@@ -1,0 +1,29 @@
+#!/bin/sh
+# 커밋 메시지에 Jira 키가 없으면 현재 브랜치명에서 뽑아 footer에 자동으로 넣어준다.
+#   feat/social-login-S15P31A306-123 에서 커밋 → "Refs: S15P31A306-123" 자동 추가
+#
+# 이미 키가 적혀 있으면 건드리지 않는다.
+. "$(dirname "$0")/_common.sh"
+
+MSG_FILE=$1
+SOURCE=$2
+
+# merge / squash / amend 커밋은 건드리지 않는다
+case "$SOURCE" in merge|squash|commit) exit 0 ;; esac
+
+# 이미 키가 들어있으면 끝
+grep -v '^#' "$MSG_FILE" | grep -Eq "$JIRA_KEY" && exit 0
+
+BRANCH=$(git symbolic-ref --short -q HEAD) || exit 0
+KEY=$(echo "$BRANCH" | grep -Eo "$JIRA_KEY" | head -n 1)
+[ -n "$KEY" ] || exit 0
+
+# 주석(#) 블록 바로 앞에 끼워 넣는다.
+# (파일 끝에 붙이면 editor로 커밋할 때 주석 더미에 묻혀서 안 보인다)
+TMP="$MSG_FILE.jira.$$"
+awk -v key="$KEY" '
+  !ins && /^#/ { print ""; print "Refs: " key; print ""; ins = 1 }
+  { print }
+  END { if (!ins) { print ""; print "Refs: " key } }
+' "$MSG_FILE" > "$TMP" && mv "$TMP" "$MSG_FILE"
+exit 0
