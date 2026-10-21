@@ -73,6 +73,15 @@ pnpm-debug.log*
 .pnpm-store/
 .eslintcache
 
+### Python ###
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
 ### 환경변수 / 시크릿 ###
 .env
 .env.*
