@@ -50,7 +50,46 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 
 ## 응답 형식
 
-노션 API 명세 공통 규약을 AI 서버(`ai/app/core/errors.py`)와 똑같이 따른다. 공통 오류 응답·페이지 응답 템플릿은 S15P31A306-139 에서 추가한다.
+노션 [API 명세](https://app.notion.com/p/3fedce3252f680898d36d3f454427d44) 공통 규약을 AI 서버(`ai/app/core/errors.py`)와 똑같이 따른다.
+
+- 필드명은 camelCase, 열거값은 `UPPER_SNAKE_CASE`, 날짜는 UTC ISO-8601 (`2026-01-02T03:04:05Z`), `null` 필드는 생략한다.
+- 성공하면 데이터 객체를 그대로 반환한다. 감싸는 봉투는 없다.
+- 목록은 `?page=0&size=20` 으로 받고 `{"items": [], "page": 0, "size": 20, "hasNext": false}` 로 돌려준다 (size 1~100, 기본 20).
+- 오류는 아래 형식이고, `details` 는 입력 필드 오류일 때만 들어간다.
+
+```json
+{
+  "code": "VALIDATION_FAILED",
+  "message": "입력값이 올바르지 않습니다.",
+  "details": [{ "field": "size", "reason": "1 이상이어야 합니다." }]
+}
+```
+
+| 상황 | HTTP | code |
+|---|---|---|
+| 입력 검증 실패, 타입 불일치, 본문 파싱 실패 | 400 | `VALIDATION_FAILED` |
+| 미인증 | 401 | `UNAUTHORIZED` |
+| CSRF 실패, 권한 없음 | 403 | `FORBIDDEN` |
+| 없는 경로, 타인 리소스 | 404 | `NOT_FOUND` |
+| 허용되지 않는 메서드 | 405 | `METHOD_NOT_ALLOWED` |
+| 업무 충돌 | 409 | 도메인 코드 (예: `ANALYSIS_IN_PROGRESS`) |
+| 한도 초과 (`Retry-After` 헤더) | 429 | `TOO_MANY_REQUESTS` |
+| 처리하지 못한 예외 (내부 정보는 응답에 넣지 않음) | 500 | `INTERNAL_ERROR` |
+
+코드에서는 이렇게 쓴다.
+
+```java
+// 목록 API: 파라미터는 PageQuery, 응답은 PageResponse
+@GetMapping
+public PageResponse<GuideSummaryResponse> list(@Valid @ModelAttribute PageQuery query) { ... }
+
+// 업무 오류: 상태·코드·메시지를 던지면 GlobalExceptionHandler 가 공통 형식으로 바꾼다
+throw new BusinessException(ErrorCode.NOT_FOUND);
+throw new BusinessException(HttpStatus.CONFLICT, "ANALYSIS_IN_PROGRESS", "이미 분석 중인 영상입니다.");
+throw BusinessException.tooManyRequests(30);
+```
+
+요청 본문은 `@Valid @RequestBody` 로 검증하면 필드별 `details` 가 자동으로 채워진다. 401·403 은 시큐리티 필터가 같은 형식으로 응답한다 (`common/security/SecurityConfig`).
 
 ## 구조
 
@@ -62,9 +101,9 @@ backend/
    ├─ BackendApplication.java
    ├─ common/                   도메인에 속하지 않는 공통 코드
    │  ├─ config/                설정 빈
-   │  ├─ security/              SecurityConfig (세션·CSRF 는 후속 이슈)
-   │  ├─ error/                 공통 오류 응답 (S15P31A306-139)
-   │  ├─ web/                   HealthController, 페이지 응답
+   │  ├─ security/              SecurityConfig (401·403 JSON, 세션 로그인은 회원 이슈)
+   │  ├─ error/                 ErrorCode · ErrorResponse · BusinessException · GlobalExceptionHandler
+   │  ├─ web/                   HealthController, PageQuery · PageResponse
    │  ├─ storage/               파일 저장소 (기능 개발 시)
    │  └─ external/              YouTube · LLM · AI 서버 호출 (기능 개발 시)
    ├─ users/  products/  pouch/  videos/  analysis/

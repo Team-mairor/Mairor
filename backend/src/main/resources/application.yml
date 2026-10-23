@@ -24,10 +24,16 @@ spring:
   jackson:
     # Jackson 3: 날짜는 기본으로 ISO-8601 문자열로 직렬화된다 (write-dates-as-timestamps 설정 불필요)
     time-zone: UTC
+    # null 필드는 생략한다 (AI 서버의 exclude_none 과 동일)
+    default-property-inclusion: non_null
   cache:
     type: caffeine
 
 server:
+  error:
+    # 오류는 항상 common.error.ErrorResponse 형식으로만 응답한다
+    whitelabel:
+      enabled: false
   servlet:
     context-path: /api
     session:
