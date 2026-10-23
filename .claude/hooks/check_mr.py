@@ -203,7 +203,7 @@ def check(fields, types, project):
                             "  형식: <type>(<scope>): <subject>   예) chore(mr-template): 머지 시 Jira 이슈 자동 완료 적용\n"
                             "  squash 머지라 MR 제목이 그대로 master 커밋 제목이 됩니다." % title)
         if re.search(r"%s-\d+" % re.escape(project), title):
-            problems.append("제목에 Jira 키를 넣지 않습니다. 본문 Jira 칸에 '- Closes %s-<번호>'로 적어주세요." % project)
+            problems.append("제목에 Jira 키를 넣지 않습니다. 본문 Jira 칸에 '- %s-<번호>'로 적어주세요." % project)
         if title.rstrip().endswith("."):
             problems.append("제목 끝에 마침표를 쓰지 않습니다.")
     body = fields.get("description")
