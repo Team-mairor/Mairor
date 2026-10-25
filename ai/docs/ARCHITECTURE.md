@@ -19,6 +19,7 @@ ai/
 │     ├─ config.py      환경변수 설정
 │     └─ errors.py      공통 오류 형식, AppError
 ├─ tests/
+├─ samples/             로컬 테스트 입력. 영상 1개 = 폴더 1개, manifest.json만 커밋 (frames/는 git 제외)
 ├─ pyproject.toml       의존성, ruff·pytest 설정
 └─ uv.lock              의존성 버전 고정
 ```

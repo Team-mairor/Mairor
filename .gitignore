@@ -99,3 +99,6 @@ application-local.yml
 *.bak
 *.swp
 *~
+
+### AI 로컬 테스트 이미지 (저작권·얼굴 사진이라 git 제외) ###
+ai/samples/*/frames/

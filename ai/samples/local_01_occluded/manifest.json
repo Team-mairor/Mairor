@@ -1,0 +1,19 @@
+{
+  "videoId": "local_01_occluded",
+  "source": { "width": 1920, "height": 1080, "fps": 30, "durationSeconds": 525.2 },
+  "steps": [
+    { "stepId": "s1",  "order": 1,  "startSeconds": 20.0,  "endSeconds": 203.0, "makeup": "other",      "product": null },
+    { "stepId": "s2",  "order": 2,  "startSeconds": 204.0, "endSeconds": 221.0, "makeup": "foundation", "product": null },
+    { "stepId": "s3",  "order": 3,  "startSeconds": 222.0, "endSeconds": 242.0, "makeup": "other",      "product": null },
+    { "stepId": "s4",  "order": 4,  "startSeconds": 243.0, "endSeconds": 267.0, "makeup": "blush",      "product": null },
+    { "stepId": "s5",  "order": 5,  "startSeconds": 268.0, "endSeconds": 287.0, "makeup": "other",      "product": null },
+    { "stepId": "s6",  "order": 6,  "startSeconds": 288.0, "endSeconds": 360.0, "makeup": "eyeshadow",  "product": null },
+    { "stepId": "s7",  "order": 7,  "startSeconds": 361.0, "endSeconds": 420.0, "makeup": "eyeliner",   "product": null },
+    { "stepId": "s8",  "order": 8,  "startSeconds": 421.0, "endSeconds": 429.0, "makeup": "other",      "product": null },
+    { "stepId": "s9",  "order": 9,  "startSeconds": 430.0, "endSeconds": 463.0, "makeup": "other",      "product": null },
+    { "stepId": "s10", "order": 10, "startSeconds": 464.0, "endSeconds": 503.5, "makeup": "lip",        "product": null }
+  ],
+  "frames": [
+    { "frameIndex": 14580, "timestampMs": 486000, "stepId": "s10", "path": "frames/014580.png", "width": 1920, "height": 1080 }
+  ]
+}
