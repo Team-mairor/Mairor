@@ -1,3 +1,5 @@
+export { CameraError, listCameras, openCamera, RESOLUTIONS, type CameraErrorKind } from "./camera";
+export { CameraProvider, useCamera, useFaceFrame, type CameraStatus } from "./camera-provider";
 export { createFaceLandmarker } from "./landmarker";
 export { isGuideVisible } from "./visibility";
 export { REGION_NAMES, REGIONS } from "./regions";
@@ -8,4 +10,5 @@ export {
   type TrackerOptions,
   type TrackerStats,
 } from "./tracker";
+export { coverTransform, toScreen } from "./view-transform";
 export type * from "./types";

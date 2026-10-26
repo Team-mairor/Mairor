@@ -24,7 +24,7 @@ import {
   type Range,
   RESOLUTIONS,
   type ControlInfo,
-} from "./camera";
+} from "@/features/face/camera";
 import { ColorProbe, type ColorStats } from "./color-probe";
 
 const REGION_COLORS: Record<RegionName, string> = {

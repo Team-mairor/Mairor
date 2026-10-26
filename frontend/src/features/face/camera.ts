@@ -9,15 +9,55 @@ export async function listCameras(): Promise<MediaDeviceInfo[]> {
   return devices.filter((d) => d.kind === "videoinput");
 }
 
-export function openCamera(deviceId: string | undefined, width: number, height: number) {
-  return navigator.mediaDevices.getUserMedia({
-    video: {
-      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" }),
-      width: { ideal: width },
-      height: { ideal: height },
-    },
-    audio: false,
-  });
+export type CameraErrorKind =
+  "insecure" | "unsupported" | "permission-denied" | "not-found" | "in-use" | "unknown";
+
+export class CameraError extends Error {
+  constructor(
+    readonly kind: CameraErrorKind,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function toCameraError(e: unknown): CameraError {
+  if (e instanceof CameraError) return e;
+  const name = e instanceof DOMException ? e.name : "";
+  const message = e instanceof Error ? e.message : String(e);
+  switch (name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return new CameraError("permission-denied", message);
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return new CameraError("not-found", message);
+    case "NotReadableError":
+    case "AbortError":
+      return new CameraError("in-use", message);
+    default:
+      return new CameraError("unknown", message);
+  }
+}
+
+export async function openCamera(deviceId: string | undefined, width: number, height: number) {
+  // HTTPS나 localhost가 아니면 브라우저가 카메라 API 자체를 막는다.
+  if (!window.isSecureContext) throw new CameraError("insecure", "보안 연결이 아닙니다");
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new CameraError("unsupported", "카메라를 지원하지 않는 브라우저입니다");
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      video: {
+        ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" }),
+        width: { ideal: width },
+        height: { ideal: height },
+      },
+      audio: false,
+    });
+  } catch (e) {
+    throw toCameraError(e);
+  }
 }
 
 // 색 측정에 영향을 주는 카메라 제어. 지원 여부는 카메라·기기·브라우저마다 다르다.
