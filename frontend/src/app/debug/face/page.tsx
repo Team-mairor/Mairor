@@ -63,7 +63,16 @@ function draw(canvas: HTMLCanvasElement, frame: FaceFrame | null, showIndices: b
 
   // 가이드를 보여주지 않는 상태의 부위는 회색으로 그린다.
   for (const name of REGION_NAMES) {
-    ctx.fillStyle = isGuideVisible(frame, name) ? REGION_COLORS[name] : "rgba(160,160,160,0.6)";
+    const color = isGuideVisible(frame, name) ? REGION_COLORS[name] : "rgba(160,160,160,0.6)";
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    for (const i of REGIONS[name].indices) {
+      const { x, y } = px(i);
+      ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
     for (const i of REGIONS[name].indices) {
       const { x, y } = px(i);
       ctx.beginPath();
