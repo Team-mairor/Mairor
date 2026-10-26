@@ -60,6 +60,16 @@ npm run dev:https
 | `npm run format`       | Prettier로 전체 포맷                   |
 | `npm run format:check` | 포맷 검사만                            |
 
+## 얼굴 추적 확인 화면
+
+`/debug/face`에서 카메라를 켜고 얼굴 추적 결과를 확인한다.
+
+- 랜드마크와 부위(눈·눈썹·입술·볼·윤곽) 표시, 랜드마크 번호 표시
+- 추적 상태, FPS, 처리 시간, 얼굴 방향(yaw·pitch·roll), 눈 뜬 정도
+- 카메라·해상도 선택, 노출·화이트밸런스·초점 고정 지원 여부
+- 이마 영역 색(Lab)과 흔들림: 카메라 설정과 조명이 색 측정에 충분히 안정적인지 확인
+- 회색으로 표시된 부위는 추적이 불안정해 가이드를 보여주지 않는 상태
+
 ## 폴더 구조
 
 ```
@@ -76,19 +86,22 @@ src/
 ├─ features/face/          # 카메라·추적·오버레이 ('use client')
 └─ lib/                    # 공통 유틸
 scripts/
-└─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델을 public/으로 복사
+└─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델을 public/에 준비
 ```
 
 ## MediaPipe 파일
 
-얼굴 추적(MediaPipe Face Landmarker)은 인터넷 없이도 동작하도록 wasm과 모델 파일을 직접 서빙한다.
+얼굴 추적(MediaPipe Face Landmarker)은 빌드한 뒤에는 인터넷 없이도 동작하도록 wasm과 모델 파일을 직접 서빙한다.
 
-| 파일 | 원본                                                   | 서빙 경로                      |
-| ---- | ------------------------------------------------------ | ------------------------------ |
-| wasm | `node_modules/@mediapipe/tasks-vision/wasm`            | `/mediapipe/wasm/`             |
-| 모델 | `../shared/face-mesh/face_landmarker.task` (AI와 공유) | `/models/face_landmarker.task` |
+| 파일        | 원본                                                   | 서빙 경로                               |
+| ----------- | ------------------------------------------------------ | --------------------------------------- |
+| wasm        | `node_modules/@mediapipe/tasks-vision/wasm`            | `/mediapipe/wasm/`                      |
+| 모델        | `../shared/face-mesh/face_landmarker.task` (AI와 공유) | `/models/face_landmarker.task`          |
+| 얼굴 검출기 | MediaPipe 공식 주소에서 내려받음 (SHA-256 확인)        | `/models/blaze_face_short_range.tflite` |
 
-- `npm run dev`, `npm run dev:https`, `npm run build` 전에 자동으로 `public/`에 복사된다. 직접 복사하려면 `npm run sync:mediapipe`.
+- `npm run dev`, `npm run dev:https`, `npm run build` 전에 자동으로 `public/`에 준비된다. 직접 하려면 `npm run sync:mediapipe`.
+- 얼굴 검출기는 여러 얼굴 중 가장 큰 얼굴을 따라가는지 확인하는 데 쓴다. 이미 받은 파일이 맞으면 다시 받지 않는다.
+- 내려받는 파일은 처음 한 번 인터넷이 필요하다. 받지 못하면 경고만 남기고 넘어가며, 그 파일 없이도 추적은 동작한다.
 - `public/mediapipe`, `public/models`는 복사본이라 커밋하지 않는다.
 - `@mediapipe/tasks-vision`은 wasm과 버전이 맞아야 해서 정확한 버전으로 고정했다. 올릴 때는 `npm install`만 하면 다음 실행 때 wasm도 같이 바뀐다.
 
