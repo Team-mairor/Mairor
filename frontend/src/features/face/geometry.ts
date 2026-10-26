@@ -1,5 +1,15 @@
 import { LEFT_IRIS_CENTER, REGIONS, RIGHT_IRIS_CENTER } from "./regions";
-import type { EyeState, Point, Pose, RegionInfo, RegionName, RegionVisibility } from "./types";
+import type {
+  EyeState,
+  NormalizedRect,
+  Point,
+  Pose,
+  RegionInfo,
+  RegionName,
+  RegionVisibility,
+} from "./types";
+
+const FULL_FRAME: NormalizedRect = { x0: 0, y0: 0, x1: 1, y1: 1 };
 
 type Size = { width: number; height: number };
 
@@ -73,11 +83,13 @@ export function regionVisibility(
   landmarks: Point[],
   pose: Pose,
   maxYaw: number,
+  /** 화면에 실제로 보이는 영역. 화면 비율이 달라 잘리면 프레임 전체보다 좁다 */
+  visible: NormalizedRect = FULL_FRAME,
 ): RegionVisibility {
   const { indices, side } = REGIONS[name];
   const inFrame = indices.filter((i) => {
     const p = landmarks[i];
-    return p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+    return p.x >= visible.x0 && p.x <= visible.x1 && p.y >= visible.y0 && p.y <= visible.y1;
   }).length;
 
   // 본인 기준 왼쪽으로 돌리면(yaw +) 왼쪽 부위가 카메라에서 멀어진다.

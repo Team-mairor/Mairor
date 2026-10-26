@@ -1,4 +1,4 @@
-import type { Point, ViewTransform } from "./types";
+import type { NormalizedRect, Point, ViewTransform } from "./types";
 
 type Size = { width: number; height: number };
 
@@ -11,6 +11,16 @@ export function coverTransform(video: Size, container: Size, mirrored: boolean):
     offsetY: (container.height - video.height * scale) / 2,
     mirrored,
   };
+}
+
+/** 화면(container)에 실제로 보이는 원본 프레임 영역. cover로 잘린 부분은 빠진다. */
+export function visibleRect(image: Size, container: Size, view: ViewTransform): NormalizedRect {
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const toX = (sx: number) => (sx - view.offsetX) / (image.width * view.scale);
+  const toY = (sy: number) => (sy - view.offsetY) / (image.height * view.scale);
+  let [x0, x1] = [toX(0), toX(container.width)];
+  if (view.mirrored) [x0, x1] = [1 - x1, 1 - x0];
+  return { x0: clamp(x0), y0: clamp(toY(0)), x1: clamp(x1), y1: clamp(toY(container.height)) };
 }
 
 /** 정규화 좌표를 화면 픽셀 좌표로 바꾼다. */

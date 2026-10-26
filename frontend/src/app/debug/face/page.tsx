@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import {
   DEFAULT_SMOOTHING as SMOOTHING,
   FaceTracker,
+  coverTransform,
   isGuideVisible,
   REGIONS,
   REGION_NAMES,
+  toScreen,
 } from "@/features/face";
 import type { CloseUpMode, FaceFrame, RegionName, TrackerStats } from "@/features/face";
 
@@ -50,11 +52,8 @@ function draw(canvas: HTMLCanvasElement, frame: FaceFrame | null, showIndices: b
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!frame || frame.trackingState === "lost") return;
 
-  const { width, height } = canvas;
-  const px = (i: number) => ({
-    x: (1 - frame.landmarks[i].x) * width,
-    y: frame.landmarks[i].y * height,
-  });
+  const view = coverTransform(frame.imageSize, canvas, true);
+  const px = (i: number) => toScreen(frame.landmarks[i], frame.imageSize, view);
 
   ctx.fillStyle = "rgba(255,255,255,0.35)";
   for (let i = 0; i < frame.landmarks.length; i++) {
@@ -92,6 +91,14 @@ export default function DebugFacePage() {
   const probeRef = useRef<ColorProbe | null>(null);
   const showIndicesRef = useRef(false);
   const lastHudUpdate = useRef(0);
+  const unmountedRef = useRef(false);
+  // 카메라·해상도를 빠르게 바꾸면 요청이 겹쳐, 마지막 요청만 반영한다.
+  const connectId = useRef(0);
+  // 노출 변경도 겹치지 않게 하나씩, 마지막 값만 적용한다.
+  const exposureQueue = useRef<{ running: boolean; next: number | null }>({
+    running: false,
+    next: null,
+  });
 
   const [status, setStatus] = useState<"idle" | "starting" | "running" | "error">("idle");
   const [error, setError] = useState("");
@@ -116,20 +123,30 @@ export default function DebugFacePage() {
 
   useEffect(() => {
     const video = videoRef.current;
+    unmountedRef.current = false;
     return () => {
+      unmountedRef.current = true;
       trackerRef.current?.dispose();
       (video?.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
+  /** 새 카메라를 화면에 반영했으면 true. 더 새 요청이 있어 버렸으면 false다. */
   async function connect(nextDeviceId: string | undefined, nextResolution: number) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas) return false;
 
-    (video.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
+    // 새 카메라를 연 뒤에 기존 것을 끈다. 실패하면 기존 영상이 그대로 남는다.
+    const id = ++connectId.current;
     const { width, height } = RESOLUTIONS[nextResolution];
     const stream = await openCamera(nextDeviceId, width, height);
+    // 카메라를 여는 동안 페이지를 떠났거나 더 새 요청이 있으면 늦게 받은 카메라를 바로 끈다.
+    if (unmountedRef.current || id !== connectId.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      return false;
+    }
+    (video.srcObject as MediaStream | null)?.getTracks().forEach((t) => t.stop());
     video.srcObject = stream;
     await video.play();
     canvas.width = video.videoWidth;
@@ -144,6 +161,7 @@ export default function DebugFacePage() {
     setExposure(range ? { range, value: typeof current === "number" ? current : range.min } : null);
     // 카메라 이름은 권한을 받은 뒤에야 보인다.
     setCameras(await listCameras());
+    return true;
   }
 
   async function start() {
@@ -152,6 +170,7 @@ export default function DebugFacePage() {
     if (!video || !canvas) return;
 
     setStatus("starting");
+    setError("");
     try {
       await connect(deviceId, resolution);
       probeRef.current = new ColorProbe();
@@ -164,14 +183,19 @@ export default function DebugFacePage() {
           const now = performance.now();
           if (now - lastHudUpdate.current > 200) {
             lastHudUpdate.current = now;
+            // 놓친 직후(hold)의 좌표는 오래돼 색이 흔들려 보이므로 추적 중일 때만 잰다.
             const color =
-              frame && frame.trackingState !== "lost"
+              frame?.trackingState === "tracking"
                 ? (probeRef.current?.sample(video, frame) ?? null)
                 : null;
             setHud({ frame, stats: { ...stats }, color });
           }
         },
         { closeUp, smoothing: smoothing ? SMOOTHING : null },
+        (e) => {
+          setError(String(e));
+          setStatus("error");
+        },
       );
       await trackerRef.current.start();
       setStatus("running");
@@ -183,8 +207,12 @@ export default function DebugFacePage() {
 
   async function change(nextDeviceId: string | undefined, nextResolution: number) {
     try {
-      await connect(nextDeviceId, nextResolution);
+      // 더 새 요청에 밀렸으면 선택값을 바꾸지 않는다. 선택창과 실제 영상이 어긋나지 않게 한다.
+      if (!(await connect(nextDeviceId, nextResolution))) return;
+      // 이전 카메라 기준의 추적 상태를 버린다.
+      trackerRef.current?.reset();
       setResolution(nextResolution);
+      setError("");
     } catch (e) {
       setError(String(e));
     }
@@ -205,12 +233,21 @@ export default function DebugFacePage() {
     const track = currentTrack();
     if (!track || !exposure) return;
     setExposure({ ...exposure, value });
-    try {
-      await setExposureTime(track, value);
-      setLockResult({ exposure: `수동 ${value}` });
-    } catch (e) {
-      setLockResult({ exposure: `실패: ${String(e)}` });
+    const queue = exposureQueue.current;
+    queue.next = value;
+    if (queue.running) return;
+    queue.running = true;
+    while (queue.next !== null) {
+      const target = queue.next;
+      queue.next = null;
+      try {
+        await setExposureTime(track, target);
+        setLockResult({ exposure: `수동 ${target}` });
+      } catch (e) {
+        setLockResult({ exposure: `실패: ${String(e)}` });
+      }
     }
+    queue.running = false;
     setControls(describeControls(track));
   }
 
@@ -317,7 +354,7 @@ export default function DebugFacePage() {
       {hud && (
         <dl className="grid max-w-3xl grid-cols-2 gap-x-4 gap-y-1 font-mono text-sm sm:grid-cols-4">
           <dt>state</dt>
-          <dd>{frame?.trackingState ?? "acquiring"}</dd>
+          <dd>{frame?.trackingState ?? "얼굴 찾는 중"}</dd>
           <dt>fps</dt>
           <dd>{hud.stats.fps}</dd>
           <dt>detect</dt>

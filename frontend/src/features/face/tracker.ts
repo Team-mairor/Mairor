@@ -1,4 +1,5 @@
 import type {
+  Detection,
   FaceDetector,
   FaceLandmarker,
   FaceLandmarkerResult,
@@ -17,6 +18,7 @@ import { REGION_NAMES } from "./regions";
 import { LandmarkSmoother, type SmoothingOptions } from "./smoothing";
 import type {
   FaceFrame,
+  NormalizedRect,
   Point,
   Pose,
   RegionInfo,
@@ -24,6 +26,7 @@ import type {
   RegionVisibility,
   TrackingState,
 } from "./types";
+import { MIN_IN_FRAME_RATIO } from "./visibility";
 
 export type CloseUpMode = "auto" | "on" | "off";
 
@@ -34,6 +37,8 @@ export interface TrackerOptions {
   maxYaw: number;
   /** 이 비율보다 화면 밖으로 나간 핵심 부위가 있으면 degraded */
   minInFrameRatio: number;
+  /** 화면에 실제로 보이는 원본 프레임 영역. null이면 프레임 전체 */
+  visibleRect: NormalizedRect | null;
   /** 이 eyeBlink 점수 이상이면 눈을 완전히 감은 것으로 본다 */
   closedBlink: number;
   blinkThreshold: number;
@@ -64,7 +69,8 @@ export const DEFAULT_SMOOTHING: SmoothingOptions = { minCutoff: 0.5, beta: 0.1, 
 const DEFAULT_OPTIONS: TrackerOptions = {
   holdMs: 500,
   maxYaw: 0.6,
-  minInFrameRatio: 0.9,
+  minInFrameRatio: MIN_IN_FRAME_RATIO,
+  visibleRect: null,
   closedBlink: 0.5,
   blinkThreshold: 0.4,
   closeUp: "auto",
@@ -76,6 +82,14 @@ const DEFAULT_OPTIONS: TrackerOptions = {
 
 const KEY_REGIONS: RegionName[] = ["leftEye", "rightEye", "lipsOuter"];
 
+// 기준값 경계에서 상태가 프레임마다 바뀌지 않도록, degraded에서 돌아올 때는 이만큼 더 넘어야 한다.
+const RECOVER_SCALE_MARGIN = 0.05;
+const RECOVER_IN_FRAME_MARGIN = 0.03;
+// 근접 배율이 1 근처에서 오가며 여백이 흔들리지 않도록 1로 붙이고 떼는 기준을 다르게 둔다.
+const SNAP_TO_FULL = 0.97;
+const LEAVE_FULL = 0.9;
+// 얼굴을 못 찾는 동안 원래 크기와 최대 축소를 이 프레임 수마다 번갈아 시도한다.
+const SEARCH_SWITCH_FRAMES = 10;
 // 추적 중인 얼굴이 가장 큰 얼굴인지 이 간격마다 확인한다.
 const LARGEST_CHECK_MS = 500;
 // 가장 큰 얼굴 주변만 남길 때, 다시 잡는 사이 얼굴이 조금 움직여도 영역 안에 남도록 넓힌다.
@@ -99,11 +113,16 @@ export class FaceTracker {
   private lockedAt = 0;
   private switchConfirms = 0;
   private running = false;
+  private disposed = false;
   private lastFrame: FaceFrame | null = null;
+  private lastState: TrackingState | null = null;
   private lastSeenAt = 0;
   private lastTimestamp = -1;
   private frameTimes: number[] = [];
   private inputScale = 1;
+  private searchFrames = 0;
+  private frameHandle: { kind: "video" | "animation"; id: number } | null = null;
+  private starting: Promise<void> | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private smoother: LandmarkSmoother | null = null;
   private options: TrackerOptions;
@@ -114,30 +133,69 @@ export class FaceTracker {
     private readonly video: HTMLVideoElement,
     private readonly onFrame: (frame: FaceFrame | null, stats: TrackerStats) => void,
     options: Partial<TrackerOptions> = {},
+    /** 추적 도중 검출이 실패해 멈췄을 때 호출된다. */
+    private readonly onError?: (error: unknown) => void,
   ) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
     this.resetSmoother();
   }
 
-  async start() {
+  start(): Promise<void> {
+    // 동시에 두 번 불러도 모델과 루프는 하나만 만든다.
+    this.starting ??= this.doStart().finally(() => {
+      this.starting = null;
+    });
+    return this.starting;
+  }
+
+  private async doStart() {
     // 가장 큰 얼굴 확인은 부가 기능이라, 검출기를 불러오지 못해도 추적은 계속한다.
-    [this.landmarker, this.detector] = await Promise.all([
-      this.landmarker ?? createFaceLandmarker(),
-      this.detector ??
-        createFaceDetector().catch((e) => {
+    const detecting = this.detector
+      ? Promise.resolve(this.detector)
+      : createFaceDetector().catch((e) => {
           console.warn("얼굴 검출기를 불러오지 못해 가장 큰 얼굴 확인 없이 추적합니다", e);
           return null;
-        }),
-    ]);
+        });
+    let landmarker: FaceLandmarker;
+    try {
+      landmarker = this.landmarker ?? (await createFaceLandmarker());
+    } catch (e) {
+      if (!this.detector) (await detecting)?.close();
+      throw e;
+    }
+    const detector = await detecting;
+    // 모델을 불러오는 동안 dispose되었으면 시작하지 않는다.
+    if (this.disposed) {
+      landmarker.close();
+      detector?.close();
+      return;
+    }
+    this.landmarker = landmarker;
+    this.detector = detector;
+    if (this.running) return;
     this.running = true;
     this.scheduleNext();
   }
 
   stop() {
     this.running = false;
+    // 이미 예약된 콜백이 남아 있으면 다시 start했을 때 루프가 두 개 돈다.
+    const handle = this.frameHandle;
+    if (handle?.kind === "video") this.video.cancelVideoFrameCallback(handle.id);
+    else if (handle) cancelAnimationFrame(handle.id);
+    this.frameHandle = null;
+  }
+
+  /** 카메라·해상도를 바꿨을 때처럼 이전 프레임 기준 상태를 버린다. */
+  reset() {
+    this.smoother?.reset();
+    this.lastFrame = null;
+    this.lastState = null;
+    this.searchFrames = 0;
   }
 
   dispose() {
+    this.disposed = true;
     this.stop();
     this.landmarker?.close();
     this.landmarker = null;
@@ -146,8 +204,11 @@ export class FaceTracker {
   }
 
   setOptions(options: Partial<TrackerOptions>) {
+    const smoothingChanged =
+      "smoothing" in options &&
+      JSON.stringify(options.smoothing) !== JSON.stringify(this.options.smoothing);
     this.options = { ...this.options, ...options };
-    if ("smoothing" in options) this.resetSmoother();
+    if (smoothingChanged) this.resetSmoother();
   }
 
   private resetSmoother() {
@@ -157,9 +218,12 @@ export class FaceTracker {
   private scheduleNext() {
     if (!this.running) return;
     if ("requestVideoFrameCallback" in this.video) {
-      this.video.requestVideoFrameCallback(() => this.tick());
+      this.frameHandle = {
+        kind: "video",
+        id: this.video.requestVideoFrameCallback(() => this.tick()),
+      };
     } else {
-      requestAnimationFrame(() => this.tick());
+      this.frameHandle = { kind: "animation", id: requestAnimationFrame(() => this.tick()) };
     }
   }
 
@@ -172,20 +236,36 @@ export class FaceTracker {
       const now = Math.max(performance.now(), this.lastTimestamp + 1);
       this.lastTimestamp = now;
 
-      this.updateInputScale();
-      const scale = this.inputScale;
       const lockBox = this.lockBox;
-      const input = scale < 1 || lockBox ? this.drawInput(scale, lockBox) : video;
+      let frame: FaceFrame | null;
+      let input: HTMLVideoElement | HTMLCanvasElement;
+      let scale: number;
+      try {
+        this.updateInputScale();
+        scale = this.inputScale;
+        input = scale < 1 || lockBox ? this.drawInput(scale, lockBox) : video;
 
-      const result = this.landmarker.detectForVideo(input, now);
-      this.stats.detectMs = performance.now() - now;
-      this.stats.inputScale = scale;
-      this.updateFps(now);
+        const result = this.landmarker.detectForVideo(input, now);
+        this.stats.detectMs = performance.now() - now;
+        this.stats.inputScale = scale;
+        this.updateFps(now);
+        frame = this.toFrame(result, now, scale);
+      } catch (e) {
+        // GPU 컨텍스트 손실처럼 대개 다시 해도 실패하므로 멈추고 알린다.
+        this.stop();
+        this.onError?.(e);
+        return;
+      }
 
-      const frame = this.toFrame(result, now, scale);
       if (lockBox) this.updateLock(frame, now);
       else this.checkLargestFace(input, frame, now, scale);
-      this.onFrame(frame, this.stats);
+
+      // 화면 쪽 처리에서 난 예외 때문에 추적이 멈추지 않게 한다.
+      try {
+        this.onFrame(frame, this.stats);
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     this.scheduleNext();
@@ -199,14 +279,18 @@ export class FaceTracker {
       return;
     }
     const frame = this.lastFrame;
-    if (!frame) return;
-    if (frame.trackingState === "hold" || frame.trackingState === "lost") {
-      this.inputScale = closeUpMinScale;
+    // 얼굴을 못 찾았으면 화면을 넘칠 만큼 가까워서일 수도, 멀어서일 수도 있어
+    // 원래 크기와 최대 축소를 번갈아 시도한다. 처음 시작할 때도 같다.
+    if (!frame || this.lastState === "hold" || this.lastState === "lost") {
+      const phase = Math.floor(this.searchFrames++ / SEARCH_SWITCH_FRAMES) % 2;
+      this.inputScale = phase === 0 ? 1 : closeUpMinScale;
       return;
     }
+    this.searchFrames = 0;
     const ratio = frame.iod / frame.imageSize.width;
     const target = Math.max(closeUpMinScale, Math.min(1, closeUpIodRatio / ratio));
-    this.inputScale = target > 0.95 ? 1 : this.inputScale * 0.7 + target * 0.3;
+    const snap = this.inputScale === 1 ? target > LEAVE_FULL : target > SNAP_TO_FULL;
+    this.inputScale = snap ? 1 : this.inputScale * 0.7 + target * 0.3;
   }
 
   // 랜드마크 추적은 얼굴 하나만 따라가서, 가림 뒤에 다른 얼굴로 넘어가면 그대로 남는다.
@@ -225,7 +309,16 @@ export class FaceTracker {
       return;
     }
 
-    const { detections } = this.detector.detectForVideo(input, now);
+    let detections: Detection[];
+    try {
+      ({ detections } = this.detector.detectForVideo(input, now));
+    } catch (e) {
+      // 부가 기능이라 실패하면 끄고 추적은 계속한다.
+      console.warn("얼굴 검출기가 실패해 가장 큰 얼굴 확인을 끕니다", e);
+      this.detector.close();
+      this.detector = null;
+      return;
+    }
 
     let largest: Box | null = null;
     let largestArea = 0;
@@ -314,6 +407,7 @@ export class FaceTracker {
       const state: TrackingState =
         timestamp - this.lastSeenAt <= this.options.holdMs ? "hold" : "lost";
       if (state === "lost") this.smoother?.reset();
+      this.lastState = state;
       return { ...this.lastFrame, timestamp, trackingState: state };
     }
 
@@ -344,13 +438,23 @@ export class FaceTracker {
     const visibility = {} as Record<RegionName, RegionVisibility>;
     for (const name of REGION_NAMES) {
       regions[name] = computeRegion(name, landmarks, imageSize, iod);
-      visibility[name] = regionVisibility(name, landmarks, pose, maxYaw);
+      visibility[name] = regionVisibility(
+        name,
+        landmarks,
+        pose,
+        maxYaw,
+        this.options.visibleRect ?? undefined,
+      );
     }
 
+    // 이미 degraded면 기준을 조금 더 넘어야 tracking으로 돌아온다.
+    const wasDegraded = this.lastState === "degraded";
+    const scaleLimit = reliableMinScale + (wasDegraded ? RECOVER_SCALE_MARGIN : 0);
+    const inFrameLimit = minInFrameRatio + (wasDegraded ? RECOVER_IN_FRAME_MARGIN : 0);
     const degraded =
-      scale < reliableMinScale ||
+      scale < scaleLimit ||
       KEY_REGIONS.some(
-        (name) => visibility[name].inFrameRatio < minInFrameRatio || !visibility[name].facing,
+        (name) => visibility[name].inFrameRatio < inFrameLimit || !visibility[name].facing,
       );
 
     const frame: FaceFrame = {
@@ -371,6 +475,7 @@ export class FaceTracker {
     };
 
     this.lastFrame = frame;
+    this.lastState = frame.trackingState;
     this.lastSeenAt = timestamp;
     return frame;
   }

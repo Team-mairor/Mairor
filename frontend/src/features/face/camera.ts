@@ -10,7 +10,15 @@ export async function listCameras(): Promise<MediaDeviceInfo[]> {
 }
 
 export type CameraErrorKind =
-  "insecure" | "unsupported" | "permission-denied" | "not-found" | "in-use" | "unknown";
+  | "insecure"
+  | "unsupported"
+  | "permission-denied"
+  | "blocked"
+  | "not-found"
+  | "in-use"
+  | "disconnected"
+  | "tracker-failed"
+  | "unknown";
 
 export class CameraError extends Error {
   constructor(
@@ -23,12 +31,15 @@ export class CameraError extends Error {
 
 function toCameraError(e: unknown): CameraError {
   if (e instanceof CameraError) return e;
-  const name = e instanceof DOMException ? e.name : "";
+  // 브라우저에 따라 DOMException이 아닌 오류 객체가 오기도 해 name만 본다.
+  const name = typeof e === "object" && e !== null && "name" in e ? String(e.name) : "";
   const message = e instanceof Error ? e.message : String(e);
   switch (name) {
     case "NotAllowedError":
-    case "SecurityError":
       return new CameraError("permission-denied", message);
+    // 일부 브라우저·관리자 정책으로 막힌 경우. Chrome은 권한 정책 차단도 NotAllowedError로 보낸다
+    case "SecurityError":
+      return new CameraError("blocked", message);
     case "NotFoundError":
     case "OverconstrainedError":
       return new CameraError("not-found", message);

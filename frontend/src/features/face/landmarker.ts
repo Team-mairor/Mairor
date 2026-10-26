@@ -25,18 +25,24 @@ export async function createFaceLandmarker(
 
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
 
-  return FaceLandmarker.createFromOptions(fileset, {
-    baseOptions: {
-      modelAssetPath: FACE_LANDMARKER_MODEL_PATH,
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numFaces: 1,
-    outputFaceBlendshapes: true,
-    outputFacialTransformationMatrixes: true,
-    ...DEFAULT_CONFIDENCE,
-    ...confidence,
-  });
+  const create = (delegate: "GPU" | "CPU") =>
+    FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: FACE_LANDMARKER_MODEL_PATH, delegate },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      outputFaceBlendshapes: true,
+      outputFacialTransformationMatrixes: true,
+      ...DEFAULT_CONFIDENCE,
+      ...confidence,
+    });
+
+  // WebGL2를 쓸 수 없는 기기에서는 느리더라도 CPU로 돌린다.
+  try {
+    return await create("GPU");
+  } catch (e) {
+    console.warn("GPU로 얼굴 추적을 시작하지 못해 CPU로 다시 시도합니다", e);
+    return create("CPU");
+  }
 }
 
 // 랜드마크 추적은 얼굴 하나만 따라가므로, 가장 큰 얼굴을 확인하는 가벼운 검출기를 따로 둔다.

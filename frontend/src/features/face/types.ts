@@ -58,6 +58,14 @@ export interface FaceFrame {
   regionVisibility: Record<RegionName, RegionVisibility>;
 }
 
+/** 원본 프레임 정규화 좌표(0~1)의 사각형 */
+export interface NormalizedRect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 export interface ViewTransform {
   scale: number;
   offsetX: number;
