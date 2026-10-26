@@ -40,6 +40,21 @@ uv run ruff format .      # 포맷
 
 의존성 추가는 `uv add <패키지>`(개발용은 `uv add --dev <패키지>`)로 하고, 바뀐 `pyproject.toml`과 `uv.lock`을 함께 커밋합니다.
 
+## 가이드 생성 확인 화면
+
+BE가 넘긴 단계·사실 칸이 어떤 문장 틀을 거쳐 어떤 가이드가 되는지 브라우저에서 봅니다. 개발용이라 서버에는 들어가지 않습니다.
+
+```bash
+uv run streamlit run tools/guide_viewer.py    # http://localhost:8501
+```
+
+- 왼쪽 **입력**: `samples/`의 manifest나 저장된 케이스를 불러와 JSON을 고치면 바로 다시 만듭니다.
+- 가운데 **과정**: 칸마다 받은 값·출처·근거 시각, 쓴 문장 틀, 만든 문장, 상태(사용·추정·미확인·없음)를 보여 줍니다.
+- 오른쪽 **결과**: 만든 가이드. 저장된 케이스면 기대값과 같은지 표시합니다.
+- **이 결과를 기대값으로 저장**을 누르면 `tests/golden/guide/<이름>.json`에 입력과 결과가 저장되고, `uv run pytest`가 이 케이스로 결과를 비교합니다.
+
+문장은 `app/services/guide_templates.py`만 고치면 바뀝니다. 고친 뒤 화면에서 결과를 확인하고, 의도한 변경이면 케이스를 다시 저장합니다.
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.

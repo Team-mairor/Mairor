@@ -1,0 +1,150 @@
+{
+  "input": {
+    "note": "ADR-008 「데이터 예시」 값으로 만든 예시 입력. 실제 영상 분석 결과가 아니다",
+    "videoId": "adr008_example",
+    "steps": [
+      {
+        "stepId": "s1",
+        "order": 1,
+        "startSeconds": 20.0,
+        "endSeconds": 60.0,
+        "makeup": "foundation",
+        "product": null,
+        "facts": null
+      },
+      {
+        "stepId": "s2",
+        "order": 2,
+        "startSeconds": 170.0,
+        "endSeconds": 230.0,
+        "makeup": "eyeshadow",
+        "product": null,
+        "facts": {
+          "tool": {
+            "value": "작은 납작 브러시",
+            "source": "scene",
+            "at": 185.0
+          },
+          "amount": {
+            "value": "브러시 끝에 조금, 손등에서 한 번 털기",
+            "source": "voice",
+            "at": 187.0
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "눈을 뜬 채로 확인하면서 넓혀 가세요",
+              "source": "voice",
+              "at": 192.0
+            }
+          ],
+          "cautions": [],
+          "finishCue": null
+        }
+      },
+      {
+        "stepId": "s3",
+        "order": 3,
+        "startSeconds": 464.0,
+        "endSeconds": 503.5,
+        "makeup": "lip",
+        "product": null,
+        "facts": {
+          "tool": {
+            "value": "손가락",
+            "source": "estimated"
+          },
+          "amount": {
+            "value": "쌀알만큼",
+            "source": "voice",
+            "at": 470.0
+          },
+          "strength": {
+            "value": "톡톡 두드리듯 가볍게",
+            "source": "voice",
+            "at": 472.0
+          },
+          "tips": [],
+          "cautions": [
+            {
+              "value": "입술 라인 밖으로 번지지 않게",
+              "source": "onscreenText",
+              "at": 480.0
+            }
+          ],
+          "finishCue": {
+            "value": "입술 안쪽이 또렷해질 때까지",
+            "source": "scene",
+            "at": 500.0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "videoId": "adr008_example",
+    "steps": [
+      {
+        "stepId": "s1",
+        "order": 1,
+        "title": "베이스",
+        "makeup": "foundation",
+        "instructions": [
+          "영상에서 베이스 바르는 법을 확인하지 못했어요."
+        ],
+        "tips": [],
+        "cautions": [],
+        "estimatedFields": [],
+        "missingFields": [
+          "tool",
+          "amount",
+          "strength",
+          "finishCue"
+        ]
+      },
+      {
+        "stepId": "s2",
+        "order": 2,
+        "title": "아이섀도",
+        "makeup": "eyeshadow",
+        "tool": "작은 납작 브러시",
+        "amount": "브러시 끝에 조금, 손등에서 한 번 털기",
+        "instructions": [
+          "작은 납작 브러시를 써요.",
+          "양은 브러시 끝에 조금, 손등에서 한 번 털기예요."
+        ],
+        "tips": [
+          "눈을 뜬 채로 확인하면서 넓혀 가세요"
+        ],
+        "cautions": [],
+        "estimatedFields": [],
+        "missingFields": [
+          "strength",
+          "finishCue"
+        ]
+      },
+      {
+        "stepId": "s3",
+        "order": 3,
+        "title": "립",
+        "makeup": "lip",
+        "tool": "손가락",
+        "amount": "쌀알만큼",
+        "instructions": [
+          "손가락을 써요.",
+          "양은 쌀알만큼이에요.",
+          "톡톡 두드리듯 가볍게 발라요.",
+          "입술 안쪽이 또렷해질 때까지 계속해요."
+        ],
+        "tips": [],
+        "cautions": [
+          "입술 라인 밖으로 번지지 않게"
+        ],
+        "estimatedFields": [
+          "tool"
+        ],
+        "missingFields": []
+      }
+    ]
+  }
+}

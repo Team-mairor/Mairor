@@ -5,6 +5,7 @@ from pydantic import Field, model_validator
 from app.schemas.common import CamelModel
 
 Makeup = Literal["foundation", "eyeshadow", "eyeliner", "blush", "lip", "other"]
+FactSource = Literal["voice", "onscreenText", "scene", "estimated"]
 
 
 class VideoSource(CamelModel):
@@ -20,6 +21,23 @@ class Product(CamelModel):
     product_id: str | None = None
 
 
+class Fact(CamelModel):
+    value: str = Field(min_length=1)
+    source: FactSource
+    at: float | None = Field(default=None, ge=0)  # 근거 시각. 원본 영상 기준 초
+
+
+class StepFacts(CamelModel):
+    """BE가 Gemini로 뽑은 단계 세부 사실 (ADR-008 facts 칸). BE와 칸을 확정하기 전 임시안."""
+
+    tool: Fact | None = None
+    amount: Fact | None = None
+    strength: Fact | None = None
+    tips: list[Fact] = Field(default_factory=list)
+    cautions: list[Fact] = Field(default_factory=list)
+    finish_cue: Fact | None = None
+
+
 class Step(CamelModel):
     step_id: str
     order: int = Field(ge=1)
@@ -27,6 +45,7 @@ class Step(CamelModel):
     end_seconds: float = Field(ge=0)
     makeup: Makeup
     product: Product | None = None
+    facts: StepFacts | None = None
 
     @model_validator(mode="after")
     def check_range(self) -> "Step":
