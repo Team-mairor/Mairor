@@ -1,0 +1,23 @@
+{
+  "videoId": "fixture",
+  "meshVersion": "v1",
+  "layers": [
+    {
+      "stepId": "s5",
+      "makeup": "lip",
+      "regions": [
+        "lipsOuter"
+      ],
+      "exclude": [
+        "lipsInner"
+      ],
+      "shape": "polygon",
+      "feather": 0.04,
+      "color": "#D65A70",
+      "opacity": 0.6,
+      "blend": "multiply",
+      "colorSource": "manual",
+      "source": "manual"
+    }
+  ]
+}

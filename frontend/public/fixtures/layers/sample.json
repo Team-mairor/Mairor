@@ -1,0 +1,222 @@
+{
+  "videoId": "fixture",
+  "meshVersion": "v1",
+  "layers": [
+    {
+      "stepId": "s1",
+      "makeup": "foundation",
+      "regions": [
+        "faceOval"
+      ],
+      "exclude": [
+        "leftEye",
+        "rightEye",
+        "leftBrow",
+        "rightBrow",
+        "lipsOuter"
+      ],
+      "shape": "polygon",
+      "feather": 0.08,
+      "color": "#E8C4A8",
+      "opacity": 0.3,
+      "blend": "normal",
+      "colorSource": "manual",
+      "source": "manual"
+    },
+    {
+      "stepId": "s2",
+      "makeup": "eyeshadow",
+      "regions": [
+        "leftEye",
+        "rightEye"
+      ],
+      "shape": "uvMask",
+      "uvMask": "masks/eyeshadow.png",
+      "color": "#B07A6A",
+      "opacity": 0.5,
+      "blend": "multiply",
+      "colorSource": "manual",
+      "source": "manual"
+    },
+    {
+      "stepId": "s3",
+      "makeup": "eyeliner",
+      "regions": [
+        "rightEye"
+      ],
+      "shape": "polyline",
+      "path": [
+        {
+          "triangle": 629,
+          "bary": [
+            0.88,
+            0,
+            0.12
+          ]
+        },
+        {
+          "triangle": 627,
+          "bary": [
+            0.12,
+            0,
+            0.88
+          ]
+        },
+        {
+          "triangle": 575,
+          "bary": [
+            0.12,
+            0,
+            0.88
+          ]
+        },
+        {
+          "triangle": 591,
+          "bary": [
+            0.88,
+            0,
+            0.12
+          ]
+        },
+        {
+          "triangle": 527,
+          "bary": [
+            0.88,
+            0,
+            0.12
+          ]
+        },
+        {
+          "triangle": 1,
+          "bary": [
+            0.88,
+            0,
+            0.12
+          ]
+        },
+        {
+          "triangle": 329,
+          "bary": [
+            0.3737,
+            0.5645,
+            0.0618
+          ]
+        }
+      ],
+      "width": 0.03,
+      "feather": 0.01,
+      "lineCap": "round",
+      "color": "#2B1D1A",
+      "opacity": 0.8,
+      "blend": "normal",
+      "colorSource": "manual",
+      "source": "manual"
+    },
+    {
+      "stepId": "s3",
+      "makeup": "eyeliner",
+      "regions": [
+        "leftEye"
+      ],
+      "shape": "polyline",
+      "path": [
+        {
+          "triangle": 38,
+          "bary": [
+            0.12,
+            0.88,
+            0
+          ]
+        },
+        {
+          "triangle": 576,
+          "bary": [
+            0.88,
+            0.12,
+            0
+          ]
+        },
+        {
+          "triangle": 574,
+          "bary": [
+            0.12,
+            0.88,
+            0
+          ]
+        },
+        {
+          "triangle": 590,
+          "bary": [
+            0.88,
+            0.12,
+            0
+          ]
+        },
+        {
+          "triangle": 526,
+          "bary": [
+            0.88,
+            0.12,
+            0
+          ]
+        },
+        {
+          "triangle": 528,
+          "bary": [
+            0.12,
+            0.88,
+            0
+          ]
+        },
+        {
+          "triangle": 328,
+          "bary": [
+            0.3732,
+            0.0618,
+            0.565
+          ]
+        }
+      ],
+      "width": 0.03,
+      "feather": 0.01,
+      "lineCap": "round",
+      "color": "#2B1D1A",
+      "opacity": 0.8,
+      "blend": "normal",
+      "colorSource": "manual",
+      "source": "manual"
+    },
+    {
+      "stepId": "s4",
+      "makeup": "blush",
+      "regions": [
+        "leftCheek",
+        "rightCheek"
+      ],
+      "shape": "uvMask",
+      "uvMask": "masks/blush.png",
+      "color": "#F4A6A6",
+      "opacity": 0.35,
+      "blend": "multiply",
+      "colorSource": "manual",
+      "source": "manual"
+    },
+    {
+      "stepId": "s5",
+      "makeup": "lip",
+      "regions": [
+        "lipsOuter"
+      ],
+      "exclude": [
+        "lipsInner"
+      ],
+      "shape": "polygon",
+      "feather": 0.04,
+      "color": "#D65A70",
+      "opacity": 0.6,
+      "blend": "multiply",
+      "colorSource": "manual",
+      "source": "manual"
+    }
+  ]
+}

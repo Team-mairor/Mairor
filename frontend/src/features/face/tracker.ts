@@ -15,6 +15,7 @@ import {
 } from "./geometry";
 import { createFaceDetector, createFaceLandmarker } from "./landmarker";
 import { REGION_NAMES } from "./regions";
+import { DEFAULT_MAX_YAW, KEY_REGIONS } from "./tracking-rules";
 import { LandmarkSmoother, type SmoothingOptions } from "./smoothing";
 import type {
   FaceFrame,
@@ -68,7 +69,7 @@ export const DEFAULT_SMOOTHING: SmoothingOptions = { minCutoff: 0.5, beta: 0.1, 
 
 const DEFAULT_OPTIONS: TrackerOptions = {
   holdMs: 500,
-  maxYaw: 0.6,
+  maxYaw: DEFAULT_MAX_YAW,
   minInFrameRatio: MIN_IN_FRAME_RATIO,
   visibleRect: null,
   closedBlink: 0.5,
@@ -79,8 +80,6 @@ const DEFAULT_OPTIONS: TrackerOptions = {
   reliableMinScale: 0.75,
   smoothing: DEFAULT_SMOOTHING,
 };
-
-const KEY_REGIONS: RegionName[] = ["leftEye", "rightEye", "lipsOuter"];
 
 // 기준값 경계에서 상태가 프레임마다 바뀌지 않도록, degraded에서 돌아올 때는 이만큼 더 넘어야 한다.
 const RECOVER_SCALE_MARGIN = 0.05;

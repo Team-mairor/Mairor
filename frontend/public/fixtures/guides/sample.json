@@ -1,0 +1,866 @@
+{
+  "meshVersion": "v1",
+  "steps": [
+    {
+      "stepId": "g1",
+      "source": "template",
+      "order": 1,
+      "title": "아이섀도: 눈두덩 전체에 안쪽에서 바깥쪽으로 펴 발라요",
+      "regions": [
+        "rightEye",
+        "leftEye"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 1,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 93,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 91,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 163,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 165,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 39,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 0,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 0,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 179,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 395,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 219,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 221,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 255,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 3,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 3,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 92,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 90,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 162,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 164,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 38,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 2,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 2,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 178,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 394,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 218,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 220,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 254,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 801,
+            "bary": [
+              0.0446,
+              0.4607,
+              0.4947
+            ]
+          },
+          "to": {
+            "triangle": 327,
+            "bary": [
+              0.3574,
+              0.2089,
+              0.4337
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 800,
+            "bary": [
+              0.0445,
+              0.4947,
+              0.4608
+            ]
+          },
+          "to": {
+            "triangle": 326,
+            "bary": [
+              0.3574,
+              0.4337,
+              0.2089
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "stepId": "g2",
+      "source": "template",
+      "order": 2,
+      "title": "아이라인: 속눈썹 라인을 따라 그리고 꼬리를 살짝 올려요",
+      "regions": [
+        "rightEye",
+        "leftEye"
+      ],
+      "guides": [
+        {
+          "type": "point",
+          "at": {
+            "triangle": 629,
+            "bary": [
+              0.88,
+              0,
+              0.12
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 629,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 627,
+              "bary": [
+                0.12,
+                0,
+                0.88
+              ]
+            },
+            {
+              "triangle": 575,
+              "bary": [
+                0.12,
+                0,
+                0.88
+              ]
+            },
+            {
+              "triangle": 591,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 527,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 329,
+              "bary": [
+                0.3737,
+                0.5645,
+                0.0618
+              ]
+            }
+          ],
+          "width": 0.03
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 38,
+            "bary": [
+              0.12,
+              0.88,
+              0
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 38,
+              "bary": [
+                0.12,
+                0.88,
+                0
+              ]
+            },
+            {
+              "triangle": 576,
+              "bary": [
+                0.88,
+                0.12,
+                0
+              ]
+            },
+            {
+              "triangle": 574,
+              "bary": [
+                0.12,
+                0.88,
+                0
+              ]
+            },
+            {
+              "triangle": 590,
+              "bary": [
+                0.88,
+                0.12,
+                0
+              ]
+            },
+            {
+              "triangle": 526,
+              "bary": [
+                0.88,
+                0.12,
+                0
+              ]
+            },
+            {
+              "triangle": 528,
+              "bary": [
+                0.12,
+                0.88,
+                0
+              ]
+            },
+            {
+              "triangle": 328,
+              "bary": [
+                0.3732,
+                0.0618,
+                0.565
+              ]
+            }
+          ],
+          "width": 0.03
+        }
+      ]
+    },
+    {
+      "stepId": "g3",
+      "source": "template",
+      "order": 3,
+      "title": "블러셔: 볼 가운데에서 관자놀이 쪽으로 쓸어 올려요",
+      "regions": [
+        "rightCheek",
+        "leftCheek"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 267,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 183,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 43,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 43,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 147,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 129,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 389,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 146,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 42,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 42,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 182,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 266,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 388,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 128,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 533,
+            "bary": [
+              0,
+              0.5,
+              0.5
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 533,
+            "bary": [
+              0,
+              0.5,
+              0.5
+            ]
+          },
+          "to": {
+            "triangle": 501,
+            "bary": [
+              0.5359,
+              0.2029,
+              0.2612
+            ]
+          }
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 530,
+            "bary": [
+              0,
+              0.5,
+              0.5
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 530,
+            "bary": [
+              0,
+              0.5,
+              0.5
+            ]
+          },
+          "to": {
+            "triangle": 500,
+            "bary": [
+              0.536,
+              0.2611,
+              0.2029
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "stepId": "g4",
+      "source": "template",
+      "order": 4,
+      "title": "립: 입술 가운데에서 양쪽 끝으로 펴 발라요",
+      "regions": [
+        "lipsOuter"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 89,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 65,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 47,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 19,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 11,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 10,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 10,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 18,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 46,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 64,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 88,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 86,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 122,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 136,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 82,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 84,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 83,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 137,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 123,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 87,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 883,
+            "bary": [
+              0.8285,
+              0.1712,
+              0.0003
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 883,
+            "bary": [
+              0.8285,
+              0.1712,
+              0.0003
+            ]
+          },
+          "to": {
+            "triangle": 699,
+            "bary": [
+              0.0608,
+              0.361,
+              0.5782
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 883,
+            "bary": [
+              0.8285,
+              0.1712,
+              0.0003
+            ]
+          },
+          "to": {
+            "triangle": 698,
+            "bary": [
+              0.061,
+              0.5781,
+              0.3609
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

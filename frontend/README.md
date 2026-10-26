@@ -84,6 +84,8 @@ npm run dev:https
 - 얼굴 피부 분할(`shared/segmentation/`)로 앞머리·손·브러시가 가린 곳에는 칠하지 않는다 (2프레임마다 갱신)
 - 섞기 계산에 영상 픽셀이 필요해 영상도 같은 캔버스에 그린다. 영상을 숨기는 하프미러 모드에서는 `multiply`가 의미 없다
 
+`/debug/overlay`에서는 카메라 없이 픽스처 얼굴(`public/fixtures/`) 위에 레이어를 합성해 본다. 픽스처 설명은 `public/fixtures/README.md`.
+
 ## 튜토리얼 가이드
 
 `/tutorial`은 단계별 가이드(`guides.json`)를 얼굴 위에 그린다. `?guides=경로`로 가이드 파일을 바꿔 볼 수 있다.
@@ -111,7 +113,8 @@ src/
 ├─ features/guide/         # 튜토리얼 가이드 ('use client')
 └─ lib/                    # 공통 유틸
 scripts/
-└─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
+├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
+└─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
 ```
 
 ## MediaPipe 파일

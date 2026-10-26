@@ -5,3 +5,4 @@ package-lock.json
 certificates
 public/mediapipe
 public/models
+public/fixtures

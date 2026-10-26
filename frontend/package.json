@@ -7,6 +7,7 @@
   },
   "scripts": {
     "sync:mediapipe": "node scripts/sync-mediapipe-assets.mjs",
+    "fixtures": "node scripts/generate-fixtures.mjs",
     "predev": "npm run sync:mediapipe",
     "dev": "next dev",
     "predev:https": "npm run sync:mediapipe",

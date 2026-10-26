@@ -1,0 +1,44 @@
+{
+  "videoId": "fixture",
+  "meshVersion": "v1",
+  "layers": [
+    {
+      "stepId": "s1",
+      "makeup": "foundation",
+      "regions": [
+        "faceOval"
+      ],
+      "exclude": [
+        "leftEye",
+        "rightEye",
+        "leftBrow",
+        "rightBrow",
+        "lipsOuter"
+      ],
+      "shape": "polygon",
+      "feather": 0.08,
+      "color": "#E8C4A8",
+      "opacity": 0.3,
+      "blend": "normal",
+      "colorSource": "manual",
+      "source": "manual"
+    },
+    {
+      "stepId": "s5",
+      "makeup": "lip",
+      "regions": [
+        "lipsOuter"
+      ],
+      "exclude": [
+        "lipsInner"
+      ],
+      "shape": "polygon",
+      "feather": 0.04,
+      "color": null,
+      "opacity": 0.6,
+      "blend": "multiply",
+      "colorSource": "manual",
+      "source": "manual"
+    }
+  ]
+}
