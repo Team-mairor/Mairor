@@ -114,12 +114,13 @@ src/
 │  │  ├─ layout.tsx        # 카메라·얼굴 추적을 여기서 한 번만 시작
 │  │  ├─ preview/page.tsx  # 미리보기
 │  │  └─ tutorial/page.tsx # 단계별 튜토리얼
-│  └─ debug/               # 확인 화면 (face·overlay)
+│  └─ debug/               # 확인 화면 (face·overlay·api)
 ├─ components/ui/          # shadcn/ui 컴포넌트
 ├─ features/face/          # 카메라·얼굴 추적 ('use client')
 ├─ features/overlay/       # 화장 레이어 합성 ('use client')
 ├─ features/guide/         # 튜토리얼 가이드 ('use client')
 └─ lib/                    # 공통 유틸
+   └─ api/                 # BE API 클라이언트·모의 응답
 scripts/
 ├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
 └─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
@@ -143,6 +144,39 @@ scripts/
 - 내려받는 파일은 처음 한 번 인터넷이 필요하다. 받지 못하면 경고만 남기고 넘어가며, 그 파일 없이도 추적은 동작한다.
 - `public/mediapipe`, `public/models`는 복사본이라 커밋하지 않는다.
 - `@mediapipe/tasks-vision`은 wasm과 버전이 맞아야 해서 정확한 버전으로 고정했다. 올릴 때는 `npm install`만 하면 다음 실행 때 wasm도 같이 바뀐다.
+
+## API 호출
+
+BE API는 `src/lib/api`의 `api`로 호출한다.
+
+```ts
+import { api, ApiError, isAbortError, type SignUpRequest, type User } from "@/lib/api";
+
+const controller = new AbortController();
+try {
+  const user = await api.post<User>("/v1/users", {
+    body: { email, password, passwordConfirm } satisfies SignUpRequest,
+    signal: controller.signal, // 화면을 떠나면 controller.abort()
+  });
+} catch (e) {
+  if (isAbortError(e)) return; // 취소는 오류로 보여 주지 않는다
+  if (e instanceof ApiError) console.log(e.status, e.code, e.message, e.details);
+}
+```
+
+- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. 노션 API 명세와 다르면 코드를 따른다. 지금 BE에 있는 API는 `GET /health`, `POST /v1/users`(회원가입)다.
+- 경로는 `/api` 뒤부터 적는다 (`/v1/...`, `/health`). 주소 앞부분은 `NEXT_PUBLIC_API_BASE_URL` (기본 `/api`).
+- `NEXT_PUBLIC_API_BASE_URL`은 같은 Origin의 상대 경로(`/api`)만 지원한다. 다른 도메인이면 세션 쿠키가 실리지 않고, BE에도 CORS 설정이 없다.
+- 세션 쿠키(`__Host-sessionId`)는 Secure라서 `http://<PC IP>:3000`으로 접속하면 브라우저가 버린다. 로그인이 필요한 요청을 폰에서 확인할 때는 USB 연결(`localhost`)이나 `npm run dev:https`로 접속한다.
+- BE는 값이 없는 필드도 빼지 않고 `null`로 보낸다. 타입에서는 `| null`로 둔다. 오류 응답의 `details`만 없으면 빠진다.
+- 메서드는 대소문자를 가리지 않고, 경로 앞의 `/`는 빠져도 붙여 준다. 본문은 `FormData`(multipart)·`Blob`·`URLSearchParams`는 그대로, 그 밖의 값은 JSON으로 보낸다.
+- 성공하면 본문을 돌려주고, 본문이 없으면(204 등) `undefined`다.
+- 실패하면 `ApiError`를 던진다. 서버에 닿지 못하면 `code`가 `NETWORK_ERROR`, `AbortSignal.timeout()`으로 끊기면 `TIMEOUT`, 응답이 공통 형식이 아니면(JSON이 아닌 성공 응답 포함) `UNEXPECTED_RESPONSE`다. 직접 취소하면 `abort()`에 넣은 이유와 상관없이 `AbortError`를 던진다.
+- `setCsrfToken()`으로 토큰을 넣어 두면 POST·PUT·PATCH·DELETE에 `X-CSRF-TOKEN`이 붙는다. 로그인·내 계정 조회 응답의 `csrfToken`을 고치지 않고 그대로 넣는다.
+- 토큰이 없거나 맞지 않는 변경 요청은 403 `CSRF_INVALID`이고, 내 계정 조회로 토큰을 다시 받는다. 회원가입·로그인은 세션이 없어 토큰 대신 허용 Origin으로 검사한다(허용되지 않으면 403 `FORBIDDEN`). 개발 서버 Origin `http://localhost:3000`은 BE 개발 설정에서 허용돼 있다.
+- BE 없이 개발할 때는 `NEXT_PUBLIC_API_MOCK=success|error`로 모의 응답을 쓴다. 운영 빌드(`npm run build`)에서는 이 값을 무시한다. 요청마다 `mock` 옵션으로 바꿀 수도 있지만 운영 빌드에도 적용되므로 `/debug` 확인 화면에서만 쓴다.
+- BE를 로컬에서 띄웠다면 `API_PROXY_TARGET=http://localhost:8080`으로 개발 서버가 `/api`를 넘긴다. 배포에서는 리버스 프록시가 맡는다.
+- `/debug/api`에서 요청별로 성공·오류·취소·시간 초과 흐름을 확인할 수 있다. 모의 응답은 요청 본문을 보지 않으므로 입력값에 따른 결과는 "실제 서버"로 확인한다.
 
 ## 규칙
 
