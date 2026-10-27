@@ -16,3 +16,8 @@ management:
   endpoint:
     health:
       show-details: always
+
+app:
+  security:
+    # 로컬 프론트(next dev). 폰에서 https://<PC IP>:3000 으로 테스트하려면 backend/.env 의 ALLOWED_ORIGINS 에 추가한다.
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,https://localhost:3000}

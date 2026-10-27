@@ -45,8 +45,27 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 | `DB_URL` | `jdbc:postgresql://localhost:5432/mairor` | JDBC URL |
 | `DB_USERNAME` | `mairor` | DB 사용자 |
 | `DB_PASSWORD` | (없음) | DB 비밀번호 |
+| `ALLOWED_ORIGINS` | dev: `http://localhost:3000,https://localhost:3000` / prod: 없음(필수) | 회원가입·로그인 같은 세션 없는 요청을 보낼 수 있는 프론트 Origin. 쉼표로 구분. prod 에서 비어 있으면 기동 실패 |
+
+프론트는 같은 Origin 의 `/api` 로 호출하므로 CORS 설정은 두지 않는다. `ALLOWED_ORIGINS` 에는 브라우저 주소창에 보이는 프론트 공개 Origin 만 넣는다 (리버스 프록시 뒤의 내부 주소가 아니다). 프록시는 `Origin` 헤더를 바꾸지 않고 그대로 넘겨야 한다.
 
 새 설정은 `application.yml` 에 `${이름:기본값}` 으로 추가하고 `.env.example` 에도 적는다.
+
+## DB 스키마
+
+dev 는 `ddl-auto=update` 라 Hibernate 가 테이블을 만들지만, **운영(prod)은 `ddl-auto=validate`** 라 테이블이 먼저 있어야 앱이 기동한다. 없으면 `missing table [users]` 로 실패한다.
+
+Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로 둔다.
+
+| 파일 | 테이블 |
+|---|---|
+| `db/schema/users.sql` | `users` (회원) |
+
+- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`
+- 누가·언제 적용하는지는 아직 정해지지 않았다 (배포 환경 이슈에서 확정). 확정 전에는 운영 배포를 하지 않는다.
+- 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).
+- 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인).
+- Flyway 를 도입하면 `db/migration/V<번호>__*.sql` 로 옮긴다. 번호는 Flyway 담당과 맞춘다.
 
 ## 응답 형식
 

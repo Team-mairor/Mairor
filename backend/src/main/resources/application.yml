@@ -52,3 +52,9 @@ management:
   endpoint:
     health:
       show-details: never
+
+app:
+  security:
+    # 회원가입·로그인처럼 세션이 없는 요청을 보낼 수 있는 프론트 Origin (쉼표 구분).
+    # 기본값이 없어서 운영에서 ALLOWED_ORIGINS 를 빠뜨리면 앱이 기동하지 않는다. dev 기본값은 application-dev.yml.
+    allowed-origins: ${ALLOWED_ORIGINS:}

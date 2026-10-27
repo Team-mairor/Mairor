@@ -56,6 +56,20 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
+  void unsupportedContentType_returns415() throws Exception {
+    mockMvc
+        .perform(
+            post("/v1/error-probe/body")
+                .with(csrf())
+                .contentType(MediaType.TEXT_PLAIN)
+                .content("name"))
+        .andExpect(status().isUnsupportedMediaType())
+        .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+        .andExpect(jsonPath("$.details").doesNotExist())
+        .andExpect(header().exists("Accept"));
+  }
+
+  @Test
   void unknownPath_returns404() throws Exception {
     mockMvc
         .perform(get("/v1/nope"))
@@ -71,7 +85,8 @@ class GlobalExceptionHandlerTest {
         .perform(post("/health").with(csrf()))
         .andExpect(status().isMethodNotAllowed())
         .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"))
-        .andExpect(jsonPath("$.message").value("허용되지 않는 요청 방식입니다."));
+        .andExpect(jsonPath("$.message").value("허용되지 않는 요청 방식입니다."))
+        .andExpect(header().exists("Allow"));
   }
 
   @Test

@@ -9,12 +9,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponseException;
+import org.springframework.web.HttpMediaTypeException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -115,7 +117,10 @@ public class GlobalExceptionHandler {
   @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
   public ResponseEntity<ErrorResponse> handleMethodNotSupported(
       HttpRequestMethodNotSupportedException e) {
-    return of(ErrorCode.METHOD_NOT_ALLOWED);
+    // 405는 Allow 헤더(허용 메서드)를 함께 내려야 한다
+    return ResponseEntity.status(ErrorCode.METHOD_NOT_ALLOWED.status())
+        .headers(e.getHeaders())
+        .body(ErrorResponse.of(ErrorCode.METHOD_NOT_ALLOWED));
   }
 
   /** 컨트롤러 안에서 난 인증 예외 (필터 밖). */
@@ -130,13 +135,22 @@ public class GlobalExceptionHandler {
     return of(ErrorCode.FORBIDDEN);
   }
 
-  /** 그 밖의 스프링 표준 HTTP 오류 (415 등): 상태 코드 이름을 코드로 쓴다. AI 서버와 같은 규칙. */
+  /** 그 밖의 스프링 표준 HTTP 오류: 상태 코드 이름을 코드로 쓴다. AI 서버와 같은 규칙. */
   @ExceptionHandler(ErrorResponseException.class)
   public ResponseEntity<ErrorResponse> handleErrorResponse(ErrorResponseException e) {
-    HttpStatus status = HttpStatus.resolve(e.getStatusCode().value());
-    String code = status != null ? status.name() : "HTTP_" + e.getStatusCode().value();
-    String message = status != null ? status.getReasonPhrase() : "요청을 처리할 수 없습니다.";
-    return ResponseEntity.status(e.getStatusCode()).body(ErrorResponse.of(code, message, null));
+    return fromStatus(e.getStatusCode(), e.getHeaders());
+  }
+
+  /**
+   * 지원하지 않는 요청 Content-Type(415)·응답 Accept(406). {@link ErrorResponseException}의 하위가 아니라서 위 핸들러에
+   * 걸리지 않고, 따로 받지 않으면 500이 된다.
+   */
+  @ExceptionHandler(HttpMediaTypeException.class)
+  public ResponseEntity<ErrorResponse> handleMediaType(HttpMediaTypeException e) {
+    // 415의 Accept(지원하는 타입) 같은 헤더는 하위 예외가 가지고 있다
+    HttpHeaders headers =
+        e instanceof org.springframework.web.ErrorResponse er ? er.getHeaders() : HttpHeaders.EMPTY;
+    return fromStatus(e.getStatusCode(), headers);
   }
 
   /** 처리하지 못한 예외: 내부 정보는 응답에 넣지 않고 로그에만 남긴다. */
@@ -150,6 +164,16 @@ public class GlobalExceptionHandler {
       List<ErrorResponse.FieldError> details) {
     return ResponseEntity.status(ErrorCode.VALIDATION_FAILED.status())
         .body(ErrorResponse.of(ErrorCode.VALIDATION_FAILED, details));
+  }
+
+  private static ResponseEntity<ErrorResponse> fromStatus(
+      HttpStatusCode statusCode, HttpHeaders headers) {
+    HttpStatus status = HttpStatus.resolve(statusCode.value());
+    String code = status != null ? status.name() : "HTTP_" + statusCode.value();
+    String message = status != null ? status.getReasonPhrase() : "요청을 처리할 수 없습니다.";
+    return ResponseEntity.status(statusCode)
+        .headers(headers)
+        .body(ErrorResponse.of(code, message, null));
   }
 
   private static ResponseEntity<ErrorResponse> of(ErrorCode code) {
