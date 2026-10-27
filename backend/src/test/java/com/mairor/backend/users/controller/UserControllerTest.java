@@ -112,7 +112,7 @@ class UserControllerTest {
     // 세션 쿠키를 주지 않고, 쿠키가 있더라도 그대로 실어 보낸 보호된 API는 여전히 401이다
     Cookie[] cookies = result.getResponse().getCookies();
     assertThat(cookies).extracting(Cookie::getName).doesNotContain("__Host-sessionId");
-    MockHttpServletRequestBuilder next = get("/v1/guides");
+    MockHttpServletRequestBuilder next = get("/v1/any");
     if (cookies.length > 0) {
       next = next.cookie(cookies);
     }
@@ -331,7 +331,7 @@ class UserControllerTest {
 
   @Test
   void otherEndpoints_stillRequireLogin() throws Exception {
-    mockMvc.perform(get("/v1/guides")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/v1/any")).andExpect(status().isUnauthorized());
     mockMvc.perform(get("/v1/users")).andExpect(status().isUnauthorized());
     mockMvc.perform(get("/v1/users/" + UUID.randomUUID())).andExpect(status().isUnauthorized());
   }

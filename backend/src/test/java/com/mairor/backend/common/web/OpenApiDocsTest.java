@@ -29,7 +29,7 @@ class OpenApiDocsTest {
         .andExpect(status().isOk())
         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
         .andExpect(jsonPath("$.openapi").exists())
-        .andExpect(jsonPath("$.paths['/v1/guides']").exists());
+        .andExpect(jsonPath("$.paths['/health']").exists());
   }
 
   @Test
@@ -56,7 +56,7 @@ class OpenApiDocsTest {
   @Test
   void otherEndpoints_stillRequireLogin() throws Exception {
     mockMvc
-        .perform(get("/v1/guides"))
+        .perform(get("/v1/any"))
         .andExpect(status().isUnauthorized())
         .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
   }

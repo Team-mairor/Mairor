@@ -89,7 +89,7 @@ class UserSignUpContextPathTest {
     Reply reply =
         client()
             .get()
-            .uri("/v1/guides")
+            .uri("/v1/any")
             .exchange(
                 (req, res) ->
                     new Reply(

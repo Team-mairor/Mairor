@@ -24,8 +24,8 @@ spring:
   jackson:
     # Jackson 3: 날짜는 기본으로 ISO-8601 문자열로 직렬화된다 (write-dates-as-timestamps 설정 불필요)
     time-zone: UTC
-    # null 필드는 생략한다 (AI 서버의 exclude_none 과 동일)
-    default-property-inclusion: non_null
+    # null 필드는 생략하지 않고 "필드": null 로 내보낸다 (노션 API 명세 "생략·null·빈 값").
+    # 오류 응답의 details 만 ErrorResponse 의 @JsonInclude 로 생략한다.
   cache:
     type: caffeine
 
@@ -41,7 +41,8 @@ server:
         name: __Host-sessionId
         secure: true
         http-only: true
-        same-site: lax
+        # 서비스 세션은 Strict. Google 인증 복귀용 임시 쿠키만 Lax 로 따로 둔다 (노션 API 명세 인증·배포 상세)
+        same-site: strict
         path: /
 
 management:

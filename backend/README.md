@@ -72,7 +72,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 
 노션 [API 명세](https://app.notion.com/p/3fedce3252f680898d36d3f454427d44) 공통 규약을 AI 서버(`ai/app/core/errors.py`)와 똑같이 따른다.
 
-- 필드명은 camelCase, 열거값은 `UPPER_SNAKE_CASE`, 날짜는 UTC ISO-8601 (`2026-01-02T03:04:05Z`), `null` 필드는 생략한다.
+- 필드명은 camelCase, 열거값은 `UPPER_SNAKE_CASE`, 날짜는 UTC ISO-8601 (`2026-01-02T03:04:05Z`). 값이 없는 필드는 생략하지 않고 `null` 로 내보낸다 (목록은 `[]`).
 - 성공하면 데이터 객체를 그대로 반환한다. 감싸는 봉투는 없다.
 - 목록은 `?page=0&size=20` 으로 받고 `{"items": [], "page": 0, "size": 20, "hasNext": false}` 로 돌려준다 (size 1~100, 기본 20).
 - 오류는 아래 형식이고, `details` 는 입력 필드 오류일 때만 들어간다.
@@ -89,19 +89,23 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 |---|---|---|
 | 입력 검증 실패, 타입 불일치, 본문 파싱 실패 | 400 | `VALIDATION_FAILED` |
 | 미인증 | 401 | `UNAUTHORIZED` |
-| CSRF 실패, 권한 없음 | 403 | `FORBIDDEN` |
+| 변경 요청의 CSRF 토큰 없음·불일치 (세션이 없어도 401보다 먼저 나간다) | 403 | `CSRF_INVALID` |
+| 권한 없음, 허용 Origin 아님 | 403 | `FORBIDDEN` |
 | 없는 경로, 타인 리소스 | 404 | `NOT_FOUND` |
 | 허용되지 않는 메서드 | 405 | `METHOD_NOT_ALLOWED` |
-| 업무 충돌 | 409 | 도메인 코드 (예: `ANALYSIS_IN_PROGRESS`) |
+| 업무 충돌 | 409 | 도메인 코드 (예: `ANALYSIS_IN_PROGRESS`), 정해진 코드가 없으면 `CONFLICT` |
 | 한도 초과 (`Retry-After` 헤더) | 429 | `TOO_MANY_REQUESTS` |
 | 처리하지 못한 예외 (내부 정보는 응답에 넣지 않음) | 500 | `INTERNAL_ERROR` |
+
+- code와 기본 message는 노션 API 명세 "공통 오류 코드" 표와 `ErrorCode` 가 같다. FE는 message가 아니라 code로 분기한다.
+- 표에 없는 HTTP 오류(406·413·415 등)는 HTTP 상태 이름을 code로 쓴다 (예: 415 `UNSUPPORTED_MEDIA_TYPE`).
 
 코드에서는 이렇게 쓴다.
 
 ```java
-// 목록 API: 파라미터는 PageQuery, 응답은 PageResponse
+// 목록 API: 파라미터는 PageQuery, 응답은 PageResponse (본보기: 테스트의 common/web/PageProbeController)
 @GetMapping
-public PageResponse<GuideSummaryResponse> list(@Valid @ModelAttribute PageQuery query) { ... }
+public PageResponse<ItemResponse> list(@Valid @ModelAttribute PageQuery query) { ... }
 
 // 업무 오류: 상태·코드·메시지를 던지면 GlobalExceptionHandler 가 공통 형식으로 바꾼다
 throw new BusinessException(ErrorCode.NOT_FOUND);
@@ -121,7 +125,7 @@ backend/
    ├─ BackendApplication.java
    ├─ common/                   도메인에 속하지 않는 공통 코드
    │  ├─ config/                설정 빈
-   │  ├─ security/              SecurityConfig (401·403 JSON, 세션 로그인은 회원 이슈)
+   │  ├─ security/              SecurityConfig (401·403 JSON, 세션 쿠키 SameSite=Strict, 세션 로그인은 회원 이슈)
    │  ├─ error/                 ErrorCode · ErrorResponse · BusinessException · GlobalExceptionHandler
    │  ├─ web/                   HealthController, PageQuery · PageResponse
    │  ├─ storage/               파일 저장소 (기능 개발 시)

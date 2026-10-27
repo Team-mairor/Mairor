@@ -134,7 +134,7 @@ class OriginCheckFilterTest {
   @Test
   void requestsOutsideTheProtectedList_passWithoutOrigin() throws Exception {
     assertThat(run(new MockHttpServletRequest("GET", "/v1/users")).passed()).isTrue();
-    assertThat(run(post("/v1/guides")).passed()).isTrue();
+    assertThat(run(post("/v1/any")).passed()).isTrue();
     assertThat(run(post("/health")).passed()).isTrue();
   }
 

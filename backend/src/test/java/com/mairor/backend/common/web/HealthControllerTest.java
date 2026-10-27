@@ -29,6 +29,6 @@ class HealthControllerTest {
 
   @Test
   void otherPaths_requireAuthentication() throws Exception {
-    mockMvc.perform(get("/v1/guides")).andExpect(status().is4xxClientError());
+    mockMvc.perform(get("/v1/any")).andExpect(status().is4xxClientError());
   }
 }

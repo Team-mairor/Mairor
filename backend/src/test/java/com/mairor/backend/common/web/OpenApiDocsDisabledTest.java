@@ -41,6 +41,6 @@ class OpenApiDocsDisabledTest {
   @Test
   void healthAndOtherEndpoints_areUnaffected() throws Exception {
     mockMvc.perform(get("/health")).andExpect(status().isOk());
-    mockMvc.perform(get("/v1/guides")).andExpect(status().isUnauthorized());
+    mockMvc.perform(get("/v1/any")).andExpect(status().isUnauthorized());
   }
 }
