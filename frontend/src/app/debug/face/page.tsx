@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  applyLandmarkerParams,
   DEFAULT_SMOOTHING as SMOOTHING,
   FaceTracker,
+  landmarkerInfo,
   coverTransform,
   isGuideVisible,
   REGIONS,
@@ -122,6 +124,11 @@ export default function DebugFacePage() {
   const [smoothing, setSmoothing] = useState(true);
   const [hud, setHud] = useState<Hud | null>(null);
 
+  // ?delegate=gpu|cpu, ?blendshapes=off 로 기기별 성능을 비교한다.
+  useEffect(() => {
+    applyLandmarkerParams(window.location.search);
+  }, []);
+
   useEffect(() => {
     showIndicesRef.current = showIndices;
   }, [showIndices]);
@@ -234,7 +241,9 @@ export default function DebugFacePage() {
   async function lock(names: ControlName[]) {
     const track = currentTrack();
     if (!track) return;
-    setLockResult(await lockControls(track, names));
+    // 버튼마다 따로 누르므로 앞서 고정한 결과를 지우지 않고 합친다.
+    const result = await lockControls(track, names);
+    setLockResult((prev) => ({ ...prev, ...result }));
     setControls(describeControls(track));
   }
 
@@ -368,6 +377,10 @@ export default function DebugFacePage() {
           <dd>{hud.stats.fps}</dd>
           <dt>detect</dt>
           <dd>{hud.stats.detectMs.toFixed(1)} ms</dd>
+          <dt>추론</dt>
+          <dd>
+            {landmarkerInfo.delegate ?? "-"} · {landmarkerInfo.gpu ?? "WebGL2 없음"}
+          </dd>
           <dt>입력 축소 배율</dt>
           <dd>{hud.stats.inputScale.toFixed(2)}</dd>
           <dt>video</dt>

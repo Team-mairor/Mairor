@@ -94,6 +94,15 @@ export function describeControls(track: MediaStreamTrack): ControlInfo[] {
 // 화면이 어두워질 수 있어, single-shot이나 현재 값을 넣은 manual만 쓴다.
 export type ControlName = "exposure" | "whiteBalance" | "focus";
 
+/** 카메라가 알려 준 범위(min·max·step) 안으로 값을 맞춘다. 범위 정보가 없으면 그대로 둔다. */
+function clampToRange(value: number, range: unknown): number {
+  const r = range as { min?: number; max?: number; step?: number } | undefined;
+  if (typeof r?.min !== "number" || typeof r?.max !== "number") return value;
+  let v = Math.max(r.min, Math.min(r.max, value));
+  if (r.step && r.step > 0) v = r.min + Math.round((v - r.min) / r.step) * r.step;
+  return Math.max(r.min, Math.min(r.max, v));
+}
+
 export async function lockControls(
   track: MediaStreamTrack,
   names: ControlName[] = ["exposure", "whiteBalance", "focus"],
@@ -116,15 +125,21 @@ export async function lockControls(
       continue;
     }
 
+    const current = settings[value];
     let constraint: Record<string, unknown> | null = null;
     if (modes.includes("single-shot")) {
       constraint = { [mode]: "single-shot" };
-    } else if (modes.includes("manual") && settings[value] !== undefined) {
-      constraint = { [mode]: "manual", [value]: settings[value] };
+    } else if (modes.includes("manual") && typeof current === "number" && current > 0) {
+      // 기기에 따라 현재 값이 허용 범위 밖으로 보고되어(예: 색온도) 그대로 넣으면 거절된다.
+      constraint = { [mode]: "manual", [value]: clampToRange(current, caps[value]) };
     }
 
     if (!constraint) {
-      results[name] = `고정 불가 (지원 모드: ${modes.join(", ")})`;
+      // 현재 값을 0으로 알려 주는 기기(갤럭시탭 S6 Lite)에서 범위 최솟값으로 고정하면 화면이 어두워지거나
+      // 색온도가 틀어진다. 지금 값을 모르면 고정하지 않고 자동으로 둔다.
+      results[name] = modes.includes("manual")
+        ? "고정 안 함 (기기가 현재 값을 알려 주지 않음)"
+        : `고정 불가 (지원 모드: ${modes.join(", ")})`;
       continue;
     }
     try {

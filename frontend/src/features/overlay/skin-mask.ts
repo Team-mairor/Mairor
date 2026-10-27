@@ -21,19 +21,14 @@ async function createSegmenter(): Promise<ImageSegmenter> {
     );
   }
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
-  const create = (delegate: "GPU" | "CPU") =>
-    ImageSegmenter.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: SKIN_SEGMENTER_MODEL_PATH, delegate },
-      runningMode: "VIDEO",
-      outputConfidenceMasks: true,
-      outputCategoryMask: false,
-    });
-  try {
-    return await create("GPU");
-  } catch (e) {
-    console.warn("GPU로 피부 분할을 시작하지 못해 CPU로 다시 시도합니다", e);
-    return create("CPU");
-  }
+  // GPU로 돌리면 마스크를 float로 읽어 오는데, 일부 모바일 GPU(Mali 등)는 이 읽기에 실패해 빈 마스크가 나오고
+  // 화장이 전부 지워진다. 입력이 256×256으로 작아 CPU로도 충분하다.
+  return ImageSegmenter.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: SKIN_SEGMENTER_MODEL_PATH, delegate: "CPU" },
+    runningMode: "VIDEO",
+    outputConfidenceMasks: true,
+    outputCategoryMask: false,
+  });
 }
 
 /**

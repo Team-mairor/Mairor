@@ -99,6 +99,9 @@ function signedArea([a, b, c]: Px[]) {
   return ((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2;
 }
 
+// 흐림 반경(기기 픽셀)이 이보다 크면 1/BLUR_DOWNSCALE 크기에서 흐린다.
+const BLUR_DOWNSCALE_FROM = 4;
+const BLUR_DOWNSCALE = 4;
 /** 삼각형 꼭짓점 순서 방향 */
 function winding(points: Px[]) {
   return Math.sign(signedArea(points));
@@ -175,6 +178,9 @@ export class OverlayRenderer {
   private readonly layer = document.createElement("canvas");
   private readonly shapeCtx = context(this.shape);
   private readonly layerCtx = context(this.layer);
+  // 큰 흐림을 줄인 크기에서 처리하는 곳
+  private readonly small = document.createElement("canvas");
+  private readonly smallCtx = context(this.small);
   // 화면 크기로 늘리고 흐린 피부 마스크. 흐림은 화면 전체에 계산되어 레이어마다 하지 않고 프레임마다 한 번만 만든다.
   private readonly skinLayer = document.createElement("canvas");
   private readonly skinCtx = context(this.skinLayer);
@@ -257,7 +263,7 @@ export class OverlayRenderer {
     this.disposed = true;
     this.maskGl?.dispose();
     this.maskGl = null;
-    for (const c of [this.shape, this.layer, this.skinLayer]) c.width = c.height = 0;
+    for (const c of [this.shape, this.layer, this.skinLayer, this.small]) c.width = c.height = 0;
   }
 
   render(options: {
@@ -320,9 +326,17 @@ export class OverlayRenderer {
     const unit = frame.iod * view.scale;
 
     for (const prepared of visible) {
+      const start = performance.now();
       this.drawLayer(prepared, frame, mesh, toPx, unit, view.mirrored);
+      const name = prepared.layer.makeup;
+      const ms = performance.now() - start;
+      // 흔들려서 평균을 낸다.
+      this.layerMs[name] = (this.layerMs[name] ?? ms) * 0.9 + ms * 0.1;
     }
   }
+
+  /** 화장 종류별 평균 그리기 시간 (ms, 성능 확인용) */
+  readonly layerMs: Record<string, number> = {};
 
   /** 영상 크기(size) 기준 이미지를 영상과 같은 위치·반전으로 화면에 그린다. */
   private drawFitted(
@@ -454,9 +468,27 @@ export class OverlayRenderer {
     // 2. 흐림: 경계에서 안팎으로 feather/2씩 퍼지도록 가우시안 σ ≈ feather/4
     const lctx = this.layerCtx;
     lctx.clearRect(box.x, box.y, box.w, box.h);
-    lctx.filter = featherPx > 0.5 ? `blur(${(featherPx / 4) * dpr}px)` : "none";
-    lctx.drawImage(this.shape, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
-    lctx.filter = "none";
+    const sigma = (featherPx / 4) * dpr;
+    if (sigma > BLUR_DOWNSCALE_FROM) {
+      // 큰 흐림은 줄인 크기에서 처리해 다시 키운다. 흐림 비용이 픽셀 수에 비례해 저사양 기기에서 크다.
+      const small = this.small;
+      const sw = Math.max(1, Math.ceil(box.w / BLUR_DOWNSCALE));
+      const sh = Math.max(1, Math.ceil(box.h / BLUR_DOWNSCALE));
+      if (small.width < sw || small.height < sh) {
+        small.width = Math.max(small.width, sw);
+        small.height = Math.max(small.height, sh);
+      }
+      const smallCtx = this.smallCtx;
+      smallCtx.clearRect(0, 0, sw, sh);
+      smallCtx.filter = `blur(${sigma / BLUR_DOWNSCALE}px)`;
+      smallCtx.drawImage(this.shape, box.x, box.y, box.w, box.h, 0, 0, sw, sh);
+      smallCtx.filter = "none";
+      lctx.drawImage(small, 0, 0, sw, sh, box.x, box.y, box.w, box.h);
+    } else {
+      lctx.filter = sigma > 0.5 ? `blur(${sigma}px)` : "none";
+      lctx.drawImage(this.shape, box.x, box.y, box.w, box.h, box.x, box.y, box.w, box.h);
+      lctx.filter = "none";
+    }
 
     // 3. 색을 입힌다 (모양의 알파 = 진하기)
     lctx.globalCompositeOperation = "source-in";

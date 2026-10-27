@@ -17,6 +17,47 @@ const DEFAULT_CONFIDENCE: LandmarkerConfidence = {
   minTrackingConfidence: 0.3,
 };
 
+export type Delegate = "GPU" | "CPU";
+
+/** 기기별 성능 비교용 설정. 기본은 GPU를 먼저 시도하고 blendshape(눈 뜬 정도)를 계산한다. */
+export interface LandmarkerPreference {
+  delegate: Delegate | "auto";
+  blendshapes: boolean;
+}
+
+const preference: LandmarkerPreference = { delegate: "auto", blendshapes: true };
+
+/** 실제로 만든 추적 모델의 실행 방식과 GPU 이름 (확인 화면 표시용) */
+export const landmarkerInfo: { delegate: Delegate | null; gpu: string | null } = {
+  delegate: null,
+  gpu: null,
+};
+
+/** 주소의 ?delegate=gpu|cpu, ?blendshapes=off 로 설정을 바꾼다. 다음에 만드는 모델부터 적용된다. */
+export function applyLandmarkerParams(search: string) {
+  const params = new URLSearchParams(search);
+  const delegate = params.get("delegate")?.toUpperCase();
+  preference.delegate = delegate === "GPU" || delegate === "CPU" ? delegate : "auto";
+  preference.blendshapes = params.get("blendshapes") !== "off";
+}
+
+let cachedGpuName: string | null | undefined;
+
+/**
+ * 브라우저가 쓰는 GPU 이름. 소프트웨어 렌더링(SwiftShader)이면 GPU 가속이 꺼진 것이다.
+ * 추적기를 다시 만들 때마다 컨텍스트가 쌓이면 브라우저가 오래된 것(화장 레이어 마스크)부터 끊으므로,
+ * 한 번만 구하고 쓴 컨텍스트는 바로 놓는다.
+ */
+function gpuName(): string | null {
+  if (cachedGpuName !== undefined) return cachedGpuName;
+  const gl = document.createElement("canvas").getContext("webgl2");
+  if (!gl) return (cachedGpuName = null);
+  const ext = gl.getExtension("WEBGL_debug_renderer_info");
+  cachedGpuName = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
+  gl.getExtension("WEBGL_lose_context")?.loseContext();
+  return cachedGpuName;
+}
+
 // 브라우저에서만 호출한다. 서버 렌더링 때 로드되지 않도록 동적으로 import한다.
 export async function createFaceLandmarker(
   confidence: Partial<LandmarkerConfidence> = {},
@@ -25,23 +66,30 @@ export async function createFaceLandmarker(
 
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
 
-  const create = (delegate: "GPU" | "CPU") =>
+  const create = (delegate: Delegate) =>
     FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: FACE_LANDMARKER_MODEL_PATH, delegate },
       runningMode: "VIDEO",
       numFaces: 1,
-      outputFaceBlendshapes: true,
+      outputFaceBlendshapes: preference.blendshapes,
       outputFacialTransformationMatrixes: true,
       ...DEFAULT_CONFIDENCE,
       ...confidence,
     });
 
+  landmarkerInfo.gpu = gpuName();
+  const createWith = async (delegate: Delegate) => {
+    const landmarker = await create(delegate);
+    landmarkerInfo.delegate = delegate;
+    return landmarker;
+  };
+  if (preference.delegate !== "auto") return createWith(preference.delegate);
   // WebGL2를 쓸 수 없는 기기에서는 느리더라도 CPU로 돌린다.
   try {
-    return await create("GPU");
+    return await createWith("GPU");
   } catch (e) {
     console.warn("GPU로 얼굴 추적을 시작하지 못해 CPU로 다시 시도합니다", e);
-    return create("CPU");
+    return createWith("CPU");
   }
 }
 
