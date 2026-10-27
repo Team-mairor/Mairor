@@ -1,0 +1,919 @@
+{
+  "model": "gemini-2.5-flash",
+  "videoUrl": "https://www.youtube.com/watch?v=eFzG30avtOI",
+  "elapsedSeconds": 86.9,
+  "finishReason": "STOP",
+  "usage": {
+    "promptTokenCount": 155604,
+    "candidatesTokenCount": 5427,
+    "totalTokenCount": 166277,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 459
+      },
+      {
+        "modality": "VIDEO",
+        "tokenCount": 138338
+      },
+      {
+        "modality": "AUDIO",
+        "tokenCount": 16807
+      }
+    ],
+    "thoughtsTokenCount": 5246,
+    "serviceTier": "standard"
+  },
+  "prompt": "이 메이크업 영상을 처음부터 끝까지 보고, 시청자가 따라 할 수 있도록 메이크업 단계를 순서대로 나눠라.\n\n규칙\n- 단계 = 얼굴에 무언가를 바르거나 정리하는 동작 하나의 묶음. 인사·잡담·제품 소개만 하는 구간은 단계로 만들지 않는다.\n- 스킨케어처럼 정해진 부위 분류에 없는 단계는 makeup을 \"other\"로 두고 partLabel에 한국어로 무엇인지 쓴다 (예: \"스킨케어\", \"눈썹\", \"쉐딩\"). 분류가 있는 단계도 partLabel을 한국어로 쓴다.\n- startSeconds·endSeconds·at·keyframeSeconds는 모두 영상 시작부터의 초(소수 가능)다.\n- summary: 이 단계에서 하는 일을 영상 내용 그대로 한 문장으로. 꾸미거나 영상에 없는 말을 더하지 않는다.\n- facts의 각 칸은 영상에 실제로 나온 것만 쓴다.\n  - tool: 바를 때 쓴 도구 (손가락, 브러시 종류, 퍼프 등)\n  - amount: 바르는 양\n  - strength: 바르는 힘·두드리는 세기\n  - tips: 크리에이터가 알려 준 요령\n  - cautions: 하지 말라고 한 것, 주의하라고 한 것\n  - finishCue: 언제 그 단계를 끝내면 되는지 알려 준 신호\n- 각 사실의 source: 말로 했으면 \"voice\", 화면 자막이면 \"onscreenText\", 말·자막 없이 화면에서 보이기만 하면 \"scene\". 영상에 근거가 없으면 칸을 null로 두고, 추측해서 채우지 않는다. \"estimated\"는 쓰지 않는다.\n- at: 그 사실의 근거가 나온 시각.\n- product: 제품 이름·색상이 말이나 자막, 화면의 제품 글자로 확인될 때만 쓴다. 확인 안 되면 null.\n- keyframeSeconds: 이 단계를 가장 잘 보여 주는 장면 시각 1~3개. 얼굴과 바르는 동작이 잘 보이는 순간으로 고르고, 반드시 그 단계 구간 안이어야 한다.\n",
+  "schema": {
+    "type": "OBJECT",
+    "properties": {
+      "durationSeconds": {
+        "type": "NUMBER"
+      },
+      "steps": {
+        "type": "ARRAY",
+        "items": {
+          "type": "OBJECT",
+          "properties": {
+            "order": {
+              "type": "INTEGER"
+            },
+            "makeup": {
+              "type": "STRING",
+              "enum": [
+                "foundation",
+                "eyeshadow",
+                "eyeliner",
+                "blush",
+                "lip",
+                "other"
+              ]
+            },
+            "partLabel": {
+              "type": "STRING"
+            },
+            "startSeconds": {
+              "type": "NUMBER"
+            },
+            "endSeconds": {
+              "type": "NUMBER"
+            },
+            "summary": {
+              "type": "STRING"
+            },
+            "product": {
+              "type": "OBJECT",
+              "nullable": true,
+              "properties": {
+                "name": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "shade": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "source": {
+                  "type": "STRING",
+                  "enum": [
+                    "voice",
+                    "onscreenText",
+                    "scene",
+                    "estimated"
+                  ]
+                }
+              }
+            },
+            "facts": {
+              "type": "OBJECT",
+              "properties": {
+                "tool": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "NUMBER",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "amount": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "NUMBER",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "strength": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "NUMBER",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "tips": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "nullable": true,
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "NUMBER",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "cautions": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "nullable": true,
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "NUMBER",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "finishCue": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "NUMBER",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                }
+              }
+            },
+            "keyframeSeconds": {
+              "type": "ARRAY",
+              "items": {
+                "type": "NUMBER"
+              }
+            }
+          },
+          "required": [
+            "order",
+            "makeup",
+            "partLabel",
+            "startSeconds",
+            "endSeconds",
+            "summary",
+            "facts",
+            "keyframeSeconds"
+          ]
+        }
+      }
+    },
+    "required": [
+      "durationSeconds",
+      "steps"
+    ]
+  },
+  "output": {
+    "durationSeconds": 526.0,
+    "steps": [
+      {
+        "order": 1,
+        "makeup": "other",
+        "partLabel": "스킨케어",
+        "startSeconds": 20.0,
+        "endSeconds": 46.0,
+        "summary": "세안 후 패드를 붙이고 머리를 말리는 동안 5분에서 10분 정도 붙여두어 건조함을 방지하고 얼굴의 열을 내린다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": {
+            "value": "머리 말리는 동안 5분에서 10분 정도 붙이고 있는다",
+            "source": "voice",
+            "at": 30.0
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "머리 말리는 동안 얼굴이 쩍쩍 갈라지는 것을 방지하고 화장이 잘 먹을 수 있게 수분을 채워준다",
+              "source": "voice",
+              "at": 38.0
+            }
+          ],
+          "tool": {
+            "value": "패드",
+            "source": "voice",
+            "at": 20.0
+          }
+        },
+        "keyframeSeconds": [
+          22.0,
+          30.0,
+          41.0
+        ],
+        "product": {
+          "name": "마다가스카르 센텔라 퀵 카밍패드",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 2,
+        "makeup": "other",
+        "partLabel": "스킨케어",
+        "startSeconds": 46.0,
+        "endSeconds": 104.0,
+        "summary": "패드를 떼어내고 얼굴 전체를 부드럽게 닦아낸 후 두드려 흡수시킨다.",
+        "facts": {
+          "amount": null,
+          "cautions": [
+            {
+              "value": "피부가 얇아서 빨개져도 너무 신경 쓰지 않아도 된다",
+              "source": "voice",
+              "at": 54.0
+            }
+          ],
+          "finishCue": null,
+          "strength": {
+            "value": "살짝",
+            "source": "voice",
+            "at": 57.0
+          },
+          "tips": [],
+          "tool": {
+            "value": "패드",
+            "source": "scene",
+            "at": 47.0
+          }
+        },
+        "keyframeSeconds": [
+          49.0,
+          55.0,
+          101.0
+        ],
+        "product": null
+      },
+      {
+        "order": 3,
+        "makeup": "other",
+        "partLabel": "스킨케어",
+        "startSeconds": 104.0,
+        "endSeconds": 129.0,
+        "summary": "토너를 손에 덜어 얼굴에 바르고 두드려 90% 정도 흡수시킨다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "다음 단계로 넘어가기 전에 90% 정도 흡수를 시킨다",
+              "source": "voice",
+              "at": 111.0
+            }
+          ],
+          "tool": {
+            "value": "손",
+            "source": "voice",
+            "at": 122.0
+          }
+        },
+        "keyframeSeconds": [
+          116.0,
+          125.0,
+          128.0
+        ],
+        "product": {
+          "name": "살몬 케어링 센텔라 토너",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 4,
+        "makeup": "other",
+        "partLabel": "스킨케어",
+        "startSeconds": 129.0,
+        "endSeconds": 238.0,
+        "summary": "앰플을 두 번 정도 레이어링하여 얼굴에 바르고 두드려 흡수시킨다.",
+        "facts": {
+          "amount": {
+            "value": "두 번 정도 레이어링",
+            "source": "voice",
+            "at": 134.0
+          },
+          "cautions": [
+            {
+              "value": "건조하다고 크림을 두껍게 얹어버리면 안에는 건조하고 화장은 다 뜬다",
+              "source": "voice",
+              "at": 152.0
+            }
+          ],
+          "finishCue": {
+            "value": "얼굴이 반짝반짝해질 때까지",
+            "source": "voice",
+            "at": 226.0
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "건조하다고 크림을 많이 바르는 게 아니라 묽은 제형을 여러 번 발라서 수분을 꽉 채운 다음 크림은 콩알 딱지 만큼만 바른다",
+              "source": "voice",
+              "at": 140.0
+            }
+          ],
+          "tool": null
+        },
+        "keyframeSeconds": [
+          137.0,
+          146.0,
+          202.0
+        ],
+        "product": {
+          "name": "리얼 히알루로닉 블루 100 앰플",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 5,
+        "makeup": "other",
+        "partLabel": "스킨케어",
+        "startSeconds": 238.0,
+        "endSeconds": 322.0,
+        "summary": "선 앰플을 소량 덜어 얼굴에 얇게 코팅하듯이 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "얇게 코팅시켜준다는 느낌으로 발라준다",
+              "source": "voice",
+              "at": 249.0
+            }
+          ],
+          "tool": {
+            "value": "손",
+            "source": "scene",
+            "at": 245.0
+          }
+        },
+        "keyframeSeconds": [
+          242.0,
+          247.0,
+          254.0
+        ],
+        "product": {
+          "name": "비건 이지시카 워터 선앰플",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 6,
+        "makeup": "foundation",
+        "partLabel": "얼굴 전체",
+        "startSeconds": 322.0,
+        "endSeconds": 341.0,
+        "summary": "파운데이션을 스패출러로 얼굴에 얹은 후 퍼프로 두드려 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": {
+            "value": "퍽퍽 두드리는 편",
+            "source": "voice",
+            "at": 333.0
+          },
+          "tips": [],
+          "tool": {
+            "value": "스패출러",
+            "source": "scene",
+            "at": 325.0
+          }
+        },
+        "keyframeSeconds": [
+          327.0,
+          334.0,
+          338.0
+        ],
+        "product": {
+          "name": "커버리셔스 파워핏 파운데이션",
+          "shade": "19 라이트",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 7,
+        "makeup": "other",
+        "partLabel": "눈 밑",
+        "startSeconds": 341.0,
+        "endSeconds": 401.0,
+        "summary": "컨실러를 퍼프에 묻혀 눈가를 밝히는 느낌으로 두드려준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "눈가를 밝히는 느낌으로 바른다",
+              "source": "voice",
+              "at": 351.0
+            }
+          ],
+          "tool": {
+            "value": "퍼프",
+            "source": "voice",
+            "at": 347.0
+          }
+        },
+        "keyframeSeconds": [
+          349.0,
+          355.0,
+          358.0
+        ],
+        "product": {
+          "name": "카무플라지 그라딩 컨실러",
+          "shade": "19호",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 8,
+        "makeup": "blush",
+        "partLabel": "볼",
+        "startSeconds": 401.0,
+        "endSeconds": 427.0,
+        "summary": "크림 블러셔를 퍼프에 묻혀 볼 중앙 위주로 과감하게 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "개학 메이크업으로 좋다",
+              "source": "voice",
+              "at": 416.0
+            },
+            {
+              "value": "파우더를 얹으면 연해지므로 과감하게 발라도 괜찮다",
+              "source": "voice",
+              "at": 422.0
+            }
+          ],
+          "tool": {
+            "value": "퍼프",
+            "source": "scene",
+            "at": 411.0
+          }
+        },
+        "keyframeSeconds": [
+          412.0,
+          419.0,
+          425.0
+        ],
+        "product": {
+          "name": "젤리 에어 치크",
+          "shade": "02 베리피치",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 9,
+        "makeup": "other",
+        "partLabel": "얼굴 전체",
+        "startSeconds": 427.0,
+        "endSeconds": 447.0,
+        "summary": "파우더를 퍼프에 묻혀 얼굴 전체에 두드려 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "얼굴이 뽀용뽀용해진다",
+              "source": "voice",
+              "at": 434.0
+            }
+          ],
+          "tool": {
+            "value": "퍼프",
+            "source": "scene",
+            "at": 429.0
+          }
+        },
+        "keyframeSeconds": [
+          430.0,
+          435.0,
+          440.0
+        ],
+        "product": {
+          "name": "프로 포토 피니셔",
+          "shade": "02",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 10,
+        "makeup": "eyeshadow",
+        "partLabel": "눈두덩이, 애교살",
+        "startSeconds": 447.0,
+        "endSeconds": 519.0,
+        "summary": "아이섀도우 팔레트의 연한 갈색 섀도우를 눈두덩이와 애교살에 베이스로 깔아준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "아이섀도우 브러시",
+            "source": "scene",
+            "at": 459.0
+          }
+        },
+        "keyframeSeconds": [
+          501.0,
+          504.0,
+          509.0
+        ],
+        "product": {
+          "name": "소프트 블러링 아이팔레트",
+          "shade": "03 선셋블러링",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 11,
+        "makeup": "eyeliner",
+        "partLabel": "아이라이너",
+        "startSeconds": 519.0,
+        "endSeconds": 559.0,
+        "summary": "아이섀도우 팔레트의 가장 진한 갈색 섀도우로 아이라인 가이드를 일자로 빼고 안쪽을 채운 후 끝을 퍼뜨려준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "경계가 너무 똑 떨어지지 않게 퍼뜨려준다",
+              "source": "voice",
+              "at": 550.0
+            }
+          ],
+          "tool": {
+            "value": "아이섀도우 브러시",
+            "source": "scene",
+            "at": 528.0
+          }
+        },
+        "keyframeSeconds": [
+          528.0,
+          540.0,
+          546.0
+        ],
+        "product": {
+          "name": "소프트 블러링 아이팔레트",
+          "shade": "03 선셋블러링",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 12,
+        "makeup": "eyeliner",
+        "partLabel": "아이라이너",
+        "startSeconds": 599.0,
+        "endSeconds": 638.0,
+        "summary": "점막보다 살짝 0.1mm 띄워서 아이라인을 그려 눈을 더 커 보이게 한다.",
+        "facts": {
+          "amount": {
+            "value": "점막에서 살짝 0.1mm 띄우고",
+            "source": "voice",
+            "at": 622.0
+          },
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "점막보다 살짝 띄워서 그려주면 더 눈이 커 보인다",
+              "source": "voice",
+              "at": 618.0
+            }
+          ],
+          "tool": null
+        },
+        "keyframeSeconds": [
+          621.0,
+          627.0,
+          635.0
+        ],
+        "product": {
+          "name": "크리미 터치 라이너",
+          "shade": "15 카푸치노 핑크",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 13,
+        "makeup": "eyeliner",
+        "partLabel": "애교살",
+        "startSeconds": 638.0,
+        "endSeconds": 700.0,
+        "summary": "점막에 그려놓은 아이라인 바로 밑에 선 하나만 살짝 그려 깔끔하고 뽀얀 애교살을 만든다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "점막 그려놓은 거 바로 밑에다가 선 하나만 살짝 그려주는 느낌으로",
+              "source": "voice",
+              "at": 647.0
+            },
+            {
+              "value": "깔끔하면서도 뽀용한 애교살이 된다",
+              "source": "voice",
+              "at": 658.0
+            }
+          ],
+          "tool": null
+        },
+        "keyframeSeconds": [
+          646.0,
+          653.0,
+          656.0
+        ],
+        "product": {
+          "name": "워터프루프 슬림 라이너",
+          "shade": "도화살몬 밀크",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 14,
+        "makeup": "other",
+        "partLabel": "속눈썹",
+        "startSeconds": 700.0,
+        "endSeconds": 709.0,
+        "summary": "마스카라를 속눈썹에 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": null
+        },
+        "keyframeSeconds": [
+          702.0,
+          704.0
+        ],
+        "product": {
+          "name": "한 올 픽스 마스카라 롱 헤이즐",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 15,
+        "makeup": "other",
+        "partLabel": "코",
+        "startSeconds": 709.0,
+        "endSeconds": 732.0,
+        "summary": "코 벽에 음영을 넣어주고 코끝 모양을 살짝 잡은 후 코끝을 커팅해준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "코끝 모양을 살짝 잡는다",
+              "source": "voice",
+              "at": 725.0
+            },
+            {
+              "value": "약간 좁게 안쪽으로 들어오고 코끝 살짝 커팅",
+              "source": "voice",
+              "at": 727.0
+            }
+          ],
+          "tool": {
+            "value": "브러시",
+            "source": "scene",
+            "at": 711.0
+          }
+        },
+        "keyframeSeconds": [
+          712.0,
+          717.0,
+          730.0
+        ],
+        "product": {
+          "name": "브이 쉐딩",
+          "shade": "03 그레이쉬 쿨",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 16,
+        "makeup": "other",
+        "partLabel": "코, 눈 앞머리",
+        "startSeconds": 732.0,
+        "endSeconds": 745.0,
+        "summary": "하이라이터를 코끝, 콧대, 눈 앞머리에 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "손가락",
+            "source": "scene",
+            "at": 735.0
+          }
+        },
+        "keyframeSeconds": [
+          736.0,
+          739.0,
+          742.0
+        ],
+        "product": {
+          "name": "멀티 쿼드 섀도우",
+          "shade": "01 코튼키스",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 17,
+        "makeup": "lip",
+        "partLabel": "입술",
+        "startSeconds": 745.0,
+        "endSeconds": 759.0,
+        "summary": "도화살몬 색상의 립 라이너로 입술 라인을 커버해준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "입술 주름을 잘 메꿔주고 괜찮다",
+              "source": "voice",
+              "at": 809.0
+            }
+          ],
+          "tool": null
+        },
+        "keyframeSeconds": [
+          750.0,
+          753.0,
+          756.0
+        ],
+        "product": {
+          "name": "워터프루프 슬림 라이너",
+          "shade": "도화살몬 밀크",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 18,
+        "makeup": "lip",
+        "partLabel": "입술",
+        "startSeconds": 759.0,
+        "endSeconds": 835.0,
+        "summary": "메인 립으로 립 틴트를 입술에 발라준다.",
+        "facts": {
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": null
+        },
+        "keyframeSeconds": [
+          802.0,
+          805.0,
+          822.0
+        ],
+        "product": {
+          "name": "3D 볼류밍 글로스 스카치",
+          "shade": "70%",
+          "source": "onscreenText"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Fact": {
+      "properties": {
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "voice",
+            "onscreenText",
+            "scene",
+            "estimated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "at": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "At"
+        }
+      },
+      "required": [
+        "value",
+        "source"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "GuideInputStep": {
+      "properties": {
+        "stepId": {
+          "minLength": 1,
+          "title": "Stepid",
+          "type": "string"
+        },
+        "order": {
+          "minimum": 1,
+          "title": "Order",
+          "type": "integer"
+        },
+        "startSeconds": {
+          "minimum": 0,
+          "title": "Startseconds",
+          "type": "number"
+        },
+        "endSeconds": {
+          "minimum": 0,
+          "title": "Endseconds",
+          "type": "number"
+        },
+        "makeup": {
+          "enum": [
+            "foundation",
+            "eyeshadow",
+            "eyeliner",
+            "blush",
+            "lip",
+            "other"
+          ],
+          "title": "Makeup",
+          "type": "string"
+        },
+        "partLabel": {
+          "minLength": 1,
+          "title": "Partlabel",
+          "type": "string"
+        },
+        "summary": {
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "images": {
+          "items": {
+            "$ref": "#/$defs/StepImage"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Images",
+          "type": "array"
+        },
+        "product": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepProduct"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "facts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepFacts"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "stepId",
+        "order",
+        "startSeconds",
+        "endSeconds",
+        "makeup",
+        "partLabel",
+        "summary",
+        "images"
+      ],
+      "title": "GuideInputStep",
+      "type": "object"
+    },
+    "StepFacts": {
+      "description": "BE가 Gemini로 뽑은 단계 세부 사실 (ADR-008 facts 칸). 잘 안 나오는 칸이 많아 모두 선택.",
+      "properties": {
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "strength": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tips": {
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "title": "Tips",
+          "type": "array"
+        },
+        "cautions": {
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "title": "Cautions",
+          "type": "array"
+        },
+        "finishCue": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Fact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "StepFacts",
+      "type": "object"
+    },
+    "StepImage": {
+      "description": "BE가 대표 장면을 캡처해 저장소에 올린 이미지.",
+      "properties": {
+        "url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "at": {
+          "minimum": 0,
+          "title": "At",
+          "type": "number"
+        }
+      },
+      "required": [
+        "url",
+        "at"
+      ],
+      "title": "StepImage",
+      "type": "object"
+    },
+    "StepProduct": {
+      "description": "영상에 나온 제품. 실행마다 표기가 달라서(웰라쥬·엘라쥬) DB에서는 비슷한 이름으로 찾는다.",
+      "properties": {
+        "brand": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Brand"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "shade": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shade"
+        }
+      },
+      "title": "StepProduct",
+      "type": "object"
+    }
+  },
+  "description": "BE가 넘기는 가이드 생성 입력. 형식과 예시는 ai/docs/GUIDE_INPUT.md.",
+  "properties": {
+    "videoId": {
+      "minLength": 1,
+      "title": "Videoid",
+      "type": "string"
+    },
+    "durationSeconds": {
+      "exclusiveMinimum": 0,
+      "title": "Durationseconds",
+      "type": "number"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/GuideInputStep"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "videoId",
+    "durationSeconds",
+    "steps"
+  ],
+  "title": "GuideInput",
+  "type": "object"
+}

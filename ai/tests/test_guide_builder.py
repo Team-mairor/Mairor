@@ -11,7 +11,9 @@ CASES_DIR = Path(__file__).resolve().parent / "golden" / "guide"
 
 
 def make_input(*steps: dict) -> GuideInput:
-    return GuideInput.model_validate({"videoId": "test_01", "steps": list(steps)})
+    return GuideInput.model_validate(
+        {"videoId": "test_01", "durationSeconds": 600.0, "steps": list(steps)}
+    )
 
 
 def make_step(order: int, makeup: str = "lip", facts: dict | None = None) -> dict:
@@ -21,6 +23,9 @@ def make_step(order: int, makeup: str = "lip", facts: dict | None = None) -> dic
         "startSeconds": order * 10.0,
         "endSeconds": order * 10.0 + 5,
         "makeup": makeup,
+        "partLabel": "립",
+        "summary": "틴트를 바른다.",
+        "images": [{"url": f"https://storage.example.com/s{order}.jpg", "at": order * 10.0 + 1}],
         "facts": facts,
     }
 
@@ -80,9 +85,9 @@ def test_steps_are_ordered_by_order() -> None:
     assert [step.step_id for step in guide.steps] == ["s1", "s2"]
 
 
-def test_manifest_with_frames_is_accepted_as_input() -> None:
-    manifest = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "manifest.json"
-    guide_input = GuideInput.model_validate_json(manifest.read_text(encoding="utf-8"))
+def test_gemini_sample_builds_a_guide() -> None:
+    sample = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "guide_input.json"
+    guide_input = GuideInput.model_validate_json(sample.read_text(encoding="utf-8"))
 
     assert len(build_guide(guide_input).guide.steps) == len(guide_input.steps)
 

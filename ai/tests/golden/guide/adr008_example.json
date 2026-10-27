@@ -2,6 +2,7 @@
   "input": {
     "note": "ADR-008 「데이터 예시」 값으로 만든 예시 입력. 실제 영상 분석 결과가 아니다",
     "videoId": "adr008_example",
+    "durationSeconds": 525.0,
     "steps": [
       {
         "stepId": "s1",
@@ -9,6 +10,14 @@
         "startSeconds": 20.0,
         "endSeconds": 60.0,
         "makeup": "foundation",
+        "partLabel": "베이스",
+        "summary": "파운데이션을 얼굴 전체에 펴 바른다.",
+        "images": [
+          {
+            "url": "https://storage.example.com/guides/adr008_example/s1-1.jpg",
+            "at": 40.0
+          }
+        ],
         "product": null,
         "facts": null
       },
@@ -18,6 +27,14 @@
         "startSeconds": 170.0,
         "endSeconds": 230.0,
         "makeup": "eyeshadow",
+        "partLabel": "아이섀도",
+        "summary": "아이섀도를 눈두덩에 펴 바른다.",
+        "images": [
+          {
+            "url": "https://storage.example.com/guides/adr008_example/s2-1.jpg",
+            "at": 190.0
+          }
+        ],
         "product": null,
         "facts": {
           "tool": {
@@ -48,6 +65,14 @@
         "startSeconds": 464.0,
         "endSeconds": 503.5,
         "makeup": "lip",
+        "partLabel": "립",
+        "summary": "틴트를 입술 안쪽부터 바른다.",
+        "images": [
+          {
+            "url": "https://storage.example.com/guides/adr008_example/s3-1.jpg",
+            "at": 480.0
+          }
+        ],
         "product": null,
         "facts": {
           "tool": {

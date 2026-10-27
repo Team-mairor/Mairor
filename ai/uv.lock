@@ -25,6 +25,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "httpx2" },
+    { name = "jsonschema" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "streamlit" },
@@ -42,6 +43,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx2", specifier = ">=2.15.1" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "ruff", specifier = ">=0.17.1" },
     { name = "streamlit", specifier = ">=1.66.1" },
@@ -292,8 +294,8 @@ name = "httpcore2"
 version = "2.15.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c2/a9/11bc39967bb9dfaab0981ab4d49f519818acbee662a7e76d06813319c838/httpcore2-2.15.1.tar.gz", hash = "sha256:a94b6b3e6260e1a3f035915408d3dcd7dc8e844c2b544b642e227cf98a747af0", size = 69859, upload-time = "2026-10-19T20:14:23.824Z" }
 wheels = [

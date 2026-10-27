@@ -12,7 +12,7 @@ ai/
 │  │  ├─ health.py      GET /health
 │  │  └─ v1/            /api/v1/... 기능 API
 │  ├─ services/         비즈니스 로직                     (기능 추가 시 생성)
-│  ├─ clients/          외부 API 호출: Gemini, 네이버 검색  (기능 추가 시 생성)
+│  ├─ clients/          외부 호출: 이미지 받기, Gemini, 네이버 검색
 │  ├─ schemas/          요청·응답 모델
 │  │  └─ common.py      CamelModel, ErrorResponse
 │  └─ core/             앱 전체 공통
@@ -20,8 +20,8 @@ ai/
 │     └─ errors.py      공통 오류 형식, AppError
 ├─ tests/
 │  └─ golden/guide/     가이드 생성 기대값. 확인 화면에서 저장하고 pytest가 비교
-├─ tools/               개발용 도구. 서버 코드가 아님 (guide_viewer.py: 가이드 생성 확인 화면)
-├─ samples/             로컬 테스트 입력. 영상 1개 = 폴더 1개, manifest.json만 커밋 (frames/는 git 제외)
+├─ tools/               개발용 도구. 서버 코드가 아님 (가이드 생성 확인 화면, Gemini 영상 시험, 공유 스키마 생성)
+├─ samples/             로컬 테스트 입력. 영상 1개 = 폴더 1개, JSON만 커밋 (frames/는 git 제외)
 ├─ pyproject.toml       의존성, ruff·pytest 설정
 └─ uv.lock              의존성 버전 고정
 ```

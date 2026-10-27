@@ -38,12 +38,14 @@ TRACE_COLUMNS = {
 
 def load_sources() -> dict[str, Path]:
     cases = {f"저장된 케이스 / {p.stem}": p for p in sorted(CASES_DIR.glob("*.json"))}
-    samples = {f"samples / {p.parent.name}": p for p in sorted(SAMPLES_DIR.glob("*/manifest.json"))}
+    samples = {
+        f"samples / {p.parent.name}": p for p in sorted(SAMPLES_DIR.glob("*/guide_input.json"))
+    }
     return cases | samples
 
 
 def read_input(path: Path) -> tuple[dict, dict | None]:
-    """(입력, 저장된 기대값). samples의 manifest는 기대값이 없다."""
+    """(입력, 저장된 기대값). samples의 입력은 기대값이 없다."""
     data = json.loads(path.read_text(encoding="utf-8"))
     if path.parent == CASES_DIR:
         return data["input"], data["expected"]
@@ -122,7 +124,7 @@ left, middle, right = st.columns([1, 2, 1.1])
 with left:
     st.header("입력")
     text = st.text_area(
-        "BE가 넘기는 JSON (manifest 그대로 붙여도 됨)",
+        "BE가 넘기는 JSON (docs/GUIDE_INPUT.md)",
         value=json.dumps(loaded_input, ensure_ascii=False, indent=2),
         height=700,
         key=f"input:{choice}",

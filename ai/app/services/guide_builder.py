@@ -7,8 +7,17 @@ from collections.abc import Iterable
 
 from pydantic.alias_generators import to_camel
 
-from app.schemas.guide import FieldTrace, Guide, GuideBuild, GuideInput, GuideStep, StepTrace
-from app.schemas.manifest import Fact, Step, StepFacts
+from app.schemas.guide import (
+    Fact,
+    FieldTrace,
+    Guide,
+    GuideBuild,
+    GuideInput,
+    GuideInputStep,
+    GuideStep,
+    StepFacts,
+    StepTrace,
+)
 from app.services import guide_templates as templates
 
 LIST_FIELDS = ("tips", "cautions")
@@ -23,7 +32,7 @@ def build_guide(guide_input: GuideInput) -> GuideBuild:
     )
 
 
-def _build_step(step: Step) -> tuple[GuideStep, StepTrace]:
+def _build_step(step: GuideInputStep) -> tuple[GuideStep, StepTrace]:
     facts = step.facts or StepFacts()
     title = templates.STEP_TITLES[step.makeup]
     traces: list[FieldTrace] = []
