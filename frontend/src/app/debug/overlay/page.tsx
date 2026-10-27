@@ -9,7 +9,7 @@ import {
   type FaceFrame,
   type RegionName,
 } from "@/features/face";
-import { GuideRenderer, loadGuideSet, type GuideSet } from "@/features/guide";
+import { GuideRenderer, loadDefaultGuideSet, type GuideSet } from "@/features/guide";
 import { loadFaceMesh, loadLayerSet, OverlayRenderer, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
@@ -92,7 +92,7 @@ export default function DebugOverlayPage() {
     loadFaceMesh()
       .then(setMesh)
       .catch((e) => setError(String(e)));
-    loadGuideSet("/fixtures/guides/sample.json")
+    loadDefaultGuideSet()
       .then(setGuides)
       .catch((e) => setError(String(e)));
   }, []);

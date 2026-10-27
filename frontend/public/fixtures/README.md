@@ -38,7 +38,7 @@
 
 | 파일 | 내용 | 예상 화면 동작 |
 | --- | --- | --- |
-| `sample.json` | 아이섀도(영역·바르는 방향)·아이라인(경로·시작점)·블러셔(영역·쓸어 올리는 방향)·립(외곽선·가운데에서 양끝) 4단계, `source: template` | `/tutorial`에서 단계마다 점선 영역·선·화살표 표시 |
+| `sample.json` | 앱의 기본 가이드(9개 부위)를 파일로 내보낸 것, `source: template` | `/tutorial?guides=/fixtures/guides/sample.json`에서 단계마다 점선 영역·선·화살표 표시 |
 | `empty.json` | 단계 없음 | "이 영상에는 가이드가 없어요" 안내 |
 
-- `/debug/overlay?step=0~3`으로 카메라 없이 단계별 가이드를 볼 수 있다
+- `/debug/overlay?step=0~8`로 카메라 없이 기본 가이드를 부위별로 볼 수 있다

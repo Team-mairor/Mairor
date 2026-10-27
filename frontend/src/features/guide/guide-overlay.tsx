@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   regionNamesError,
+  REGIONS,
   toScreen,
   useCamera,
   useFaceFrame,
@@ -13,6 +14,7 @@ import {
 import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
+import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer } from "./renderer";
 import type { GuideSet, GuideStep } from "./types";
 
@@ -61,6 +63,11 @@ export async function loadGuideSet(url: string): Promise<GuideSet> {
     }),
   }));
   return { ...set, steps };
+}
+
+/** 외부 가이드 없이 쓰는 9개 부위 기본 가이드 */
+export async function loadDefaultGuideSet(): Promise<GuideSet> {
+  return buildDefaultGuideSet(await loadFaceMesh(), REGIONS);
 }
 
 /** CameraProvider 안에서 지금 단계의 가이드를 얼굴 위에 그린다. */

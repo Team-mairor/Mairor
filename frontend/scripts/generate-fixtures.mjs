@@ -13,6 +13,8 @@ if (major < 22 || (major === 22 && minor < 18)) {
 }
 const { crc32, deflateSync } = await import("node:zlib");
 const { REGIONS } = await import("../src/features/face/regions.ts");
+const { buildDefaultGuideSet, eyelinerPaths } =
+  await import("../src/features/guide/default-guides.ts");
 // 추적기와 같은 판정 기준을 그대로 쓴다. 값을 바꾸면 픽스처를 다시 생성한다.
 const { MIN_IN_FRAME_RATIO } = await import("../src/features/face/visibility.ts");
 const { DEFAULT_MAX_YAW: MAX_YAW, KEY_REGIONS } =
@@ -162,84 +164,8 @@ writeJson(
 writeJson("faces/lost.json", faceFrame({ trackingState: "lost" }));
 
 // ── 아이라인 경로 (MeshAnchor) ──
-const uvPt = (i) => ({ x: uv[i][0], y: uv[i][1] });
-
-function barycentric(p, [a, b, c]) {
-  const v0 = { x: b.x - a.x, y: b.y - a.y };
-  const v1 = { x: c.x - a.x, y: c.y - a.y };
-  const v2 = { x: p.x - a.x, y: p.y - a.y };
-  const det = v0.x * v1.y - v1.x * v0.y;
-  const wb = (v2.x * v1.y - v1.x * v2.y) / det;
-  const wc = (v0.x * v2.y - v2.x * v0.y) / det;
-  return [1 - wb - wc, wb, wc];
-}
-
-/** UV 위의 점을 가장 알맞은 삼각형 기준 MeshAnchor로 바꾼다. 삼각형 밖이면 가장 가까운 삼각형 (음수 비율) */
-function anchorAt(p) {
-  let best = null;
-  triangles.forEach((tri, index) => {
-    const bary = barycentric(
-      p,
-      tri.map((i) => uvPt(i)),
-    );
-    const outside = -Math.min(...bary);
-    if (!best || outside < best.outside) best = { index, bary, outside };
-  });
-  const bary = best.bary.map((v) => round(v));
-  bary[0] = round(1 - bary[1] - bary[2]);
-  return { triangle: best.index, bary };
-}
-
-// 아이라인: 눈 안쪽 1/3 지점에서 눈꼬리까지 속눈썹 라인을 따라가고, 꼬리는 아래 속눈썹 라인의 연장선에서
-// 눈썹 꼬리 쪽으로 살짝 올려 뺀다. MediaPipe 윗눈꺼풀 점은 눈꺼풀 가장자리라, 선이 눈꺼풀 위로 뜨지 않게
-// 아래 눈꺼풀 쪽으로 조금 내린다.
-const LASH_LINE_SHIFT = 0.12; // 눈 뜬 높이 대비
-const WING_LENGTH = 0.3; // 눈 너비 대비
-const WING_LIFT = 0.25; // 눈썹 꼬리 방향을 섞는 비율
-
-const unit = (v) => {
-  const len = Math.hypot(v.x, v.y) || 1;
-  return { x: v.x / len, y: v.y / len };
-};
-
-function eyelinerPath({ upper, lower, lowerNearOuter, inner, outer, browTail }) {
-  const path = upper.map((i, k) => {
-    const u = uvPt(i);
-    const l = uvPt(lower[k]);
-    return anchorAt({
-      x: u.x + (l.x - u.x) * LASH_LINE_SHIFT,
-      y: u.y + (l.y - u.y) * LASH_LINE_SHIFT,
-    });
-  });
-  const corner = uvPt(outer);
-  const along = unit({
-    x: corner.x - uvPt(lowerNearOuter).x,
-    y: corner.y - uvPt(lowerNearOuter).y,
-  });
-  const toBrow = unit({ x: uvPt(browTail).x - corner.x, y: uvPt(browTail).y - corner.y });
-  const dir = unit({ x: along.x + toBrow.x * WING_LIFT, y: along.y + toBrow.y * WING_LIFT });
-  const length = Math.hypot(corner.x - uvPt(inner).x, corner.y - uvPt(inner).y) * WING_LENGTH;
-  path.push(anchorAt({ x: corner.x + dir.x * length, y: corner.y + dir.y * length }));
-  return path;
-}
-
-// 윗눈꺼풀과 같은 자리의 아래 눈꺼풀 점 (안쪽 1/3 → 눈꼬리 직전). 눈꼬리 점은 아래로 꺾여 있어 건너뛴다
-const RIGHT_EYELINER = {
-  upper: [157, 158, 159, 160, 161, 246],
-  lower: [154, 153, 145, 144, 163, 7],
-  lowerNearOuter: 163,
-  inner: 133,
-  outer: 33,
-  browTail: 46,
-};
-const LEFT_EYELINER = {
-  upper: [384, 385, 386, 387, 388, 466],
-  lower: [381, 380, 374, 373, 390, 249],
-  lowerNearOuter: 390,
-  inner: 362,
-  outer: 263,
-  browTail: 276,
-};
+// 기본 가이드와 같은 경로를 레이어에도 쓴다.
+const eyeliner = eyelinerPaths({ triangles, uv });
 
 // ── UV 마스크 ──
 const SIZE = 512;
@@ -387,7 +313,7 @@ const layers = {
     makeup: "eyeliner",
     regions: ["rightEye"],
     shape: "polyline",
-    path: eyelinerPath(RIGHT_EYELINER),
+    path: eyeliner.right,
     width: 0.03,
     feather: 0.01,
     lineCap: "round",
@@ -401,7 +327,7 @@ const layers = {
     makeup: "eyeliner",
     regions: ["leftEye"],
     shape: "polyline",
-    path: eyelinerPath(LEFT_EYELINER),
+    path: eyeliner.left,
     width: 0.03,
     feather: 0.01,
     lineCap: "round",
@@ -448,79 +374,8 @@ writeJson(
 );
 
 // ── 튜토리얼 가이드 ──
-const at = (i) => anchorAt(uvPt(i));
-const between = (i, j, t = 0.5) =>
-  anchorAt({ x: uv[i][0] + (uv[j][0] - uv[i][0]) * t, y: uv[i][1] + (uv[j][1] - uv[i][1]) * t });
-const outline = (indices) => ({ type: "polygon", outline: indices.map(at) });
-
-// 아이섀도: 윗눈꺼풀 ~ 눈썹 아래선 사이 영역, 안쪽에서 바깥쪽으로 펴 바르기
-const shadowRight = [33, 246, 161, 160, 159, 158, 157, 173, 133, 55, 65, 52, 53, 46];
-const shadowLeft = [263, 466, 388, 387, 386, 385, 384, 398, 362, 285, 295, 282, 283, 276];
-// 블러셔: 볼 가운데에서 관자놀이 쪽으로 쓸어 올리기
-// 볼 점 번호는 후보값이라 안쪽 점이 섞여 있어, 바깥 테두리 점만 이은 모양을 쓴다.
-const cheekHull = {
-  right: [116, 117, 118, 101, 36, 207, 147],
-  left: [266, 330, 347, 346, 345, 376, 427],
-};
-const cheekCenter = { right: between(50, 117), left: between(280, 346) };
-
-const guideSteps = [
-  {
-    stepId: "g1",
-    source: "template",
-    order: 1,
-    title: "아이섀도: 눈두덩 전체에 안쪽에서 바깥쪽으로 펴 발라요",
-    regions: ["rightEye", "leftEye"],
-    guides: [
-      outline(shadowRight),
-      outline(shadowLeft),
-      { type: "arrow", from: between(159, 65, 0.3), to: between(33, 46, 0.6) },
-      { type: "arrow", from: between(386, 295, 0.3), to: between(263, 276, 0.6) },
-    ],
-  },
-  {
-    stepId: "g2",
-    source: "template",
-    order: 2,
-    title: "아이라인: 속눈썹 라인을 따라 그리고 꼬리를 살짝 올려요",
-    regions: ["rightEye", "leftEye"],
-    guides: [
-      { type: "point", at: eyelinerPath(RIGHT_EYELINER)[0] },
-      { type: "polyline", path: eyelinerPath(RIGHT_EYELINER), width: 0.03 },
-      { type: "point", at: eyelinerPath(LEFT_EYELINER)[0] },
-      { type: "polyline", path: eyelinerPath(LEFT_EYELINER), width: 0.03 },
-    ],
-  },
-  {
-    stepId: "g3",
-    source: "template",
-    order: 3,
-    title: "블러셔: 볼 가운데에서 관자놀이 쪽으로 쓸어 올려요",
-    regions: ["rightCheek", "leftCheek"],
-    guides: [
-      outline(cheekHull.right),
-      outline(cheekHull.left),
-      { type: "point", at: cheekCenter.right },
-      { type: "arrow", from: cheekCenter.right, to: between(117, 127, 0.7) },
-      { type: "point", at: cheekCenter.left },
-      { type: "arrow", from: cheekCenter.left, to: between(346, 356, 0.7) },
-    ],
-  },
-  {
-    stepId: "g4",
-    source: "template",
-    order: 4,
-    title: "립: 입술 가운데에서 양쪽 끝으로 펴 발라요",
-    regions: ["lipsOuter"],
-    guides: [
-      outline(REGIONS.lipsOuter.indices),
-      { type: "point", at: between(0, 17) },
-      { type: "arrow", from: between(0, 17), to: between(61, 0, 0.15) },
-      { type: "arrow", from: between(0, 17), to: between(291, 0, 0.15) },
-    ],
-  },
-];
-writeJson("guides/sample.json", { meshVersion: "v1", steps: guideSteps });
+// 앱의 기본 가이드(9개 부위)를 그대로 파일로 내보내, ?guides= 로 파일 불러오기를 확인한다.
+writeJson("guides/sample.json", buildDefaultGuideSet({ triangles, uv }, REGIONS));
 writeJson("guides/empty.json", { meshVersion: "v1", steps: [] });
 
 console.log(`[generate-fixtures] ${outDir}에 픽스처를 만들었습니다.`);

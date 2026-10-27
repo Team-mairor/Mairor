@@ -4,19 +4,17 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { GuideOverlay, loadGuideSet, type GuideSet } from "@/features/guide";
-
-const DEFAULT_GUIDES = "/fixtures/guides/sample.json";
+import { GuideOverlay, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/features/guide";
 
 export default function TutorialPage() {
-  // 레시피 연동 전까지는 ?guides=경로 로 가이드 파일을 바꿔 본다.
+  // 레시피 연동 전까지는 기본 가이드를 쓰고, ?guides=경로 로 가이드 파일을 바꿔 본다.
   const [set, setSet] = useState<GuideSet | null>(null);
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const url = new URLSearchParams(window.location.search).get("guides") ?? DEFAULT_GUIDES;
-    loadGuideSet(url)
+    const url = new URLSearchParams(window.location.search).get("guides");
+    (url ? loadGuideSet(url) : loadDefaultGuideSet())
       .then(setSet)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
