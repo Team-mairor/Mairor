@@ -19,5 +19,6 @@ management:
 
 app:
   security:
-    # 로컬 프론트(next dev). 폰에서 https://<PC IP>:3000 으로 테스트하려면 backend/.env 의 ALLOWED_ORIGINS 에 추가한다.
-    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,https://localhost:3000}
+    # 로컬 프론트(next dev)와 Swagger UI(8080). 폰에서 https://<PC IP>:3000 으로 테스트하려면 backend/.env 의 ALLOWED_ORIGINS 에 추가한다.
+    # .env 에 ALLOWED_ORIGINS 를 직접 적으면 이 기본값을 대체하므로, Swagger 로 가입을 호출하려면 http://localhost:8080 도 넣는다.
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:3000,https://localhost:3000,http://localhost:8080}

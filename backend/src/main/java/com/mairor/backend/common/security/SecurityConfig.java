@@ -15,7 +15,8 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
 /**
- * 보안 설정. 헬스체크와 회원가입만 열고 나머지는 인증을 요구한다. 미인증은 401, CSRF·권한 실패는 403을 공통 오류 형식(JSON)으로 응답한다.
+ * 보안 설정. 헬스체크, 회원가입, API 문서(Swagger)만 열고 나머지는 인증을 요구한다. 미인증은 401, CSRF·권한 실패는 403을 공통 오류 형식(JSON)으로
+ * 응답한다.
  *
  * <p>회원가입({@code POST /v1/users})은 세션이 없는 비회원 요청이라 이 경로만 CSRF 토큰 검사에서 빼고, 대신 허용 Origin 검증({@link
  * OriginCheckFilter})으로 보호한다 (공통 규약). 로그인 경로는 로그인 이슈에서 {@link #ORIGIN_PROTECTED}에 한 줄 더하면 된다.
@@ -41,6 +42,9 @@ public class SecurityConfig {
                 auth.requestMatchers("/health", "/actuator/health", "/actuator/health/**")
                     .permitAll()
                     .requestMatchers(SIGN_UP)
+                    .permitAll()
+                    // API 문서(Swagger). 운영에서는 springdoc 을 꺼서(application-prod.yml) 404 가 된다
+                    .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                     .permitAll()
                     .anyRequest()
                     .authenticated())

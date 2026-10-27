@@ -8,3 +8,10 @@ logging:
   level:
     root: INFO
     com.mairor.backend: INFO
+
+# API 문서(Swagger)는 운영에 노출하지 않는다. 꺼지면 /v3/api-docs·/swagger-ui/** 는 404
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

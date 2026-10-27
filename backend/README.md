@@ -24,6 +24,7 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 |---|---|
 | http://localhost:8080/api/health | 헬스체크 → `{"status":"UP"}` |
 | http://localhost:8080/api/actuator/health | Actuator health (dev 프로파일은 상세 표시) |
+| http://localhost:8080/api/swagger-ui/index.html | API 문서(Swagger UI). dev 에서만 열리고 prod 에서는 꺼진다 (404). 로그인이 필요한 API 는 로그인 구현 전까지 401 |
 
 프로파일은 기본 `dev`. 운영은 환경변수 `SPRING_PROFILES_ACTIVE=prod`.
 
@@ -45,7 +46,7 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 | `DB_URL` | `jdbc:postgresql://localhost:5432/mairor` | JDBC URL |
 | `DB_USERNAME` | `mairor` | DB 사용자 |
 | `DB_PASSWORD` | (없음) | DB 비밀번호 |
-| `ALLOWED_ORIGINS` | dev: `http://localhost:3000,https://localhost:3000` / prod: 없음(필수) | 회원가입·로그인 같은 세션 없는 요청을 보낼 수 있는 프론트 Origin. 쉼표로 구분. prod 에서 비어 있으면 기동 실패 |
+| `ALLOWED_ORIGINS` | dev: `http://localhost:3000,https://localhost:3000,http://localhost:8080` / prod: 없음(필수) | 회원가입·로그인 같은 세션 없는 요청을 보낼 수 있는 프론트 Origin. 쉼표로 구분. 직접 적으면 dev 기본값을 대체한다(Swagger 에서 호출하려면 `http://localhost:8080` 포함). prod 에서 비어 있으면 기동 실패 |
 
 프론트는 같은 Origin 의 `/api` 로 호출하므로 CORS 설정은 두지 않는다. `ALLOWED_ORIGINS` 에는 브라우저 주소창에 보이는 프론트 공개 Origin 만 넣는다 (리버스 프록시 뒤의 내부 주소가 아니다). 프록시는 `Origin` 헤더를 바꾸지 않고 그대로 넘겨야 한다.
 

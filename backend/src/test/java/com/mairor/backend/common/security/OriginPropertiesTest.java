@@ -23,13 +23,16 @@ class OriginPropertiesTest {
           .withPropertyValues("spring.config.import=optional:classpath:/does-not-exist.properties");
 
   @Test
-  void devProfile_defaultsToLocalFrontend() {
+  void devProfile_defaultsToLocalFrontendAndSwaggerUi() {
     runner
         .withPropertyValues("spring.profiles.active=dev")
         .run(
             context ->
                 assertThat(context.getBean(OriginProperties.class).allowedOrigins())
-                    .containsExactly("http://localhost:3000", "https://localhost:3000"));
+                    .containsExactly(
+                        "http://localhost:3000",
+                        "https://localhost:3000",
+                        "http://localhost:8080"));
   }
 
   @Test
