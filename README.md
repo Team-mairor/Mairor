@@ -25,6 +25,12 @@ git config --local --get commit.template    # .../.gitmessage
 
 ---
 
+## CI
+
+MR과 master에서 파트별 검사(backend·frontend·ai)가 자동으로 돈다. 무엇이 언제 도는지, 실패하면 어떻게 하는지는 [ci/README.md](ci/README.md).
+
+---
+
 ## Git Hook
 
 | 훅 | 시점 | 동작 |

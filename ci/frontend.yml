@@ -1,0 +1,28 @@
+# 프론트 검사: frontend/README.md 에 적힌 검사 명령과 빌드. 담당 FE.
+# 빌드 전 prebuild 가 shared/face-mesh 를 복사하고 MediaPipe 모델을 받으므로 shared/ 변경에도 돈다.
+frontend:
+  stage: check
+  image: node:24
+  rules:
+    - changes:
+        - frontend/**/*
+        - shared/**/*
+        - .gitlab-ci.yml
+        - ci/**/*
+  variables:
+    npm_config_cache: $CI_PROJECT_DIR/.npm
+    NEXT_TELEMETRY_DISABLED: "1"
+  before_script:
+    - cd frontend
+    - npm ci --prefer-offline --no-audit --no-fund
+  script:
+    - npm run lint
+    - npm run typecheck
+    - npm run format:check
+    - npm run build
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - .npm/

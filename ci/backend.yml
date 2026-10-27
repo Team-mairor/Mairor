@@ -1,0 +1,31 @@
+# 백엔드 검사: backend/README.md "테스트 · 포맷"과 같은 명령. 담당 BE.
+# 테스트는 Testcontainers 가 러너 서버의 Docker 로 postgres:17 을 띄운다.
+# 러너는 잡을 host 네트워크로 돌리고 Docker 공개 포트를 127.0.0.1 에만 열므로, DB 주소를 localhost 로 알려 준다.
+backend:
+  stage: check
+  image: eclipse-temurin:21-jdk
+  rules:
+    - changes:
+        - backend/**/*
+        - .gitlab-ci.yml
+        - ci/**/*
+  variables:
+    GRADLE_USER_HOME: $CI_PROJECT_DIR/.gradle-home
+    GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+    TESTCONTAINERS_HOST_OVERRIDE: "localhost"
+  before_script:
+    - cd backend
+  script:
+    - ./gradlew --no-daemon spotlessCheck test build
+  cache:
+    key: backend-gradle
+    paths:
+      - .gradle-home/caches/
+      - .gradle-home/wrapper/
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      junit: backend/build/test-results/test/TEST-*.xml
+    paths:
+      - backend/build/reports/tests/

@@ -20,6 +20,8 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 ./gradlew bootRun         # 직접 띄운 PostgreSQL 에 .env 값으로 붙는다
 ```
 
+`bootRun` 용 PostgreSQL 은 레포 루트에서 `cp .env.example .env` 후 `docker compose up -d postgres` 로 띄울 수 있다. 값은 `backend/.env` 의 DB 값과 맞춘다.
+
 | 주소 | 내용 |
 |---|---|
 | http://localhost:8080/api/health | 헬스체크 → `{"status":"UP"}` |
@@ -36,6 +38,8 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 ./gradlew spotlessApply     # 포맷 적용
 ./gradlew build             # spotlessCheck + test + jar
 ```
+
+MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린다. 구성과 실패 시 대응은 [ci/README.md](../ci/README.md).
 
 ## 환경변수
 
