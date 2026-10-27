@@ -75,6 +75,23 @@ uv run python tools/gemini_video_test.py sample tools/gemini_runs/<파일> sampl
 - 확인 화면은 ① 보낸 요청과 받은 응답, ② 단계마다 영상·Gemini 결과·AI 서버 입력·만든 가이드, ③ 실행끼리 단계 경계·분류·칸 채움 비교를 보여 줍니다.
 - `sample`은 결과를 가이드 입력으로 바꿔 저장합니다. 대표 장면 시각은 예시 이미지 주소가 됩니다.
 
+## 단계 설명 모델 비교
+
+가이드 입력의 단계마다 GMS로 GPT·Gemini·Claude를 불러 쉬운 설명을 만들고, 모델별 결과를 나란히 봅니다. 모델 결정(S15P31A306-249)용 개발 도구입니다. `.env`에 `GMS_API_KEY`가 있어야 합니다. 비교 결과는 [docs/experiments/STEP_EXPLANATION_MODEL_COMPARISON.md](../docs/experiments/STEP_EXPLANATION_MODEL_COMPARISON.md)에 있습니다.
+
+설명은 단계 화면 아래에 한 번에 보이는 형식(프롬프트 v2)입니다. 동작 1~4개(25자 이내), 동작에 붙은 팁(단계당 2개, 30자 이내, 요령·주의), 넘어갈 때(입력에 있을 때만)로 이루어집니다.
+
+```bash
+uv run python tools/explain_compare.py                             # 결과 → tools/explain_runs/<영상 ID>_<회차>.json
+uv run python tools/explain_compare.py --models claude --steps 1-5  # 모델·단계 골라 돌리기
+uv run streamlit run tools/explain_viewer.py                       # 결과 보기
+```
+
+- 모델은 `explain_compare.py`의 `MODELS`, 프롬프트는 `tools/explain_prompt.txt`입니다. 프롬프트를 고치면 `PROMPT_VERSION`을 올립니다.
+- 실행이 끝나면 모델별 GMS 사용량 추정을 출력합니다. `PRICES`(공개 요금) × 10,000이 GMS 사이트 숫자와 같은 단위입니다. GPT는 사이트 숫자가 더 크게 나와서 확인 중입니다.
+- 보내기 전에 근거 시각이 단계 구간 밖인 팁을 그 시각의 단계로 옮기고, 받은 뒤 글자 수·개수·근거 번호·숫자·제품 이름·도구·방향·말투를 코드로 검사합니다.
+- 확인 화면은 ① 단계마다 입력과 세 모델 결과, ② 모델별 검사·시간·토큰 요약, ③ 한 모델 결과를 가이드 순서대로, ④ 프롬프트와 팁 옮긴 기록을 보여 줍니다.
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.
@@ -84,6 +101,7 @@ uv run python tools/gemini_video_test.py sample tools/gemini_runs/<파일> sampl
 | `APP_ENV` | `local` | `local` · `dev` · `prod`. `prod`에서는 API 문서를 닫음 |
 | `LOG_LEVEL` | `INFO` | `DEBUG` · `INFO` · `WARNING` · `ERROR` |
 | `GEMINI_API_KEY` | | Gemini 영상 시험 도구만 씀. 서버는 읽지 않음 |
+| `GMS_API_KEY` | | 단계 설명 모델 비교 도구만 씀. 서버는 읽지 않음 |
 
 새 설정은 `app/core/config.py`의 `Settings`에 필드를 추가하고 `.env.example`에도 적습니다.
 
