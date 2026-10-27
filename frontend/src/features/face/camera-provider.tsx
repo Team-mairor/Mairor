@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 import { CameraError, openCamera } from "./camera";
 import { CameraErrorView } from "./camera-error-view";
-import { FaceTracker, type TrackerStats } from "./tracker";
+import { FaceTracker, type TrackerStats, VideoStalledError } from "./tracker";
 import type { FaceFrame, ViewTransform } from "./types";
 import { coverTransform, visibleRect } from "./view-transform";
 
@@ -152,7 +152,12 @@ export function CameraProvider({
           }
         },
         {},
-        (e) => abort(new CameraError("tracker-failed", String(e))),
+        (e) =>
+          abort(
+            e instanceof VideoStalledError
+              ? new CameraError("disconnected", e.message)
+              : new CameraError("tracker-failed", String(e)),
+          ),
       );
       trackerRef.current = tracker;
       // 보이는 영역을 새 추적기에도 알려 준다.

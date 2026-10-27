@@ -9,6 +9,7 @@ export {
   type CloseUpMode,
   type TrackerOptions,
   type TrackerStats,
+  VideoStalledError,
 } from "./tracker";
 export { coverTransform, toScreen, visibleRect } from "./view-transform";
 export type * from "./types";

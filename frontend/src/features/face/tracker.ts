@@ -89,6 +89,10 @@ const SNAP_TO_FULL = 0.97;
 const LEAVE_FULL = 0.9;
 // 얼굴을 못 찾는 동안 원래 크기와 최대 축소를 이 프레임 수마다 번갈아 시도한다.
 const SEARCH_SWITCH_FRAMES = 10;
+// 화면이 보이는데 이 시간(ms) 동안 프레임이 오지 않으면 영상이 멈춘 것으로 보고 다시 재생한다.
+const STALL_MS = 2000;
+// 다시 재생해도 이만큼 연속으로 멈춰 있으면 오류로 알린다.
+const MAX_STALL_RETRIES = 3;
 // 추적 중인 얼굴이 가장 큰 얼굴인지 이 간격마다 확인한다.
 const LARGEST_CHECK_MS = 500;
 // 가장 큰 얼굴 주변만 남길 때, 다시 잡는 사이 얼굴이 조금 움직여도 영역 안에 남도록 넓힌다.
@@ -100,6 +104,14 @@ const LOCK_TIMEOUT_MS = 1000;
 // 연달아 이 횟수만큼 확인됐을 때만 바꾼다.
 const SWITCH_AREA_RATIO = 1.5;
 const SWITCH_CONFIRMS = 2;
+
+/** 다시 재생해도 카메라 영상이 계속 멈춰 있을 때 onError로 넘기는 오류. 검출 실패와 안내를 구분한다. */
+export class VideoStalledError extends Error {
+  constructor() {
+    super("카메라 영상이 멈췄습니다");
+    this.name = "VideoStalledError";
+  }
+}
 
 export class FaceTracker {
   private landmarker: FaceLandmarker | null = null;
@@ -122,6 +134,9 @@ export class FaceTracker {
   private searchFrames = 0;
   private frameHandle: { kind: "video" | "animation"; id: number } | null = null;
   private starting: Promise<void> | null = null;
+  private lastTickAt = 0;
+  private stallRetries = 0;
+  private watchdog: ReturnType<typeof setInterval> | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private smoother: LandmarkSmoother | null = null;
   private options: TrackerOptions;
@@ -173,16 +188,57 @@ export class FaceTracker {
     this.detector = detector;
     if (this.running) return;
     this.running = true;
+    this.lastTickAt = performance.now();
+    this.stallRetries = 0;
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+    this.watchdog = setInterval(this.checkStall, STALL_MS / 2);
     this.scheduleNext();
   }
 
-  stop() {
-    this.running = false;
-    // 이미 예약된 콜백이 남아 있으면 다시 start했을 때 루프가 두 개 돈다.
+  // 태블릿 화면이 꺼지거나 백그라운드로 가면 브라우저가 영상을 멈추고, 돌아와도 다시 재생하지 않는다.
+  private readonly onVisibilityChange = () => {
+    if (document.visibilityState !== "visible" || !this.running) return;
+    // 숨어 있던 동안은 멈춘 게 아니므로, 다시 보인 시점부터 재고 재시도 횟수도 새로 센다.
+    this.lastTickAt = performance.now();
+    this.stallRetries = 0;
+    this.resume();
+  };
+
+  private readonly checkStall = () => {
+    if (!this.running || document.visibilityState !== "visible") return;
+    if (performance.now() - this.lastTickAt < STALL_MS) return;
+    if (++this.stallRetries > MAX_STALL_RETRIES) {
+      this.stop();
+      this.onError?.(new VideoStalledError());
+      return;
+    }
+    this.lastTickAt = performance.now();
+    this.resume();
+  };
+
+  /** 멈춘 영상을 다시 재생하고 프레임 콜백을 새로 예약한다. */
+  private resume() {
+    if (this.video.paused) {
+      this.video.play().catch((e) => console.warn("카메라 영상을 다시 재생하지 못했습니다", e));
+    }
+    this.cancelFrame();
+    this.scheduleNext();
+  }
+
+  private cancelFrame() {
     const handle = this.frameHandle;
     if (handle?.kind === "video") this.video.cancelVideoFrameCallback(handle.id);
     else if (handle) cancelAnimationFrame(handle.id);
     this.frameHandle = null;
+  }
+
+  stop() {
+    this.running = false;
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    if (this.watchdog) clearInterval(this.watchdog);
+    this.watchdog = null;
+    // 이미 예약된 콜백이 남아 있으면 다시 start했을 때 루프가 두 개 돈다.
+    this.cancelFrame();
   }
 
   /** 카메라·해상도를 바꿨을 때처럼 이전 프레임 기준 상태를 버린다. */
@@ -191,6 +247,10 @@ export class FaceTracker {
     this.lastFrame = null;
     this.lastState = null;
     this.searchFrames = 0;
+    // 이전 카메라 기준 영역으로 입력을 가리지 않도록 가장 큰 얼굴 확인도 처음부터 한다.
+    this.lockBox = null;
+    this.lockTarget = null;
+    this.switchConfirms = 0;
   }
 
   dispose() {
@@ -228,6 +288,8 @@ export class FaceTracker {
 
   private tick() {
     if (!this.running || !this.landmarker) return;
+    this.lastTickAt = performance.now();
+    this.stallRetries = 0;
 
     const video = this.video;
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
@@ -319,27 +381,29 @@ export class FaceTracker {
       return;
     }
 
-    let largest: Box | null = null;
-    let largestArea = 0;
     const { videoWidth: w, videoHeight: h } = this.video;
     const offset = (1 - scale) / 2;
+    const boxes: Box[] = [];
     for (const { boundingBox: b } of detections) {
-      if (!b || b.width * b.height <= largestArea) continue;
-      largestArea = b.width * b.height;
-      largest = {
+      if (!b) continue;
+      boxes.push({
         minX: (b.originX / w - offset) / scale,
         minY: (b.originY / h - offset) / scale,
         maxX: ((b.originX + b.width) / w - offset) / scale,
         maxY: ((b.originY + b.height) / h - offset) / scale,
-      };
+      });
     }
+    let largest: Box | null = null;
+    for (const box of boxes) if (!largest || boxArea(box) > boxArea(largest)) largest = box;
     if (!largest) return;
 
     if (isTracking(frame)) {
-      const current = boundingBox(frame.landmarks);
+      const center = boxCenter(boundingBox(frame.landmarks));
+      // 크기는 같은 검출기 박스끼리 비교한다. 랜드마크 박스는 검출기 박스와 범위가 달라서다.
+      const current =
+        boxes.find((box) => containsPoint(box, center)) ?? boundingBox(frame.landmarks);
       const bigger =
-        !containsPoint(largest, boxCenter(current)) &&
-        boxArea(largest) >= boxArea(current) * SWITCH_AREA_RATIO;
+        !containsPoint(largest, center) && boxArea(largest) >= boxArea(current) * SWITCH_AREA_RATIO;
       this.switchConfirms = bigger ? this.switchConfirms + 1 : 0;
       if (this.switchConfirms < SWITCH_CONFIRMS) return;
     }
