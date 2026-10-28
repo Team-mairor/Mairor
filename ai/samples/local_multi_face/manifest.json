@@ -1,0 +1,10 @@
+{
+  "videoId": "local_multi_face",
+  "source": { "width": 1920, "height": 1280, "fps": 1, "durationSeconds": 1.0 },
+  "steps": [
+    { "stepId": "s1", "order": 1, "startSeconds": 0.0, "endSeconds": 1.0, "makeup": "other", "product": null }
+  ],
+  "frames": [
+    { "frameIndex": 0, "timestampMs": 0, "stepId": "s1", "path": "frames/000000.jpg", "width": 1920, "height": 1280 }
+  ]
+}

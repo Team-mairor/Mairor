@@ -12,6 +12,8 @@ ai:
     UV_CACHE_DIR: $CI_PROJECT_DIR/.uv-cache
     UV_LINK_MODE: copy
   before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends libgl1 libglib2.0-0 libegl1 libgles2
     - cd ai
     - uv sync --locked
   script:

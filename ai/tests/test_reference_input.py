@@ -1,17 +1,18 @@
 import json
+from io import BytesIO
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import ExifTags, Image
 
 from app.core.errors import AppError
-from app.services.reference_input import load_reference_input, read_frame_rgb
+from app.schemas.manifest import Frame
+from app.services.reference_input import load_reference_input, photo_to_rgb, read_frame_rgb
 
 LOCAL_01 = Path(__file__).resolve().parents[1] / "samples" / "local_01"
 
 
 def write_sample(folder: Path, **overrides) -> None:
-    """가로 4 · 세로 2짜리 빨간 사진 1장과 manifest.json을 만든다."""
     manifest = {
         "videoId": "test_01",
         "source": {"width": 4, "height": 2, "fps": 30, "durationSeconds": 10.0},
@@ -125,6 +126,19 @@ def test_frame_size_mismatch_is_rejected(tmp_path):
     assert e.value.code == "FRAME_SIZE_MISMATCH"
 
 
+def test_photo_to_rgb_uprights_photo_without_file():
+    exif = Image.Exif()
+    exif[ExifTags.Base.Orientation] = 6
+    buffer = BytesIO()
+    Image.new("RGB", (2, 4), (255, 0, 0)).save(buffer, "JPEG", exif=exif)
+    frame = Frame(frame_index=0, timestamp_ms=0, step_id=None, path="000000.jpg", width=4, height=2)
+
+    with Image.open(BytesIO(buffer.getvalue())) as image:
+        rgb = photo_to_rgb(image, frame)
+
+    assert rgb.shape == (2, 4, 3)
+
+
 @pytest.mark.skipif(
     not (LOCAL_01 / "frames" / "015150.png").is_file(),
     reason="local_01 사진은 git에 없다. 노션 107 문서의 '다시 구하는 법'으로 받는다",
@@ -147,10 +161,6 @@ EXCEPTION_SAMPLES = [
 
 @pytest.mark.parametrize(("folder", "image"), EXCEPTION_SAMPLES)
 def test_exception_samples_pass_the_input_check(folder, image):
-    """얼굴이 없거나 가려진 사진도 파일·형식은 멀쩡해서 입구는 통과한다.
-
-    거르는 건 105의 얼굴 찾기다.
-    """
     sample = LOCAL_01.parent / folder
     if not (sample / "frames" / image).is_file():
         pytest.skip(f"{folder} 사진은 git에 없다. 노션 107 문서의 '다시 구하는 법'으로 받는다")

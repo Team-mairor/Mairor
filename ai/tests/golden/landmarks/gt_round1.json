@@ -1,0 +1,305 @@
+{
+  "round": 1,
+  "pointNames": [
+    "right_eye_outer",
+    "right_eye_inner",
+    "left_eye_inner",
+    "left_eye_outer",
+    "nose_tip",
+    "mouth_right",
+    "mouth_left",
+    "upper_lip_top",
+    "lower_lip_bottom",
+    "chin"
+  ],
+  "photos": [
+    {
+      "id": "1_front",
+      "image": "ai/samples/local_01_seq/frames/015150.png",
+      "width": 1920,
+      "height": 1080,
+      "points": {
+        "right_eye_outer": [
+          823.8,
+          400.2
+        ],
+        "right_eye_inner": [
+          898.8,
+          415.2
+        ],
+        "left_eye_inner": [
+          992.8,
+          420.9
+        ],
+        "left_eye_outer": [
+          1072.4,
+          414.7
+        ],
+        "nose_tip": [
+          938.0,
+          499.4
+        ],
+        "mouth_right": [
+          865.2,
+          587.8
+        ],
+        "mouth_left": [
+          1004.2,
+          595.5
+        ],
+        "upper_lip_top": [
+          934.9,
+          568.2
+        ],
+        "lower_lip_bottom": [
+          931.8,
+          638.4
+        ],
+        "chin": [
+          927.2,
+          698.9
+        ]
+      }
+    },
+    {
+      "id": "2_lip_covered",
+      "image": "ai/samples/local_01_seq/frames/015060.png",
+      "width": 1920,
+      "height": 1080,
+      "points": {
+        "right_eye_outer": [
+          786.2,
+          421.3
+        ],
+        "right_eye_inner": [
+          861.1,
+          436.7
+        ],
+        "left_eye_inner": [
+          951.5,
+          440.4
+        ],
+        "left_eye_outer": [
+          1035.4,
+          430.9
+        ],
+        "nose_tip": [
+          890.4,
+          523.9
+        ],
+        "mouth_right": [
+          840.4,
+          609.4
+        ],
+        "mouth_left": [
+          974.3,
+          612.1
+        ],
+        "upper_lip_top": [
+          892.5,
+          589.7
+        ],
+        "lower_lip_bottom": [
+          890.4,
+          661.5
+        ],
+        "chin": [
+          881.9,
+          713.0
+        ]
+      }
+    },
+    {
+      "id": "3_eyes_closed",
+      "image": "ai/samples/local_01_seq/frames/015102.png",
+      "width": 1920,
+      "height": 1080,
+      "points": {
+        "right_eye_outer": [
+          774.9,
+          422.2
+        ],
+        "right_eye_inner": [
+          849.6,
+          428.8
+        ],
+        "left_eye_inner": [
+          938.6,
+          435.4
+        ],
+        "left_eye_outer": [
+          1027.0,
+          429.8
+        ],
+        "nose_tip": [
+          876.1,
+          519.3
+        ],
+        "mouth_right": [
+          830.3,
+          604.2
+        ],
+        "mouth_left": [
+          961.5,
+          609.2
+        ],
+        "upper_lip_top": [
+          879.1,
+          583.3
+        ],
+        "lower_lip_bottom": [
+          882.7,
+          661.1
+        ],
+        "chin": [
+          880.1,
+          707.8
+        ]
+      }
+    },
+    {
+      "id": "4_head_turned",
+      "image": "ai/samples/local_01_seq/frames/015246.png",
+      "width": 1920,
+      "height": 1080,
+      "points": {
+        "right_eye_outer": [
+          746.4,
+          408.9
+        ],
+        "right_eye_inner": [
+          815.0,
+          418.3
+        ],
+        "left_eye_inner": [
+          898.0,
+          416.3
+        ],
+        "left_eye_outer": [
+          981.1,
+          404.9
+        ],
+        "nose_tip": [
+          831.9,
+          492.9
+        ],
+        "mouth_right": [
+          797.1,
+          583.9
+        ],
+        "mouth_left": [
+          922.4,
+          587.4
+        ],
+        "upper_lip_top": [
+          840.8,
+          562.0
+        ],
+        "lower_lip_bottom": [
+          848.3,
+          621.2
+        ],
+        "chin": [
+          851.3,
+          679.9
+        ]
+      }
+    },
+    {
+      "id": "5_after_cut",
+      "image": "ai/samples/local_01_seq/frames/015330.png",
+      "width": 1920,
+      "height": 1080,
+      "points": {
+        "right_eye_outer": [
+          945.8,
+          411.2
+        ],
+        "right_eye_inner": [
+          1024.3,
+          422.3
+        ],
+        "left_eye_inner": [
+          1118.0,
+          423.3
+        ],
+        "left_eye_outer": [
+          1204.9,
+          417.0
+        ],
+        "nose_tip": [
+          1061.6,
+          502.3
+        ],
+        "mouth_right": [
+          1004.8,
+          603.4
+        ],
+        "mouth_left": [
+          1122.7,
+          607.1
+        ],
+        "upper_lip_top": [
+          1060.6,
+          563.9
+        ],
+        "lower_lip_bottom": [
+          1060.1,
+          652.4
+        ],
+        "chin": [
+          1061.1,
+          712.4
+        ]
+      }
+    },
+    {
+      "id": "6_multi_face4",
+      "image": "ai/samples/local_multi_face/frames/000000.jpg",
+      "width": 1920,
+      "height": 1280,
+      "points": {
+        "right_eye_outer": [
+          1043.3,
+          677.8
+        ],
+        "right_eye_inner": [
+          1087.5,
+          684.1
+        ],
+        "left_eye_inner": [
+          1129.0,
+          688.2
+        ],
+        "left_eye_outer": [
+          1179.1,
+          693.6
+        ],
+        "nose_tip": [
+          1097.5,
+          715.5
+        ],
+        "mouth_right": [
+          1055.4,
+          750.8
+        ],
+        "mouth_left": [
+          1157.8,
+          761.5
+        ],
+        "upper_lip_top": [
+          1098.7,
+          752.3
+        ],
+        "lower_lip_bottom": [
+          1093.1,
+          780.8
+        ],
+        "chin": [
+          1090.1,
+          833.3
+        ]
+      }
+    }
+  ]
+}
