@@ -1,3 +1,7 @@
+// 부위 점 번호는 AI(Python)와 같이 쓰도록 shared/face-mesh/regions.v1.json에 둔다.
+// 픽스처 생성 스크립트도 Node에서 바로 읽으므로 JSON은 import 속성을 붙여 가져온다.
+import shared from "../../../../shared/face-mesh/regions.v1.json" with { type: "json" };
+
 import type { RegionName } from "./types";
 
 export const RIGHT_IRIS_CENTER = 468;
@@ -11,61 +15,53 @@ interface RegionDef {
   side: "left" | "right" | "center";
 }
 
-export const REGIONS: Record<RegionName, RegionDef> = {
-  rightEye: {
-    indices: [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7],
-    axis: [133, 33],
-    side: "right",
-  },
-  leftEye: {
-    indices: [263, 466, 388, 387, 386, 385, 384, 398, 362, 382, 381, 380, 374, 373, 390, 249],
-    axis: [362, 263],
-    side: "left",
-  },
-  rightBrow: {
-    indices: [46, 53, 52, 65, 55, 107, 66, 105, 63, 70],
-    axis: [55, 46],
-    side: "right",
-  },
-  leftBrow: {
-    indices: [276, 283, 282, 295, 285, 336, 296, 334, 293, 300],
-    axis: [285, 276],
-    side: "left",
-  },
-  lipsOuter: {
-    indices: [
-      61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146,
-    ],
-    axis: [61, 291],
-    side: "center",
-  },
-  lipsInner: {
-    indices: [
-      78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95,
-    ],
-    axis: [78, 308],
-    side: "center",
-  },
-  // TODO: 후보값. 디버그 화면에서 실측 후 확정
-  rightCheek: {
-    indices: [123, 116, 117, 118, 101, 36, 50, 205, 207, 147],
-    axis: [234, 454],
-    side: "right",
-  },
-  leftCheek: {
-    indices: [330, 347, 346, 345, 352, 376, 427, 425, 280, 266],
-    axis: [234, 454],
-    side: "left",
-  },
-  faceOval: {
-    indices: [
-      10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152,
-      148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
-    ],
-    axis: [234, 454],
-    side: "center",
-  },
-};
+const SIDES: readonly RegionDef["side"][] = ["left", "right", "center"];
+
+// 공유 파일의 부위 이름은 RegionName과 정확히 같아야 한다.
+const NAMES = {
+  rightEye: true,
+  leftEye: true,
+  rightBrow: true,
+  leftBrow: true,
+  lipsOuter: true,
+  lipsInner: true,
+  rightCheek: true,
+  leftCheek: true,
+  faceOval: true,
+} satisfies Record<RegionName, true>;
+
+// 메시 꼭짓점은 0~467이다. 홍채(468~)는 메시에 없다.
+const isMeshVertex = (i: number) => Number.isInteger(i) && i >= 0 && i < RIGHT_IRIS_CENTER;
+
+/** 공유 파일의 한 부위를 확인해 RegionDef로 바꾼다. 형식이 틀리면 화면을 그리기 전에 알 수 있게 바로 멈춘다. */
+function toRegionDef(name: string, region: { indices: number[]; axis: number[]; side: string }) {
+  const side = SIDES.find((s) => s === region.side);
+  if (
+    !Object.hasOwn(NAMES, name) ||
+    region.indices.length < 3 ||
+    !region.indices.every(isMeshVertex) ||
+    region.axis.length !== 2 ||
+    !region.axis.every(isMeshVertex) ||
+    !side
+  ) {
+    throw new Error(`regions.v1.json의 ${name} 형식이 맞지 않습니다`);
+  }
+  return {
+    indices: region.indices,
+    axis: [region.axis[0], region.axis[1]],
+    side,
+  } satisfies RegionDef;
+}
+
+const missing = Object.keys(NAMES).filter((name) => !Object.hasOwn(shared.regions, name));
+if (missing.length > 0) {
+  throw new Error(`regions.v1.json에 부위가 빠졌습니다: ${missing.join(", ")}`);
+}
+
+export const REGIONS = {} as Record<RegionName, RegionDef>;
+for (const [name, region] of Object.entries(shared.regions)) {
+  REGIONS[name as RegionName] = toRegionDef(name, region);
+}
 
 export const REGION_NAMES = Object.keys(REGIONS) as RegionName[];
 

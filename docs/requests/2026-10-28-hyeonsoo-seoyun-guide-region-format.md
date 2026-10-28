@@ -163,5 +163,4 @@ AI가 레퍼런스 영상에서 단계마다 바를 영역을 찾아 FE에 넘�
 
 - 하위 단계별 기본 가이드: [2026-10-28-hyeonsoo-seoyun-default-guide-by-step.md](2026-10-28-hyeonsoo-seoyun-default-guide-by-step.md)
 - 가이드 빼는 영역 처리: [2026-10-28-hyeonsoo-seoyun-guide-exclude.md](2026-10-28-hyeonsoo-seoyun-guide-exclude.md)
-- 부위 점 번호 공유: [2026-10-28-hyeonsoo-seoyun-region-points-shared.md](2026-10-28-hyeonsoo-seoyun-region-points-shared.md)
 - 이 데이터가 BE를 거쳐 전달될 때 API 명세 v2 도포 정보와의 대응은 BE에 따로 확인을 요청했습니다: [2026-10-28-hyeonsoo-jungyoon-api-v2-application.md](2026-10-28-hyeonsoo-jungyoon-api-v2-application.md)

@@ -9,13 +9,15 @@ FE(브라우저, `@mediapipe/tasks-vision`)와 AI(Python, `mediapipe`)가 **같�
 | `triangles.v1.json` | 캐노니컬 메시 삼각형 898개. 배열 위치가 `MeshAnchor.triangle` 번호 | `face_landmarker.task`에서 추출 |
 | `uv.v1.json` | 꼭짓점 468개의 UV | `face_landmarker.task`에서 추출 |
 | `extract_mesh.py` | 위 두 JSON을 만드는 스크립트 (`python extract_mesh.py`) | |
+| `regions.v1.json` | 부위 9개(눈·눈썹·입술 바깥/안쪽·볼·얼굴 윤곽)의 랜드마크 번호. `indices`는 외곽선을 따라 한 바퀴 도는 순서(도는 방향은 부위마다 다름), `axis`는 각도 기준 [시작, 끝], `side`는 본인 기준 `left`·`right`·`center` | FE에서 정함 |
 
 - `face_landmarker.task` SHA-256: `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`
 
 ## 사용 위치
 
 - FE: `frontend/scripts/sync-mediapipe-assets.mjs`가 `npm run dev`·`npm run build` 전에 `frontend/public/models/`로 복사한다.
-- AI (예정): Python에서 이 경로의 파일을 직접 읽는다.
+- FE: `frontend/src/features/face/regions.ts`가 `regions.v1.json`을 직접 import한다 (`next.config.ts`의 `turbopack.root`가 저장소 루트).
+- AI (예정): Python에서 이 경로의 파일을 직접 읽는다. 부위 점 번호는 `regions.v1.json`을 읽고 따로 옮겨 적지 않는다.
 
 ## 메시 규칙 (`meshVersion: "v1"`)
 

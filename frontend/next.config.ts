@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 import type { NextConfig } from "next";
 
 // 개발 서버에서만 /api를 BE로 넘긴다. 배포에서는 같은 Origin의 리버스 프록시가 맡는다.
@@ -19,6 +21,8 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
   turbopack: {
+    // 부위 점 번호처럼 AI와 같이 쓰는 파일(../shared)을 import할 수 있도록 저장소 루트를 기준으로 삼는다.
+    root: join(__dirname, ".."),
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],

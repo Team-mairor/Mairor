@@ -39,4 +39,3 @@ FE 색 레이어는 이미 같은 칸을 처리합니다. `frontend/src/features
 ## 함께 보내는 요청
 
 - 튜토리얼 가이드 영역 데이터 형식 반영: [2026-10-28-hyeonsoo-seoyun-guide-region-format.md](2026-10-28-hyeonsoo-seoyun-guide-region-format.md)
-- 부위 점 번호 공유: [2026-10-28-hyeonsoo-seoyun-region-points-shared.md](2026-10-28-hyeonsoo-seoyun-region-points-shared.md)
