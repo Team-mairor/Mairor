@@ -64,7 +64,7 @@ def _load(image: StepImage, fetch: Fetch) -> LoadedImage:
         with Image.open(BytesIO(data)) as picture:
             picture.load()
             image_format, (width, height) = picture.format, picture.size
-    except Exception as e:  # Pillow는 깨진 파일 종류마다 다른 예외를 낸다
+    except Exception as e:
         raise ImageProblem("이미지로 열 수 없습니다") from e
     if image_format not in IMAGE_TYPES:
         raise ImageProblem(f"JPEG·PNG·WEBP만 받습니다 ({image_format})")

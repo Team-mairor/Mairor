@@ -12,7 +12,7 @@ ai/
 │  │  ├─ health.py      GET /health
 │  │  └─ v1/            /api/v1/... 기능 API
 │  ├─ services/         비즈니스 로직                     (기능 추가 시 생성)
-│  ├─ clients/          외부 호출: 이미지 받기, Gemini, 네이버 검색
+│  ├─ clients/          외부 호출: 이미지 받기, Claude(GMS), 네이버 검색
 │  ├─ schemas/          요청·응답 모델
 │  │  └─ common.py      CamelModel, ErrorResponse
 │  └─ core/             앱 전체 공통
@@ -77,7 +77,7 @@ uvicorn :8000
 FastAPI
    ├─ 1. 경로로 라우터 함수 찾기        api/
    ├─ 2. 본문을 모델로 검증·변환        schemas/   camelCase → snake_case
-   ├─ 3. 로직 실행                      services/ → clients/ → Gemini · 네이버
+   ├─ 3. 로직 실행                      services/ → clients/ → Claude(GMS) · 네이버
    └─ 4. 반환값을 JSON으로              schemas/   snake_case → camelCase
 
    어디서든 예외 → core/errors.py → {code, message, details}

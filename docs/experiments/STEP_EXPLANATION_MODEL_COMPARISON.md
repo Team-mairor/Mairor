@@ -17,6 +17,7 @@
 
 - 입력: `ai/samples/local_01/guide_input.json` (19단계). 글만 보내고 이미지는 보내지 않았다
 - 세 모델 모두 같은 프롬프트(`ai/tools/explain_prompt.txt` v2), 같은 응답 형식, 기본 설정으로 단계마다 한 번씩 불렀다
+- 생각 수준(effort)은 보내지 않았다. Claude Haiku 5.5는 생략하면 `medium`과 같다 ([Effort 문서](https://platform.claude.com/docs/en/build-with-claude/effort))
 - 결과 형식
 
 | 칸 | 규칙 |

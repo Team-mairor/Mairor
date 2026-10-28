@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "메이크업 코칭 AI 서버 (영상 분석, 제품 피처 수집)"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=2.3.0",
     "fastapi>=0.156.4",
     "mediapipe>=1.1.1",
     "numpy>=2.5.4",

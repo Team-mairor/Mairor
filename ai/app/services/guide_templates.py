@@ -17,7 +17,6 @@ STEP_TITLES: dict[Makeup, str] = {
     "other": "기타",
 }
 
-# 칸 하나 = 문장 하나. 단계 안내는 이 순서로 나온다.
 SENTENCES: dict[str, str] = {
     "tool": "{tool|을} 써요.",
     "amount": "양은 {amount|이에요}.",
@@ -25,14 +24,10 @@ SENTENCES: dict[str, str] = {
     "finish_cue": "{finish_cue} 계속해요.",
 }
 
-# 부위마다 다르게 쓰고 싶은 틀만 적는다. 없으면 SENTENCES를 쓴다.
-# 예) "lip": {"tool": "{tool|으로} 입술 안쪽부터 발라요."}
 SENTENCES_BY_MAKEUP: dict[Makeup, dict[str, str]] = {}
 
-# 문장을 하나도 만들지 못했을 때
 NO_INSTRUCTION = "영상에서 {title} 바르는 법을 확인하지 못했어요."
 
-# 조사: (받침 있을 때, 받침 없을 때, 한글로 안 끝날 때). 틀에는 둘 중 아무거나 써도 된다
 _JOSA_FORMS = [
     ("을", "를", "을(를)"),
     ("이", "가", "이(가)"),
@@ -44,7 +39,7 @@ _JOSA_FORMS = [
 _JOSA = {josa: forms for forms in _JOSA_FORMS for josa in forms[:2]}
 
 _PLACEHOLDER = re.compile(r"\{(\w+)(?:\|(\w+))?\}")
-_RIEUL = 8  # 종성 ㄹ. '으로'는 ㄹ 받침 뒤에서 '로'가 된다
+_RIEUL = 8
 
 
 def attach_josa(word: str, josa: str) -> str:

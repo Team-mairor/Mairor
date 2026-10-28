@@ -92,6 +92,22 @@ uv run streamlit run tools/explain_viewer.py                       # 결과 보�
 - 보내기 전에 근거 시각이 단계 구간 밖인 팁을 그 시각의 단계로 옮기고, 받은 뒤 글자 수·개수·근거 번호·숫자·제품 이름·도구·방향·말투를 코드로 검사합니다.
 - 확인 화면은 ① 단계마다 입력과 세 모델 결과, ② 모델별 검사·시간·토큰 요약, ③ 한 모델 결과를 가이드 순서대로, ④ 프롬프트와 팁 옮긴 기록을 보여 줍니다.
 
+## Claude 호출
+
+`app/clients/llm.py`가 GMS를 거쳐 Claude를 부릅니다. 서비스 코드는 `get_llm()`으로 받은 `Llm`에 지시문·글·이미지·응답 형식(Pydantic 모델)을 넘깁니다.
+
+```python
+result = await llm.generate(system=SYSTEM, text=text, images=loaded_images, output=StepExplanation)
+result.output  # StepExplanation
+result.usage   # 입력·출력·생각 토큰
+```
+
+- `usage.output_tokens`는 생각 토큰을 뺀 답 토큰입니다. 출력 요금은 `output_tokens + thinking_tokens`에 붙습니다 (단계 설명 모델 비교 도구와 같은 뜻).
+- 실패하면 `LlmError`를 냅니다. `kind`로 다시 해 볼지 정합니다: `retryable`(시간 초과·연결 실패·408·409·429·5xx), `request`(그 밖의 4xx), `refused`(거절), `truncated`(답 잘림), `invalid_output`(형식과 다름), `config`(키 없음).
+- 408·409·429·5xx·시간 초과는 SDK가 먼저 `LLM_MAX_RETRIES`번 다시 시도합니다.
+- GMS는 키를 `x-api-key` 헤더에서만 읽습니다. SDK 기본값인 `Authorization: Bearer`로 보내면 401이 나서 `x-api-key`로 보냅니다.
+- 테스트는 `tests/fakes.py`의 `FakeLlm`으로 바꿔 끼웁니다.
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.
@@ -101,7 +117,15 @@ uv run streamlit run tools/explain_viewer.py                       # 결과 보�
 | `APP_ENV` | `local` | `local` · `dev` · `prod`. `prod`에서는 API 문서를 닫음 |
 | `LOG_LEVEL` | `INFO` | `DEBUG` · `INFO` · `WARNING` · `ERROR` |
 | `GEMINI_API_KEY` | | Gemini 영상 시험 도구만 씀. 서버는 읽지 않음 |
-| `GMS_API_KEY` | | 단계 설명 모델 비교 도구만 씀. 서버는 읽지 않음 |
+| `GMS_API_KEY` | | Claude 호출 키. 단계 설명 모델 비교 도구도 씀 |
+| `LLM_MODEL` | `claude-haiku-5-5` | Claude 모델 |
+| `LLM_EFFORT` | `medium` | 생각 수준. `low` · `medium` · `high` · `xhigh` · `max`. Haiku 5.5는 생략하면 `medium`이라 모델 비교 실험과 같은 조건 |
+| `LLM_BASE_URL` | `https://gms.ssafy.io/gmsapi/api.anthropic.com` | GMS의 Anthropic 주소 |
+| `LLM_MAX_TOKENS` | `16000` | 답 최대 토큰. 생각 토큰 포함 |
+| `LLM_TIMEOUT_SECONDS` | `60` | 한 번 시도의 제한 시간 |
+| `LLM_MAX_RETRIES` | `2` | 시간 초과·408·409·429·5xx일 때 다시 시도하는 횟수 |
+
+`CLAUDE_`로 시작하는 이름은 쓰지 않습니다. Claude Code가 `CLAUDE_EFFORT` 같은 환경변수를 넣어 두어서 설정이 바뀝니다.
 
 새 설정은 `app/core/config.py`의 `Settings`에 필드를 추가하고 `.env.example`에도 적습니다.
 

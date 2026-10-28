@@ -18,6 +18,16 @@ def test_docs_closed_in_prod(monkeypatch):
     assert prod.get("/health").status_code == 200
 
 
+def test_llm_settings_ignore_claude_code_variables(monkeypatch):
+    monkeypatch.setenv("CLAUDE_EFFORT", "xhigh")
+    monkeypatch.setenv("LLM_MODEL", "claude-sonnet-5-5")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.llm_model == "claude-sonnet-5-5"
+    assert settings.llm_effort == "medium"
+
+
 def test_settings_read_environment(monkeypatch):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")

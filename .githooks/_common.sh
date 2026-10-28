@@ -44,7 +44,7 @@ print_branch_rule() {
 }
 
 # ── Python ────────────────────────────────────────────────
-# Python 실행기 찾기. (.claude/hooks/check_mr.sh가 쓴다)
+# Python 실행기 찾기. (.claude/hooks/의 check_mr.sh, check_comments.sh가 쓴다)
 #
 # Windows의 App Execution Alias 때문에 `python3`이 "파일은 있지만 실행하면
 # Microsoft Store 안내만 띄우고 죽는" 스텁일 수 있다. command -v 로는 이걸
