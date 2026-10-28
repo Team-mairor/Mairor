@@ -83,7 +83,7 @@ def test_unknown_makeup_is_rejected(tmp_path):
                 "order": 1,
                 "startSeconds": 1.0,
                 "endSeconds": 5.0,
-                "makeup": "mascara",
+                "makeup": "concealer",
             }
         ],
     )

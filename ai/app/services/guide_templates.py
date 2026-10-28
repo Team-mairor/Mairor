@@ -14,6 +14,10 @@ STEP_TITLES: dict[Makeup, str] = {
     "eyeliner": "아이라인",
     "blush": "블러셔",
     "lip": "립",
+    "brow": "눈썹",
+    "mascara": "마스카라",
+    "contour": "쉐딩",
+    "highlight": "하이라이트",
     "other": "기타",
 }
 

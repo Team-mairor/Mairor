@@ -19,7 +19,7 @@ BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini
 | `steps[].stepId` | ✓ | 단계 ID. 겹치면 안 된다 |
 | `steps[].order` | ✓ | 1부터 시작하는 순서. 겹치면 안 된다 |
 | `steps[].startSeconds` · `endSeconds` | ✓ | 단계 구간. 끝이 시작보다 커야 하고, 영상 길이를 넘으면 안 된다 |
-| `steps[].makeup` | ✓ | 부위 분류: `foundation` · `eyeshadow` · `eyeliner` · `blush` · `lip` · `other` |
+| `steps[].makeup` | ✓ | 부위 분류: `foundation` · `eyeshadow` · `eyeliner` · `blush` · `lip` · `brow` · `mascara` · `contour` · `highlight` · `other` |
 | `steps[].partLabel` | ✓ | 한국어 부위 이름 (예: 스킨케어 패드, 컨실러). `other`인 단계가 무엇인지 알려 준다 |
 | `steps[].summary` | ✓ | 이 단계에서 하는 일 한 문장 |
 | `steps[].images` | ✓ | 대표 장면 1~3장. `url`(저장소 주소, http·https)과 `at`(캡처 시각, 단계 구간 안) |

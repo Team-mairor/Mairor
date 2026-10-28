@@ -1,11 +1,13 @@
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from app.schemas.guide import GuideInput
+from app.schemas.manifest import Makeup
 from app.services.guide_builder import build_guide
-from app.services.guide_templates import attach_josa
+from app.services.guide_templates import STEP_TITLES, attach_josa
 
 CASES_DIR = Path(__file__).resolve().parent / "golden" / "guide"
 
@@ -77,6 +79,10 @@ def test_step_without_facts_gets_fallback_sentence() -> None:
     assert step.title == "블러셔"
     assert step.instructions == ["영상에서 블러셔 바르는 법을 확인하지 못했어요."]
     assert step.missing_fields == ["tool", "amount", "strength", "finishCue"]
+
+
+def test_every_makeup_has_a_step_title() -> None:
+    assert set(STEP_TITLES) == set(get_args(Makeup))
 
 
 def test_steps_are_ordered_by_order() -> None:

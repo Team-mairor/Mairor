@@ -4,7 +4,18 @@ from pydantic import Field, model_validator
 
 from app.schemas.common import CamelModel
 
-Makeup = Literal["foundation", "eyeshadow", "eyeliner", "blush", "lip", "other"]
+Makeup = Literal[
+    "foundation",
+    "eyeshadow",
+    "eyeliner",
+    "blush",
+    "lip",
+    "brow",
+    "mascara",
+    "contour",
+    "highlight",
+    "other",
+]
 
 
 class VideoSource(CamelModel):

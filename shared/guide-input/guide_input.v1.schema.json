@@ -68,6 +68,10 @@
             "eyeliner",
             "blush",
             "lip",
+            "brow",
+            "mascara",
+            "contour",
+            "highlight",
             "other"
           ],
           "title": "Makeup",
