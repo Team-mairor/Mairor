@@ -3,10 +3,10 @@
 팀원 모두가 같이 보는 기준 자료를 모아 두는 곳이다. 기능명세, 유저 플로우, API 명세 같은 문서를 둔다.
 
 | 문서 | 파일 | 노션 원본 | 가져온 날 | 노션 상태 |
-|---|---|---|---|---|
+|---|---|---|---|-------|
 | 기능명세서 | [feature-spec.md](feature-spec.md) | [링크](https://app.notion.com/p/3fedce3252f680e589b0c4e5476d731f) | 2026-10-27 | 확정/배포 |
-| 최종 유저플로우 (v11) | [user-flow.md](user-flow.md) | [링크](https://app.notion.com/p/406dce3252f68144abc8e28875775da0) | 2026-10-27 | 작성 중 |
-| API 명세 v2 | [api-spec.md](api-spec.md) | [링크](https://app.notion.com/p/406dce3252f68087b565cd7c68f445a0) | 2026-10-27 | 작성 중 |
+| 최종 유저플로우 (v11) | [user-flow.md](user-flow.md) | [링크](https://app.notion.com/p/406dce3252f68144abc8e28875775da0) | 2026-10-27 | 확정/배포 |
+| API 명세 v2 | [api-spec.md](api-spec.md) | [링크](https://app.notion.com/p/406dce3252f68087b565cd7c68f445a0) | 2026-10-27 | 확정/배포 |
 
 - 노션 페이지 본문을 그대로 옮긴 사본이다. 파일 맨 위 제목 한 줄만 추가했다.
 - `<mention>`, `<callout>`, `<code>` 같은 노션 태그가 남아 있어 GitLab 화면에서 일부 서식이 다르게 보일 수 있다.
