@@ -43,6 +43,9 @@ dependencies {
     implementation 'com.github.ben-manes.caffeine:caffeine'
     runtimeOnly 'org.postgresql:postgresql'
 
+    // 메일 발송 (가입 이메일 인증번호). SMTP 는 Gmail
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
     // 외부 HTTP 호출 (YouTube·LLM·AI 서버)
     implementation 'org.springframework.boot:spring-boot-starter-restclient'
 

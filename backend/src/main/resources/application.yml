@@ -19,15 +19,29 @@ spring:
       ddl-auto: validate
   session:
     jdbc:
-      # Flyway 도입(3단계) 전까지 Spring Session 이 세션 테이블을 직접 만든다. 도입 후 never 로 바꾼다.
+      # Flyway 도입 전까지 세션 테이블을 직접 만든다
       initialize-schema: always
   jackson:
-    # Jackson 3: 날짜는 기본으로 ISO-8601 문자열로 직렬화된다 (write-dates-as-timestamps 설정 불필요)
     time-zone: UTC
-    # null 필드는 생략하지 않고 "필드": null 로 내보낸다 (노션 API 명세 "생략·null·빈 값").
-    # 오류 응답의 details 만 ErrorResponse 의 @JsonInclude 로 생략한다.
+    # null 필드도 "필드": null 로 내보낸다 (오류 응답의 details 만 ErrorResponse 에서 생략)
   cache:
     type: caffeine
+  mail:
+    # 인증번호 발송용 SMTP (Gmail). 계정·앱 비밀번호는 환경변수로만 넣고, 실제 발송은 app.mail.enabled=true 일 때만 쓴다
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          # 메일 서버가 느려도 요청이 오래 멈추지 않게 5초로 끊는다
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 
 server:
   error:
@@ -41,7 +55,7 @@ server:
         name: __Host-sessionId
         secure: true
         http-only: true
-        # 서비스 세션은 Strict. Google 인증 복귀용 임시 쿠키만 Lax 로 따로 둔다 (노션 API 명세 인증·배포 상세)
+        # 서비스 세션은 Strict. Google 인증 복귀용 임시 쿠키만 Lax 로 따로 둔다
         same-site: strict
         path: /
 
@@ -53,9 +67,47 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    # SMTP 장애가 서비스 전체 DOWN 으로 보이지 않게 메일은 헬스체크에서 뺀다
+    mail:
+      enabled: false
 
 app:
   security:
-    # 회원가입·로그인처럼 세션이 없는 요청을 보낼 수 있는 프론트 Origin (쉼표 구분).
-    # 기본값이 없어서 운영에서 ALLOWED_ORIGINS 를 빠뜨리면 앱이 기동하지 않는다. dev 기본값은 application-dev.yml.
+    # 세션 없는 요청(회원가입 등)을 보낼 수 있는 프론트 Origin (쉼표 구분). 운영에서 비어 있으면 기동하지 않는다
     allowed-origins: ${ALLOWED_ORIGINS:}
+  signup:
+    # true 면 가입에 이메일 인증 토큰이 필요하다. prod 에서 켜면 메일 발송·비밀키 설정이 필수다
+    require-email-verification: ${SIGNUP_REQUIRE_EMAIL_VERIFICATION:false}
+  mail:
+    # false 면 메일을 보내지 않는다 (dev 는 인증번호를 로그로만 남기고, prod 는 발송이 항상 실패한다)
+    enabled: ${MAIL_ENABLED:false}
+    # 비우면 MAIL_USERNAME 을 쓴다
+    from: ${MAIL_FROM:}
+    from-name: ${MAIL_FROM_NAME:Mairor}
+  verification-store:
+    # 인증 임시 상태 저장소. memory 만 있다 (서버 1대 전제)
+    type: ${VERIFICATION_STORE:memory}
+  email-verification:
+    # 인증번호 해시용 비밀키. 비우면 기동할 때마다 임의로 만든다
+    secret: ${EMAIL_VERIFICATION_SECRET:}
+    code-ttl: 10m
+    resend-cooldown: 60s
+    hourly-limit: 5
+    max-attempts: 5
+    token-ttl: 30m
+  rate-limit:
+    # 키는 클라이언트 IP, 초과하면 429 + Retry-After
+    email-availability:
+      limit: ${RATE_LIMIT_EMAIL_AVAILABILITY_LIMIT:30}
+      window: ${RATE_LIMIT_EMAIL_AVAILABILITY_WINDOW:1m}
+    # 인증번호 발송 (이메일별 쿨다운·시간당 횟수는 app.email-verification)
+    email-verification:
+      limit: ${RATE_LIMIT_EMAIL_VERIFICATION_LIMIT:10}
+      window: ${RATE_LIMIT_EMAIL_VERIFICATION_WINDOW:10m}
+  agreements:
+    # 현재 약관 버전. 필수 약관은 요청의 agreements[].version 이 이 값과 같아야 인정한다 (마케팅은 제외)
+    versions:
+      terms: ${AGREEMENT_TERMS_VERSION:2026-10-26}
+      privacy: ${AGREEMENT_PRIVACY_VERSION:2026-10-26}
+      age-over-14: ${AGREEMENT_AGE_OVER_14_VERSION:2026-10-26}

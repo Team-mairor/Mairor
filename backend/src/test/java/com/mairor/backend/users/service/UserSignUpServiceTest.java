@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 
 import com.mairor.backend.TestcontainersConfiguration;
 import com.mairor.backend.common.error.BusinessException;
+import com.mairor.backend.users.SignUpRequests;
 import com.mairor.backend.users.dto.request.SignUpRequest;
 import com.mairor.backend.users.dto.response.UserResponse;
 import com.mairor.backend.users.entity.User;
@@ -37,7 +38,7 @@ class UserSignUpServiceTest {
   @MockitoSpyBean private UserRepository userRepository;
 
   private static SignUpRequest request(String email, String password) {
-    return new SignUpRequest(email, password, password);
+    return SignUpRequests.basic(email, password, password);
   }
 
   @Test
@@ -73,7 +74,7 @@ class UserSignUpServiceTest {
     assertThat(decomposed).isNotEqualTo(composed);
 
     UserResponse response =
-        service.signUp(new SignUpRequest("member@example.com", composed, decomposed));
+        service.signUp(SignUpRequests.basic("member@example.com", composed, decomposed));
 
     User saved = userRepository.findById(UUID.fromString(response.userId())).orElseThrow();
     assertThat(passwordEncoder.matches(composed, saved.getPasswordHash())).isTrue();
@@ -92,7 +93,7 @@ class UserSignUpServiceTest {
 
   @Test
   void signUp_mismatchedConfirm_returns400WithFieldDetail() {
-    SignUpRequest mismatched = new SignUpRequest("member@example.com", PASSWORD, PASSWORD + " ");
+    SignUpRequest mismatched = SignUpRequests.basic("member@example.com", PASSWORD, PASSWORD + " ");
 
     assertThatThrownBy(() -> service.signUp(mismatched))
         .isInstanceOfSatisfying(
@@ -145,7 +146,8 @@ class UserSignUpServiceTest {
 
   @Test
   void signUp_mismatchedConfirm_doesNotTouchTheRepository() {
-    SignUpRequest mismatched = new SignUpRequest("member@example.com", PASSWORD, "Other!2026abc");
+    SignUpRequest mismatched =
+        SignUpRequests.basic("member@example.com", PASSWORD, "Other!2026abc");
 
     assertThatThrownBy(() -> service.signUp(mismatched)).isInstanceOf(BusinessException.class);
 

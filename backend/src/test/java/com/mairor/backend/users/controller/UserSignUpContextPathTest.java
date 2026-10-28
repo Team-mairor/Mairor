@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jayway.jsonpath.JsonPath;
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.users.SignUpRequests;
+import com.mairor.backend.users.repository.UserAgreementRepository;
 import com.mairor.backend.users.repository.UserRepository;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -32,6 +34,7 @@ class UserSignUpContextPathTest {
   private int port;
 
   @Autowired private UserRepository userRepository;
+  @Autowired private UserAgreementRepository userAgreementRepository;
 
   private final String email = "ctx-" + UUID.randomUUID() + "@example.com";
 
@@ -42,15 +45,16 @@ class UserSignUpContextPathTest {
   }
 
   private Reply post(String origin) {
-    var request = client().post().uri("/v1/users").contentType(MediaType.APPLICATION_JSON);
+    var request = client().post().uri("/v1/users/signup").contentType(MediaType.APPLICATION_JSON);
     if (origin != null) {
       request = request.header("Origin", origin);
     }
     return request
         .body(
             """
-            {"email": "%s", "password": "ExampleOnly!2026", "passwordConfirm": "ExampleOnly!2026"}"""
-                .formatted(email))
+            {"email": "%s", "password": "ExampleOnly!2026", "passwordConfirm": "ExampleOnly!2026",
+             "agreements": %s}"""
+                .formatted(email, SignUpRequests.AGREEMENTS_JSON))
         .exchange(
             (req, res) ->
                 new Reply(
@@ -60,8 +64,14 @@ class UserSignUpContextPathTest {
 
   @AfterEach
   void cleanUp() {
-    userRepository.deleteAll(
-        userRepository.findAll().stream().filter(u -> u.getEmail().equals(email)).toList());
+    userRepository
+        .findByEmail(email)
+        .ifPresent(
+            user -> {
+              // 약관 동의 기록이 회원을 참조하므로 먼저 지운다
+              userAgreementRepository.deleteAll(userAgreementRepository.findByUserId(user.getId()));
+              userRepository.delete(user);
+            });
   }
 
   @Test

@@ -19,7 +19,8 @@ class OriginCheckFilterTest {
   private static final String APP = "https://app.example.com";
 
   private final RequestMatcher signUp =
-      request -> "POST".equals(request.getMethod()) && "/v1/users".equals(request.getRequestURI());
+      request ->
+          "POST".equals(request.getMethod()) && "/v1/users/signup".equals(request.getRequestURI());
 
   private final OriginCheckFilter filter =
       new OriginCheckFilter(
@@ -50,7 +51,7 @@ class OriginCheckFilterTest {
 
   @Test
   void allowedOrigin_passesToTheChain() throws Exception {
-    Result result = run(post("/v1/users", APP));
+    Result result = run(post("/v1/users/signup", APP));
 
     assertThat(result.passed()).isTrue();
     assertThat(result.response().getStatus()).isEqualTo(200);
@@ -67,14 +68,14 @@ class OriginCheckFilterTest {
         "  https://app.example.com  "
       })
   void equivalentSpellingsOfAllowedOrigins_pass(String origin) throws Exception {
-    assertThat(run(post("/v1/users", origin)).passed()).isTrue();
+    assertThat(run(post("/v1/users/signup", origin)).passed()).isTrue();
   }
 
   // ---- 거절 ----
 
   @Test
   void missingOrigin_isRejectedWithForbiddenJson() throws Exception {
-    Result result = run(post("/v1/users"));
+    Result result = run(post("/v1/users/signup"));
 
     assertThat(result.passed()).isFalse();
     assertThat(result.response().getStatus()).isEqualTo(403);
@@ -109,7 +110,7 @@ class OriginCheckFilterTest {
         "https://app.example.com@evil.com"
       })
   void invalidOrDisallowedOrigin_isRejected(String origin) throws Exception {
-    Result result = run(post("/v1/users", origin));
+    Result result = run(post("/v1/users/signup", origin));
 
     assertThat(result.passed()).as("origin=%s", origin).isFalse();
     assertThat(result.response().getStatus()).isEqualTo(403);
@@ -117,13 +118,13 @@ class OriginCheckFilterTest {
 
   @Test
   void multipleOriginHeaders_areRejectedEvenIfEachIsAllowed() throws Exception {
-    assertThat(run(post("/v1/users", APP, "http://localhost:3000")).passed()).isFalse();
-    assertThat(run(post("/v1/users", APP, APP)).passed()).isFalse();
+    assertThat(run(post("/v1/users/signup", APP, "http://localhost:3000")).passed()).isFalse();
+    assertThat(run(post("/v1/users/signup", APP, APP)).passed()).isFalse();
   }
 
   @Test
   void headerInjectionInRejectedOrigin_doesNotBreakTheResponse() throws Exception {
-    Result result = run(post("/v1/users", "https://evil.com\r\nX-Injected: 1"));
+    Result result = run(post("/v1/users/signup", "https://evil.com\r\nX-Injected: 1"));
 
     assertThat(result.passed()).isFalse();
     assertThat(result.response().getStatus()).isEqualTo(403);
@@ -133,7 +134,7 @@ class OriginCheckFilterTest {
 
   @Test
   void requestsOutsideTheProtectedList_passWithoutOrigin() throws Exception {
-    assertThat(run(new MockHttpServletRequest("GET", "/v1/users")).passed()).isTrue();
+    assertThat(run(new MockHttpServletRequest("GET", "/v1/users/signup")).passed()).isTrue();
     assertThat(run(post("/v1/any")).passed()).isTrue();
     assertThat(run(post("/health")).passed()).isTrue();
   }

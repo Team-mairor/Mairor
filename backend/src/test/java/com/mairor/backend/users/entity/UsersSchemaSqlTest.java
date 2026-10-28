@@ -49,11 +49,35 @@ class UsersSchemaSqlTest {
 
     assertThat(columns)
         .extracting(c -> c.get("column_name"))
-        .containsExactlyInAnyOrder("id", "email", "password_hash", "created_at", "updated_at");
+        .containsExactlyInAnyOrder(
+            "id",
+            "email",
+            "password_hash",
+            "provider",
+            "nickname",
+            "name",
+            "phone",
+            "birth_date",
+            "gender",
+            "email_verified_at",
+            "created_at",
+            "updated_at");
     assertThat(column(columns, "password_hash").get("is_nullable")).isEqualTo("YES");
     assertThat(column(columns, "email").get("is_nullable")).isEqualTo("NO");
     assertThat(column(columns, "email").get("character_maximum_length")).isEqualTo(254);
     assertThat(column(columns, "password_hash").get("character_maximum_length")).isEqualTo(255);
+
+    // 가입 때 선택으로 받는 프로필은 비어 있을 수 있고, provider 는 항상 있다
+    assertThat(column(columns, "provider").get("is_nullable")).isEqualTo("NO");
+    for (String optional :
+        List.of("nickname", "name", "phone", "birth_date", "gender", "email_verified_at")) {
+      assertThat(column(columns, optional).get("is_nullable")).as(optional).isEqualTo("YES");
+    }
+    assertThat(column(columns, "provider").get("character_maximum_length")).isEqualTo(10);
+    assertThat(column(columns, "nickname").get("character_maximum_length")).isEqualTo(20);
+    assertThat(column(columns, "name").get("character_maximum_length")).isEqualTo(50);
+    assertThat(column(columns, "phone").get("character_maximum_length")).isEqualTo(11);
+    assertThat(column(columns, "gender").get("character_maximum_length")).isEqualTo(10);
   }
 
   @Test
@@ -68,13 +92,62 @@ class UsersSchemaSqlTest {
   @Test
   void duplicateEmailViolatesTheNamedUniqueConstraint() {
     String insert =
-        "insert into users (id, email, created_at, updated_at) "
-            + "values (gen_random_uuid(), ?, now(), now())";
+        "insert into users (id, email, provider, created_at, updated_at) "
+            + "values (gen_random_uuid(), ?, 'LOCAL', now(), now())";
     jdbc.update(insert, "member@example.com");
 
     assertThatThrownBy(() -> jdbc.update(insert, "member@example.com"))
         .isInstanceOf(DuplicateKeyException.class)
         .hasMessageContaining(User.EMAIL_UNIQUE);
+  }
+
+  @Test
+  void userAgreementsColumnsAndConstraintsMatchTheEntity() {
+    List<Map<String, Object>> columns =
+        jdbc.queryForList(
+            "select column_name, is_nullable, character_maximum_length "
+                + "from information_schema.columns where table_name = 'user_agreements'");
+
+    assertThat(columns)
+        .extracting(c -> c.get("column_name"))
+        .containsExactlyInAnyOrder("id", "user_id", "type", "version", "agreed", "agreed_at");
+    for (Map<String, Object> c : columns) {
+      assertThat(c.get("is_nullable")).as(String.valueOf(c.get("column_name"))).isEqualTo("NO");
+    }
+    assertThat(column(columns, "type").get("character_maximum_length")).isEqualTo(30);
+    assertThat(column(columns, "version").get("character_maximum_length")).isEqualTo(20);
+
+    List<String> names =
+        jdbc.queryForList(
+            "select conname from pg_constraint where conrelid = 'user_agreements'::regclass",
+            String.class);
+    assertThat(names)
+        .contains("user_agreements_pkey", UserAgreement.USER_FK, UserAgreement.USER_TYPE_UNIQUE);
+  }
+
+  @Test
+  void sameAgreementTypeTwiceForOneUserViolatesTheUniqueConstraint() {
+    jdbc.update(
+        "insert into users (id, email, provider, created_at, updated_at) "
+            + "values ('00000000-0000-0000-0000-000000000001', 'a@example.com', 'LOCAL', now(), now())");
+    String insert =
+        "insert into user_agreements (id, user_id, type, version, agreed, agreed_at) "
+            + "values (gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'TERMS', 'v1', true, now())";
+    jdbc.update(insert);
+
+    assertThatThrownBy(() -> jdbc.update(insert))
+        .isInstanceOf(DuplicateKeyException.class)
+        .hasMessageContaining(UserAgreement.USER_TYPE_UNIQUE);
+  }
+
+  @Test
+  void agreementsMustReferenceAnExistingUser() {
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "insert into user_agreements (id, user_id, type, version, agreed, agreed_at) "
+                        + "values (gen_random_uuid(), gen_random_uuid(), 'TERMS', 'v1', true, now())"))
+        .hasMessageContaining(UserAgreement.USER_FK);
   }
 
   private static Map<String, Object> column(List<Map<String, Object>> columns, String name) {

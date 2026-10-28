@@ -37,7 +37,44 @@ class OpenApiDocsTest {
     mockMvc
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/v1/users'].post").exists());
+        .andExpect(jsonPath("$.paths['/v1/users/signup'].post").exists());
+  }
+
+  /** Swagger UI 의 기본 입력이 "string" 이 아니라 바로 보낼 수 있는 값(필수 약관 3개 포함)이어야 한다. */
+  @Test
+  void apiDocs_signUpHasUsableExample() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/signup'].post.requestBody.content['application/json'].examples")
+                .isNotEmpty())
+        .andExpect(
+            jsonPath("$.components.schemas.SignupAgreement.properties.version.example")
+                .value("2026-10-26"))
+        .andExpect(
+            jsonPath("$.components.schemas.SignupAgreement.properties.type.example").value("TERMS"))
+        .andExpect(
+            jsonPath("$.components.schemas.SignUpRequest.properties.email.example")
+                .value("user@example.com"));
+  }
+
+  @Test
+  void apiDocs_includesEmailVerification() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/email-verification'].post").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/email-verification/verification'].post").exists());
+  }
+
+  @Test
+  void apiDocs_includesEmailAvailability() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/email-availability'].post").exists());
   }
 
   @Test

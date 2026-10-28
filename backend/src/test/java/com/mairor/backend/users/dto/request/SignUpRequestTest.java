@@ -2,11 +2,13 @@ package com.mairor.backend.users.dto.request;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.mairor.backend.users.SignUpRequests;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
 import java.text.Normalizer;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -33,7 +35,7 @@ class SignUpRequestTest {
   }
 
   private static SignUpRequest request(String email, String password) {
-    return new SignUpRequest(email, password, password);
+    return SignUpRequests.basic(email, password, password);
   }
 
   private static Set<ConstraintViolation<SignUpRequest>> violations(SignUpRequest request) {
@@ -108,7 +110,7 @@ class SignUpRequestTest {
 
   @Test
   void password_null_isRejected() {
-    assertThat(messages(new SignUpRequest("member@example.com", null, "x"), "password"))
+    assertThat(messages(SignUpRequests.basic("member@example.com", null, "x"), "password"))
         .containsExactly("필수 값입니다.");
   }
 
@@ -116,7 +118,7 @@ class SignUpRequestTest {
   void passwordConfirm_null_isRejected() {
     assertThat(
             messages(
-                new SignUpRequest("member@example.com", "ExampleOnly!2026", null),
+                SignUpRequests.basic("member@example.com", "ExampleOnly!2026", null),
                 "passwordConfirm"))
         .containsExactly("필수 값입니다.");
   }
@@ -211,8 +213,153 @@ class SignUpRequestTest {
   @Test
   void toString_masksPasswords() {
     String text =
-        new SignUpRequest("Member@Example.com", "ExampleOnly!2026", "ExampleOnly!2026").toString();
+        SignUpRequests.basic("Member@Example.com", "ExampleOnly!2026", "ExampleOnly!2026")
+            .toString();
 
     assertThat(text).contains("member@example.com").doesNotContain("ExampleOnly");
+  }
+
+  // ---- 선택 필드 ----
+
+  private static SignUpRequest withProfile(
+      String nickname, String name, String phone, String birthDate, String gender) {
+    return new SignUpRequest(
+        "member@example.com",
+        "ExampleOnly!2026",
+        "ExampleOnly!2026",
+        nickname,
+        name,
+        phone,
+        birthDate == null ? null : LocalDate.parse(birthDate),
+        gender,
+        SignUpRequests.requiredAgreements(),
+        null);
+  }
+
+  @Test
+  void emailVerificationToken_isTrimmedBlankIsNull_andMasked() {
+    SignUpRequest withToken =
+        SignUpRequests.withToken(
+            "member@example.com", "ExampleOnly!2026", "ExampleOnly!2026", " tok-123 ");
+    SignUpRequest blank =
+        SignUpRequests.withToken(
+            "member@example.com", "ExampleOnly!2026", "ExampleOnly!2026", "   ");
+
+    assertThat(withToken.emailVerificationToken()).isEqualTo("tok-123");
+    assertThat(blank.emailVerificationToken()).isNull();
+    assertThat(withToken.toString()).doesNotContain("tok-123");
+  }
+
+  @Test
+  void emailVerificationToken_overTheLengthLimit_isRejected() {
+    SignUpRequest request =
+        SignUpRequests.withToken(
+            "member@example.com", "ExampleOnly!2026", "ExampleOnly!2026", "t".repeat(201));
+
+    assertThat(messages(request, "emailVerificationToken")).contains("200자 이하여야 합니다.");
+  }
+
+  @Test
+  void profile_allOmitted_hasNoViolations() {
+    assertThat(violations(withProfile(null, null, null, null, null))).isEmpty();
+  }
+
+  @Test
+  void profile_blankValuesAreTreatedAsOmitted() {
+    SignUpRequest request = withProfile("   ", "", " - ", null, "  ");
+
+    assertThat(request.nickname()).isNull();
+    assertThat(request.name()).isNull();
+    assertThat(request.phone()).isNull();
+    assertThat(request.gender()).isNull();
+    assertThat(violations(request)).isEmpty();
+  }
+
+  @Test
+  void nickname_isTrimmedAndLengthChecked() {
+    assertThat(withProfile("  미러  ", null, null, null, null).nickname()).isEqualTo("미러");
+    assertThat(messages(withProfile("가", null, null, null, null), "nickname"))
+        .contains("2자 이상 20자 이하여야 합니다.");
+    assertThat(messages(withProfile("가나", null, null, null, null), "nickname")).isEmpty();
+    assertThat(messages(withProfile("a".repeat(20), null, null, null, null), "nickname")).isEmpty();
+    assertThat(messages(withProfile("a".repeat(21), null, null, null, null), "nickname"))
+        .contains("2자 이상 20자 이하여야 합니다.");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"미 러", "미러!", "mirror-1", "미러😀", "미러@"})
+  void nickname_withDisallowedCharacters_isRejected(String nickname) {
+    assertThat(messages(withProfile(nickname, null, null, null, null), "nickname"))
+        .contains("한글, 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.");
+  }
+
+  @Test
+  void nickname_allowsHangulLettersDigitsAndUnderscore() {
+    assertThat(messages(withProfile("미러_Mirror01", null, null, null, null), "nickname")).isEmpty();
+  }
+
+  @Test
+  void name_lengthAndCharacters() {
+    assertThat(messages(withProfile(null, "홍길동", null, null, null), "name")).isEmpty();
+    assertThat(messages(withProfile(null, "Hong Gil Dong", null, null, null), "name")).isEmpty();
+    assertThat(messages(withProfile(null, "홍", null, null, null), "name"))
+        .contains("2자 이상 50자 이하여야 합니다.");
+    assertThat(messages(withProfile(null, "가".repeat(51), null, null, null), "name"))
+        .contains("2자 이상 50자 이하여야 합니다.");
+    assertThat(messages(withProfile(null, "홍길동1", null, null, null), "name"))
+        .contains("한글, 영문, 공백만 사용할 수 있습니다.");
+    assertThat(messages(withProfile(null, "홍_길동", null, null, null), "name"))
+        .contains("한글, 영문, 공백만 사용할 수 있습니다.");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"010-1234-5678", "01012345678", "010 1234 5678", "011-123-4567"})
+  void phone_validNumbers_areAccepted(String phone) {
+    SignUpRequest request = withProfile(null, null, phone, null, null);
+
+    assertThat(request.phone()).matches("\\d{10,11}");
+    assertThat(messages(request, "phone")).isEmpty();
+  }
+
+  @Test
+  void phone_isNormalizedToDigits() {
+    assertThat(withProfile(null, null, "010-1234-5678", null, null).phone())
+        .isEqualTo("01012345678");
+    assertThat(withProfile(null, null, " 010 123 4567 ", null, null).phone())
+        .isEqualTo("0101234567");
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "02-1234-5678",
+        "010-123-456",
+        "010-12345-67890",
+        "+82-10-1234-5678",
+        "abc",
+        "010-12a4-5678"
+      })
+  void phone_withInvalidFormat_isRejected(String phone) {
+    assertThat(messages(withProfile(null, null, phone, null, null), "phone"))
+        .contains("올바른 휴대폰 번호 형식이 아닙니다.");
+  }
+
+  @Test
+  void gender_acceptsOnlyMaleOrFemale() {
+    assertThat(messages(withProfile(null, null, null, null, "MALE"), "gender")).isEmpty();
+    assertThat(messages(withProfile(null, null, null, null, "FEMALE"), "gender")).isEmpty();
+    assertThat(messages(withProfile(null, null, null, null, "OTHER"), "gender"))
+        .contains("MALE 또는 FEMALE 이어야 합니다.");
+    assertThat(messages(withProfile(null, null, null, null, "male"), "gender"))
+        .contains("MALE 또는 FEMALE 이어야 합니다.");
+  }
+
+  @Test
+  void toString_masksPersonalInformation() {
+    String text = withProfile("미러", "홍길동", "01012345678", "2000-01-15", "FEMALE").toString();
+
+    assertThat(text)
+        .contains("member@example.com")
+        .doesNotContain("미러", "홍길동", "01012345678", "2000-01-15", "FEMALE");
   }
 }

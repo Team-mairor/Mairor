@@ -25,6 +25,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 
 /**
  * 컨트롤러 단계에서 나는 모든 예외를 {@link ErrorResponse} 형식으로 바꾼다.
@@ -104,7 +106,30 @@ public class GlobalExceptionHandler {
   /** 요청 본문을 읽을 수 없음 (JSON 문법 오류, 빈 본문 등). */
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {
+    // 날짜·숫자처럼 형식이 안 맞는 값은 어느 필드인지 알 수 있으면 그 필드 이름으로 알린다
+    if (e.getCause() instanceof MismatchedInputException mismatch) {
+      String field = fieldPath(mismatch);
+      if (!field.isEmpty()) {
+        return validationFailed(List.of(new ErrorResponse.FieldError(field, "값의 형식이 올바르지 않습니다.")));
+      }
+    }
     return validationFailed(List.of(new ErrorResponse.FieldError("body", "요청 본문을 읽을 수 없습니다.")));
+  }
+
+  /** 오류가 난 JSON 위치를 {@code agreements[0].version} 같은 필드 경로로 바꾼다. 위치를 모르면 빈 문자열. */
+  private static String fieldPath(MismatchedInputException e) {
+    StringBuilder path = new StringBuilder();
+    for (JacksonException.Reference ref : e.getPath()) {
+      if (ref.getPropertyName() != null) {
+        if (!path.isEmpty()) {
+          path.append('.');
+        }
+        path.append(ref.getPropertyName());
+      } else if (ref.getIndex() >= 0) {
+        path.append('[').append(ref.getIndex()).append(']');
+      }
+    }
+    return path.toString();
   }
 
   /** 없는 경로. */

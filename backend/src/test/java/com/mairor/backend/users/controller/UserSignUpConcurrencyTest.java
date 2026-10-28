@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.users.SignUpRequests;
+import com.mairor.backend.users.repository.UserAgreementRepository;
 import com.mairor.backend.users.repository.UserRepository;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,20 +37,29 @@ class UserSignUpConcurrencyTest {
 
   @Autowired private MockMvc mockMvc;
   @Autowired private UserRepository userRepository;
+  @Autowired private UserAgreementRepository userAgreementRepository;
 
   private final String email = "race-" + UUID.randomUUID() + "@example.com";
 
   @AfterEach
   void cleanUp() {
-    userRepository.findByEmail(email).ifPresent(userRepository::delete);
+    userRepository
+        .findByEmail(email)
+        .ifPresent(
+            user -> {
+              // 약관 동의 기록이 회원을 참조하므로 먼저 지운다
+              userAgreementRepository.deleteAll(userAgreementRepository.findByUserId(user.getId()));
+              userRepository.delete(user);
+            });
   }
 
   @Test
   void sameEmailAtTheSameTime_createsExactlyOneUser() throws Exception {
     String json =
         """
-        {"email": "%s", "password": "ExampleOnly!2026", "passwordConfirm": "ExampleOnly!2026"}"""
-            .formatted(email);
+        {"email": "%s", "password": "ExampleOnly!2026", "passwordConfirm": "ExampleOnly!2026",
+         "agreements": %s}"""
+            .formatted(email, SignUpRequests.AGREEMENTS_JSON);
     ExecutorService pool = Executors.newFixedThreadPool(ATTEMPTS);
     CountDownLatch ready = new CountDownLatch(ATTEMPTS);
     CountDownLatch go = new CountDownLatch(1);
@@ -62,7 +73,7 @@ class UserSignUpConcurrencyTest {
                   go.await();
                   return mockMvc
                       .perform(
-                          post("/v1/users")
+                          post("/v1/users/signup")
                               .header("Origin", "http://localhost:3000")
                               .contentType(MediaType.APPLICATION_JSON)
                               .content(json))
@@ -82,7 +93,9 @@ class UserSignUpConcurrencyTest {
       assertThat(statuses).filteredOn(s -> s == 201).hasSize(1);
       assertThat(statuses).filteredOn(s -> s == 409).hasSize(ATTEMPTS - 1);
       assertThat(statuses).doesNotContain(500);
-      assertThat(userRepository.findByEmail(email)).isPresent();
+      // 회원과 약관 동의 기록이 일관된다: 이긴 요청의 기록만 있다 (필수 3종 + 마케팅)
+      var user = userRepository.findByEmail(email).orElseThrow();
+      assertThat(userAgreementRepository.findByUserId(user.getId())).hasSize(4);
     } finally {
       pool.shutdownNow();
     }

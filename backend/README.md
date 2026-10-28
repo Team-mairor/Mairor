@@ -51,10 +51,58 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `DB_USERNAME` | `mairor` | DB 사용자 |
 | `DB_PASSWORD` | (없음) | DB 비밀번호 |
 | `ALLOWED_ORIGINS` | dev: `http://localhost:3000,https://localhost:3000,http://localhost:8080` / prod: 없음(필수) | 회원가입·로그인 같은 세션 없는 요청을 보낼 수 있는 프론트 Origin. 쉼표로 구분. 직접 적으면 dev 기본값을 대체한다(Swagger 에서 호출하려면 `http://localhost:8080` 포함). prod 에서 비어 있으면 기동 실패 |
+| `AGREEMENT_TERMS_VERSION` | `2026-10-26` | 서비스 이용약관의 현재 버전. 가입 요청의 `agreements[].version` 이 같아야 한다 |
+| `AGREEMENT_PRIVACY_VERSION` | `2026-10-26` | 개인정보 수집·이용의 현재 버전 |
+| `AGREEMENT_AGE_OVER_14_VERSION` | `2026-10-26` | 만 14세 이상 확인의 현재 버전 |
+| `MAIL_ENABLED` | `false` | `true`면 SMTP 로 인증번호 메일을 실제로 보낸다. `false`면 dev 는 인증번호를 서버 로그로만 남기고, prod 는 발송이 항상 실패한다 |
+| `MAIL_USERNAME` | (없음) | SMTP 계정(Gmail 주소). `MAIL_ENABLED=true` 인데 비어 있으면 기동 실패 |
+| `MAIL_PASSWORD` | (없음) | Gmail **앱 비밀번호**(2단계 인증 필요). 비어 있으면 기동 실패. 코드·문서에 적지 않는다 |
+| `MAIL_FROM` | `MAIL_USERNAME` | 보내는 사람 주소. Gmail 은 인증한 계정 주소로만 보낼 수 있다 |
+| `MAIL_FROM_NAME` | `Mairor` | 받는 사람에게 보이는 보내는 사람 이름 |
+| `MAIL_HOST` / `MAIL_PORT` | `smtp.gmail.com` / `587` | SMTP 서버 (STARTTLS) |
+| `SIGNUP_REQUIRE_EMAIL_VERIFICATION` | `false` | `true`면 가입 요청에 `emailVerificationToken` 이 필요하다(없거나 다른 이메일의 토큰이면 `USERS_EMAIL_NOT_VERIFIED`). 이메일 소유 확인은 명세 확정 전 확장이라 기본은 꺼져 있다. prod 에서 켜면 `MAIL_ENABLED=true`(+SMTP 계정)와 `EMAIL_VERIFICATION_SECRET` 이 없을 때 기동 실패한다 |
+| `EMAIL_VERIFICATION_SECRET` | (없음) | 인증번호 해시용 비밀키. 비우면 서버를 켤 때마다 임의로 만들어져 재시작 시 진행 중인 인증이 무효가 된다. 서버를 여러 대 두기 전에 반드시 설정한다 |
+| `VERIFICATION_STORE` | `memory` | 인증 임시 상태 저장소. 지금은 `memory` 만 있다 ([인메모리 저장소의 한계](#인메모리-저장소의-한계)) |
+| `RATE_LIMIT_EMAIL_AVAILABILITY_LIMIT` / `_WINDOW` | `30` / `1m` | 이메일 중복 확인의 IP 당 요청 제한 |
+| `RATE_LIMIT_EMAIL_VERIFICATION_LIMIT` / `_WINDOW` | `10` / `10m` | 인증번호 발송의 IP 당 요청 제한 |
 
 프론트는 같은 Origin 의 `/api` 로 호출하므로 CORS 설정은 두지 않는다. `ALLOWED_ORIGINS` 에는 브라우저 주소창에 보이는 프론트 공개 Origin 만 넣는다 (리버스 프록시 뒤의 내부 주소가 아니다). 프록시는 `Origin` 헤더를 바꾸지 않고 그대로 넘겨야 한다.
 
-새 설정은 `application.yml` 에 `${이름:기본값}` 으로 추가하고 `.env.example` 에도 적는다.
+새 설정은 `application.yml` 에 `${이름:기본값}` 으로 추가하고 위 표에 적는다. `.env.example` 에는 환경마다 값을 정해야 하는 것(접속 정보·비밀값·켜고 끄는 스위치)만 넣고, 기본값으로 충분한 튜닝 값은 표에만 둔다.
+
+## 회원가입
+
+공개 API 4개이고 모두 허용 Origin 검사를 받는다. 가입은 세션·토큰을 만들지 않는다(로그인은 별도).
+
+| API | 경로 | 설명 |
+|---|---|---|
+| API-USERS-011 | `POST /api/v1/users/email-availability` | 가입 가능한 이메일인지 확인. IP 당 요청 제한(초과 시 429 `USERS_EMAIL_CHECK_RATE_LIMITED`) |
+| API-USERS-012 | `POST /api/v1/users/email-verification` | 인증번호 메일 발송 (초안) |
+| API-USERS-013 | `POST /api/v1/users/email-verification/verification` | 인증번호 확인 → `verificationToken` 발급 (초안) |
+| API-USERS-001 | `POST /api/v1/users/signup` | 회원가입. 201 `{userId, email, nickname, provider, createdAt}` |
+
+```
+중복 확인 ─▶ (이메일 인증을 요구할 때만) 인증번호 발송 ─▶ 인증번호 확인 ─▶ 가입
+```
+
+- **가입 요청**: `email`, `password`, `passwordConfirm` 과 `agreements[]` 가 필수이고, 프로필(`nickname`, `name`, `phone`, `birthDate`, `gender`)은 선택이다. 필드 규칙은 API 명세와 `SignUpRequest` 를 따른다.
+- **약관**: `TERMS`·`PRIVACY`·`AGE_OVER_14` 는 동의(`agreed=true`)하고 서버의 현재 버전과 같아야 한다. 하나라도 빠지거나 `false` 거나 버전이 다르면 400 `USERS_REQUIRED_AGREEMENT_MISSING`. `MARKETING` 은 선택이고 버전을 맞추지 않는다. 회원과 약관 기록은 한 트랜잭션으로 저장하고 실패하면 함께 롤백한다.
+- **이메일 인증**(`SIGNUP_REQUIRE_EMAIL_VERIFICATION`)
+  - `false`(기본): 인증 API 와 상관없이 가입은 `emailVerificationToken` 없이 된다.
+  - `true`: 가입에 같은 이메일로 발급된 `emailVerificationToken` 이 필요하다. 없거나 맞지 않으면 400 `USERS_EMAIL_NOT_VERIFIED`. 성공하면 `email_verified_at` 이 기록되고 토큰은 폐기된다.
+- **인증번호 정책**(임시값, `app.email-verification`): 유효 10분 · 재발송 60초 간격 · 이메일당 시간당 5회 · 확인 실패 5회 · 인증 토큰 유효 30분. 인증번호는 해시로만 보관하고 확인에 성공하면 폐기한다. 발송 IP 제한(위 표)은 별도로 적용된다.
+- **메일 모양**: HTML 본문(`src/main/resources/mail/verification-code.html`, `{{code}}`·`{{validFor}}` 자리)과 평문 본문을 함께 보낸다. 디자인을 바꿀 때는 이 HTML 만 고치면 된다.
+- **메일 발송**: `MAIL_ENABLED=false` 면 dev 는 인증번호를 서버 로그에만 남기고(로컬 확인용) prod 는 발송이 실패한다(503 `USERS_EMAIL_SEND_FAILED`). 실제 발송은 `MAIL_*` 를 설정한다.
+- API-USERS-012·013 과 `SIGNUP_REQUIRE_EMAIL_VERIFICATION` 은 이메일 소유 확인 정책이 확정되기 전의 초안이다. 확정되면 갱신한다.
+
+### 인메모리 저장소의 한계
+
+인증번호·재발송 기록·인증 토큰(`VERIFICATION_STORE=memory`)과 요청 제한(`RateLimiter`)은 서버 메모리에 있다.
+
+- **서버 1대에서만 정확하다.** 여러 대면 인증번호를 발송한 서버와 확인하는 서버가 달라 인증이 실패하고, 요청 제한도 서버마다 따로 센다.
+- **재시작하면 사라진다.** 진행 중인 인증은 다시 받아야 하고 제한 횟수도 초기화된다(`EMAIL_VERIFICATION_SECRET` 이 없으면 인증번호 해시도 달라진다).
+- 클라이언트 IP 는 `getRemoteAddr()` 라서 리버스 프록시 뒤에서는 모든 요청이 프록시 IP 하나로 보인다. 배포 환경이 정해지면 전달 헤더 처리를 맞춘다(S15P31A306-203).
+- 저장소·제한기는 인터페이스(`EmailVerificationStore`, `RateLimiter`)와 계약 테스트가 있어서, Redis 구현을 더하고 `VERIFICATION_STORE` 로 고르게 하면 바꿀 수 있다(후속).
 
 ## DB 스키마
 
@@ -64,7 +112,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 
 | 파일 | 테이블 |
 |---|---|
-| `db/schema/users.sql` | `users` (회원) |
+| `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록) |
 
 - 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`
 - 누가·언제 적용하는지는 아직 정해지지 않았다 (배포 환경 이슈에서 확정). 확정 전에는 운영 배포를 하지 않는다.

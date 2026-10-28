@@ -31,6 +31,8 @@
 | API-USERS-009 | POST /api/v1/users/password-reset/verification | USERS-005 비밀번호 재설정 |
 | API-USERS-010 | PUT /api/v1/users/password-reset/password | USERS-005 비밀번호 재설정 |
 | API-USERS-011 | POST /api/v1/users/email-availability | USERS-001 회원가입 |
+| API-USERS-012 | POST /api/v1/users/email-verification | USERS-001 회원가입 (이메일 소유 확인, 초안) |
+| API-USERS-013 | POST /api/v1/users/email-verification/verification | USERS-001 회원가입 (이메일 소유 확인, 초안) |
 | API-VIDEO-001 | POST /api/v1/videos | VIDEO-001 · VIDEO-005 · VIDEO-004 |
 | API-VIDEO-002 | POST /api/v1/users/me/analysis-jobs | VIDEO-002 · ANALYSIS-001\~006 |
 | API-VIDEO-003 | GET /api/v1/users/me/analysis-jobs/\{jobId\} | VIDEO-003 · ANALYSIS-006 |
@@ -73,7 +75,7 @@ API-USERS-001 · POST /api/v1/users/signup
 관련 기능: USERS-001 회원가입
 
 - 공개 JSON·허용 Origin 검증. 요청은 아래 회원가입 필드 표를 따른다.
-- 성공 201: User(provider=LOCAL), 세션 미생성. 실패: 400 VALIDATION\_FAILED(필드 오류·만 14세 미만), 400 USERS\_REQUIRED\_AGREEMENT\_MISSING(필수 동의 누락·false·버전 불일치), 409 USERS\_EMAIL\_DUPLICATE.
+- 성공 201: User(provider=LOCAL), 세션 미생성. 실패: 400 VALIDATION\_FAILED(필드 오류·만 14세 미만), 400 USERS\_REQUIRED\_AGREEMENT\_MISSING(필수 동의 누락·false·버전 불일치), 400 USERS\_EMAIL\_NOT\_VERIFIED(이메일 소유 확인 사용 시, 초안), 409 USERS\_EMAIL\_DUPLICATE.
 - 이메일 정규화 후 서버 유니크 제약으로 동시 중복 방지. 회원과 약관 기록은 함께 저장·실패 시 함께 롤백. 비밀번호·확인값·개인정보는 로그 미기록. 비밀번호는 해시 저장. 성공 후 로그인 화면에 정규화 이메일을 채운다.
 - 필수는 email·password·passwordConfirm·agreements뿐. nickname·name·phone·birthDate·gender는 선택(생략/null 가능, 기능명세 USERS-001). 필드명은 phone 고정(phoneNumber 금지). Google 가입의 추가 정보·동의 수집은 미결(5절).
 
@@ -90,6 +92,7 @@ API-USERS-001 · POST /api/v1/users/signup
 | birthDate | N | YYYY-MM-DD 과거 날짜, 입력 시 만14세 미만 거절. 생략/null 가능 |
 | gender | N | MALE/FEMALE, 생략/null 가능 |
 | agreements | Y | SignupAgreement 배열. TERMS·PRIVACY·AGE\_OVER\_14 모두 true·현재 버전. MARKETING 선택, type 중복 불가 |
+| emailVerificationToken | 조건부(초안) | 이메일 소유 확인을 사용하는 환경에서만 필수. API-USERS-013이 발급한 토큰이며 같은 이메일에 대해서만 유효 |
 </toggle>
 
 <toggle>
@@ -448,7 +451,7 @@ API-REPORT-003 · DELETE /api/v1/users/me/history-records/\{recordId\}
 </toggle>
 
 <toggle>
-신규 API 9개 — USERS-008\~011 · VIDEO-006·007 · CAMERA-001\~003
+신규 API 11개 — USERS-008\~013 · VIDEO-006·007 · CAMERA-001\~003
 
 ### API-USERS-008 · 재설정 인증 코드 발송
 
@@ -492,6 +495,31 @@ POST /api/v1/users/email-availability
 - 성공 200: <code>{ "email": "user@example.com", "available": true }</code> — email은 정규화 값
 - 오류: 400 <code>VALIDATION_FAILED</code>(형식·254자) · 429 <code>USERS_EMAIL_CHECK_RATE_LIMITED</code>(Retry-After)
 - 정책: 확인 결과는 예약이 아니며 가입 시 409 <code>USERS_EMAIL_DUPLICATE</code>는 유지(동시 가입 대비). 이메일을 바꾸면 클라이언트가 확인 상태를 해제하고 '가입하기'를 비활성화. 존재 여부 노출 수준은 기존 409와 같으므로 요청 제한을 함께 둔다
+
+### API-USERS-012 · 가입 이메일 인증번호 발송 (초안)
+
+POST /api/v1/users/email-verification
+
+- 관련 기능: USERS-001 · 공개(비회원) · JSON·허용 Origin 검증
+- 상태: **초안(구현 선행).** 이메일 소유 확인 정책이 기능명세서 확인 필요 5에서 확정되기 전까지 설정 플래그(기본 꺼짐) 뒤에서만 사용한다. 확정 시 이 항목을 갱신한다
+- 요청 Body: <code>email</code> string Y — 정규화 후 검사, 254자 이하
+- 성공 202: <code>{ "expiresInSeconds": 600, "resendAvailableInSeconds": 60 }</code>
+- 오류: 400 <code>VALIDATION_FAILED</code>(형식) · 409 <code>USERS_EMAIL_DUPLICATE</code>(이미 가입된 이메일, 메일 미발송) · 429 <code>USERS_EMAIL_SEND_RATE_LIMITED</code>(재발송 60초 간격·시간당 5회, Retry-After) · 503 <code>USERS_EMAIL_SEND_FAILED</code>(메일 발송 실패, 즉시 재시도 가능)
+- 정책
+  - 6자리 숫자 코드를 메일로 발송. 10분 유효·1회용, 재발송 시 이전 코드와 시도 횟수 무효화
+  - 가입 화면은 중복 확인(API-USERS-011) 통과 후 호출. 가입 여부 노출 수준은 API-USERS-011과 같으므로 요청 제한을 함께 둔다
+  - 코드·인증 상태는 DB가 아닌 임시 저장소에 두며 평문 코드를 로그에 남기지 않는다(개발용 발송기 제외)
+
+### API-USERS-013 · 가입 이메일 인증번호 확인 (초안)
+
+POST /api/v1/users/email-verification/verification
+
+- 관련 기능: USERS-001 · 공개(비회원) · JSON·허용 Origin 검증
+- 상태: 초안(API-USERS-012와 같음)
+- 요청 Body: <code>email</code> string Y · <code>code</code> string Y(6자리 숫자)
+- 성공 200: <code>{ "verificationToken": "...", "expiresAt": "2026-10-27T08:30:00Z" }</code> — 이메일에 묶인 토큰, 유효 30분, 가입 성공 시 폐기
+- 오류: 400 <code>VALIDATION_FAILED</code>(코드 형식) · 400 <code>USERS_EMAIL_CODE_INVALID</code>(불일치) · 410 <code>USERS_EMAIL_CODE_EXPIRED</code>(만료 또는 발송 이력 없음) · 429 <code>USERS_EMAIL_CODE_ATTEMPTS_EXCEEDED</code>(시도 5회 초과, 재발송으로 초기화)
+- 정책: 코드는 확인에 성공하면 즉시 폐기(1회용). 토큰은 이 응답에서만 평문으로 노출한다. FE는 410·429를 구분해 안내하고, 이메일을 바꾸면 인증 상태를 해제한다
 
 ### API-VIDEO-006 · 분석 재시도
 
@@ -560,7 +588,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 0 인트로 | API-USERS-004 → 200 홈(csrfToken 보관) / 401 로그인(로그인 이력 플래그 있으면 만료 안내, API-USERS-004 참고) |
 | 1-1 로그인 | API-USERS-002 → 성공 시 이 기기 온보딩 기록 확인(브라우저 저장) → 온보딩 또는 홈. 401 공통 오류, 429 Retry-After 카운트다운. Google: API-USERS-006 → callback API-USERS-007 → API-USERS-004. 취소·실패·연결 필요는 callback 결과 코드로 안내 |
 | 1-2 비밀번호 재설정 | API-USERS-008(코드 발송) → API-USERS-009(코드 확인·resetToken) → API-USERS-010(새 비밀번호) → 로그인 화면 + 완료 안내 |
-| 1-3 회원가입 | API-USERS-011 중복 확인(이메일 변경 시 재확인) → API-USERS-001(약관 agreements 포함) → 로그인 화면(이메일 채움) → 로그인 후 온보딩 |
+| 1-3 회원가입 | API-USERS-011 중복 확인(이메일 변경 시 재확인) → (이메일 소유 확인 사용 시, 초안) API-USERS-012 인증번호 발송 → API-USERS-013 확인 → API-USERS-001(약관 agreements 포함) → 로그인 화면(이메일 채움) → 로그인 후 온보딩 |
 | 2 온보딩·파우치 담기 | 노출 여부는 기기 저장(API 없음). 파우치 담기 = 11 등록 시트와 동일(API-POUCH-008 → 001/002 → 004) |
 | 3 홈 | API-REPORT-001(최근 리포트·다시 따라 하기 카드) · API-VIDEO-007(검수 중 가이드 카드) · API-POUCH-003(파우치 보드 최대 5). '다시 하기'·'READY 따라 하기' → 5 준비(로딩 없음) |
 | 4 영상 입력 | 검색 API-VIDEO-004 / Top 4 API-VIDEO-005. 검색 결과 선택 → API-VIDEO-001(임베드·챕터) → guideAvailable면 '바로 따라 하기', 아니면 '분석하기' → API-VIDEO-002. Top 4 탭 → API-VIDEO-001 → 가이드 없으면 즉시 API-VIDEO-002. 429 한도 안내, 재생 불가 선택 차단 |
@@ -756,7 +784,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 
 | 항목 | 남은 결정 |
 | --- | --- |
-| 인증·회원 | 세션 수명·로그인 실패 제한 수치, SESSION\_EXPIRED 코드 도입 여부, Google 동일 이메일 연결/중복 계정, Google 최초 로그인 시 약관·추가 정보 수집, 탈퇴 범위, 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
+| 인증·회원 | 세션 수명·로그인 실패 제한 수치, SESSION\_EXPIRED 코드 도입 여부, Google 동일 이메일 연결/중복 계정, Google 최초 로그인 시 약관·추가 정보 수집, 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
 | 비밀번호 재설정 | Google 전용 계정 안내를 메일로 할지 화면으로 할지, resetToken 유효 시간·코드 시도 횟수, 요청 제한 수치 |
 | 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |

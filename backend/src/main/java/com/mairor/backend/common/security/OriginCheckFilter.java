@@ -22,16 +22,13 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * 허용 Origin 검증. 세션이 없어 CSRF 토큰을 쓸 수 없는 요청(회원가입·로그인)을 "JSON 요청 + 허용 Origin"으로 보호한다는 공통 규약을 구현한다.
+ * 허용 Origin 검증. 세션이 없어 CSRF 토큰을 쓸 수 없는 요청을 "JSON 요청 + 허용 Origin"으로 보호한다.
  *
- * <p>보호 대상 요청({@code protectedRequests})에서 {@code Origin} 헤더가 정확히 하나이고 허용 목록에 있어야 통과한다. 헤더가 없거나
- * {@code null}이거나 형식이 잘못됐거나 값이 여럿이면 403 {@code FORBIDDEN}이다. 스킴·호스트·포트로 나눠 정확히 비교하며(기본 포트 생략, 대소문자
- * 무시, 끝 {@code /} 무시), 부분 문자열이나 접미사 비교는 하지 않는다. 대상이 아닌 요청은 건드리지 않는다.
+ * <p>보호 대상 요청은 {@code Origin} 헤더가 정확히 하나이고 허용 목록에 있어야 통과하고, 아니면 403 {@code FORBIDDEN}이다. 스킴·호스트·포트로
+ * 나눠 비교한다(기본 포트·끝 {@code /}·대소문자 무시). 대상이 아닌 요청은 건드리지 않는다.
  *
- * <p>{@code Origin}은 curl·봇이 위조할 수 있다. 브라우저를 통한 교차 사이트 요청을 막는 장치이며 봇 방어가 아니다.
- *
- * <p>{@code @Component}로 만들지 않는다. 필터 빈은 서블릿 컨테이너에 따로 한 번 더 등록되므로, {@link SecurityConfig}가 만들어 보안 필터
- * 체인에만 끼운다.
+ * <p>{@code Origin}은 curl·봇이 위조할 수 있어 브라우저의 교차 사이트 요청만 막는다. {@code @Component}로 만들면 서블릿 컨테이너에 한 번 더
+ * 등록되므로 {@link SecurityConfig}가 만들어 보안 체인에만 끼운다.
  */
 public class OriginCheckFilter extends OncePerRequestFilter {
 
