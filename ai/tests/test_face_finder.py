@@ -52,6 +52,7 @@ def test_front_photo_has_one_face_with_478_points():
 
 
 def golden_photos() -> list[dict]:
+    """두 회차 정답 점의 평균. 사진마다 {image, points: {이름: (x, y) 픽셀}}."""
     rounds = [
         json.loads((GOLDEN / f"gt_round{n}.json").read_text(encoding="utf-8")) for n in (1, 2)
     ]
@@ -66,6 +67,7 @@ def golden_photos() -> list[dict]:
 
 
 def mean_error(face: Face, truth: dict, width: int, height: int) -> float:
+    """10점 평균 오차(%). 정답의 바깥 눈꼬리 사이 거리를 100으로 본다."""
     eye_gap = dist(truth["right_eye_outer"], truth["left_eye_outer"])
     errors = []
     for name, index in MEDIAPIPE_POINTS.items():
@@ -75,6 +77,7 @@ def mean_error(face: Face, truth: dict, width: int, height: int) -> float:
 
 
 def face_on_truth(faces: list[Face], truth: dict, width: int, height: int) -> Face:
+    """여러 얼굴 중 정답 점들의 가운데를 감싸는 얼굴을 고른다."""
     cx = sum(x for x, _ in truth.values()) / len(truth) / width
     cy = sum(y for _, y in truth.values()) / len(truth) / height
     for face in faces:

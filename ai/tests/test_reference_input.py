@@ -13,6 +13,7 @@ LOCAL_01 = Path(__file__).resolve().parents[1] / "samples" / "local_01"
 
 
 def write_sample(folder: Path, **overrides) -> None:
+    """가로 4 · 세로 2짜리 빨간 사진 1장과 manifest.json을 만든다."""
     manifest = {
         "videoId": "test_01",
         "source": {"width": 4, "height": 2, "fps": 30, "durationSeconds": 10.0},
@@ -161,6 +162,10 @@ EXCEPTION_SAMPLES = [
 
 @pytest.mark.parametrize(("folder", "image"), EXCEPTION_SAMPLES)
 def test_exception_samples_pass_the_input_check(folder, image):
+    """얼굴이 없거나 가려진 사진도 파일·형식은 멀쩡해서 입구는 통과한다.
+
+    거르는 건 105의 얼굴 찾기다.
+    """
     sample = LOCAL_01.parent / folder
     if not (sample / "frames" / image).is_file():
         pytest.skip(f"{folder} 사진은 git에 없다. 노션 107 문서의 '다시 구하는 법'으로 받는다")

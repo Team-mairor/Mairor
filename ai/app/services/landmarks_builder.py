@@ -14,6 +14,11 @@ PhotoLoader = Callable[[Frame], np.ndarray]
 def build_landmarks(
     manifest: Manifest, load_photo: PhotoLoader, finder: FaceFinder = find_faces
 ) -> LandmarksResult:
+    """프레임마다 load_photo로 사진을 받아 얼굴 점을 찾고 결과를 돌려준다.
+
+    load_photo는 프레임 1장의 RGB 배열을 돌려주는 함수다. 폴더 읽기와 저장은 부른 쪽이 한다.
+    finder는 시험할 때 가짜로 바꿔 끼우는 자리다. 평소에는 face_finder.find_faces를 쓴다.
+    """
     frames = sorted(manifest.frames, key=lambda frame: frame.frame_index)
     return LandmarksResult(
         video_id=manifest.video_id,
@@ -22,6 +27,7 @@ def build_landmarks(
 
 
 def face_width_px(face: Face, image_width: int) -> float:
+    """얼굴 점 전체를 감싸는 네모의 가로 길이(px). 여러 명이면 이 값이 가장 큰 얼굴을 쓴다."""
     xs = [point.x for point in face.landmarks]
     return (max(xs) - min(xs)) * image_width
 

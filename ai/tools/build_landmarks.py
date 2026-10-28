@@ -1,3 +1,8 @@
+"""샘플 폴더의 사진마다 얼굴 점을 찾아 output/landmarks.json으로 저장한다 (개발용).
+
+실행 (ai/ 폴더에서): uv run python tools/build_landmarks.py samples/local_01_seq
+"""
+
 import sys
 from collections import Counter
 from pathlib import Path
@@ -30,6 +35,7 @@ def main() -> None:
 
 
 def save(result: LandmarksResult, folder: Path) -> Path:
+    """결과를 <샘플 폴더>/output/landmarks.json에 camelCase로 저장하고 경로를 돌려준다."""
     path = folder / OUTPUT_FILE
     path.parent.mkdir(exist_ok=True)
     path.write_text(result.model_dump_json(by_alias=True), encoding="utf-8")

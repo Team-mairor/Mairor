@@ -17,6 +17,7 @@ DIGITS = 6
 
 
 def find_faces(rgb: np.ndarray) -> list[Face]:
+    """사진 1장(RGB 숫자 표)에서 얼굴을 찾는다. 얼굴마다 점 478개, 눈 사이 거리, 고개 각도."""
     height, width = rgb.shape[:2]
     image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
     result = _landmarker().detect(image)
@@ -30,6 +31,7 @@ def find_faces(rgb: np.ndarray) -> list[Face]:
 
 @lru_cache
 def _landmarker() -> vision.FaceLandmarker:
+    """모델을 한 번만 불러 두고 다시 쓴다."""
     options = vision.FaceLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
         running_mode=vision.RunningMode.IMAGE,
@@ -51,6 +53,7 @@ def _to_face(points, matrix: np.ndarray, width: int, height: int) -> Face:
 
 
 def _pose(m: np.ndarray) -> Pose:
+    """얼굴 방향 표(4x4)에서 각도를 구한다. 공식은 FE geometry.ts의 poseFromMatrix와 같다."""
     return Pose(
         yaw=atan2(m[0, 2], m[2, 2]),
         pitch=asin(max(-1.0, min(1.0, m[1, 2]))),

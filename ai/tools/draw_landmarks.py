@@ -1,3 +1,9 @@
+"""landmarks.json의 점을 사진 위에 그려 확인용 사진과 GIF를 만든다 (개발용).
+
+실행 (ai/ 폴더에서): uv run python tools/draw_landmarks.py samples/local_01_seq
+결과: <샘플 폴더>/output/points/<프레임 번호>.png, <샘플 폴더>/output/landmarks.gif
+"""
+
 import sys
 from pathlib import Path
 
@@ -50,6 +56,7 @@ def main() -> None:
 
 
 def _open_photo(reference: ReferenceInput, frame: Frame) -> Image.Image:
+    """사진을 연다. 열리지 않으면 같은 크기의 검은 화면으로 대신한다."""
     try:
         return Image.fromarray(read_frame_rgb(reference, frame))
     except (AppError, OSError):
@@ -57,6 +64,7 @@ def _open_photo(reference: ReferenceInput, frame: Frame) -> Image.Image:
 
 
 def _draw(photo: Image.Image, row: FrameLandmarks, width: int) -> Image.Image:
+    """사진을 가로 width로 줄이고, 점 478개와 상태 글씨를 그린다."""
     height = round(photo.height * width / photo.width)
     image = photo.resize((width, height))
     draw = ImageDraw.Draw(image)
@@ -77,6 +85,7 @@ def _draw(photo: Image.Image, row: FrameLandmarks, width: int) -> Image.Image:
 
 
 def _durations(rows: list[FrameLandmarks]) -> list[int]:
+    """GIF 한 장을 보여 줄 시간(ms). 다음 사진과의 시각 차이라서 실제 속도로 움직인다."""
     times = [row.timestamp_ms for row in rows]
     gaps = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
     return [*gaps, gaps[-1] if gaps else 1000]

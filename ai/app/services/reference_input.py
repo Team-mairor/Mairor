@@ -14,6 +14,8 @@ MANIFEST_FILE = "manifest.json"
 
 @dataclass(frozen=True)
 class ReferenceInput:
+    """영상 1개 분량의 입력. 사진은 위치만 들고 있고, 픽셀은 read_frame_rgb로 필요할 때 읽는다."""
+
     folder: Path
     manifest: Manifest
 
@@ -47,11 +49,16 @@ def load_reference_input(folder: str | Path) -> ReferenceInput:
 
 
 def read_frame_rgb(reference: ReferenceInput, frame: Frame) -> np.ndarray:
+    """사진 1장을 (높이, 너비, 3) 모양의 RGB uint8 배열로 읽는다."""
     with Image.open(reference.frame_path(frame)) as image:
         return photo_to_rgb(image, frame)
 
 
 def photo_to_rgb(image: Image.Image, frame: Frame) -> np.ndarray:
+    """연 사진을 EXIF 방향대로 세워 RGB uint8 배열로 바꾸고 manifest 크기와 비교한다.
+
+    사진을 파일에서 열든 받아 온 내용에서 열든 같은 처리를 쓴다.
+    """
     upright = ImageOps.exif_transpose(image)
     rgb = np.asarray(upright.convert("RGB"))
 

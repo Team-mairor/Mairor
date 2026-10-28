@@ -9,6 +9,7 @@ BLANK = np.zeros((2, 4, 3), dtype=np.uint8)
 
 
 def make_manifest(indexes: list[int]) -> Manifest:
+    """프레임 번호 목록대로 사진 크기가 4 x 2인 입력 모델을 만든다."""
     return Manifest.model_validate(
         {
             "videoId": "test_01",
@@ -39,6 +40,7 @@ def make_manifest(indexes: list[int]) -> Manifest:
 
 
 def fake_face(left: float, right: float) -> Face:
+    """가로로 left~right에 걸친 가짜 얼굴. 얼굴 폭 = (right - left) x 사진 가로."""
     middle = Point(x=(left + right) / 2, y=0.5, z=0.0)
     points = [Point(x=left, y=0.5, z=0.0), Point(x=right, y=0.5, z=0.0), *[middle] * 476]
     return Face(landmarks=points, iod=1.0, pose=Pose(yaw=0.0, pitch=0.0, roll=0.0))

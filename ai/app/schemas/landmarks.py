@@ -10,6 +10,8 @@ FrameStatus = Literal["ok", "noFace", "rejected", "error"]
 
 
 class Point(CamelModel):
+    """정규화 좌표. 원본 사진 기준, 좌우는 본인 기준. 화면 밖 점은 0~1을 넘는다."""
+
     x: float
     y: float
     z: float
@@ -21,6 +23,11 @@ class ImageSize(CamelModel):
 
 
 class Pose(CamelModel):
+    """라디안. 부호는 FE와 같다.
+
+    본인 기준 왼쪽으로 돌리면 yaw +, 위를 보면 pitch +, 왼쪽으로 기울이면 roll +
+    """
+
     yaw: float
     pitch: float
     roll: float
