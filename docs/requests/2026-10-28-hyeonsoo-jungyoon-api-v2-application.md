@@ -39,7 +39,7 @@ AI 영역 데이터의 부위 이름으로 아래처럼 계산할 수 있습니�
 | 짝 부위의 왼쪽·오른쪽이 둘 다 있음 (`leftEye`+`rightEye`, `leftBrow`+`rightBrow`, `leftCheek`+`rightCheek`) | `BOTH` |
 | 짝 부위의 왼쪽만 | `LEFT` |
 | 짝 부위의 오른쪽만 | `RIGHT` |
-| 가운데 부위만 (`lipsOuter` · `lipsInner` · `faceOval`) | `CENTER` |
+| 가운데 부위만 (`lipsOuter` · `faceOval`) | `CENTER` |
 | 짝 부위와 가운데 부위가 섞임 (예: 하이라이트) | 정하지 않음 |
 
 - [ ] 짝 부위와 가운데 부위가 섞인 경우의 `side`를 정해 주세요
@@ -63,7 +63,7 @@ AI 영역 데이터의 부위 이름으로 아래처럼 계산할 수 있습니�
   "subSteps": [
     { "subStepId": "s17-1", "order": 1, "status": "extracted", "reasons": [], "templateId": null,
       "guideSets": [
-        { "region": "lipsOuter", "source": "extracted", "exclude": ["lipsInner"],
+        { "region": "lipsOuter", "source": "extracted",
           "guides": [{ "type": "polygon", "outline": [{ "triangle": 37, "bary": [0.21, 0.52, 0.27] }] }] }
       ] }
   ] }

@@ -42,7 +42,7 @@ AI가 레퍼런스 영상에서 단계마다 바를 영역을 찾아 FE에 넘�
       "subSteps": [
         { "subStepId": "s17-1", "order": 1, "status": "extracted", "reasons": [], "templateId": null,
           "guideSets": [
-            { "region": "lipsOuter", "source": "extracted", "exclude": ["lipsInner"],
+            { "region": "lipsOuter", "source": "extracted",
               "guides": [{ "type": "polygon", "outline": [] }] }
           ] }
       ] }
@@ -140,7 +140,7 @@ AI가 레퍼런스 영상에서 단계마다 바를 영역을 찾아 FE에 넘�
           "subStepId": "s17-1", "order": 1, "status": "extracted", "reasons": [], "templateId": null,
           "guideSets": [
             {
-              "region": "lipsOuter", "source": "extracted", "exclude": ["lipsInner"],
+              "region": "lipsOuter", "source": "extracted",
               "guides": [
                 { "type": "polygon", "outline": [
                   { "triangle": 37, "bary": [0.21, 0.52, 0.27] },

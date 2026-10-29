@@ -4,7 +4,6 @@ from app.schemas.landmarks import Face, ImageSize, Point, Pose
 from app.services.region_mask import polygon_mask, region_mask, span
 
 SQUARE = [(2, 2), (7, 2), (7, 7), (2, 7)]
-HOLE = [(4, 4), (5, 4), (5, 5), (4, 5)]
 
 
 def test_square_is_filled_including_its_edge():
@@ -21,12 +20,6 @@ def test_band_widens_outward():
     assert wide.sum() > plain.sum()
     assert (wide & plain).sum() == plain.sum()
     assert wide[4, 1]
-
-
-def test_exclude_cuts_a_hole():
-    mask = polygon_mask(SQUARE, 10, 10, exclude=HOLE)
-    assert mask.sum() == 36 - 4
-    assert not mask[4, 4]
 
 
 def test_span_is_horizontal_length():

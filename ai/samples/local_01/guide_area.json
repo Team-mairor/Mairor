@@ -25,7 +25,7 @@
           "subStepId": "s17-1", "order": 1, "status": "extracted", "reasons": [], "templateId": null,
           "guideSets": [
             {
-              "region": "lipsOuter", "source": "extracted", "exclude": ["lipsInner"],
+              "region": "lipsOuter", "source": "extracted",
               "guides": [
                 { "type": "polygon", "outline": [
                   { "triangle": 37, "bary": [0.21, 0.52, 0.27] },

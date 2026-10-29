@@ -22,7 +22,6 @@ MIN_IOU_ON_SAMPLE = 0.73
 MIN_PEAK_CATCH_ON_SAMPLE = 0.7
 SKIN = (232, 192, 172)
 LIP = (200, 70, 80)
-MOUTH = (40, 20, 20)
 FACE = Face(
     landmarks=[Point(x=0.5, y=0.5, z=0.0)] * 478, iod=1.0, pose=Pose(yaw=0.0, pitch=0.0, roll=0.0)
 )
@@ -94,15 +93,12 @@ def test_found_area_under_min_ratio_of_lips_is_not_found():
     assert check_lip_area(short).reason == "lipColorNotFound"
 
 
-def test_red_lips_are_found_and_mouth_inside_is_left_out():
+def test_red_lips_are_found():
     outer = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
-    inner = polygon_mask(map_points(REGION_POINTS["lipsInner"]), MAP_SIZE, MAP_SIZE)
     after = np.full((MAP_SIZE, MAP_SIZE, 3), SKIN, dtype=np.uint8)
     after[outer] = LIP
-    after[inner] = MOUTH
     area = lip_area_on_map(after)
-    assert iou(area, outer & ~inner) > 0.99
-    assert not (area & inner).any()
+    assert iou(area, outer) > 0.99
     assert not (area & ~outer).any()
 
 

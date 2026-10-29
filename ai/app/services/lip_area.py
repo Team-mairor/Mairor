@@ -15,10 +15,6 @@ MARGIN_RATIO = 0.05
 REDNESS_MIN = 6.0
 MIN_FOUND_RATIO = 0.5
 SKIN_RING_RATIOS = (0.20, 0.35)
-INNER_GROW_RATIO = 0.03
-MOUTH_DARK_L = 40.0
-TEETH_L = 80.0
-TEETH_CHROMA = 20.0
 
 SRGB_TO_XYZ = np.array(
     [
@@ -76,14 +72,14 @@ def lip_area_on_map(after: np.ndarray) -> np.ndarray:
     """바른 뒤 지도에서 립을 바른 곳을 찾는다. 지도 크기 표이고 바른 칸이 True다.
 
     입술 바깥 테두리를 MARGIN_RATIO만큼 넓힌 범위 안에서, 입 주변 피부보다 붉은 기(Lab a)가
-    REDNESS_MIN 넘게 높은 칸을 바른 곳으로 본다. 입 안의 어두운 칸과 이는 뺀다.
+    REDNESS_MIN 넘게 높은 칸을 바른 곳으로 본다.
     """
     lab = _to_lab(after)
     outline = map_points(REGION_POINTS["lipsOuter"])
     width = span(outline)
     area = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=round(width * MARGIN_RATIO))
     redness = lab[..., 1] - np.median(lab[..., 1][_skin_ring(outline, width)])
-    return area & (redness > REDNESS_MIN) & ~_mouth_inside(lab, width)
+    return area & (redness > REDNESS_MIN)
 
 
 def check_lip_area(area: np.ndarray) -> LipArea:
@@ -123,15 +119,6 @@ def _skin_ring(outline: list[tuple[float, float]], width: float) -> np.ndarray:
     near, far = (round(width * ratio) for ratio in SKIN_RING_RATIOS)
     outer = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=far)
     return outer & ~polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=near)
-
-
-def _mouth_inside(lab: np.ndarray, width: float) -> np.ndarray:
-    """입 안 테두리를 넉넉히 넓힌 곳 중 어두운 칸(입 안)과 밝고 색이 없는 칸(이)."""
-    inner = map_points(REGION_POINTS["lipsInner"])
-    grown = polygon_mask(inner, MAP_SIZE, MAP_SIZE, band=round(width * INNER_GROW_RATIO))
-    light, a, b = lab[..., 0], lab[..., 1], lab[..., 2]
-    teeth = (light > TEETH_L) & (np.hypot(a, b) < TEETH_CHROMA)
-    return grown & ((light < MOUTH_DARK_L) | teeth)
 
 
 def _to_lab(rgb: np.ndarray) -> np.ndarray:
