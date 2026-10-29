@@ -70,6 +70,15 @@ npm run dev:https
 - 이마 영역 색(Lab)과 흔들림: 카메라 설정과 조명이 색 측정에 충분히 안정적인지 확인
 - 회색으로 표시된 부위는 추적이 불안정해 가이드를 보여주지 않는 상태
 
+## 좌우와 거울 반전
+
+- 좌우는 사용자 신체 기준이다. 반전 전 원본 프레임과 얼굴 메시 UV에서 사용자 오른쪽 부위(`rightEye` 등)는 왼쪽(x < 0.5)에 있다
+- 가이드·화장 레이어 좌표(`MeshAnchor`)와 좌우 라벨은 반전 전 기준 그대로 두고 바꾸지 않는다
+- 화면에는 실제 얼굴에 매핑한 뒤 거울 반전을 한 번만 적용한다
+- 카메라 영상은 `<video>`에 CSS `-scale-x-100`으로 뒤집고, 캔버스에 영상을 직접 그릴 때는 `drawFitted`에서 뒤집는다
+- 가이드·화장 레이어 캔버스는 CSS로 뒤집지 않고, `toScreen`(`features/face/view-transform.ts`)에서 x를 `1 - x`로 바꾼다. 캔버스에 CSS 반전을 더하거나 좌표를 미리 뒤집으면 두 번 반전된다
+- 확인: `?guides=/fixtures/guides/right-only.json`을 붙이면 가이드가 화면 오른쪽 얼굴에만 보여야 한다 (`/tutorial`, `/debug/overlay`)
+
 ## 화장 레이어 합성
 
 `/debug/preview`는 카메라 영상 위에 화장 레이어(`layers.json`, AI 파트 출력 규격)를 합성한다. `?layers=경로`로 레이어 파일을 바꿔 볼 수 있다. 앱 화면 `/preview`도 같은 합성기와 `?layers=`를 쓴다.

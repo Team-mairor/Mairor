@@ -1,0 +1,653 @@
+{
+  "meshVersion": "v1",
+  "steps": [
+    {
+      "stepId": "contour",
+      "title": "쉐딩: 옆광대 아래부터 턱선까지 바깥쪽에서 안쪽으로 짧게 쓸어요",
+      "regions": [
+        "rightCheek"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 411,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 411,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 697,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 455,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 451,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 451,
+              "bary": [
+                0.2181,
+                0.0942,
+                0.6877
+              ]
+            },
+            {
+              "triangle": 455,
+              "bary": [
+                0.2092,
+                0.1202,
+                0.6706
+              ]
+            },
+            {
+              "triangle": 867,
+              "bary": [
+                0.2793,
+                0.0615,
+                0.6592
+              ]
+            },
+            {
+              "triangle": 695,
+              "bary": [
+                0.5091,
+                0.3842,
+                0.1067
+              ]
+            },
+            {
+              "triangle": 413,
+              "bary": [
+                0.4317,
+                0.3891,
+                0.1792
+              ]
+            }
+          ]
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 697,
+            "bary": [
+              1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 697,
+            "bary": [
+              1,
+              0,
+              0
+            ]
+          },
+          "to": {
+            "triangle": 867,
+            "bary": [
+              0.0991,
+              0.0769,
+              0.824
+            ]
+          }
+        }
+      ],
+      "order": 1,
+      "source": "template"
+    },
+    {
+      "stepId": "highlight",
+      "title": "하이라이트: 콧대 위쪽·눈 밑 앞쪽·턱 끝에 살짝 얹어요",
+      "regions": [
+        "rightEye"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 77,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 15,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 17,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 15,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 25,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 195,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 45,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "order": 2,
+      "source": "template"
+    },
+    {
+      "stepId": "blush",
+      "title": "블러셔: 볼 앞쪽에 코 옆에서 바깥쪽으로 둥글게 펴요",
+      "regions": [
+        "rightCheek"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 183,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 43,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 43,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 147,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 127,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 127,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 387,
+              "bary": [
+                0.4,
+                0.6,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 147,
+            "bary": [
+              0.5,
+              0,
+              0.5
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 147,
+            "bary": [
+              0.5,
+              0,
+              0.5
+            ]
+          },
+          "to": {
+            "triangle": 531,
+            "bary": [
+              0.4,
+              0.6,
+              0
+            ]
+          }
+        }
+      ],
+      "order": 3,
+      "source": "template"
+    },
+    {
+      "stepId": "brow",
+      "title": "눈썹: 앞머리에서 꼬리 쪽으로 결대로 빈 곳만 채워요",
+      "regions": [
+        "rightBrow"
+      ],
+      "guides": [
+        {
+          "type": "point",
+          "at": {
+            "triangle": 395,
+            "bary": [
+              0.5,
+              0.5,
+              0
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 395,
+              "bary": [
+                0.5,
+                0.5,
+                0
+              ]
+            },
+            {
+              "triangle": 397,
+              "bary": [
+                0.5,
+                0.5,
+                0
+              ]
+            },
+            {
+              "triangle": 247,
+              "bary": [
+                0.5,
+                0.5,
+                0
+              ]
+            },
+            {
+              "triangle": 249,
+              "bary": [
+                0.5,
+                0.5,
+                0
+              ]
+            },
+            {
+              "triangle": 255,
+              "bary": [
+                0.5,
+                0.5,
+                0
+              ]
+            }
+          ],
+          "width": 0.08
+        }
+      ],
+      "order": 4,
+      "source": "template"
+    },
+    {
+      "stepId": "eyeshadow",
+      "title": "아이섀도: 쌍꺼풀 라인 높이까지 안쪽에서 바깥쪽으로 펴 발라요",
+      "regions": [
+        "rightEye"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 1,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 93,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 91,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 163,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 165,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 39,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 0,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 0,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 791,
+              "bary": [
+                0.2645,
+                0.0044,
+                0.7311
+              ]
+            },
+            {
+              "triangle": 799,
+              "bary": [
+                0.7869,
+                0.0623,
+                0.1508
+              ]
+            },
+            {
+              "triangle": 805,
+              "bary": [
+                0.108,
+                0.7578,
+                0.1342
+              ]
+            },
+            {
+              "triangle": 809,
+              "bary": [
+                0.3027,
+                0.3062,
+                0.3911
+              ]
+            },
+            {
+              "triangle": 813,
+              "bary": [
+                0.388,
+                0.3092,
+                0.3028
+              ]
+            }
+          ]
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 797,
+            "bary": [
+              0.0235,
+              0.7321,
+              0.2444
+            ]
+          },
+          "to": {
+            "triangle": 807,
+            "bary": [
+              0.0213,
+              0.137,
+              0.8417
+            ]
+          }
+        }
+      ],
+      "order": 5,
+      "source": "template"
+    },
+    {
+      "stepId": "eyeliner",
+      "title": "아이라인: 속눈썹 사이를 채우고 꼬리는 눈매 따라 짧게 빼요",
+      "regions": [
+        "rightEye"
+      ],
+      "guides": [
+        {
+          "type": "point",
+          "at": {
+            "triangle": 629,
+            "bary": [
+              0.88,
+              0,
+              0.12
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 629,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 627,
+              "bary": [
+                0.12,
+                0,
+                0.88
+              ]
+            },
+            {
+              "triangle": 575,
+              "bary": [
+                0.12,
+                0,
+                0.88
+              ]
+            },
+            {
+              "triangle": 591,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 527,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                0.88,
+                0,
+                0.12
+              ]
+            },
+            {
+              "triangle": 243,
+              "bary": [
+                0.0216,
+                0.5221,
+                0.4563
+              ]
+            }
+          ],
+          "width": 0.03
+        }
+      ],
+      "order": 6,
+      "source": "template"
+    },
+    {
+      "stepId": "mascara",
+      "title": "마스카라: 속눈썹 뿌리에서 위로 쓸어 올려요",
+      "regions": [
+        "rightEye"
+      ],
+      "guides": [
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 163,
+            "bary": [
+              0,
+              1,
+              0
+            ]
+          },
+          "to": {
+            "triangle": 219,
+            "bary": [
+              0.5106,
+              0.4206,
+              0.0688
+            ]
+          }
+        },
+        {
+          "type": "arrow",
+          "from": {
+            "triangle": 93,
+            "bary": [
+              1,
+              0,
+              0
+            ]
+          },
+          "to": {
+            "triangle": 327,
+            "bary": [
+              0.5114,
+              0.3656,
+              0.123
+            ]
+          }
+        }
+      ],
+      "order": 7,
+      "source": "template"
+    }
+  ]
+}

@@ -9,16 +9,22 @@ import {
   type FaceFrame,
   type RegionName,
 } from "@/features/face";
-import { GuideRenderer, loadDefaultGuideSet, type GuideSet } from "@/features/guide";
+import { GuideRenderer, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/features/guide";
 import { loadFaceMesh, loadLayerSet, OverlayRenderer, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 const FACES = ["front", "turned-left", "close-up", "blink-hold", "lost"];
 const LAYERS = ["sample", "lip-only", "empty", "no-color", "missing-mask"];
 
-/** ?step=은 0 이상의 정수일 때만 쓴다. 없거나 잘못되면 가이드를 그리지 않는다(-1). */
-function parseStep(value: string | null): number {
-  return value !== null && /^\d+$/.test(value) ? Number(value) : -1;
+/**
+ * ?step=은 단계 이름(stepId)이나 0부터 센 순서. 이름으로 고르면 가이드 파일을 바꿔도 같은 단계를 본다.
+ * 없거나 맞는 단계가 없으면 가이드를 그리지 않는다(-1).
+ */
+function stepIndex(set: GuideSet | null, value: string | null): number {
+  if (!set || value === null) return -1;
+  const byId = set.steps.findIndex((s) => s.stepId === value);
+  if (byId >= 0) return byId;
+  return /^\d+$/.test(value) && Number(value) < set.steps.length ? Number(value) : -1;
 }
 
 async function loadFace(name: string): Promise<FaceFrame> {
@@ -71,13 +77,16 @@ export default function DebugOverlayPage() {
   const [size, setSize] = useState<{ width: number; height: number; dpr: number } | null>(null);
   const [face, setFace] = useState(FACES[0]);
   const [guides, setGuides] = useState<GuideSet | null>(null);
-  // -1이면 가이드를 그리지 않는다.
-  const [step, setStep] = useState(-1);
+  // 단계 이름이나 순서. null이면 가이드를 그리지 않는다.
+  const [stepKey, setStepKey] = useState<string | null>(null);
+  const step = stepIndex(guides, stepKey);
   const [layersName, setLayersName] = useState(LAYERS[0]);
   const [mesh, setMesh] = useState<FaceMesh | null>(null);
   const [message, setMessage] = useState("");
   // 상태 문구에 덮이지 않도록 오류는 따로 둔다.
   const [error, setError] = useState("");
+  // 가이드 파일 오류는 그리기가 끝날 때 지워지지 않도록 따로 둔다.
+  const [guideError, setGuideError] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -87,14 +96,16 @@ export default function DebugOverlayPage() {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (f && FACES.includes(f)) setFace(f);
     if (l && LAYERS.includes(l)) setLayersName(l);
-    setStep(parseStep(params.get("step")));
+    setStepKey(params.get("step"));
     /* eslint-enable react-hooks/set-state-in-effect */
     loadFaceMesh()
       .then(setMesh)
       .catch((e) => setError(String(e)));
-    loadDefaultGuideSet()
+    // ?guides=경로 로 가이드 파일을 바꿔 본다 (예: 좌우 확인용 right-only.json)
+    const guidesUrl = params.get("guides");
+    (guidesUrl ? loadGuideSet(guidesUrl) : loadDefaultGuideSet())
       .then(setGuides)
-      .catch((e) => setError(String(e)));
+      .catch((e) => setGuideError(String(e)));
   }, []);
 
   useEffect(() => {
@@ -187,7 +198,7 @@ export default function DebugOverlayPage() {
           aria-label="가이드 단계"
           className="h-8 rounded-lg border bg-background px-2"
           value={step}
-          onChange={(e) => setStep(Number(e.target.value))}
+          onChange={(e) => setStepKey(guides?.steps[Number(e.target.value)]?.stepId ?? null)}
         >
           <option value={-1}>가이드 없음</option>
           {guides?.steps.map((s, i) => (
@@ -198,6 +209,7 @@ export default function DebugOverlayPage() {
         </select>
         <span className="text-muted-foreground">{message}</span>
         {error && <span className="text-destructive">{error}</span>}
+        {guideError && <span className="text-destructive">{guideError}</span>}
       </div>
       <div className="relative">
         <canvas ref={canvasRef} className="aspect-video w-full rounded-lg" />

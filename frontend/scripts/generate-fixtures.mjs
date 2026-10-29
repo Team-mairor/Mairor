@@ -377,7 +377,28 @@ writeJson(
 
 // ── 튜토리얼 가이드 ──
 // 앱의 기본 가이드(9개 부위)를 그대로 파일로 내보내, ?guides= 로 파일 불러오기를 확인한다.
-writeJson("guides/sample.json", buildDefaultGuideSet({ triangles, uv }, REGIONS));
+const defaultGuides = buildDefaultGuideSet({ triangles, uv }, REGIONS);
+writeJson("guides/sample.json", defaultGuides);
 writeJson("guides/empty.json", { meshVersion: "v1", steps: [] });
+
+// 좌우 확인용: 기본 가이드에서 본인 기준 오른쪽(UV x < 0.5) 도형만 남긴다.
+// 거울 화면에서는 화면 오른쪽에 보여야 한다.
+const anchorU = ({ triangle, bary }) =>
+  triangles[triangle].reduce((sum, vertex, k) => sum + uv[vertex][0] * bary[k], 0);
+const anchorsOf = (guide) =>
+  guide.type === "point"
+    ? [guide.at]
+    : guide.type === "arrow"
+      ? [guide.from, guide.to]
+      : (guide.path ?? guide.outline);
+const rightSteps = defaultGuides.steps
+  .map((step) => ({
+    ...step,
+    regions: step.regions.filter((name) => name.startsWith("right")),
+    guides: step.guides.filter((guide) => anchorsOf(guide).every((a) => anchorU(a) < 0.5)),
+  }))
+  .filter((step) => step.regions.length > 0 && step.guides.length > 0)
+  .map((step, i) => ({ ...step, order: i + 1 }));
+writeJson("guides/right-only.json", { ...defaultGuides, steps: rightSteps });
 
 console.log(`[generate-fixtures] ${outDir}에 픽스처를 만들었습니다.`);

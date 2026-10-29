@@ -40,5 +40,7 @@
 | --- | --- | --- |
 | `sample.json` | 앱의 기본 가이드(9개 부위)를 파일로 내보낸 것, `source: template` | `/tutorial?guides=/fixtures/guides/sample.json`에서 단계마다 점선 영역·선·화살표 표시 |
 | `empty.json` | 단계 없음 | "이 영상에는 가이드가 없어요" 안내 |
+| `right-only.json` | 기본 가이드에서 본인 기준 오른쪽 도형만 남긴 것 (가운데·왼쪽 도형이 있는 단계는 오른쪽만) | 거울 화면이라 화면 **오른쪽** 얼굴에만 표시. 왼쪽에 보이면 좌우 반전이 잘못된 것 |
 
-- `/debug/overlay?step=0~8`로 카메라 없이 기본 가이드를 부위별로 볼 수 있다
+- `/debug/overlay?step=blush`처럼 단계 이름(`stepId`)이나 순서(0~8)로 카메라 없이 기본 가이드를 부위별로 볼 수 있다
+- `?guides=/fixtures/guides/right-only.json`을 붙이면 기본 가이드 대신 그 파일을 쓴다. 단계 수가 달라 순서가 어긋나므로 단계 이름으로 고른다
