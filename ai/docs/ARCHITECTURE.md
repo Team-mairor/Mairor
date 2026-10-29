@@ -7,7 +7,7 @@ FastAPI는 폴더 구조를 강제하지 않는다. 이 문서가 이 프로젝�
 ```
 ai/
 ├─ app/
-│  ├─ main.py           앱 조립: 설정 읽기, 오류 처리·라우터 등록
+│  ├─ main.py           앱 조립: 설정 읽기, 오류 처리·라우터 등록, 호출 기록 켜기
 │  ├─ api/              요청을 받는 곳
 │  │  ├─ health.py      GET /health
 │  │  └─ v1/            /api/v1/... 기능 API
@@ -18,12 +18,15 @@ ai/
 │  ├─ prompts/          LLM 지시문 (txt)
 │  └─ core/             앱 전체 공통
 │     ├─ config.py      환경변수 설정
-│     └─ errors.py      공통 오류 형식, AppError
+│     ├─ errors.py      공통 오류 형식, AppError
+│     ├─ logs.py        로그 형식(text · json), json이면 작업 문맥(job_id 등)을 붙임
+│     └─ tracing.py     호출 기록(Phoenix): 작업·단계·콜백 기록, Claude 호출 기록 켜기
 ├─ tests/
 │  ├─ golden/guide/     가이드 생성 기대값. 확인 화면에서 저장하고 pytest가 비교
 │  └─ golden/landmarks/ 얼굴 점 정답. 모델 비교와 정확도 테스트(평균 오차 3% 이하)에 씀
 ├─ tools/               개발용 도구. 서버 코드가 아님 (가이드 생성 확인 화면, Gemini 영상 시험, 공유 스키마 생성, 얼굴 점 추출·확인)
 ├─ samples/             로컬 테스트 입력. 영상 1개 = 폴더 1개, JSON만 커밋 (frames/·output/은 git 제외)
+├─ docker-compose.yml   로컬 Phoenix (호출 기록 화면)
 ├─ pyproject.toml       의존성, ruff·pytest 설정
 └─ uv.lock              의존성 버전 고정
 ```

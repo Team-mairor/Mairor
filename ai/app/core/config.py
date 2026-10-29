@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     app_env: Literal["local", "dev", "prod"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_format: Literal["text", "json"] = "text"
 
     gms_api_key: SecretStr | None = None
     llm_base_url: str = "https://gms.ssafy.io/gmsapi/api.anthropic.com"
@@ -26,6 +27,9 @@ class Settings(BaseSettings):
     callback_timeout_seconds: float = Field(default=10, gt=0)
     callback_max_retries: int = Field(default=3, ge=0)
     callback_retry_delay_seconds: float = Field(default=1, ge=0)
+
+    tracing_endpoint: str | None = None
+    tracing_project: str = "ai-guide"
 
     @property
     def is_prod(self) -> bool:

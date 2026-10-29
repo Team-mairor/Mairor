@@ -1,0 +1,15 @@
+# AI 서버 로컬 개발용. 작업·Claude 호출 기록을 보는 Phoenix를 띄운다.
+# 사용: docker compose up -d → http://localhost:6006, ai/.env 에 TRACING_ENDPOINT=http://localhost:6006/v1/traces
+# 기록은 phoenix-data 볼륨(SQLite)에 남는다. 지우려면 docker compose down -v
+services:
+  phoenix:
+    image: arizephoenix/phoenix:version-20.26.1
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    ports:
+      - "127.0.0.1:6006:6006"
+    volumes:
+      - phoenix-data:/mnt/data
+
+volumes:
+  phoenix-data:

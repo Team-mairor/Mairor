@@ -3,18 +3,21 @@
 입력 칸마다 번호(summary, tool, t1, c1 ...)를 붙여 보내고, 모델은 문장마다 근거 번호를 단다.
 """
 
+import hashlib
 from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic.alias_generators import to_camel
 
 from app.clients.llm import Llm, LlmImage, LlmResult
+from app.core.tracing import using_prompt
 from app.schemas.guide import GuideInputStep, StepFacts
 from app.schemas.guide_job import ExplainedStep, StepAction, StepExplanation, StepTip
 
 PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "step_explanation.txt").read_text(
     encoding="utf-8"
 )
+PROMPT_VERSION = f"step_explanation@{hashlib.sha256(PROMPT.encode()).hexdigest()[:8]}"
 FACT_FIELDS = ("tool", "amount", "strength", "finish_cue")
 LIST_PREFIXES = (("t", "tips"), ("c", "cautions"))
 
@@ -40,8 +43,11 @@ def user_message(step: GuideInputStep, inputs: dict[str, str]) -> str:
 async def explain_step(
     llm: Llm, step: GuideInputStep, images: Sequence[LlmImage]
 ) -> LlmResult[StepExplanation]:
-    text = user_message(step, step_inputs(step))
-    return await llm.generate(system=PROMPT, text=text, images=images, output=StepExplanation)
+    """지시문 파일 내용이 바뀌면 PROMPT_VERSION도 바뀌어 기록에서 지시문별로 나눠 볼 수 있다."""
+    inputs = step_inputs(step)
+    text = user_message(step, inputs)
+    with using_prompt(PROMPT, PROMPT_VERSION, {"partLabel": step.part_label} | inputs):
+        return await llm.generate(system=PROMPT, text=text, images=images, output=StepExplanation)
 
 
 def to_explained_step(step: GuideInputStep, explanation: StepExplanation) -> ExplainedStep:

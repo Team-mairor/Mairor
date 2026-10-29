@@ -117,6 +117,16 @@ BE가 가이드 입력을 보내면 바로 202로 접수하고, 백그라운드�
 - 지시문은 `app/prompts/step_explanation.txt`입니다. 단계 설명 모델 비교의 프롬프트 v2에 대표 장면 이미지 한 줄을 더했습니다.
 - 근거 번호(`sources`)와 쓰지 않은 입력(`unused`)은 BE에 보내지 않고 로그에 남깁니다. 설명 원문은 `LOG_LEVEL=DEBUG`일 때만 남깁니다.
 
+## 호출 기록 (Phoenix)
+
+작업마다 단계별 Claude 호출의 응답 시간·토큰·비용·실패 이유를 Phoenix 화면에서 봅니다.
+
+```bash
+docker compose up -d   # ai/ 에서. http://localhost:6006
+```
+
+`.env`에 `TRACING_ENDPOINT=http://localhost:6006/v1/traces`를 넣고 서버를 다시 띄우면 요청을 보낼 때마다 기록이 남습니다. 기록 항목과 찾는 방법은 [docs/MONITORING.md](docs/MONITORING.md)에 있습니다.
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.
@@ -125,6 +135,7 @@ BE가 가이드 입력을 보내면 바로 202로 접수하고, 백그라운드�
 |---|---|---|
 | `APP_ENV` | `local` | `local` · `dev` · `prod`. `prod`에서는 API 문서를 닫음 |
 | `LOG_LEVEL` | `INFO` | `DEBUG` · `INFO` · `WARNING` · `ERROR` |
+| `LOG_FORMAT` | `text` | `text`는 한 줄 글, `json`은 서버용. json이면 작업 중 로그에 `job_id` · `video_id` · `step_id` · `traceId`가 붙음 |
 | `GEMINI_API_KEY` | | Gemini 영상 시험 도구만 씀. 서버는 읽지 않음 |
 | `GMS_API_KEY` | | Claude 호출 키. 단계 설명 모델 비교 도구도 씀 |
 | `LLM_MODEL` | `claude-haiku-5-5` | Claude 모델 |
@@ -137,6 +148,8 @@ BE가 가이드 입력을 보내면 바로 202로 접수하고, 백그라운드�
 | `CALLBACK_TIMEOUT_SECONDS` | `10` | 콜백 한 번의 제한 시간 |
 | `CALLBACK_MAX_RETRIES` | `3` | 콜백을 다시 보내는 횟수 |
 | `CALLBACK_RETRY_DELAY_SECONDS` | `1` | 첫 재시도 전 대기. 다음부터 5배씩 늘어남 |
+| `TRACING_ENDPOINT` | | 호출 기록을 보낼 Phoenix 주소. 비우면 보내지 않음 |
+| `TRACING_PROJECT` | `ai-guide` | Phoenix에서 기록이 모이는 프로젝트 이름 |
 
 `CLAUDE_`로 시작하는 이름은 쓰지 않습니다. Claude Code가 `CLAUDE_EFFORT` 같은 환경변수를 넣어 두어서 설정이 바뀝니다.
 

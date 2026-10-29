@@ -18,6 +18,7 @@ from app.clients.callback import send_callback
 from app.clients.llm import Llm, get_llm
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
+from app.core.tracing import set_failed, set_output, traced
 from app.schemas.common import ErrorResponse
 from app.schemas.guide_job import (
     CallbackState,
@@ -126,39 +127,58 @@ async def get_guide_job(job_id: str, store: Store) -> GuideJobView:
 
 
 async def run_job(job: GuideJob, llm: Llm, settings: Settings) -> None:
-    """가이드를 만들고 결과를 콜백으로 보낸다. 실패도 FAILED 결과로 보낸다."""
-    job.status = "RUNNING"
-    try:
-        job.guide = await build_explained_guide(job.request.guide_input, llm)
-        job.status = "COMPLETED"
-    except AppError as e:
-        job.error = ErrorResponse(code=e.code, message=e.message, details=e.details)
-        job.status = "FAILED"
-    except Exception:
-        logger.exception("가이드 작업 %s에서 예기치 않은 오류", job.job_id)
-        job.error = ErrorResponse(
-            code="INTERNAL_ERROR", message="가이드를 만들다가 예기치 않은 오류가 발생했습니다."
-        )
-        job.status = "FAILED"
-    job.finished_at = time.time()
-    logger.info(
-        "가이드 작업 %s %s (%.1f초)", job.job_id, job.status, job.finished_at - job.created_at
-    )
+    """가이드를 만들고 결과를 콜백으로 보낸다. 실패도 FAILED 결과로 보낸다.
 
-    outcome = await send_callback(
-        str(job.request.callback_url),
-        job.result().model_dump(mode="json", by_alias=True),
-        timeout_seconds=settings.callback_timeout_seconds,
-        max_retries=settings.callback_max_retries,
-        retry_delay_seconds=settings.callback_retry_delay_seconds,
-    )
-    job.callback = CallbackState(
-        attempts=outcome.attempts, delivered=outcome.delivered, last_error=outcome.last_error
-    )
-    if not outcome.delivered:
-        logger.warning(
-            "가이드 작업 %s 콜백 실패 (%d번 시도, %s)",
-            job.job_id,
-            outcome.attempts,
-            outcome.last_error,
+    작업 하나가 기록 하나(guide_job)이고, 작업이 실패했거나 콜백을 못 보냈으면 오류로 남긴다.
+    """
+    guide_input = job.request.guide_input
+    inputs = {"jobId": job.job_id, "videoId": guide_input.video_id, "steps": len(guide_input.steps)}
+    with traced("guide_job", inputs, job_id=job.job_id, video_id=guide_input.video_id) as span:
+        job.status = "RUNNING"
+        try:
+            job.guide = await build_explained_guide(guide_input, llm)
+            job.status = "COMPLETED"
+        except AppError as e:
+            job.error = ErrorResponse(code=e.code, message=e.message, details=e.details)
+            job.status = "FAILED"
+        except Exception:
+            logger.exception("가이드 작업 %s에서 예기치 않은 오류", job.job_id)
+            job.error = ErrorResponse(
+                code="INTERNAL_ERROR", message="가이드를 만들다가 예기치 않은 오류가 발생했습니다."
+            )
+            job.status = "FAILED"
+        job.finished_at = time.time()
+        logger.info(
+            "가이드 작업 %s %s (%.1f초)", job.job_id, job.status, job.finished_at - job.created_at
         )
+        set_output(span, job.result().model_dump(mode="json", by_alias=True))
+
+        await deliver(job, settings)
+        if job.error is not None:
+            set_failed(span, f"{job.error.code}: {job.error.message}")
+        elif not job.callback.delivered:
+            set_failed(span, "콜백을 보내지 못했습니다")
+
+
+async def deliver(job: GuideJob, settings: Settings) -> None:
+    """콜백 주소는 기록하지 않는다. 서명 같은 값이 붙어 올 수 있다."""
+    with traced("callback", {"maxAttempts": settings.callback_max_retries + 1}) as span:
+        outcome = await send_callback(
+            str(job.request.callback_url),
+            job.result().model_dump(mode="json", by_alias=True),
+            timeout_seconds=settings.callback_timeout_seconds,
+            max_retries=settings.callback_max_retries,
+            retry_delay_seconds=settings.callback_retry_delay_seconds,
+        )
+        job.callback = CallbackState(
+            attempts=outcome.attempts, delivered=outcome.delivered, last_error=outcome.last_error
+        )
+        set_output(span, job.callback.model_dump(mode="json", by_alias=True))
+        if not outcome.delivered:
+            set_failed(span, outcome.last_error or "콜백을 보내지 못했습니다")
+            logger.warning(
+                "가이드 작업 %s 콜백 실패 (%d번 시도, %s)",
+                job.job_id,
+                outcome.attempts,
+                outcome.last_error,
+            )

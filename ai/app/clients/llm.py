@@ -81,6 +81,8 @@ class ClaudeLlm:
 
     키 하나를 모든 요청이 같이 쓰므로 동시 호출 수(llm_max_concurrency)도 이 객체가 센다.
     자리가 날 때까지 기다리는 시간은 llm_timeout_seconds에 들어가지 않는다.
+
+    SDK 자체 기록은 끈다. 호출 기록은 core/tracing.py가 남기고, 둘 다 켜면 비용이 두 번 잡힌다.
     """
 
     def __init__(
@@ -100,6 +102,7 @@ class ClaudeLlm:
                 timeout=settings.llm_timeout_seconds,
                 max_retries=settings.llm_max_retries,
                 http_client=http_client,
+                open_telemetry=False,
             )
 
     async def generate[T: BaseModel](
