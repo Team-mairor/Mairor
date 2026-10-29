@@ -1,7 +1,15 @@
-import numpy as np
+from pathlib import Path
 
+import numpy as np
+from PIL import Image
+
+from app.services.face_map import MAP_SIZE
+from app.services.lip_area import check_lip_area, lip_area_on_map
 from app.services.mask_outline import mask_outline, simplify_outline
 from app.services.region_mask import polygon_mask
+
+GOLDEN = Path(__file__).resolve().parent / "golden" / "lip"
+MAX_CHANGED_RATIO_ON_SAMPLE = 0.01
 
 
 def blank(size: int = 30) -> np.ndarray:
@@ -63,3 +71,11 @@ def test_too_few_points_give_no_outline():
 
 def test_shape_thinner_than_tolerance_gives_no_outline():
     assert simplify_outline([(0.0, 0.0), (5.0, 0.2), (10.0, 0.0), (5.0, -0.2)]) == []
+
+
+def test_simplified_sample_lip_keeps_its_shape():
+    after = np.asarray(Image.open(GOLDEN / "after_s10.png").convert("RGB"))
+    outline = mask_outline(check_lip_area(lip_area_on_map(after)).mask)
+    before = polygon_mask(outline, MAP_SIZE, MAP_SIZE)
+    simplified = polygon_mask(simplify_outline(outline), MAP_SIZE, MAP_SIZE)
+    assert (simplified ^ before).sum() <= before.sum() * MAX_CHANGED_RATIO_ON_SAMPLE
