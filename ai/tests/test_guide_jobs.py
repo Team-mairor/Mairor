@@ -189,6 +189,21 @@ def test_job_is_accepted_explained_and_called_back(backend):
     assert view["callback"] == {"attempts": 1, "delivered": True, "lastError": None}
 
 
+def test_sentence_end_periods_are_removed(backend):
+    llm = FakeLlm(
+        explanation("펴 발라요.", tip="얇게 여러 번 발라요. ", done_when="고르게 펴지면 넘어가요."),
+        explanation("발라요"),
+    )
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    first = backend.callbacks[0]["guide"]["steps"][0]
+    assert first["actions"] == [
+        {"text": "펴 발라요", "tip": {"kind": "tip", "text": "얇게 여러 번 발라요"}}
+    ]
+    assert first["doneWhen"] == "고르게 펴지면 넘어가요"
+
+
 def test_each_step_is_sent_with_its_inputs_and_images(backend):
     llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
 

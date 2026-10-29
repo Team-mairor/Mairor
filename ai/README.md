@@ -139,7 +139,7 @@ docker compose up -d   # ai/ 에서. http://localhost:6006
 | `GEMINI_API_KEY` | | Gemini 영상 시험 도구만 씀. 서버는 읽지 않음 |
 | `GMS_API_KEY` | | Claude 호출 키. 단계 설명 모델 비교 도구도 씀 |
 | `LLM_MODEL` | `claude-haiku-5-5` | Claude 모델 |
-| `LLM_EFFORT` | `medium` | 생각 수준. `low` · `medium` · `high` · `xhigh` · `max`. Haiku 5.5는 생략하면 `medium`이라 모델 비교 실험과 같은 조건 |
+| `LLM_EFFORT` | `high` | 생각 수준. `low` · `medium` · `high` · `xhigh` · `max`. `medium`이면 쉬워 보이는 단계에서 생각을 건너뛰고 입력에 없는 말을 지어낸다 |
 | `LLM_BASE_URL` | `https://gms.ssafy.io/gmsapi/api.anthropic.com` | GMS의 Anthropic 주소 |
 | `LLM_MAX_TOKENS` | `16000` | 답 최대 토큰. 생각 토큰 포함 |
 | `LLM_TIMEOUT_SECONDS` | `60` | 한 번 시도의 제한 시간 |

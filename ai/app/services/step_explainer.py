@@ -50,16 +50,23 @@ async def explain_step(
         return await llm.generate(system=PROMPT, text=text, images=images, output=StepExplanation)
 
 
+def sentence(text: str) -> str:
+    """모델이 문장 끝 마침표를 붙였다 뺐다 해서 화면에 보일 문장은 마침표 없이 맞춘다."""
+    return text.strip().rstrip(".").rstrip()
+
+
 def to_explained_step(step: GuideInputStep, explanation: StepExplanation) -> ExplainedStep:
     """BE에 보낼 칸만 남긴다. 근거 번호와 쓰지 않은 입력은 뺀다."""
     actions = [
         StepAction(
-            text=action.text,
-            tip=StepTip(kind=action.tip.kind, text=action.tip.text) if action.tip else None,
+            text=sentence(action.text),
+            tip=StepTip(kind=action.tip.kind, text=sentence(action.tip.text))
+            if action.tip
+            else None,
         )
         for action in explanation.actions
     ]
-    done_when = explanation.done_when.text if explanation.done_when else None
+    done_when = sentence(explanation.done_when.text) if explanation.done_when else None
     return ExplainedStep(
         step_id=step.step_id, order=step.order, actions=actions, done_when=done_when
     )

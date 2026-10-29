@@ -25,7 +25,7 @@ def test_llm_settings_ignore_claude_code_variables(monkeypatch):
     settings = Settings(_env_file=None)
 
     assert settings.llm_model == "claude-sonnet-5-5"
-    assert settings.llm_effort == "medium"
+    assert settings.llm_effort == "high"
 
 
 def test_settings_read_environment(monkeypatch):

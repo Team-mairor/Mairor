@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     gms_api_key: SecretStr | None = None
     llm_base_url: str = "https://gms.ssafy.io/gmsapi/api.anthropic.com"
     llm_model: str = "claude-haiku-5-5"
-    llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "high"
     llm_max_tokens: int = Field(default=16000, gt=0)
     llm_timeout_seconds: float = Field(default=60, gt=0)
     llm_max_retries: int = Field(default=2, ge=0)
