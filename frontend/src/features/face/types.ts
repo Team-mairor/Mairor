@@ -81,6 +81,7 @@ export interface MeshAnchor {
 
 export type GuideShape =
   | { type: "point"; at: MeshAnchor }
-  | { type: "polyline"; path: MeshAnchor[]; width: number }
+  /** brush면 따라 그릴 선이 아니라 결 방향의 붓 자국(눈썹 결·속눈썹)으로 그린다 */
+  | { type: "polyline"; path: MeshAnchor[]; width: number; brush?: boolean }
   | { type: "polygon"; outline: MeshAnchor[] }
   | { type: "arrow"; from: MeshAnchor; to: MeshAnchor };

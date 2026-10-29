@@ -76,6 +76,13 @@ function anchorTools(mesh: FaceMesh) {
 const LASH_LINE_SHIFT = 0.12; // 눈 뜬 높이 대비
 const WING_LENGTH = 0.15; // 눈 너비 대비
 
+// 블러셔 영역: 볼 영역 위쪽 점과 50(280). 볼 아래쪽까지 칠하면 처져 보인다.
+// 미리보기 블러셔 마스크(픽스처 생성 스크립트)도 이 점을 쓴다
+export const BLUSH_POINTS = {
+  right: [123, 116, 117, 118, 101, 50],
+  left: [352, 345, 346, 347, 330, 280],
+};
+
 // 윗눈꺼풀과 같은 자리의 아래 눈꺼풀 점 (안쪽 1/3 → 눈꼬리 직전). 눈꼬리 점은 아래로 꺾여 있어 건너뛴다
 const EYELINER = {
   right: {
@@ -128,7 +135,7 @@ export function eyelinerPaths(mesh: FaceMesh): { right: MeshAnchor[]; left: Mesh
  * regions에는 부위 정의(REGIONS)를 넘긴다.
  */
 export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): GuideSet {
-  const { at, between, outline } = anchorTools(mesh);
+  const { uvPt, anchorAt, at, between, outline } = anchorTools(mesh);
   const arrow = (from: MeshAnchor, to: MeshAnchor): GuideShape => ({ type: "arrow", from, to });
   const point = (anchor: MeshAnchor): GuideShape => ({ type: "point", at: anchor });
   const eyeliner = eyelinerPaths(mesh);
@@ -142,6 +149,96 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     type: "polygon",
     outline: [...lid.map(at), ...toBrow.map(([i, j]) => between(i, j, 0.4))],
   });
+
+  /**
+   * 눈썹 결: [아래 선 점, 위 선 점] 쌍을 앞머리 → 꼬리 순서로 받아 결 방향의 짧은 붓 자국을 만든다.
+   * 앞머리는 거의 위로, 꼬리로 갈수록 꼬리 쪽으로 눕는다.
+   */
+  const browHairs = (pairs: [number, number][], count = 16): GuideShape[] => {
+    const lerp = (p: Uv, q: Uv, t: number): Uv => ({
+      x: p.x + (q.x - p.x) * t,
+      y: p.y + (q.y - p.y) * t,
+    });
+    /** 눈썹 길이 비율 s(0 앞머리 ~ 1 꼬리), 높이 h(0 아래 선 ~ 1 위 선)의 UV 점 */
+    const browAt = (s: number, h: number): Uv => {
+      const x = Math.min(0.999, Math.max(0, s)) * (pairs.length - 1);
+      const i = Math.floor(x);
+      const [l0, u0] = pairs[i].map(uvPt);
+      const [l1, u1] = pairs[i + 1].map(uvPt);
+      return lerp(lerp(l0, l1, x - i), lerp(u0, u1, x - i), h);
+    };
+    // 털처럼 보이도록 길이·간격을 조금씩 흐트러뜨리고, 아래·위 두 줄에서 엇갈려 시작한다 (같은 값이 나오는 고정 난수)
+    const jitter = (k: number) => {
+      const x = Math.sin(k * 12.9898) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    return Array.from({ length: count }, (_, k): GuideShape => {
+      const s = 0.03 + (0.92 * k) / (count - 1) + (jitter(k) - 0.5) * 0.02;
+      const lean = 0.015 + 0.11 * s;
+      const start = k % 2 === 0 ? 0.08 : 0.3;
+      const top = Math.min(
+        0.95,
+        start + (0.82 - 0.4 * Math.max(0, (s - 0.6) / 0.4)) * (0.7 + 0.3 * jitter(k + 100)),
+      );
+      return {
+        type: "polyline",
+        path: [
+          anchorAt(browAt(s, start)),
+          anchorAt(browAt(s + lean * 0.45, (start + top) / 2 + 0.06)),
+          anchorAt(browAt(s + lean, top)),
+        ],
+        width: 0.018,
+        brush: true,
+      };
+    });
+  };
+  /**
+   * 속눈썹: [눈꺼풀 점, 눈썹 점] 쌍을 안쪽 → 바깥쪽 순서로 받아, 눈꺼풀을 따라 가늘고 짧은 속눈썹을 촘촘히 만든다.
+   * 눈썹 쪽으로 뻗되 바깥쪽으로 갈수록 눈꼬리 쪽으로 눕는다.
+   */
+  const lashes = (pairs: [number, number][], count = 12): GuideShape[] => {
+    const lerp = (p: Uv, q: Uv, t: number): Uv => ({
+      x: p.x + (q.x - p.x) * t,
+      y: p.y + (q.y - p.y) * t,
+    });
+    const along = (s: number, side: 0 | 1): Uv => {
+      const x = Math.min(0.999, Math.max(0, s)) * (pairs.length - 1);
+      const i = Math.floor(x);
+      return lerp(uvPt(pairs[i][side]), uvPt(pairs[i + 1][side]), x - i);
+    };
+    const outward = unit({
+      x: uvPt(pairs[pairs.length - 1][0]).x - uvPt(pairs[0][0]).x,
+      y: uvPt(pairs[pairs.length - 1][0]).y - uvPt(pairs[0][0]).y,
+    });
+    // 길이를 조금씩 흐트러뜨린다 (같은 값이 나오는 고정 난수)
+    const jitter = (k: number) => {
+      const x = Math.sin(k * 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    return Array.from({ length: count }, (_, k): GuideShape => {
+      const s = k / (count - 1);
+      const root = along(s, 0);
+      const toBrow = { x: along(s, 1).x - root.x, y: along(s, 1).y - root.y };
+      // 끝이 눈꺼풀 가장자리 바로 위 점들(눈썹까지의 11~16%)보다 아래에 있어야 눈을 감을 때 같이 내려온다
+      const reach = Math.hypot(toBrow.x, toBrow.y) * (0.05 + 0.03 * s + 0.01 * jitter(k));
+      const up = unit(toBrow);
+      const lean = 0.15 + 0.6 * s;
+      const tip = {
+        x: root.x + (up.x + outward.x * lean) * reach,
+        y: root.y + (up.y + outward.y * lean) * reach,
+      };
+      const mid = {
+        x: root.x + (up.x + outward.x * lean * 0.4) * reach * 0.5,
+        y: root.y + (up.y + outward.y * lean * 0.4) * reach * 0.5,
+      };
+      return {
+        type: "polyline",
+        path: [anchorAt(root), anchorAt(mid), anchorAt(tip)],
+        width: 0.006,
+        brush: true,
+      };
+    });
+  };
 
   const steps: Omit<GuideStep, "order" | "source">[] = [
     {
@@ -185,57 +282,41 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       ],
     },
     {
-      // 볼 앞쪽(웃으면 올라오는 곳, 눈동자 아래). 코 옆에서 바깥으로 거의 가로로
+      // 광대 위쪽 (BLUSH_POINTS)
       stepId: "blush",
-      title: "블러셔: 볼 앞쪽에 코 옆에서 바깥쪽으로 둥글게 펴요",
+      title: "블러셔: 광대 위쪽에 볼 앞에서 광대 쪽으로 둥글게 펴요",
       regions: ["rightCheek", "leftCheek"],
       guides: [
-        // 바깥쪽은 점이 세로로 늘어서 있어, 광대 쪽(123·352)으로 조금 부풀려 둥글게 만든다
-        {
-          type: "polygon",
-          outline: [...[117, 118, 101, 36, 205, 187].map(at), between(123, 50, 0.4)],
-        },
-        {
-          type: "polygon",
-          outline: [...[346, 347, 330, 266, 425, 411].map(at), between(352, 280, 0.4)],
-        },
-        point(between(36, 205)),
-        arrow(between(36, 205), between(50, 123, 0.4)),
-        point(between(266, 425)),
-        arrow(between(266, 425), between(280, 352, 0.4)),
+        outline(BLUSH_POINTS.right),
+        outline(BLUSH_POINTS.left),
+        point(between(101, 50)),
+        arrow(between(101, 50), between(123, 117, 0.3)),
+        point(between(330, 280)),
+        arrow(between(330, 280), between(352, 346, 0.3)),
       ],
     },
     {
-      // 눈썹이 가늘어 윤곽선 대신 눈썹 두께만 한 띠로 보여 준다.
-      // 윗선·아랫선의 가운데를 앞머리(55·107)에서 꼬리(46·70)까지
+      // 앞머리(55·107)에서 꼬리(46·70)까지 결 방향 붓 자국. 결이 채울 영역을 보여 주므로 윤곽은 따로 그리지 않는다
       stepId: "brow",
       title: "눈썹: 앞머리에서 꼬리 쪽으로 결대로 빈 곳만 채워요",
       regions: ["rightBrow", "leftBrow"],
       guides: [
-        point(between(55, 107)),
-        {
-          type: "polyline",
-          path: [
-            between(55, 107),
-            between(65, 66),
-            between(52, 105),
-            between(53, 63),
-            between(46, 70),
-          ],
-          width: 0.08,
-        },
-        point(between(285, 336)),
-        {
-          type: "polyline",
-          path: [
-            between(285, 336),
-            between(295, 296),
-            between(282, 334),
-            between(283, 293),
-            between(276, 300),
-          ],
-          width: 0.08,
-        },
+        ...browHairs([
+          [55, 107],
+          [65, 66],
+          [52, 105],
+          [53, 63],
+          [46, 70],
+        ]),
+        point(between(55, 107, 0.3)),
+        ...browHairs([
+          [285, 336],
+          [295, 296],
+          [282, 334],
+          [283, 293],
+          [276, 300],
+        ]),
+        point(between(285, 336, 0.3)),
       ],
     },
     {
@@ -280,15 +361,27 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       ],
     },
     {
-      // 윗눈꺼풀(속눈썹 뿌리) 가운데·바깥쪽에서 눈썹 쪽으로. 화살이 짧아 많으면 화살촉끼리 겹친다
+      // 윗눈꺼풀(속눈썹 뿌리) 가운데~바깥쪽에서 눈썹 쪽으로 쓸어 올리는 속눈썹 결
       stepId: "mascara",
       title: "마스카라: 속눈썹 뿌리에서 위로 쓸어 올려요",
       regions: ["rightEye", "leftEye"],
       guides: [
-        arrow(at(159), between(159, 52, 0.7)),
-        arrow(at(161), between(161, 46, 0.7)),
-        arrow(at(386), between(386, 282, 0.7)),
-        arrow(at(388), between(388, 276, 0.7)),
+        ...lashes([
+          [157, 55],
+          [158, 65],
+          [159, 52],
+          [160, 53],
+          [161, 53],
+          [246, 46],
+        ]),
+        ...lashes([
+          [384, 285],
+          [385, 295],
+          [386, 282],
+          [387, 283],
+          [388, 283],
+          [466, 276],
+        ]),
       ],
     },
     {

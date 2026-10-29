@@ -13,7 +13,7 @@ if (major < 22 || (major === 22 && minor < 18)) {
 }
 const { crc32, deflateSync } = await import("node:zlib");
 const { REGIONS } = await import("../src/features/face/regions.ts");
-const { buildDefaultGuideSet, eyelinerPaths } =
+const { buildDefaultGuideSet, eyelinerPaths, BLUSH_POINTS } =
   await import("../src/features/guide/default-guides.ts");
 // 추적기와 같은 판정 기준을 그대로 쓴다. 값을 바꾸면 픽스처를 다시 생성한다.
 const { MIN_IN_FRAME_RATIO } = await import("../src/features/face/visibility.ts");
@@ -273,11 +273,9 @@ function writePng(path, values) {
   writePng("layers/masks/eyeshadow.png", soft);
 }
 
-// 블러셔: 볼 영역 중 광대 쪽 위를 넓게 흐린다. 볼 아래쪽(입꼬리 방향)까지 칠하면 처져 보인다.
+// 블러셔: 튜토리얼 블러셔 가이드와 같은 점(광대 위쪽)을 넓게 흐린다.
 {
-  const right = [123, 116, 117, 118, 101, 50];
-  const left = [352, 345, 346, 347, 330, 280];
-  const { mask } = polygonMask([right, left]);
+  const { mask } = polygonMask([BLUSH_POINTS.right, BLUSH_POINTS.left]);
   writePng(
     "layers/masks/blush.png",
     blur(mask, 10).map((v) => Math.min(1, v * 1.4)),

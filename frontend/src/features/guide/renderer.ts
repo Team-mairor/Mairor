@@ -19,21 +19,30 @@ export interface Projection {
   unit: number;
 }
 
+// 하프미러(검은 배경) 위에 흰 선만 떠 있게 그린다. 화면이 밝은 곳은 거울에 비친 얼굴이 흐려지므로
+// 영역을 채우거나 띠를 깔지 않는다. 크기는 IOD 기준이고, 멀어져도 최소 픽셀은 지킨다.
+/** 가이드 색 (R, G, B). 하프미러에 올려 보고 바꿀 때는 이 값만 고친다 */
+const INK = "255, 255, 255";
+
 const STYLE = {
-  color: "rgba(255, 255, 255, 0.95)",
-  // 밝은 피부 위에서도 보이도록 선 아래에 어두운 테두리를 깐다.
-  shadow: "rgba(0, 0, 0, 0.45)",
-  fill: "rgba(255, 255, 255, 0.12)",
-  band: "rgba(255, 255, 255, 0.28)",
-  lineWidth: 2.5,
-  shadowWidth: 5,
-  dash: [10, 7],
-  /** 점선이 흐르는 속도 (px/s). 방향을 알려 준다 */
-  dashSpeed: 30,
-  /** 화살촉 크기 (IOD 기준) */
-  arrowHead: 0.12,
-  /** 시작점 표시 반지름 (IOD 기준) */
-  pointRadius: 0.05,
+  color: `rgba(${INK}, 0.98)`,
+  // 선 둘레의 옅은 흰 빛. 흐림 필터는 저사양 기기에서 무거워 넓고 옅은 선 두 겹으로 퍼지게 한다
+  glow: [
+    { color: `rgba(${INK}, 0.08)`, extra: 10 },
+    { color: `rgba(${INK}, 0.16)`, extra: 4 },
+  ],
+  /** 점선의 점 지름, 점 사이 간격(점 지름 대비) */
+  dot: { size: 0.032, min: 3, gap: 0.8 },
+  /** 실선(화살표) 두께 */
+  line: { size: 0.035, min: 3 },
+  /** 경로의 점선이 흐르는 속도 (점 지름/초). 방향만 알 수 있게 느리게 */
+  flow: 0.8,
+  /** 화살촉 크기 */
+  arrowHead: 0.14,
+  /** 시작점 반지름 */
+  point: { size: 0.05, min: 5 },
+  /** 붓 자국 가운데 최소 두께 (px). 두께는 도형의 width를 쓴다 */
+  brushMin: 1.2,
 };
 
 /**
@@ -46,7 +55,14 @@ export function isStepVisible(step: GuideStep, frame: FaceFrame | null): boolean
   return step.regions.some((region) => isRegionInView(frame, region));
 }
 
-/** 얼굴 위에 튜토리얼 가이드(점선 영역·선·화살표·시작점)를 그린다. */
+/**
+ * 얼굴 위에 튜토리얼 가이드를 그린다. 도형마다 모양을 달리해 한 단계 안에서 겹쳐도 구분되게 한다.
+ * - 영역(polygon): 둥근 점선 테두리 (멈춤)
+ * - 경로(polyline): 진행 방향으로 천천히 흐르는 점선. 점 지름은 도형의 width와 기본값 중 큰 쪽
+ * - 붓 자국(polyline, brush): 양 끝이 가는 결 방향 자국 (눈썹 결·속눈썹)
+ * - 방향(arrow): 굵은 실선과 화살촉
+ * - 시작점(point): 속이 찬 점
+ */
 export class GuideRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private dpr = 1;
@@ -95,9 +111,12 @@ export class GuideRenderer {
     ctx.lineCap = "round";
     const at = (anchor: Parameters<typeof resolveAnchor>[0]) =>
       projection.toPx(resolveAnchor(anchor, mesh, frame.landmarks));
-    const dashOffset = -((now / 1000) * STYLE.dashSpeed);
+    const dot = sized(projection.unit, STYLE.dot);
+    const dashOffset = -(now / 1000) * STYLE.flow * dot * (1 + STYLE.dot.gap);
 
-    for (const guide of step.guides) {
+    // 붓 자국은 다른 도형보다 먼저 깔아 시작점·화살표가 위에 보이게 한다.
+    const ordered = [...step.guides].sort((a, b) => Number(isBrush(b)) - Number(isBrush(a)));
+    for (const guide of ordered) {
       this.drawGuide(guide, at, projection.unit, dashOffset);
     }
   }
@@ -109,72 +128,160 @@ export class GuideRenderer {
     dashOffset: number,
   ) {
     const ctx = this.ctx;
+    const dot = sized(unit, STYLE.dot);
     switch (guide.type) {
       case "polygon": {
-        // 바를 영역: 옅게 채우고 점선으로 테두리
+        // 바를 영역: 둥근 점선 테두리. 점을 곡선으로 이어 각지지 않게 하고, 방향이 없으므로 흐르지 않게 한다
         const points = guide.outline.map(at);
         if (points.length < 3) return;
-        tracePath(ctx, points, true);
-        ctx.fillStyle = STYLE.fill;
-        ctx.fill();
-        this.stroke(true, dashOffset);
+        traceSmooth(ctx, points, true);
+        this.dotted(dot, 0);
         return;
       }
       case "polyline": {
-        // 그릴 선: 두께만큼 옅은 띠 + 가운데 점선이 진행 방향으로 흐름
         const points = guide.path.map(at);
         if (points.length < 2) return;
-        tracePath(ctx, points, false);
-        ctx.setLineDash([]);
-        ctx.strokeStyle = STYLE.band;
-        ctx.lineWidth = Math.max(STYLE.lineWidth, guide.width * unit);
-        ctx.stroke();
-        this.stroke(true, dashOffset);
+        if (guide.brush) {
+          this.brushStroke(points, Math.max(STYLE.brushMin, guide.width * unit));
+          return;
+        }
+        // 그릴 선: 점선이 진행 방향으로 천천히 흐름
+        traceSmooth(ctx, points, false);
+        this.dotted(Math.max(dot, guide.width * unit), dashOffset);
         return;
       }
       case "arrow": {
-        // 바르는 방향
+        // 바르는 방향: 영역 테두리(점선)와 헷갈리지 않게 실선
         const from = at(guide.from);
         const to = at(guide.to);
+        const width = sized(unit, STYLE.line);
         tracePath(ctx, [from, to], false);
-        this.stroke(true, dashOffset);
-        const head = arrowHead(from, to, STYLE.arrowHead * unit);
+        this.solid(width);
+        const head = arrowHead(from, to, Math.max(width * 3, STYLE.arrowHead * unit));
         if (!head) return;
         tracePath(ctx, head, false);
-        this.stroke(false, 0);
+        this.solid(width);
         return;
       }
       case "point": {
         // 시작점
         const p = at(guide.at);
         ctx.beginPath();
-        ctx.arc(p.x, p.y, Math.max(4, STYLE.pointRadius * unit), 0, Math.PI * 2);
-        this.stroke(false, 0);
+        ctx.arc(p.x, p.y, sized(unit, STYLE.point), 0, Math.PI * 2);
+        this.halo(0);
+        ctx.fillStyle = STYLE.color;
+        ctx.fill();
         return;
       }
     }
   }
 
-  /** 지금 경로를 어두운 테두리 + 흰 선으로 긋는다. */
-  private stroke(dashed: boolean, dashOffset: number) {
+  /** 지금 경로를 둥근 점이 이어진 점선으로 긋는다 (흰 빛 + 흰 점). */
+  private dotted(dot: number, dashOffset: number) {
     const ctx = this.ctx;
-    const dash = dashed ? STYLE.dash : [];
-    ctx.setLineDash(dash);
+    // 길이 0인 대시에 둥근 끝을 붙이면 점이 된다.
+    ctx.setLineDash([0, dot * (1 + STYLE.dot.gap)]);
     ctx.lineDashOffset = dashOffset;
-    ctx.strokeStyle = STYLE.shadow;
-    ctx.lineWidth = STYLE.shadowWidth;
-    ctx.stroke();
+    this.halo(dot);
     ctx.strokeStyle = STYLE.color;
-    ctx.lineWidth = STYLE.lineWidth;
+    ctx.lineWidth = dot;
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.lineDashOffset = 0;
+  }
+
+  /** 지금 경로를 실선으로 긋는다 (흰 빛 + 흰 선). */
+  private solid(width: number) {
+    const ctx = this.ctx;
+    ctx.setLineDash([]);
+    this.halo(width);
+    ctx.strokeStyle = STYLE.color;
+    ctx.lineWidth = width;
+    ctx.stroke();
+  }
+
+  /** 지금 경로 둘레에 옅은 흰 빛을 깐다. width는 그 위에 그릴 선 두께 */
+  private halo(width: number) {
+    const ctx = this.ctx;
+    for (const g of STYLE.glow) {
+      ctx.strokeStyle = g.color;
+      ctx.lineWidth = width + g.extra;
+      ctx.stroke();
+    }
+  }
+
+  /** 붓 자국: 뿌리는 굵고 끝으로 갈수록 가는 모양을 한 번에 채운다. */
+  private brushStroke(path: Px[], width: number) {
+    const ctx = this.ctx;
+    const samples = 16;
+    const left: Px[] = [];
+    const right: Px[] = [];
+    for (let k = 0; k <= samples; k++) {
+      const u = k / samples;
+      const p = pointAlong(path, u);
+      const q = pointAlong(path, Math.min(1, u + 0.02));
+      const o = pointAlong(path, Math.max(0, u - 0.02));
+      const len = Math.hypot(q.x - o.x, q.y - o.y) || 1;
+      const half = (width / 2) * (0.35 + 0.65 * (1 - u));
+      const nx = (-(q.y - o.y) / len) * half;
+      const ny = ((q.x - o.x) / len) * half;
+      left.push({ x: p.x + nx, y: p.y + ny });
+      right.push({ x: p.x - nx, y: p.y - ny });
+    }
+    tracePath(ctx, [...left, ...right.reverse()], true);
+    // 가는 결이 빛에 번져 뭉개지지 않게 붓 자국은 흰색만 칠한다
+    ctx.fillStyle = STYLE.color;
+    ctx.fill();
   }
 }
+
+/** IOD 기준 크기를 픽셀로. 멀어져도 최소 픽셀은 지킨다 */
+const sized = (unit: number, s: { size: number; min: number }) => Math.max(s.min, s.size * unit);
+
+const isBrush = (guide: GuideShape) => guide.type === "polyline" && !!guide.brush;
 
 function tracePath(ctx: CanvasRenderingContext2D, points: Px[], close: boolean) {
   ctx.beginPath();
   points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   if (close) ctx.closePath();
+}
+
+/** 점을 모두 지나는 곡선(Catmull-Rom)으로 이어 각지지 않게 그린다. 영역이 정의한 점보다 줄어들지 않는다. */
+function traceSmooth(ctx: CanvasRenderingContext2D, points: Px[], close: boolean) {
+  const n = points.length;
+  const pt = (i: number) =>
+    close ? points[((i % n) + n) % n] : points[Math.max(0, Math.min(n - 1, i))];
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 0; i < (close ? n : n - 1); i++) {
+    const [p0, p1, p2, p3] = [pt(i - 1), pt(i), pt(i + 1), pt(i + 2)];
+    ctx.bezierCurveTo(
+      p1.x + (p2.x - p0.x) / 6,
+      p1.y + (p2.y - p0.y) / 6,
+      p2.x - (p3.x - p1.x) / 6,
+      p2.y - (p3.y - p1.y) / 6,
+      p2.x,
+      p2.y,
+    );
+  }
+  if (close) ctx.closePath();
+}
+
+/** 꺾은선을 따라 길이 비율 t(0~1)만큼 간 점 */
+function pointAlong(points: Px[], t: number): Px {
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));
+  let left = Math.min(1, Math.max(0, t)) * lengths.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < lengths.length; i++) {
+    if (left <= lengths[i] || i === lengths.length - 1) {
+      const r = lengths[i] ? Math.min(1, left / lengths[i]) : 0;
+      return {
+        x: points[i].x + (points[i + 1].x - points[i].x) * r,
+        y: points[i].y + (points[i + 1].y - points[i].y) * r,
+      };
+    }
+    left -= lengths[i];
+  }
+  return points[0];
 }
 
 /** 끝점에서 뒤로 벌어진 화살촉 두 변 [왼쪽 끝, 꼭짓점, 오른쪽 끝] */
