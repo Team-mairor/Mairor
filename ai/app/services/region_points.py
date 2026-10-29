@@ -1,0 +1,18 @@
+"""부위마다 테두리를 한 바퀴 도는 얼굴 점 번호.
+
+FE와 같이 쓰는 shared/face-mesh/regions.v1.json의 indices를 읽는다. 번호를 따로 옮겨 적지 않는다.
+"""
+
+import json
+from pathlib import Path
+from typing import get_args
+
+from app.schemas.guide_area import RegionName
+
+REGIONS_PATH = Path(__file__).resolve().parents[3] / "shared" / "face-mesh" / "regions.v1.json"
+
+_REGIONS = json.loads(REGIONS_PATH.read_text(encoding="utf-8"))["regions"]
+
+REGION_POINTS: dict[RegionName, tuple[int, ...]] = {
+    name: tuple(_REGIONS[name]["indices"]) for name in get_args(RegionName)
+}
