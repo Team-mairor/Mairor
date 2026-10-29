@@ -10,6 +10,40 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  --font-display: var(--font-gowun);
+  --font-serif: var(--font-instrument-serif);
+  --font-label: var(--font-instrument-sans);
+  /* mairor 브랜드 색. 프로토타입 v11 기준 */
+  --color-ink: #3a0e25;
+  --color-ink-deep: #2a0a1c;
+  --color-plum: #991e5a;
+  --color-pink: #db1374;
+  --color-pink-soft: #efc0da;
+  --color-pink-tint: #fce8f1;
+  --color-pink-pale: #fbeff5;
+  --color-rose: #ff8fc0;
+  --color-blush: #f4b6cf;
+  --color-coral: #ef8e8a;
+  --color-mute: #6e5a64;
+  --color-mute-2: #5c4852;
+  --color-line: #efe4ea;
+  --color-line-2: #e6d5dd;
+  --color-line-3: #d9c7d0;
+  --color-ash: #c9b5bf;
+  --color-ash-2: #c9b8c1;
+  --color-ash-3: #a8949e;
+  --color-cream: #f6f1f4;
+  --color-cream-2: #fbf6f8;
+  --color-cream-3: #f6eef2;
+  --color-lime: #dbe586;
+  --color-lime-ink: #6b7a12;
+  --color-lime-pale: #f5f8dc;
+  --color-lime-deep: #5e6a00;
+  --color-sky: #b9c9e7;
+  --color-sky-pale: #eaf0fa;
+  --color-wine: #c0105f;
+  --color-wine-2: #c0264f;
+  --color-error: #b3261e;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,38 +83,38 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #3a0e25;
+  --card: #ffffff;
+  --card-foreground: #3a0e25;
+  --popover: #ffffff;
+  --popover-foreground: #3a0e25;
+  --primary: #991e5a;
+  --primary-foreground: #ffffff;
+  --secondary: #f6f1f4;
+  --secondary-foreground: #3a0e25;
+  --muted: #f6f1f4;
+  --muted-foreground: #6e5a64;
+  --accent: #fbf6f8;
+  --accent-foreground: #3a0e25;
+  --destructive: #c0105f;
+  --border: #efe4ea;
+  --input: #e6d5dd;
+  --ring: #db1374;
+  --chart-1: #991e5a;
+  --chart-2: #db1374;
+  --chart-3: #dbe586;
+  --chart-4: #b9c9e7;
+  --chart-5: #efc0da;
+  --radius: 1rem;
+  --sidebar: #fbf6f8;
+  --sidebar-foreground: #3a0e25;
+  --sidebar-primary: #991e5a;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f6f1f4;
+  --sidebar-accent-foreground: #3a0e25;
+  --sidebar-border: #efe4ea;
+  --sidebar-ring: #db1374;
 }
 
 .dark {
@@ -128,5 +162,420 @@
     @apply font-sans;
     /* 두 번 탭 확대 방지 */
     touch-action: manipulation;
+    word-break: keep-all;
+    -webkit-font-smoothing: antialiased;
+  }
+  input {
+    font-family: inherit;
+  }
+}
+
+/*
+ * 화면 폭 대응. 모든 화면은 프로토타입과 같은 800px 세로 레이아웃(태블릿)을 기준으로 그린다.
+ * - 800px 미만(폰): 레이아웃 전체를 폭 비율대로 축소한다. zoom은 transform과 달리 레이아웃·스크롤·터치 영역이 함께 줄어든다.
+ * - 800px 이상(가로 태블릿·PC): 가운데 800px 칸에 고정하고 바깥은 연한 배경으로 둔다.
+ * ponytail: 요소별 재배치(2열→1열 등)는 하지 않는다. 폰 전용 배치가 필요한 화면이 생기면 그 화면에만 sm: 변형을 더한다.
+ */
+@media (max-width: 799px) {
+  html {
+    zoom: tan(atan2(100vw, 800px));
+  }
+}
+@media (min-width: 800px) {
+  body {
+    background: var(--color-cream);
+  }
+  #app {
+    box-shadow: 0 0 0 1px var(--color-line);
+  }
+}
+
+/*
+ * 확인 화면(/debug/*)은 이전과 똑같이 보이게 앱 화면용 규칙을 되돌린다.
+ * 800px 칸·폭 축소를 끄고, shadcn 색 변수를 원래 기본값으로 둔다.
+ */
+html:has([data-debug]) {
+  zoom: 1;
+}
+body:has([data-debug]) {
+  background: var(--background);
+}
+#app:has([data-debug]) {
+  max-width: none;
+  box-shadow: none;
+}
+[data-debug] {
+  color: var(--foreground);
+  word-break: normal;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* 프로토타입 공통 모션 */
+@keyframes mr-fade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mr-rise {
+  from {
+    opacity: 0;
+    transform: translateY(46px);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+@keyframes mr-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes mr-slide-in {
+  from {
+    transform: translateX(48px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes mr-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(56px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mr-bar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes mr-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+@utility animate-fade {
+  animation: mr-fade 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@utility animate-sheet-up {
+  animation: mr-sheet-up 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@utility animate-slide-in {
+  animation: mr-slide-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@utility animate-step-in {
+  animation: mr-step-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 인트로·온보딩 연출 */
+@keyframes mr-dot {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes mr-dot-out {
+  to {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+@keyframes mr-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes mr-up {
+  to {
+    transform: translateY(-290px);
+  }
+}
+@keyframes mr-wipe {
+  from {
+    clip-path: inset(100% 0 0 0 round 210px 210px 28px 28px);
+  }
+  to {
+    clip-path: inset(0 0 0 0 round 210px 210px 28px 28px);
+  }
+}
+@keyframes mr-zoom {
+  from {
+    transform: scale(1.18);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes mr-scan {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(540px);
+  }
+}
+@keyframes mr-panel-up {
+  to {
+    transform: translateY(-101%);
+  }
+}
+@keyframes mr-panel-down {
+  to {
+    transform: translateY(101%);
+  }
+}
+@keyframes mr-story {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes mr-halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.14);
+    opacity: 0;
+  }
+}
+@keyframes mr-spot {
+  0%,
+  26% {
+    left: 61.8%;
+    top: 62px;
+    width: 24.5%;
+    height: 76px;
+  }
+  34%,
+  60% {
+    left: 75.6%;
+    top: 194px;
+    width: 20.9%;
+    height: 118px;
+  }
+  68%,
+  94% {
+    left: 31.9%;
+    top: 435px;
+    width: 36.2%;
+    height: 86px;
+  }
+  100% {
+    left: 61.8%;
+    top: 62px;
+    width: 24.5%;
+    height: 76px;
+  }
+}
+@keyframes mr-gdemo {
+  0% {
+    width: 4%;
+  }
+  35% {
+    width: 26%;
+  }
+  50% {
+    width: 90%;
+  }
+  70%,
+  100% {
+    width: 58%;
+  }
+}
+@keyframes mr-gthumb {
+  0% {
+    left: calc(4% - 11px);
+  }
+  35% {
+    left: calc(26% - 11px);
+  }
+  50% {
+    left: calc(90% - 11px);
+  }
+  70%,
+  100% {
+    left: calc(58% - 11px);
+  }
+}
+@keyframes mr-blush {
+  0% {
+    opacity: 0.05;
+  }
+  35% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    opacity: 0.7;
+  }
+}
+@keyframes mr-flash {
+  0% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  45%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes mr-thumb-in {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.5);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes mr-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-220px) scale(0.9);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(14px) scale(1.02);
+  }
+  80% {
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mr-overlay-out {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+@keyframes mr-pop-out {
+  0% {
+    opacity: 0;
+    transform: translate(0, 60px) scale(0.3);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy)) scale(1.12) rotate(var(--r));
+  }
+  100% {
+    opacity: 1;
+    transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r));
+  }
+}
+@keyframes mr-open-x {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes mr-zip {
+  from {
+    left: 4%;
+  }
+  to {
+    left: 86%;
   }
 }

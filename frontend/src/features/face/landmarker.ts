@@ -58,11 +58,28 @@ function gpuName(): string | null {
   return cachedGpuName;
 }
 
+// MediaPipe wasm은 자기 INFO 로그("Created TensorFlow Lite XNNPACK delegate for CPU.")를 stderr →
+// console.error로 내보낸다. 오류가 아니므로 Next 개발 오버레이에 뜨지 않게 거른다.
+// 얼굴 추적기·검출기·피부 분할 모델처럼 MediaPipe 모델을 만드는 곳마다 먼저 부른다.
+let infoFiltered = false;
+export function filterMediapipeInfo() {
+  if (infoFiltered) return;
+  infoFiltered = true;
+  const original = console.error;
+  // TFLite delegate 생성 로그만 거른다. 다른 INFO 접두어는 그대로 오류로 남긴다
+  const MEDIAPIPE_INFO = /^INFO: Created TensorFlow Lite .* delegate/;
+  console.error = (...args: unknown[]) => {
+    if (typeof args[0] === "string" && MEDIAPIPE_INFO.test(args[0])) return console.info(...args);
+    original(...args);
+  };
+}
+
 // 브라우저에서만 호출한다. 서버 렌더링 때 로드되지 않도록 동적으로 import한다.
 export async function createFaceLandmarker(
   confidence: Partial<LandmarkerConfidence> = {},
 ): Promise<FaceLandmarker> {
   const { FaceLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
+  filterMediapipeInfo();
 
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
 
@@ -96,6 +113,7 @@ export async function createFaceLandmarker(
 // 랜드마크 추적은 얼굴 하나만 따라가므로, 가장 큰 얼굴을 확인하는 가벼운 검출기를 따로 둔다.
 export async function createFaceDetector(): Promise<FaceDetector> {
   const { FaceDetector, FilesetResolver } = await import("@mediapipe/tasks-vision");
+  filterMediapipeInfo();
 
   const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_PATH);
 

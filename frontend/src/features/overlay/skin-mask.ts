@@ -1,6 +1,6 @@
 import type { ImageSegmenter, MPMask } from "@mediapipe/tasks-vision";
 
-import { MEDIAPIPE_WASM_PATH } from "@/features/face/landmarker";
+import { filterMediapipeInfo, MEDIAPIPE_WASM_PATH } from "@/features/face";
 
 export const SKIN_SEGMENTER_MODEL_PATH = "/models/selfie_multiclass_256x256.tflite";
 
@@ -13,6 +13,7 @@ const KEEP = 0.4;
 
 async function createSegmenter(): Promise<ImageSegmenter> {
   const { FilesetResolver, ImageSegmenter } = await import("@mediapipe/tasks-vision");
+  filterMediapipeInfo();
   // 모델이 없을 때 GPU 실패로 오해하지 않도록, GPU·CPU를 시도하기 전에 먼저 확인한다.
   const model = await fetch(SKIN_SEGMENTER_MODEL_PATH, { method: "HEAD" });
   if (!model.ok) {

@@ -46,9 +46,12 @@ const VIDEO_SIZE = { width: 1280, height: 720 };
 export function CameraProvider({
   children,
   autoStart = true,
+  errorView = "replace",
 }: {
   children: ReactNode;
   autoStart?: boolean;
+  /** replace: 오류 화면으로 바꿈(확인 화면용). none: 자식을 그대로 두고 화면이 직접 error를 보여 준다 */
+  errorView?: "replace" | "none";
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -259,7 +262,7 @@ export function CameraProvider({
           muted
         />
         <div className="relative flex flex-1 flex-col">
-          {status === "error" && error ? (
+          {status === "error" && error && errorView === "replace" ? (
             <CameraErrorView error={error} onRetry={() => void start()} />
           ) : (
             children

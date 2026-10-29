@@ -56,6 +56,11 @@ const MESSAGES: Record<CameraErrorKind, { title: string; detail: string; retryab
   },
 };
 
+/** 다시 시도하면 달라질 수 있는 오류인지. 안내 카드도 같은 기준으로 버튼을 보여 준다 */
+export function isRetryable(kind: CameraErrorKind) {
+  return MESSAGES[kind].retryable;
+}
+
 export function CameraErrorView({ error, onRetry }: { error: CameraError; onRetry: () => void }) {
   const { title, detail, retryable } = MESSAGES[error.kind];
 

@@ -1,54 +1,134 @@
 "use client";
 
-import Link from "next/link";
+import { ArrowRight, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { applyLandmarkerParams } from "@/features/face";
+import {
+  GlassPanel,
+  LiveNote,
+  LiveTag,
+  RoundBack,
+  parseAlert,
+  useLiveState,
+} from "@/features/live/live-chrome";
 import { MakeupOverlay } from "@/features/overlay";
+import { REF_PRODUCTS, TRY_STEPS } from "@/lib/mock-data";
+import { useQuery } from "@/lib/use-query";
+import { cn } from "@/lib/utils";
 
+// 레시피 연동 전까지는 ?layers=경로 로 레이어 파일을 바꿔 본다.
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
+const PARTS = TRY_STEPS.map((i) => REF_PRODUCTS[i]);
 
+/** 07 미리보기 · 실시간 입혀보기 (PREVIEW-001 · CAMERA-001 · CAMERA-004). ?alert=lost|turn|cover|far|light 는 알림 확인용 */
 export default function PreviewPage() {
-  // 레시피 연동 전까지는 주소로 확인 조건을 바꾼다.
-  //   ?layers=경로  레이어 파일
-  //   ?overlay=off  레이어를 그리지 않음 (추적만 할 때와 성능 비교)
-  //   ?stats        FPS·처리 시간 표시
-  //   ?occlusion=off 앞머리·손 등 가림을 반영하지 않음
-  //   ?delegate=gpu|cpu, ?blendshapes=off  얼굴 추적 실행 방식 (기기별 성능 비교)
-  // 주소를 읽기 전(null)에는 오버레이를 만들지 않는다. 기본값으로 분할 모델을 불렀다가 버리면 비교가 어긋난다.
-  const [options, setOptions] = useState<{
-    layersUrl: string;
-    overlay: boolean;
-    stats: boolean;
-    occlusion: boolean;
-  } | null>(null);
+  const router = useRouter();
+  const query = useQuery();
+  const [bare, setBare] = useState(false);
+  // 진입 직후 2.7초 동안 안내 토스트 (프로토타입의 반짝임 연출을 토스트로 줄임)
+  const [intro, setIntro] = useState(true);
   useEffect(() => {
-    // 카메라를 여는 CameraProvider의 effect보다 먼저 돌아, 추적 모델을 만들기 전에 적용된다.
-    applyLandmarkerParams(window.location.search);
-    const params = new URLSearchParams(window.location.search);
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소창 값은 브라우저에서만 읽을 수 있다
-    setOptions({
-      layersUrl: params.get("layers") ?? DEFAULT_LAYERS,
-      overlay: params.get("overlay") !== "off",
-      stats: params.has("stats"),
-      occlusion: params.get("occlusion") !== "off",
-    });
+    const t = setTimeout(() => setIntro(false), 2700);
+    return () => clearTimeout(t);
   }, []);
+  const alert = parseAlert(query?.get("alert"));
+  const { note, canRender } = useLiveState(alert);
+  const layersUrl = query ? (query.get("layers") ?? DEFAULT_LAYERS) : null;
+  // 알림·카메라 오류·얼굴 없음이면 메이크업을 숨긴다 (CAMERA-004)
+  const hide = bare || !canRender;
 
   return (
-    <main className="relative flex flex-1 flex-col items-center justify-end gap-6 p-8">
-      {options && (
-        <MakeupOverlay
-          layersUrl={options.layersUrl}
-          enabled={options.overlay}
-          showStats={options.stats}
-          occlusion={options.occlusion}
-        />
+    <main className="relative flex flex-1 flex-col">
+      <MakeupOverlay layersUrl={hide ? null : layersUrl} />
+      {note?.live && !note.face && (
+        <div className="pointer-events-none absolute top-[30%] left-1/2 h-[540px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-dashed border-white/55" />
       )}
-      <Button asChild size="lg" className="relative">
-        <Link href="/tutorial">튜토리얼 시작</Link>
-      </Button>
+
+      <div className="pointer-events-none absolute inset-x-5 top-5 flex items-center justify-between gap-3">
+        <LiveTag />
+      </div>
+      <LiveNote note={note} />
+      {intro && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+100%*0)] z-[2] mx-auto mb-[380px] flex w-max items-center gap-2.5 rounded-full bg-ink py-3 pr-5 pl-3.5 text-[16px] font-bold text-white shadow-[0_10px_24px_rgba(58,14,37,.3)]"
+          style={{ animation: "mr-fade 400ms cubic-bezier(.34,1.56,.64,1) both" }}
+        >
+          <Sparkles className="size-5 text-lime" aria-hidden />
+          영상 속 메이크업을 내 얼굴에 입혀 볼게요
+        </div>
+      )}
+
+      <GlassPanel>
+        <div className="flex items-baseline gap-3.5">
+          <span className="shrink-0 font-serif text-[44px] leading-[.9] text-rose italic">
+            Live
+          </span>
+          <h1 className="font-display text-[30px] leading-[1.15] text-white">
+            내 얼굴에 바로 입혀보는 중
+          </h1>
+        </div>
+        <p className="-mt-2 text-[18px] leading-[1.5] text-pretty text-line-2">
+          피부 표현(파운데이션 · 컨실러)은 색 비교가 어려워 빠져요 · {PARTS.length} /{" "}
+          {REF_PRODUCTS.length} 단계 미리보기
+        </p>
+        <div className="-mt-1 grid grid-cols-2 gap-2.5">
+          {[
+            { off: false, label: "메이크업 입히기" },
+            { off: true, label: "민낯으로 보기" },
+          ].map((m) => {
+            const on = bare === m.off;
+            return (
+              <button
+                key={m.label}
+                type="button"
+                onClick={() => setBare(m.off)}
+                aria-pressed={on}
+                className={cn(
+                  "flex min-h-16 items-center justify-center gap-3 rounded-[18px] border px-[18px] transition-colors",
+                  on ? "border-rose/60 bg-white/12" : "border-white/8 bg-white/4",
+                )}
+              >
+                {!m.off && (
+                  <span className="flex shrink-0 pl-1.5">
+                    {PARTS.map((p) => (
+                      <span
+                        key={p.id}
+                        className={cn(
+                          "-ml-1.5 size-[22px] rounded-full border-2",
+                          on ? "border-white" : "border-white/30",
+                        )}
+                        style={{ background: p.color }}
+                      />
+                    ))}
+                  </span>
+                )}
+                <span
+                  className={cn(
+                    "text-[22px] font-bold whitespace-nowrap",
+                    on ? "text-white" : "text-ash",
+                  )}
+                >
+                  {m.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-3">
+          <RoundBack onClick={() => router.push("/select")} label="영상 입력으로" />
+          <button
+            type="button"
+            onClick={() => router.push("/check")}
+            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_rgba(219,19,116,.38)] active:scale-[.98]"
+          >
+            <span className="truncate text-[22px] font-bold">이 메이크업으로 시작하기</span>
+            <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
+              <ArrowRight className="size-[26px]" strokeWidth={2.4} aria-hidden />
+            </span>
+          </button>
+        </div>
+      </GlassPanel>
     </main>
   );
 }

@@ -72,7 +72,7 @@ npm run dev:https
 
 ## 화장 레이어 합성
 
-`/preview`는 카메라 영상 위에 화장 레이어(`layers.json`, AI 파트 출력 규격)를 합성한다. `?layers=경로`로 레이어 파일을 바꿔 볼 수 있다.
+`/debug/preview`는 카메라 영상 위에 화장 레이어(`layers.json`, AI 파트 출력 규격)를 합성한다. `?layers=경로`로 레이어 파일을 바꿔 볼 수 있다. 앱 화면 `/preview`도 같은 합성기와 `?layers=`를 쓴다.
 
 | 주소 옵션                                | 설명                                                                                                                                          |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -96,7 +96,7 @@ npm run dev:https
 
 ## 튜토리얼 가이드
 
-`/tutorial`은 단계별 가이드(`guides.json`)를 얼굴 위에 그린다. 가이드 파일이 없으면 기본 가이드를 쓰고, `?guides=경로`로 가이드 파일을 바꿔 볼 수 있다.
+`/debug/tutorial`은 단계별 가이드(`guides.json`)를 얼굴 위에 그린다. 가이드 파일이 없으면 기본 가이드를 쓰고, `?guides=경로`로 가이드 파일을 바꿔 볼 수 있다. 앱 화면 `/tutorial`도 같은 렌더러와 `?guides=`를 쓴다.
 
 - 도형: `point`(시작점), `polyline`(경로), `polygon`(영역), `arrow`(방향). 위치는 `MeshAnchor`
 - 화장 레이어와 같은 공용 규칙으로 숨기고, 단계를 바꾸면 직전 판정을 버린다
@@ -124,27 +124,48 @@ npm run dev:https
 
 ## 폴더 구조
 
+프로토타입 v11(`Mairor 유저플로우 v11`)의 화면을 그대로 옮겼다. 화면 ID는 [최종 유저플로우 (v11)](https://app.notion.com/p/406dce3252f68144abc8e28875775da0) 순서를 따른다.
+
 ```
 src/
-├─ app/                    # 페이지 (Next.js 규칙)
-│  ├─ layout.tsx           # 전체 공통 레이아웃
-│  ├─ page.tsx             # 메인
-│  ├─ select/page.tsx      # 영상 선택
-│  ├─ (camera)/            # 카메라를 쓰는 페이지 묶음
-│  │  ├─ layout.tsx        # 카메라·얼굴 추적을 여기서 한 번만 시작
-│  │  ├─ preview/page.tsx  # 미리보기
-│  │  └─ tutorial/page.tsx # 단계별 튜토리얼
-│  └─ debug/               # 확인 화면 (face·overlay·api)
-├─ components/ui/          # shadcn/ui 컴포넌트
-├─ features/face/          # 카메라·얼굴 추적 ('use client')
-├─ features/overlay/       # 화장 레이어 합성 ('use client')
-├─ features/guide/         # 튜토리얼 가이드 ('use client')
-└─ lib/                    # 공통 유틸
-   └─ api/                 # BE API 클라이언트·모의 응답
+├─ app/                       # 페이지 (Next.js 규칙)
+│  ├─ layout.tsx              # 폰트 · 세션 저장소
+│  ├─ page.tsx                # 00 인트로
+│  ├─ login/                  # 01 로그인 · 비밀번호 재설정 · Google
+│  ├─ signup/                 # 01-1 회원가입
+│  ├─ onboarding/             # 02-1 온보딩 · 파우치 담기
+│  ├─ (tabs)/                 # 하단 탭이 있는 화면 묶음
+│  │  ├─ home/                # 02 홈
+│  │  └─ my/pouch · my/reports · my/report?id=   # 12 내 파우치 · 13 리포트
+│  ├─ select/                 # 03 영상 입력
+│  ├─ loading/                # 04 로딩 · 얼굴 등록 · 파우치 확인
+│  ├─ (camera)/               # 카메라를 쓰는 연속 화면 (얼굴 화면 유지)
+│  │  ├─ layout.tsx           # 카메라·얼굴 추적을 여기서 한 번만 시작
+│  │  ├─ preview/             # 07 미리보기
+│  │  ├─ check/               # 08 제품 체크 ↔ 입혀보며 고르기
+│  │  ├─ tutorial/guide/      # 09 튜토리얼 안내 · 사진 저장 동의
+│  │  └─ tutorial/            # 10 튜토리얼
+│  ├─ done/                   # 11 완성
+│  └─ debug/                  # 확인 화면 (face·overlay·api·preview·tutorial). 앱 스타일 영향 없이 원래대로 보인다
+├─ components/                # 하단 탭 · 흐름 단계 · ui/ (버튼·입력·안내·모달)
+├─ features/session/          # 로그인·파우치·리포트·실행 상태 (브라우저 저장)
+├─ features/pouch/            # 파우치 보드 · 제품 등록 시트 · 일러스트
+├─ features/auth/ · loading/ · live/ · my/ · tutorial/   # 화면별 조각
+├─ features/face/             # 카메라·얼굴 추적 ('use client')
+├─ features/overlay/          # 화장 레이어 합성 ('use client')
+├─ features/guide/            # 튜토리얼 가이드 ('use client')
+├─ lib/                       # mock-data(샘플 데이터) · validation · 공통 유틸
+│  └─ api/                    # BE API 클라이언트·모의 응답
 scripts/
 ├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
 └─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
+public/
+├─ ill/                       # 파우치 종류 일러스트
+└─ images/                    # 로그인·온보딩 이미지, 샘플 얼굴
 ```
+
+- API 연동 전이라 데이터는 `lib/mock-data.ts`의 샘플이고, 로그인·분석·저장은 타이머로 흉내 낸다.
+- 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`, `/my/pouch?demo=shade-fail`
 
 ## MediaPipe 파일
 
