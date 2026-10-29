@@ -1,0 +1,64 @@
+"""샘플 폴더의 단계마다 도포 영역을 채워 output/guide_area.json으로 저장한다 (개발용).
+
+사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
+실행 (ai/ 폴더에서): uv run python tools/build_guide_area.py samples/local_01_lip_seq
+"""
+
+import sys
+from pathlib import Path
+
+AI_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(AI_ROOT))
+
+from app.schemas.guide_area import GuideArea
+from app.schemas.landmarks import LandmarksResult
+from app.services.guide_area_builder import build_guide_area
+from app.services.reference_input import load_reference_input, read_frame_rgb
+
+CHECKED_FILE = Path("output") / "frames_checked.json"
+OUTPUT_FILE = Path("output") / "guide_area.json"
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        print("사용법: uv run python tools/build_guide_area.py <샘플 폴더>")
+        sys.exit(1)
+
+    folder = Path(sys.argv[1])
+    checked_path = folder / CHECKED_FILE
+    if not checked_path.is_file():
+        print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
+        sys.exit(1)
+
+    reference = load_reference_input(folder)
+    frames = {frame.frame_index: frame for frame in reference.manifest.frames}
+    result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
+    area = build_guide_area(
+        reference.manifest.video_id,
+        reference.manifest.steps,
+        result,
+        lambda row: read_frame_rgb(reference, frames[row.frame_index]),
+    )
+    path = save(area, folder)
+
+    for step in area.steps:
+        for sub_step in step.sub_steps:
+            points = sum(len(g.outline) for s in sub_step.guide_sets for g in s.guides)
+            detail = f"테두리 점 {points}개" if points else ", ".join(sub_step.reasons) or "-"
+            print(f"{sub_step.sub_step_id} {step.makeup}: {sub_step.status} ({detail})")
+    print(f"저장: {path}")
+
+
+def save(area: GuideArea, folder: Path) -> Path:
+    """결과를 <샘플 폴더>/output/guide_area.json에 camelCase로 저장하고 경로를 돌려준다.
+
+    FE·BE와 함께 보는 샘플이라 들여쓰기 2칸으로 줄을 나눠 저장한다.
+    """
+    path = folder / OUTPUT_FILE
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(area.model_dump_json(by_alias=True, indent=2), encoding="utf-8")
+    return path
+
+
+if __name__ == "__main__":
+    main()
