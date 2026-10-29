@@ -2,8 +2,11 @@
 
 테두리의 얼굴 주소를 그 사진의 얼굴 점으로 다시 계산해, 사진 속 입술 위 제자리에 오는지 본다.
 먼저 tools/build_guide_area.py를 실행해 둔다.
+사진 시각(초)을 붙이면 그 시각에 가장 가까운 ok 사진마다 그린다(다른 자세에서 따라가는지 보기).
 저장: output/guide_area_<stepId>_check.jpg (사진의 영역 부분, 왼쪽 그대로 · 오른쪽 테두리)
+      시각을 붙이면 output/guide_area_<stepId>_<초>s_check.jpg
 실행 (ai/ 폴더에서): uv run python tools/draw_guide_area.py samples/local_01_lip_seq
+                     uv run python tools/draw_guide_area.py samples/local_01_lip_seq 473.0 511.0
 """
 
 import json
@@ -17,7 +20,7 @@ AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import GuideArea, MeshAnchor
-from app.schemas.landmarks import Face, LandmarksResult
+from app.schemas.landmarks import Face, FrameLandmarks, LandmarksResult
 from app.services.face_map import MESH_DIR
 from app.services.lip_area import after_rows
 from app.services.reference_input import load_reference_input, read_frame_rgb
@@ -33,8 +36,14 @@ Pixel = tuple[float, float]
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("사용법: uv run python tools/draw_guide_area.py <샘플 폴더>")
+    usage = "사용법: uv run python tools/draw_guide_area.py <샘플 폴더> [사진 시각(초) …]"
+    if len(sys.argv) < 2:
+        print(usage)
+        sys.exit(1)
+    try:
+        seconds = [float(text) for text in sys.argv[2:]]
+    except ValueError:
+        print(usage)
         sys.exit(1)
 
     folder = Path(sys.argv[1])
@@ -62,26 +71,32 @@ def main() -> None:
         ]
         if not outlines:
             continue
-        rows = after_rows(result, ends[step.step_id])
+        if seconds:
+            rows = [_nearest_row(result, s) for s in seconds]
+        else:
+            rows = after_rows(result, ends[step.step_id])[:1]
         if not rows:
             print(f"{step.step_id}: 단계 끝 직후에 그릴 사진이 없습니다.")
             continue
-        row = rows[0]
-        photo = read_frame_rgb(reference, frames[row.frame_index])
-        height, width = photo.shape[:2]
-        lines = [_photo_points(outline, row.face, width, height, triangles) for outline in outlines]
-        path = save(photo, lines, folder, step.step_id)
-        print(
-            f"{step.step_id}: {row.timestamp_ms / 1000:.1f}초 사진, "
-            f"테두리 점 {sum(len(line) for line in lines)}개"
-        )
-        print(f"저장: {path}")
-        drawn += 1
+        for row in rows:
+            photo = read_frame_rgb(reference, frames[row.frame_index])
+            height, width = photo.shape[:2]
+            lines = [
+                _photo_points(outline, row.face, width, height, triangles) for outline in outlines
+            ]
+            name = f"{step.step_id}_{row.timestamp_ms / 1000:.1f}s" if seconds else step.step_id
+            path = save(photo, lines, folder, name)
+            print(
+                f"{step.step_id}: {row.timestamp_ms / 1000:.1f}초 사진, "
+                f"테두리 점 {sum(len(line) for line in lines)}개"
+            )
+            print(f"저장: {path}")
+            drawn += 1
     if not drawn:
         print("그릴 영역이 없습니다.")
 
 
-def save(photo: np.ndarray, lines: list[list[Pixel]], folder: Path, step_id: str) -> Path:
+def save(photo: np.ndarray, lines: list[list[Pixel]], folder: Path, name: str) -> Path:
     """사진의 영역 부분을 잘라 왼쪽은 그대로, 오른쪽은 테두리를 그려 저장하고 경로를 돌려준다."""
     out = folder / "output"
     out.mkdir(exist_ok=True)
@@ -101,9 +116,15 @@ def save(photo: np.ndarray, lines: list[list[Pixel]], folder: Path, step_id: str
     sheet = Image.new("RGB", (left.width * 2, left.height), "white")
     sheet.paste(left, (0, 0))
     sheet.paste(right, (left.width, 0))
-    path = out / f"guide_area_{step_id}_check.jpg"
+    path = out / f"guide_area_{name}_check.jpg"
     sheet.save(path, quality=90)
     return path
+
+
+def _nearest_row(result: LandmarksResult, seconds: float) -> FrameLandmarks:
+    """seconds초에 가장 가까운, 판정이 ok인 사진."""
+    rows = [row for row in result.frames if row.status == "ok"]
+    return min(rows, key=lambda row: abs(row.timestamp_ms - seconds * 1000))
 
 
 def _photo_points(
