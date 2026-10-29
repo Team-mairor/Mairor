@@ -1,9 +1,12 @@
+from collections.abc import Sequence
+
 import cv2
 import numpy as np
 
 from app.services.region_mask import Pixel
 
 MIN_OUTLINE_POINTS = 3
+OUTLINE_TOLERANCE = 1.0
 
 
 def mask_outline(mask: np.ndarray) -> list[Pixel]:
@@ -22,3 +25,19 @@ def mask_outline(mask: np.ndarray) -> list[Pixel]:
     if len(largest) < MIN_OUTLINE_POINTS:
         return []
     return [(float(x), float(y)) for x, y in largest[:, 0, :]]
+
+
+def simplify_outline(outline: Sequence[Pixel], tolerance: float = OUTLINE_TOLERANCE) -> list[Pixel]:
+    """한 바퀴 도는 테두리의 점을 모양을 지키며 줄인다. tolerance는 지도 칸 단위 허용 거리다.
+
+    남은 점을 이은 선에서 tolerance 안에 드는 점은 버리고 꺾이는 점만 남긴다(Douglas-Peucker).
+    원래 점 중에서 고르기만 하고, 서로 가장 먼 두 점은 늘 남는다.
+    들어온 점이나 줄인 결과가 MIN_OUTLINE_POINTS점이 안 되면 빈 목록이다.
+    """
+    if len(outline) < MIN_OUTLINE_POINTS:
+        return []
+    points = np.array(outline, dtype=np.float32).reshape(-1, 1, 2)
+    kept = cv2.approxPolyDP(points, tolerance, True)
+    if len(kept) < MIN_OUTLINE_POINTS:
+        return []
+    return [(float(x), float(y)) for x, y in kept[:, 0, :]]
