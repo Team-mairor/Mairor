@@ -273,9 +273,11 @@ function writePng(path, values) {
   writePng("layers/masks/eyeshadow.png", soft);
 }
 
-// 블러셔: 볼 후보 영역을 넓게 흐린다.
+// 블러셔: 볼 영역 중 광대 쪽 위를 넓게 흐린다. 볼 아래쪽(입꼬리 방향)까지 칠하면 처져 보인다.
 {
-  const { mask } = polygonMask([REGIONS.rightCheek.indices, REGIONS.leftCheek.indices]);
+  const right = [123, 116, 117, 118, 101, 50];
+  const left = [352, 345, 346, 347, 330, 280];
+  const { mask } = polygonMask([right, left]);
   writePng(
     "layers/masks/blush.png",
     blur(mask, 10).map((v) => Math.min(1, v * 1.4)),
