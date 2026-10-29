@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
-  coverTransform,
+  containTransform,
   REGIONS,
   toScreen,
   type FaceFrame,
@@ -143,12 +143,12 @@ export default function DebugOverlayPage() {
       renderer.render({
         video: paintFace(frame),
         frame,
-        view: coverTransform(frame.imageSize, { width, height }, true),
+        view: containTransform(frame.imageSize, { width, height }, true),
         layers,
         mesh,
         drawVideo: true,
       });
-      const view = coverTransform(frame.imageSize, { width, height }, true);
+      const view = containTransform(frame.imageSize, { width, height }, true);
       guide.resize(width, height, dpr);
       guide.render({
         frame,

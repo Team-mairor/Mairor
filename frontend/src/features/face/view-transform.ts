@@ -13,7 +13,18 @@ export function coverTransform(video: Size, container: Size, mirrored: boolean):
   };
 }
 
-/** 화면(container)에 실제로 보이는 원본 프레임 영역. cover로 잘린 부분은 빠진다. */
+/** 영상 전체를 컨테이너 안에 넣어(object-fit: contain) 가운데 정렬할 때의 변환 */
+export function containTransform(video: Size, container: Size, mirrored: boolean): ViewTransform {
+  const scale = Math.min(container.width / video.width, container.height / video.height);
+  return {
+    scale,
+    offsetX: (container.width - video.width * scale) / 2,
+    offsetY: (container.height - video.height * scale) / 2,
+    mirrored,
+  };
+}
+
+/** 화면(container)에 실제로 보이는 원본 프레임 영역. cover면 잘린 부분이 빠지고, contain이면 프레임 전체다. */
 export function visibleRect(image: Size, container: Size, view: ViewTransform): NormalizedRect {
   const clamp = (v: number) => Math.max(0, Math.min(1, v));
   const toX = (sx: number) => (sx - view.offsetX) / (image.width * view.scale);

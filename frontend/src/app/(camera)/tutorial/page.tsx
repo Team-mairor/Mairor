@@ -5,7 +5,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
-import { GuideOverlay, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/features/guide";
+import {
+  GuideOverlay,
+  loadDefaultGuideSet,
+  loadGuideSet,
+  useStepInView,
+  type GuideSet,
+} from "@/features/guide";
 import {
   GlassPanel,
   LiveNote,
@@ -25,6 +31,8 @@ const BLOCK_WHY: Record<LiveReason, string> = {
   turn: "고개를 정면으로 돌려 주세요",
   cover: "손이나 도구를 잠깐 내려 주세요",
   far: "조금 더 가까이 와 주세요",
+  turned: "고개를 정면으로 돌려 주세요",
+  "out-of-frame": "얼굴 전체가 보이게 해 주세요",
   light: "조명이 바뀌었어요",
   error: "카메라를 켤 수 없어요",
   starting: "카메라를 켜는 중이에요",
@@ -51,7 +59,6 @@ export default function TutorialPage() {
   const { state, updateRun, startRun } = useSession();
   const run = state.run;
   const alert = parseAlert(query?.get("alert"));
-  const { note, canRender, canMeasure, reason } = useLiveState(alert);
 
   const [guideSet, setGuideSet] = useState<GuideSet | null>(null);
   const [step, setStep] = useState(0);
@@ -80,6 +87,12 @@ export default function TutorialPage() {
   const guideStep =
     info.guideId == null ? null : (guideSet?.steps.find((s) => s.stepId === info.guideId) ?? null);
   const descOnly = guideSet != null && guideStep == null;
+  // 가까이 다가가 지금 단계 부위만 잘려도 화면 밖으로 잘린 것으로 안내하고 측정을 멈춘다
+  const stepInView = useStepInView(guideStep);
+  const { note, canRender, canMeasure, reason } = useLiveState(
+    alert,
+    stepInView ? null : "out-of-frame",
+  );
   // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가 (CAMERA-004 · GUIDE-013)
   const blocked = !canMeasure;
 

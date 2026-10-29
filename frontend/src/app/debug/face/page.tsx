@@ -9,10 +9,13 @@ import {
   FaceTracker,
   landmarkerInfo,
   coverTransform,
+  faceWidthRatio,
   isGuideVisible,
   REGIONS,
   REGION_NAMES,
   toScreen,
+  TRACKING_ISSUE_TEXT,
+  trackingIssue,
 } from "@/features/face";
 import type { CloseUpMode, FaceFrame, RegionName, TrackerStats } from "@/features/face";
 
@@ -115,7 +118,7 @@ export default function DebugFacePage() {
   const [error, setError] = useState("");
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState<string>();
-  const [resolution, setResolution] = useState(1);
+  const [resolution, setResolution] = useState(0);
   const [controls, setControls] = useState<ControlInfo[]>([]);
   const [lockResult, setLockResult] = useState<Record<string, string> | null>(null);
   const [exposure, setExposure] = useState<{ range: Range; value: number } | null>(null);
@@ -282,6 +285,8 @@ export default function DebugFacePage() {
   }
 
   const frame = hud?.frame;
+  // 카메라를 켜기 전에는 안내를 띄우지 않는다.
+  const issue = hud ? trackingIssue(frame ?? null) : null;
   const running = status === "running";
 
   return (
@@ -373,6 +378,8 @@ export default function DebugFacePage() {
         <dl className="grid max-w-3xl grid-cols-2 gap-x-4 gap-y-1 font-mono text-sm sm:grid-cols-4">
           <dt>state</dt>
           <dd>{frame?.trackingState ?? "얼굴 찾는 중"}</dd>
+          <dt>안내</dt>
+          <dd>{issue ? TRACKING_ISSUE_TEXT[issue].title : "-"}</dd>
           <dt>fps</dt>
           <dd>{hud.stats.fps}</dd>
           <dt>detect</dt>
@@ -387,6 +394,8 @@ export default function DebugFacePage() {
           <dd>{frame ? `${frame.imageSize.width}×${frame.imageSize.height}` : "-"}</dd>
           <dt>iod</dt>
           <dd>{frame ? frame.iod.toFixed(1) : "-"} px</dd>
+          <dt>얼굴 폭 / 영상 폭</dt>
+          <dd>{frame ? faceWidthRatio(frame).toFixed(2) : "-"}</dd>
           <dt>yaw / pitch / roll</dt>
           <dd>
             {frame

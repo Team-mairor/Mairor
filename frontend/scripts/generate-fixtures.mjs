@@ -17,8 +17,11 @@ const { buildDefaultGuideSet, eyelinerPaths, BLUSH_POINTS } =
   await import("../src/features/guide/default-guides.ts");
 // 추적기와 같은 판정 기준을 그대로 쓴다. 값을 바꾸면 픽스처를 다시 생성한다.
 const { MIN_IN_FRAME_RATIO } = await import("../src/features/face/visibility.ts");
-const { DEFAULT_MAX_YAW: MAX_YAW, KEY_REGIONS } =
-  await import("../src/features/face/tracking-rules.ts");
+const {
+  DEFAULT_MAX_YAW: MAX_YAW,
+  KEY_REGIONS,
+  MIN_KEY_REGIONS_IN_VIEW,
+} = await import("../src/features/face/tracking-rules.ts");
 
 const frontendDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const meshDir = join(frontendDir, "../shared/face-mesh");
@@ -124,10 +127,11 @@ function faceFrame({ trackingState, yaw = 0, placement, eyes } = {}) {
           : Math.abs(yaw) < maxYaw;
     regionVisibility[name] = { inFrameRatio: round(inFrame / def.indices.length, 3), facing };
   }
-  const degraded = KEY_REGIONS.some(
+  const inView = KEY_REGIONS.filter(
     (name) =>
-      regionVisibility[name].inFrameRatio < MIN_IN_FRAME_RATIO || !regionVisibility[name].facing,
-  );
+      regionVisibility[name].inFrameRatio >= MIN_IN_FRAME_RATIO && regionVisibility[name].facing,
+  ).length;
+  const degraded = inView < MIN_KEY_REGIONS_IN_VIEW;
 
   return {
     version: "0.2",

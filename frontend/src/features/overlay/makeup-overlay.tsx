@@ -44,11 +44,14 @@ interface Perf {
 /** CameraProvider 안에서 카메라 영상 위에 화장 레이어를 그린다. */
 export function MakeupOverlay({
   layersUrl,
+  hidden = false,
   enabled = true,
   showStats = false,
   occlusion = true,
 }: {
   layersUrl: string | null;
+  /** true면 레이어는 그대로 두고 화장만 그리지 않는다. 다시 보일 때 레이어를 새로 불러오지 않는다 */
+  hidden?: boolean;
   /** false면 그리지 않는다 (추적만 할 때와 성능 비교용) */
   enabled?: boolean;
   /** FPS·처리 시간 표시 */
@@ -63,6 +66,7 @@ export function MakeupOverlay({
   const layersRef = useRef<PreparedLayer[]>([]);
   const viewRef = useRef(viewTransform);
   const showVideoRef = useRef(showVideo);
+  const hiddenRef = useRef(hidden);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [perf, setPerf] = useState<Perf | null>(null);
@@ -107,7 +111,8 @@ export function MakeupOverlay({
   useEffect(() => {
     viewRef.current = viewTransform;
     showVideoRef.current = showVideo;
-  }, [viewTransform, showVideo]);
+    hiddenRef.current = hidden;
+  }, [viewTransform, showVideo, hidden]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -155,8 +160,8 @@ export function MakeupOverlay({
     const now = performance.now();
     const skin = skinRef.current;
     const video = videoRef.current;
-    // 얼굴을 놓쳤으면 칠할 화장이 없어 분할을 쉰다.
-    const tracking = frame && frame.trackingState !== "lost";
+    // 얼굴을 놓쳤거나 화장을 숨겼으면 칠할 곳이 없어 분할을 쉰다.
+    const tracking = frame && frame.trackingState !== "lost" && !hiddenRef.current;
     if (enabled && skin && video && tracking && skinFrame.current++ % SKIN_EVERY === 0) {
       let stopReason: string | null = null;
       try {
@@ -189,7 +194,7 @@ export function MakeupOverlay({
         video,
         frame,
         view: viewRef.current,
-        layers: layersRef.current,
+        layers: hiddenRef.current ? [] : layersRef.current,
         mesh: meshRef.current,
         drawVideo: showVideoRef.current,
         skinMask: skinRef.current?.canvas ?? null,

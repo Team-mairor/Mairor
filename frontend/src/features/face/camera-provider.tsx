@@ -18,7 +18,7 @@ import { CameraError, openCamera } from "./camera";
 import { CameraErrorView } from "./camera-error-view";
 import { FaceTracker, type TrackerStats, VideoStalledError } from "./tracker";
 import type { FaceFrame, ViewTransform } from "./types";
-import { coverTransform, visibleRect } from "./view-transform";
+import { containTransform, visibleRect } from "./view-transform";
 
 export type CameraStatus = "idle" | "starting" | "ready" | "error";
 
@@ -33,6 +33,8 @@ interface CameraContextValue {
   /** 하프미러 앞에서는 영상을 숨기고 가이드만 그린다. */
   showVideo: boolean;
   setShowVideo: (show: boolean) => void;
+  /** 카메라 아래쪽을 덮는 패널. 패널 뒤 부위는 화면 밖으로 판정한다 */
+  setCoverPanel: (panel: HTMLElement | null) => void;
   start: () => Promise<void>;
   stop: () => void;
   subscribe: (listener: FrameListener) => () => void;
@@ -40,7 +42,8 @@ interface CameraContextValue {
 
 const CameraContext = createContext<CameraContextValue | null>(null);
 
-const VIDEO_SIZE = { width: 1280, height: 720 };
+// 전면 센서가 4:3이라 좌우가 덜 잘리고, 1280×720보다 빠르다.
+const VIDEO_SIZE = { width: 640, height: 480 };
 
 // 카메라와 얼굴 추적을 한 번만 시작해 하위 페이지가 함께 쓴다.
 export function CameraProvider({
@@ -64,6 +67,8 @@ export function CameraProvider({
   const [error, setError] = useState<CameraError | null>(null);
   const [showVideo, setShowVideo] = useState(true);
   const [viewTransform, setViewTransform] = useState<ViewTransform | null>(null);
+  const coverPanelRef = useRef<HTMLElement | null>(null);
+  const coverObserverRef = useRef<ResizeObserver | null>(null);
 
   const updateTransform = useCallback(() => {
     const video = videoRef.current;
@@ -71,11 +76,31 @@ export function CameraProvider({
     if (!video?.videoWidth || !container) return;
     const image = { width: video.videoWidth, height: video.videoHeight };
     const size = { width: container.clientWidth, height: container.clientHeight };
-    const view = coverTransform(image, size, true);
+    // 가까이 가도 덜 잘리도록 영상을 자르지 않는다 (위아래는 빈 띠).
+    const view = containTransform(image, size, true);
     setViewTransform(view);
-    // 화면 비율이 달라 잘린 부위는 추적기가 화면 밖으로 판정하게 한다.
-    trackerRef.current?.setOptions({ visibleRect: visibleRect(image, size, view) });
+    // 화면에 안 보이는 부위(패널 뒤 포함)는 추적기가 화면 밖으로 판정한다.
+    const panel = coverPanelRef.current;
+    const covered = panel
+      ? Math.max(0, container.getBoundingClientRect().bottom - panel.getBoundingClientRect().top)
+      : 0;
+    const visible = { width: size.width, height: Math.max(1, size.height - covered) };
+    trackerRef.current?.setOptions({ visibleRect: visibleRect(image, visible, view) });
   }, []);
+
+  const setCoverPanel = useCallback(
+    (panel: HTMLElement | null) => {
+      coverObserverRef.current?.disconnect();
+      coverObserverRef.current = null;
+      coverPanelRef.current = panel;
+      if (panel) {
+        coverObserverRef.current = new ResizeObserver(updateTransform);
+        coverObserverRef.current.observe(panel);
+      }
+      updateTransform();
+    },
+    [updateTransform],
+  );
 
   // start 도중 stop이 호출되면(페이지 이탈, 개발 모드의 effect 재실행) 진행 중인 start를 버린다.
   const sessionRef = useRef(0);
@@ -240,11 +265,12 @@ export function CameraProvider({
       viewTransform,
       showVideo,
       setShowVideo,
+      setCoverPanel,
       start,
       stop,
       subscribe,
     }),
-    [status, error, viewTransform, showVideo, start, stop, subscribe],
+    [status, error, viewTransform, showVideo, setCoverPanel, start, stop, subscribe],
   );
 
   return (
@@ -253,7 +279,7 @@ export function CameraProvider({
         <video
           ref={videoRef}
           className={cn(
-            "absolute inset-0 h-full w-full -scale-x-100 object-cover",
+            "absolute inset-0 h-full w-full -scale-x-100 object-contain",
             !showVideo && "invisible",
           )}
           onLoadedMetadata={updateTransform}

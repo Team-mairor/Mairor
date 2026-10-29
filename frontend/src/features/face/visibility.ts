@@ -2,6 +2,8 @@ import type { FaceFrame, RegionName } from "./types";
 
 /** 부위의 이 비율 이상이 화면 안에 있어야 온전히 보이는 것으로 본다. */
 export const MIN_IN_FRAME_RATIO = 0.9;
+/** 이미 화면 밖으로 본 부위는 이만큼 더 들어와야 다시 보이는 것으로 본다 (경계에서 깜빡이지 않게) */
+export const RECOVER_IN_FRAME_MARGIN = 0.03;
 
 /** 부위가 카메라 쪽을 향하고 충분히 화면 안에 있는지 */
 export function isRegionInView(

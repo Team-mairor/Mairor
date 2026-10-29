@@ -183,7 +183,7 @@ export default function CheckPage() {
   return (
     <main className="relative flex flex-1 flex-col">
       {/* 누르고 있으면 영상 메이크업(원본), 아니면 내가 고른 제품 색. ponytail: 레이어는 같은 파일을 쓰고 전환만 한다 */}
-      <MakeupOverlay layersUrl={canRender ? layersUrl : null} />
+      <MakeupOverlay layersUrl={layersUrl} hidden={!canRender} />
 
       <LiveNote note={note} />
       <div className="absolute inset-x-5 top-5 flex items-center justify-between gap-3">
@@ -265,7 +265,7 @@ export default function CheckPage() {
       )}
 
       {view === "list" ? (
-        <GlassPanel className="top-[84px] gap-[22px] px-0 pt-[30px] pb-5">
+        <GlassPanel className="top-[84px] gap-[22px] px-0 pt-[30px] pb-5" coversFace={false}>
           {swapFor != null && (
             <SwapPanel
               r={REF_PRODUCTS[swapFor]}

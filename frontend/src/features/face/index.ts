@@ -8,7 +8,13 @@ export {
   landmarkerInfo,
   MEDIAPIPE_WASM_PATH,
 } from "./landmarker";
-export { HoldVisibility, isGuideVisible, isRegionInView, MIN_IN_FRAME_RATIO } from "./visibility";
+export {
+  HoldVisibility,
+  isGuideVisible,
+  isRegionInView,
+  MIN_IN_FRAME_RATIO,
+  RECOVER_IN_FRAME_MARGIN,
+} from "./visibility";
 export { REGION_NAMES, regionNamesError, REGIONS } from "./regions";
 export {
   DEFAULT_SMOOTHING,
@@ -18,5 +24,13 @@ export {
   type TrackerStats,
   VideoStalledError,
 } from "./tracker";
-export { coverTransform, toScreen, visibleRect } from "./view-transform";
+export {
+  faceWidthRatio,
+  MIN_FACE_WIDTH_RATIO,
+  TRACKING_ISSUE_TEXT,
+  trackingIssue,
+  useTrackingIssue,
+  type TrackingIssue,
+} from "./tracking-issue";
+export { containTransform, coverTransform, toScreen, visibleRect } from "./view-transform";
 export type * from "./types";

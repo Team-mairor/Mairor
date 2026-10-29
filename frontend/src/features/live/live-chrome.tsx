@@ -1,31 +1,31 @@
 "use client";
 
 import { ArrowLeft } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
-import { isRetryable, useCamera, useFaceFrame, type CameraErrorKind } from "@/features/face";
+import {
+  isRetryable,
+  TRACKING_ISSUE_TEXT,
+  useCamera,
+  useTrackingIssue,
+  type CameraErrorKind,
+  type TrackingIssue,
+} from "@/features/face";
 import { cn } from "@/lib/utils";
 
 interface FaceState {
   face: boolean;
-  far: boolean;
+  /** 공통 추적 판정. 없으면 null */
+  issue: TrackingIssue | null;
 }
 
 const FaceStateContext = createContext<FaceState | null>(null);
 
 /** 추적 상태 요약을 카메라 화면 전체가 한 번만 계산해 나눠 쓴다 (프레임 리스너 1개) */
 export function FaceStateProvider({ children }: { children: ReactNode }) {
-  const [face, setFace] = useState(false);
-  const [far, setFar] = useState(false);
-  useFaceFrame((frame) => {
-    const ok = !!frame && frame.trackingState !== "lost";
-    // 얼굴 폭(IOD 단위 × IOD 픽셀)이 영상 폭의 20% 미만이면 너무 멀다
-    const tooFar =
-      !!frame && ok && (frame.regions.faceOval.width * frame.iod) / frame.imageSize.width < 0.2;
-    setFace((f) => (f === ok ? f : ok));
-    setFar((f) => (f === tooFar ? f : tooFar));
-  });
-  return <FaceStateContext.Provider value={{ face, far }}>{children}</FaceStateContext.Provider>;
+  const issue = useTrackingIssue();
+  const face = issue !== "lost";
+  return <FaceStateContext.Provider value={{ face, issue }}>{children}</FaceStateContext.Provider>;
 }
 
 /** 추적 상태 요약. 프레임마다가 아니라 바뀔 때만 리렌더한다 */
@@ -99,7 +99,7 @@ function useCameraErrorNote(face: boolean): LiveNoteData | null {
 }
 
 /** 가이드·게이지를 멈춘 이유. null이면 정상 */
-export type LiveReason = LiveAlert | "error" | "starting";
+export type LiveReason = LiveAlert | TrackingIssue | "error" | "starting";
 
 export interface LiveState {
   /** 보여 줄 안내 카드. 없으면 null */
@@ -112,12 +112,17 @@ export interface LiveState {
 }
 
 /**
- * 현재 보여 줄 안내와 그릴 수 있는지 여부. 카메라 오류 > 인식 알림 > 거리 > 얼굴 없음 > 준비 중.
+ * 현재 보여 줄 안내와 그릴 수 있는지 여부. 카메라 오류 > 준비 중 > 확인용 알림 > 추적 문제.
  * 세 카메라 화면(미리보기·제품 체크·튜토리얼)은 이 값으로 숨김·측정 불가를 판단한다 (CAMERA-004)
  */
-export function useLiveState(alert?: LiveAlert | null): LiveState {
+export function useLiveState(
+  alert?: LiveAlert | null,
+  /** 화면별 추가 판정. 공통 추적 판정에 문제가 없을 때만 쓴다 */
+  extraIssue?: TrackingIssue | null,
+): LiveState {
   const { status } = useCamera();
-  const { face, far } = useFaceState();
+  const { face, issue: trackIssue } = useFaceState();
+  const issue = trackIssue ?? extraIssue ?? null;
   const err = useCameraErrorNote(face);
   const off = { canRender: false, canMeasure: false };
   if (err) return { note: err, ...off, reason: "error" };
@@ -135,18 +140,13 @@ export function useLiveState(alert?: LiveAlert | null): LiveState {
       canMeasure: false,
       reason: alert,
     };
-  if (!face)
+  if (issue)
     return {
-      note: { title: ALERT.lost[0], desc: ALERT.lost[1], live: true, face },
-      ...off,
-      reason: "lost",
-    };
-  if (far)
-    return {
-      note: { title: ALERT.far[0], desc: ALERT.far[1], live: true, face },
-      canRender: true,
+      note: { ...TRACKING_ISSUE_TEXT[issue], live: true, face },
+      // 너무 멀 때만 그리고, 나머지는 가이드·화장을 숨긴 상태다
+      canRender: issue === "far",
       canMeasure: false,
-      reason: "far",
+      reason: issue,
     };
   return { note: null, canRender: true, canMeasure: true, reason: null };
 }
@@ -213,9 +213,20 @@ export function LiveNote({ note, className }: { note: LiveNoteData | null; class
 }
 
 /** 하단 반투명 패널 */
-export function GlassPanel({ children, className }: { children: ReactNode; className?: string }) {
+export function GlassPanel({
+  children,
+  className,
+  coversFace = true,
+}: {
+  children: ReactNode;
+  className?: string;
+  /** 패널 뒤 얼굴 부위를 화면 밖으로 판정할지. 화면을 거의 덮는 시트는 false */
+  coversFace?: boolean;
+}) {
+  const { setCoverPanel } = useCamera();
   return (
     <div
+      ref={coversFace ? setCoverPanel : undefined}
       className={cn(
         "absolute inset-x-4 bottom-4 flex flex-col gap-5 rounded-[36px] border border-white/10 bg-[rgba(42,10,28,.92)] px-7 pt-6 pb-[18px] text-white shadow-[0_24px_60px_rgba(20,4,12,.45)] backdrop-blur-2xl",
         className,

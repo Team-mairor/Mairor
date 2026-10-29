@@ -2,6 +2,7 @@ import {
   HoldVisibility,
   isGuideVisible,
   isRegionInView,
+  MIN_IN_FRAME_RATIO,
   type FaceFrame,
   type GuideShape,
   type Point,
@@ -49,10 +50,17 @@ const STYLE = {
  * 정확하지 않은 가이드는 보여주지 않는다. 공용 규칙(isGuideVisible)대로 추적이 안정적일 때만 보이고,
  * 단계 부위가 모두 가려지면 숨긴다. 깜빡임(hold) 때의 유지는 GuideRenderer가 직전 판정으로 처리한다.
  */
-export function isStepVisible(step: GuideStep, frame: FaceFrame | null): boolean {
+export function isStepVisible(
+  step: GuideStep,
+  frame: FaceFrame | null,
+  minInFrameRatio = MIN_IN_FRAME_RATIO,
+): boolean {
   if (!frame || !isGuideVisible(frame)) return false;
   if (step.regions.length === 0) return true;
-  return step.regions.some((region) => isRegionInView(frame, region));
+  // 얼굴 전체(faceOval)는 가까이 가면 늘 잘리고, 화면 밖 부분은 그릴 때 알아서 빠지므로 숨기지 않는다.
+  return step.regions.some(
+    (region) => region === "faceOval" || isRegionInView(frame, region, minInFrameRatio),
+  );
 }
 
 /**

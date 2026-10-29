@@ -40,7 +40,7 @@ export default function PreviewPage() {
 
   return (
     <main className="relative flex flex-1 flex-col">
-      <MakeupOverlay layersUrl={hide ? null : layersUrl} />
+      <MakeupOverlay layersUrl={layersUrl} hidden={hide} />
       {note?.live && !note.face && (
         <div className="pointer-events-none absolute top-[30%] left-1/2 h-[540px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-dashed border-white/55" />
       )}

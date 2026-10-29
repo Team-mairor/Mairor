@@ -15,7 +15,7 @@ import {
 } from "./geometry";
 import { createFaceDetector, createFaceLandmarker } from "./landmarker";
 import { REGION_NAMES } from "./regions";
-import { DEFAULT_MAX_YAW, KEY_REGIONS } from "./tracking-rules";
+import { DEFAULT_MAX_YAW, KEY_REGIONS, MIN_KEY_REGIONS_IN_VIEW } from "./tracking-rules";
 import { LandmarkSmoother, type SmoothingOptions } from "./smoothing";
 import type {
   FaceFrame,
@@ -27,7 +27,7 @@ import type {
   RegionVisibility,
   TrackingState,
 } from "./types";
-import { MIN_IN_FRAME_RATIO } from "./visibility";
+import { MIN_IN_FRAME_RATIO, RECOVER_IN_FRAME_MARGIN } from "./visibility";
 
 export type CloseUpMode = "auto" | "on" | "off";
 
@@ -36,7 +36,7 @@ export interface TrackerOptions {
   holdMs: number;
   /** 이 각도(라디안)를 넘게 돌리면 반대쪽 부위를 보이지 않는 것으로 본다 */
   maxYaw: number;
-  /** 이 비율보다 화면 밖으로 나간 핵심 부위가 있으면 degraded */
+  /** 핵심 부위는 화면 안 비율이 이 값 이상이어야 보이는 것으로 친다 */
   minInFrameRatio: number;
   /** 화면에 실제로 보이는 원본 프레임 영역. null이면 프레임 전체 */
   visibleRect: NormalizedRect | null;
@@ -75,15 +75,17 @@ const DEFAULT_OPTIONS: TrackerOptions = {
   closedBlink: 0.5,
   blinkThreshold: 0.4,
   closeUp: "auto",
-  closeUpMinScale: 0.5,
+  // 얼굴이 화면을 크게 넘칠 만큼 다가가도 잡히도록 넉넉히 줄인다.
+  closeUpMinScale: 0.3,
   closeUpIodRatio: 0.22,
-  reliableMinScale: 0.75,
+  // 480px 폭에서 최대로 줄이면 얼굴이 약 144px로 랜드마크 모델 입력(192px)보다 작아지지만,
+  // 갤럭시탭 S6 Lite에서 이 거리까지 부위 위치가 맞는 것을 확인해 축소 배율로는 degraded로 보지 않는다.
+  reliableMinScale: 0,
   smoothing: DEFAULT_SMOOTHING,
 };
 
 // 기준값 경계에서 상태가 프레임마다 바뀌지 않도록, degraded에서 돌아올 때는 이만큼 더 넘어야 한다.
 const RECOVER_SCALE_MARGIN = 0.05;
-const RECOVER_IN_FRAME_MARGIN = 0.03;
 // 근접 배율이 1 근처에서 오가며 여백이 흔들리지 않도록 1로 붙이고 떼는 기준을 다르게 둔다.
 const SNAP_TO_FULL = 0.97;
 const LEAVE_FULL = 0.9;
@@ -514,11 +516,10 @@ export class FaceTracker {
     const wasDegraded = this.lastState === "degraded";
     const scaleLimit = reliableMinScale + (wasDegraded ? RECOVER_SCALE_MARGIN : 0);
     const inFrameLimit = minInFrameRatio + (wasDegraded ? RECOVER_IN_FRAME_MARGIN : 0);
-    const degraded =
-      scale < scaleLimit ||
-      KEY_REGIONS.some(
-        (name) => visibility[name].inFrameRatio < inFrameLimit || !visibility[name].facing,
-      );
+    const inView = KEY_REGIONS.filter(
+      (name) => visibility[name].inFrameRatio >= inFrameLimit && visibility[name].facing,
+    ).length;
+    const degraded = scale < scaleLimit || inView < MIN_KEY_REGIONS_IN_VIEW;
 
     const frame: FaceFrame = {
       version: "0.2",

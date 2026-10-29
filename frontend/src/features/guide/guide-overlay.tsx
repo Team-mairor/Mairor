@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  MIN_IN_FRAME_RATIO,
+  RECOVER_IN_FRAME_MARGIN,
   regionNamesError,
   REGIONS,
   toScreen,
@@ -15,7 +17,7 @@ import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/featur
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 import { buildDefaultGuideSet } from "./default-guides";
-import { GuideRenderer } from "./renderer";
+import { GuideRenderer, isStepVisible } from "./renderer";
 import type { GuideSet, GuideStep } from "./types";
 
 function anchorsOf(guide: GuideShape): MeshAnchor[] {
@@ -79,6 +81,28 @@ export function loadDefaultGuideSet(): Promise<GuideSet> {
       throw e;
     });
   return defaultGuideSet;
+}
+
+/**
+ * 지금 단계 부위가 화면 안에 보이는지. 바뀔 때만 다시 그린다.
+ * 추적이 불안정할 때는 추적 판정이 따로 안내하므로 직전 값을 유지한다.
+ */
+export function useStepInView(step: GuideStep | null): boolean {
+  const [inView, setInView] = useState(true);
+  const stepRef = useRef(step);
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+  useFaceFrame((frame) => {
+    if (frame?.trackingState !== "tracking") return;
+    // 추적기처럼 한번 숨긴 뒤에는 조금 더 들어와야 다시 보이게 해 경계에서 깜빡이지 않게 한다.
+    setInView((prev) => {
+      const limit = MIN_IN_FRAME_RATIO + (prev ? 0 : RECOVER_IN_FRAME_MARGIN);
+      const next = !stepRef.current || isStepVisible(stepRef.current, frame, limit);
+      return prev === next ? prev : next;
+    });
+  });
+  return inView;
 }
 
 /** CameraProvider 안에서 지금 단계의 가이드를 얼굴 위에 그린다. */
