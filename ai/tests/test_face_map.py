@@ -1,11 +1,24 @@
 import json
 
 import numpy as np
+import pytest
 
+from app.schemas.guide_area import MeshAnchor
 from app.schemas.landmarks import Face, Point, Pose
-from app.services.face_map import MAP_SIZE, MESH_DIR, flatten, map_points, median_map
+from app.services.face_map import (
+    BARY_DIGITS,
+    MAP_SIZE,
+    MESH_DIR,
+    flatten,
+    map_points,
+    median_map,
+    points_to_anchors,
+)
 
 UV = np.array(json.loads((MESH_DIR / "uv.v1.json").read_text(encoding="utf-8"))["uv"])
+TRIANGLES = np.array(
+    json.loads((MESH_DIR / "triangles.v1.json").read_text(encoding="utf-8"))["triangles"]
+)
 WHITE = (255, 255, 255)
 
 
@@ -49,3 +62,31 @@ def test_median_keeps_the_majority_color():
     red = np.full((2, 2, 3), (200, 50, 50), dtype=np.uint8)
     hand = np.full((2, 2, 3), (230, 180, 160), dtype=np.uint8)
     assert np.array_equal(median_map([red, hand, red]), red)
+
+
+def back_to_map(anchor: MeshAnchor) -> np.ndarray:
+    """주소를 지도 위치로 되돌린다. FE resolveAnchor와 같은 계산을 지도 자리에 한다."""
+    return np.array(anchor.bary) @ (UV[TRIANGLES[anchor.triangle]] * MAP_SIZE)
+
+
+def test_no_points_give_no_anchors():
+    assert points_to_anchors([]) == []
+
+
+def test_anchors_point_back_to_cell_centers():
+    cells = [(554.0, 658.0), (390.0, 711.0), (512.0, 300.0), (300.0, 500.0)]
+    for cell, anchor in zip(cells, points_to_anchors(cells), strict=True):
+        assert np.abs(back_to_map(anchor) - (np.array(cell) + 0.5)).max() < 0.01
+        assert sum(anchor.bary) == pytest.approx(1, abs=1e-9)
+        assert all(round(ratio, BARY_DIGITS) == ratio for ratio in anchor.bary)
+
+
+def test_known_lip_cell_keeps_its_address():
+    anchor = points_to_anchors([(554.0, 658.0)])[0]
+    assert anchor == MeshAnchor(triangle=292, bary=(0.3182, 0.3541, 0.3277))
+
+
+def test_cell_outside_face_uses_nearest_piece_with_a_negative_ratio():
+    anchor = points_to_anchors([(512.0, 982.0)])[0]
+    assert min(anchor.bary) < 0
+    assert np.abs(back_to_map(anchor) - (512.5, 982.5)).max() < 0.01
