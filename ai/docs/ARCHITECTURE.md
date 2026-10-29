@@ -15,6 +15,7 @@ ai/
 │  ├─ clients/          외부 호출: 이미지 받기, Claude(GMS), 네이버 검색
 │  ├─ schemas/          요청·응답 모델
 │  │  └─ common.py      CamelModel, ErrorResponse
+│  ├─ prompts/          LLM 지시문 (txt)
 │  └─ core/             앱 전체 공통
 │     ├─ config.py      환경변수 설정
 │     └─ errors.py      공통 오류 형식, AppError
@@ -92,6 +93,7 @@ api ──► services ──► clients
 ```
 
 - `api`는 요청·응답만 다룬다. 로직은 `services`에 둔다.
+- `services`는 결과만 돌려준다. 결과를 저장하거나 내보내는 일(작업 상태 보관, 콜백 전송)은 `api`가 맡는다.
 - 외부 API 호출은 `clients`에만 둔다. 테스트에서 가짜로 바꾸기 쉽다.
 - `schemas`, `core`는 `api`·`services`·`clients`를 import 하지 않는다.
 

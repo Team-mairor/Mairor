@@ -58,7 +58,7 @@ uv run streamlit run tools/guide_viewer.py    # http://localhost:8501
 입력 형식(`app/schemas/guide.py`의 `GuideInput`)을 고치면 BE와 함께 쓰는 스키마도 다시 만듭니다. 방법과 규칙은 [shared/guide-input/README.md](../shared/guide-input/README.md)에 있습니다.
 
 ```bash
-uv run python tools/export_guide_schema.py    # → shared/guide-input/guide_input.v1.schema.json
+uv run python tools/export_guide_schema.py    # → shared/guide-input/, shared/guide-job/
 ```
 
 ## Gemini 영상 시험
@@ -108,6 +108,15 @@ result.usage   # 입력·출력·생각 토큰
 - GMS는 키를 `x-api-key` 헤더에서만 읽습니다. SDK 기본값인 `Authorization: Bearer`로 보내면 401이 나서 `x-api-key`로 보냅니다.
 - 테스트는 `tests/fakes.py`의 `FakeLlm`으로 바꿔 끼웁니다.
 
+## 가이드 생성 API
+
+BE가 가이드 입력을 보내면 바로 202로 접수하고, 백그라운드에서 단계마다 Claude로 설명을 만든 뒤 BE가 준 주소로 결과를 보냅니다(콜백). BE와 맞춘 요청·콜백 형식, 실패 코드, 콜백 재시도는 [docs/references/ai-api.md](../docs/references/ai-api.md)에 있습니다.
+
+- 작업은 서버 메모리에만 있어서 서버가 다시 시작되면 사라집니다. 끝난 작업은 1시간 뒤 지웁니다.
+- 형식(`app/schemas/guide_job.py`)을 고치면 공유 스키마를 다시 만듭니다 (`uv run python tools/export_guide_schema.py`).
+- 지시문은 `app/prompts/step_explanation.txt`입니다. 단계 설명 모델 비교의 프롬프트 v2에 대표 장면 이미지 한 줄을 더했습니다.
+- 근거 번호(`sources`)와 쓰지 않은 입력(`unused`)은 BE에 보내지 않고 로그에 남깁니다. 설명 원문은 `LOG_LEVEL=DEBUG`일 때만 남깁니다.
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.
@@ -124,6 +133,10 @@ result.usage   # 입력·출력·생각 토큰
 | `LLM_MAX_TOKENS` | `16000` | 답 최대 토큰. 생각 토큰 포함 |
 | `LLM_TIMEOUT_SECONDS` | `60` | 한 번 시도의 제한 시간 |
 | `LLM_MAX_RETRIES` | `2` | 시간 초과·408·409·429·5xx일 때 다시 시도하는 횟수 |
+| `LLM_MAX_CONCURRENCY` | `50` | 서버 전체에서 동시에 보내는 Claude 호출 수. 가이드 작업이 겹치면 나눠 씀. GMS는 동시 60개까지 429 없음 (10.29 측정) |
+| `CALLBACK_TIMEOUT_SECONDS` | `10` | 콜백 한 번의 제한 시간 |
+| `CALLBACK_MAX_RETRIES` | `3` | 콜백을 다시 보내는 횟수 |
+| `CALLBACK_RETRY_DELAY_SECONDS` | `1` | 첫 재시도 전 대기. 다음부터 5배씩 늘어남 |
 
 `CLAUDE_`로 시작하는 이름은 쓰지 않습니다. Claude Code가 `CLAUDE_EFFORT` 같은 환경변수를 넣어 두어서 설정이 바뀝니다.
 

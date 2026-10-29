@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ErrorDetail": {
+      "properties": {
+        "field": {
+          "title": "Field",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "reason"
+      ],
+      "title": "ErrorDetail",
+      "type": "object"
+    },
+    "ErrorResponse": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ErrorDetail"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorResponse",
+      "type": "object"
+    },
+    "ExplainedGuide": {
+      "properties": {
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ExplainedStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "steps"
+      ],
+      "title": "ExplainedGuide",
+      "type": "object"
+    },
+    "ExplainedStep": {
+      "description": "단계 화면 아래에 한 번에 보이는 설명. 동작 순서대로, 팁은 동작에 붙는다.",
+      "properties": {
+        "stepId": {
+          "title": "Stepid",
+          "type": "string"
+        },
+        "order": {
+          "title": "Order",
+          "type": "integer"
+        },
+        "actions": {
+          "items": {
+            "$ref": "#/$defs/StepAction"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "doneWhen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Donewhen"
+        }
+      },
+      "required": [
+        "stepId",
+        "order",
+        "actions"
+      ],
+      "title": "ExplainedStep",
+      "type": "object"
+    },
+    "StepAction": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "tip": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepTip"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "StepAction",
+      "type": "object"
+    },
+    "StepTip": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "tip",
+            "caution"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "StepTip",
+      "type": "object"
+    }
+  },
+  "description": "콜백 본문. COMPLETED면 guide, FAILED면 error가 들어간다.",
+  "properties": {
+    "jobId": {
+      "title": "Jobid",
+      "type": "string"
+    },
+    "videoId": {
+      "title": "Videoid",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "COMPLETED",
+        "FAILED"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "guide": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExplainedGuide"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ErrorResponse"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "jobId",
+    "videoId",
+    "status"
+  ],
+  "title": "GuideJobResult",
+  "type": "object"
+}

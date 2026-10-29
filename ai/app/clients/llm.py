@@ -5,6 +5,7 @@
 서비스 코드는 Llm 모양에만 기대고, 테스트는 tests/fakes.py의 FakeLlm으로 바꿔 끼운다.
 """
 
+import asyncio
 import base64
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -77,6 +78,9 @@ class ClaudeLlm:
 
     SDK는 키를 Authorization: Bearer로 보내서 GMS가 401을 낸다.
     그래서 Bearer를 빼고 x-api-key로 보낸다.
+
+    키 하나를 모든 요청이 같이 쓰므로 동시 호출 수(llm_max_concurrency)도 이 객체가 센다.
+    자리가 날 때까지 기다리는 시간은 llm_timeout_seconds에 들어가지 않는다.
     """
 
     def __init__(
@@ -85,6 +89,7 @@ class ClaudeLlm:
         self._model = settings.llm_model
         self._effort = settings.llm_effort
         self._max_tokens = settings.llm_max_tokens
+        self._slots = asyncio.Semaphore(settings.llm_max_concurrency)
         self._client = None
         if settings.gms_api_key:
             key = settings.gms_api_key.get_secret_value()
@@ -105,16 +110,20 @@ class ClaudeLlm:
         content: list[ImageBlockParam | TextBlockParam] = [_image_block(image) for image in images]
         content.append({"type": "text", "text": text})
         try:
-            message = await self._client.messages.create(
-                model=self._model,
-                max_tokens=self._max_tokens,
-                system=system,
-                messages=[{"role": "user", "content": content}],
-                output_config={
-                    "effort": self._effort,
-                    "format": {"type": "json_schema", "schema": anthropic.transform_schema(output)},
-                },
-            )
+            async with self._slots:
+                message = await self._client.messages.create(
+                    model=self._model,
+                    max_tokens=self._max_tokens,
+                    system=system,
+                    messages=[{"role": "user", "content": content}],
+                    output_config={
+                        "effort": self._effort,
+                        "format": {
+                            "type": "json_schema",
+                            "schema": anthropic.transform_schema(output),
+                        },
+                    },
+                )
         except anthropic.APITimeoutError as e:
             raise LlmError("retryable", "Claude 응답 시간이 초과됐습니다") from e
         except anthropic.APIConnectionError as e:

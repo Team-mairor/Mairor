@@ -188,6 +188,35 @@ def test_output_outside_format_is_invalid(text):
     fails(ok(text=text), "invalid_output")
 
 
+def test_calls_beyond_concurrency_wait_for_a_free_slot():
+    """가이드 작업이 여러 개여도 같은 ClaudeLlm을 쓴다.
+
+    그래서 서버 전체 동시 호출 수가 llm_max_concurrency를 넘지 않는다.
+    """
+    active = peak = 0
+
+    async def slow(request: httpx2.Request) -> httpx2.Response:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.02)
+        active -= 1
+        return httpx2.Response(200, json=message_json())
+
+    http = anthropic.DefaultAsyncHttpxClient(transport=httpx2.MockTransport(slow))
+    llm = ClaudeLlm(make_settings(llm_max_concurrency=2), http_client=http)
+
+    async def five_calls():
+        return await asyncio.gather(
+            *(llm.generate(system="s", text="t", images=[], output=Answer) for _ in range(5))
+        )
+
+    results = asyncio.run(five_calls())
+
+    assert len(results) == 5
+    assert peak == 2
+
+
 def test_settings_hide_key():
     settings = make_settings()
 

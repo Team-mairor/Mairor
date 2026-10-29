@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     llm_max_tokens: int = Field(default=16000, gt=0)
     llm_timeout_seconds: float = Field(default=60, gt=0)
     llm_max_retries: int = Field(default=2, ge=0)
+    llm_max_concurrency: int = Field(default=50, gt=0)
+
+    callback_timeout_seconds: float = Field(default=10, gt=0)
+    callback_max_retries: int = Field(default=3, ge=0)
+    callback_retry_delay_seconds: float = Field(default=1, ge=0)
 
     @property
     def is_prod(self) -> bool:

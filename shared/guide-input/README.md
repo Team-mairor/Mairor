@@ -29,4 +29,4 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 서버만 검사�
 2. `ai/`에서 `uv run python tools/export_guide_schema.py`로 스키마를 다시 만든다. 안 하면 `uv run pytest`가 실패한다.
 3. MR 리뷰어에 BE 담당을 넣는다.
 
-BE가 보내던 JSON이 거절되는 변경(칸 삭제·이름 변경, 필수 칸 추가, 범위 좁히기)이면 `export_guide_schema.py`의 `SCHEMA_VERSION`을 올려 새 파일로 만들고, BE가 옮긴 뒤 이전 파일을 지운다.
+BE가 보내던 JSON이 거절되는 변경(칸 삭제·이름 변경, 필수 칸 추가, 범위 좁히기)이면 `export_guide_schema.py`에서 파일 이름의 버전을 올려 새 파일로 만들고, BE가 옮긴 뒤 이전 파일을 지운다.

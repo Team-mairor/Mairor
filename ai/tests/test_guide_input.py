@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from app.clients.image_store import ImageFetchError, fetch_image
 from app.core.errors import AppError
 from app.schemas.guide import GuideInput
-from app.services.guide_input import MAX_IMAGE_BYTES, load_step_images
+from app.services.guide_input import MAX_IMAGE_BYTES, load_step_images, move_misplaced_facts
 
 SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "guide_input.json"
 URL = "https://storage.example.com/s1-1.jpg"
@@ -186,3 +186,34 @@ def test_fetch_image_reads_up_to_limit_and_reports_http_errors():
             fetch_image(f"{base}/missing.jpg", 100)
     finally:
         server.shutdown()
+
+
+def test_tips_outside_step_move_to_the_step_at_that_time():
+    second = copy.deepcopy(VALID["steps"][0]) | {
+        "stepId": "s2",
+        "order": 2,
+        "startSeconds": 30.0,
+        "endSeconds": 40.0,
+        "images": [{"url": URL, "at": 32.0}],
+        "facts": {"tips": [{"value": "겹친 팁", "source": "voice", "at": 35.0}]},
+    }
+    tips = [
+        {"value": "구간 안", "source": "voice", "at": 15.0},
+        {"value": "구간 끝 5초 안", "source": "voice", "at": 24.0},
+        {"value": "시각 없음", "source": "voice"},
+        {"value": "옆 단계 것", "source": "voice", "at": 33.0},
+        {"value": "겹친 팁", "source": "voice", "at": 36.0},
+    ]
+    cautions = [{"value": "옆 단계 주의", "source": "voice", "at": 38.0}]
+    data = make_input(facts={"tips": tips, "cautions": cautions})
+    data["steps"].append(second)
+    original = GuideInput.model_validate(data)
+
+    moved = move_misplaced_facts(original)
+
+    first, last = moved.steps
+    assert [t.value for t in first.facts.tips] == ["구간 안", "구간 끝 5초 안", "시각 없음"]
+    assert first.facts.cautions == []
+    assert [t.value for t in last.facts.tips] == ["겹친 팁", "옆 단계 것"]
+    assert [c.value for c in last.facts.cautions] == ["옆 단계 주의"]
+    assert len(original.steps[0].facts.tips) == 5
