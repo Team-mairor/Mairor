@@ -24,12 +24,21 @@ function barycentric(p: Uv, [a, b, c]: Uv[]): [number, number, number] {
 /** 메시 UV 위의 점을 MeshAnchor로 바꾸는 도구 */
 function anchorTools(mesh: FaceMesh) {
   const uvPt = (i: number): Uv => ({ x: mesh.uv[i][0], y: mesh.uv[i][1] });
+  // 점마다 삼각형 전체를 훑으므로 꼭짓점 UV는 한 번만 꺼내 둔다.
+  const triangleUvs = mesh.triangles.map((tri) => tri.map(uvPt));
+  // 랜드마크가 꼭짓점인 첫 삼각형과 그 안의 자리. 꼭짓점 그대로인 기준점은 훑지 않고 바로 쓴다.
+  const vertexSlots = new Map<number, { triangle: number; slot: number }>();
+  mesh.triangles.forEach((tri, triangle) =>
+    tri.forEach((vertex, slot) => {
+      if (!vertexSlots.has(vertex)) vertexSlots.set(vertex, { triangle, slot });
+    }),
+  );
 
   /** 점을 품은 삼각형 기준으로 바꾼다. 삼각형 밖이면 가장 가까운 삼각형 (음수 비율) */
   const anchorAt = (p: Uv): MeshAnchor => {
     let best: { index: number; bary: [number, number, number]; outside: number } | null = null;
-    mesh.triangles.forEach((tri, index) => {
-      const bary = barycentric(p, tri.map(uvPt));
+    triangleUvs.forEach((uvs, index) => {
+      const bary = barycentric(p, uvs);
       const outside = -Math.min(...bary);
       if (!best || outside < best.outside) best = { index, bary, outside };
     });
@@ -40,7 +49,13 @@ function anchorTools(mesh: FaceMesh) {
   };
 
   /** 랜드마크 i */
-  const at = (i: number) => anchorAt(uvPt(i));
+  const at = (i: number): MeshAnchor => {
+    const hit = vertexSlots.get(i);
+    if (!hit) return anchorAt(uvPt(i));
+    const bary: [number, number, number] = [0, 0, 0];
+    bary[hit.slot] = 1;
+    return { triangle: hit.triangle, bary };
+  };
   /** 랜드마크 i에서 j 쪽으로 t만큼 간 자리 */
   const between = (i: number, j: number, t = 0.5) =>
     anchorAt({

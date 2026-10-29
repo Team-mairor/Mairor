@@ -65,9 +65,20 @@ export async function loadGuideSet(url: string): Promise<GuideSet> {
   return { ...set, steps };
 }
 
-/** 외부 가이드 없이 쓰는 9개 부위 기본 가이드 */
-export async function loadDefaultGuideSet(): Promise<GuideSet> {
-  return buildDefaultGuideSet(await loadFaceMesh(), REGIONS);
+let defaultGuideSet: Promise<GuideSet> | null = null;
+
+/**
+ * 외부 가이드 없이 쓰는 9개 부위 기본 가이드. 만드는 데 시간이 걸려 한 번만 만들고 같이 쓴다.
+ * 돌려받은 값은 공유 캐시이므로 직접 수정하지 말고, 정렬·가공할 때는 필요한 배열이나 객체를 복사한다.
+ */
+export function loadDefaultGuideSet(): Promise<GuideSet> {
+  defaultGuideSet ??= loadFaceMesh()
+    .then((mesh) => buildDefaultGuideSet(mesh, REGIONS))
+    .catch((e) => {
+      defaultGuideSet = null;
+      throw e;
+    });
+  return defaultGuideSet;
 }
 
 /** CameraProvider 안에서 지금 단계의 가이드를 얼굴 위에 그린다. */
