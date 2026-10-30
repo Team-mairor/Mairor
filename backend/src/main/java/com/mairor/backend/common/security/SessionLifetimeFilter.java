@@ -36,6 +36,7 @@ public class SessionLifetimeFilter extends OncePerRequestFilter {
   private final Clock clock;
   private final ErrorResponseWriter errorWriter;
   private final RequestMatcher publicPaths;
+  private final SessionEndNotifier sessionEnd;
 
   /**
    * @param publicPaths 인증 없이 열려 있는 경로. 만료된 세션이어도 요청을 막지 않고 통과시킨다
@@ -44,11 +45,13 @@ public class SessionLifetimeFilter extends OncePerRequestFilter {
       SessionLifetimePolicy policy,
       Clock clock,
       ErrorResponseWriter errorWriter,
-      RequestMatcher publicPaths) {
+      RequestMatcher publicPaths,
+      SessionEndNotifier sessionEnd) {
     this.policy = policy;
     this.clock = clock;
     this.errorWriter = errorWriter;
     this.publicPaths = publicPaths;
+    this.sessionEnd = sessionEnd;
   }
 
   @Override
@@ -66,14 +69,41 @@ public class SessionLifetimeFilter extends OncePerRequestFilter {
       return;
     }
 
+    String userId = SecurityContextHolder.getContext().getAuthentication().getName();
+    boolean isPublicPath = publicPaths.matches(request);
     SecurityContextHolder.clearContext();
     request.setAttribute(SessionAttributes.COOKIE_REFRESH_SUPPRESSED, Boolean.TRUE);
-    session.invalidate();
-    if (publicPaths.matches(request)) {
+
+    if (endSession(userId, session, isPublicPath)) {
+      session.invalidate();
+    }
+    if (isPublicPath) {
       chain.doFilter(request, response);
       return;
     }
     errorWriter.write(response, ErrorCode.UNAUTHORIZED);
+  }
+
+  /**
+   * 종료 훅을 호출하고 세션을 지워도 되는지 돌려준다. 훅이 실패하면 세션을 남긴다(다음 요청이나 유휴 만료 정리에서 다시 시도). 남아 있어도 요청마다 만료로 판정되므로 쓸
+   * 수 없는 세션이다.
+   *
+   * <p>단 공개 경로(로그인 등)는 요청이 그대로 이어지는데, 만료된 세션을 남겨 두면 로그인이 그 세션을 이어 받아 버린다. 그래서 이 경우는 훅이 실패해도 세션을
+   * 지운다(실패는 로그·지표로 남는다).
+   */
+  private boolean endSession(String userId, HttpSession session, boolean isPublicPath) {
+    SessionEnd end = new SessionEnd(userId, session.getId(), SessionEndReason.ABSOLUTE_EXPIRED);
+    if (isPublicPath) {
+      sessionEnd.bestEffort(end);
+      return true;
+    }
+    try {
+      sessionEnd.strict(end);
+      return true;
+    } catch (RuntimeException e) {
+      // 실패는 알림 처리기가 이미 로그·지표로 남겼다
+      return false;
+    }
   }
 
   private boolean isExpired(HttpSession session) {

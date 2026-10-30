@@ -68,6 +68,10 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `SESSION_TIMEOUT` | `3d` | 서버 세션 유휴 만료. 마지막 인증 요청으로부터 이 시간이 지나면 다시 로그인해야 한다 |
 | `SESSION_COOKIE_MAX_AGE` | `3d` | 세션 쿠키 최대 수명. 인증 요청이 성공하면 이 값으로 갱신된다(절대 만료까지 남은 시간이 더 짧으면 그 값) |
 | `SESSION_ABSOLUTE_TIMEOUT` | `30d` | 절대 만료. 로그인 성공 시점부터 이 시간이 지나면 활동 중이어도 다시 로그인한다. 일반 요청으로 연장하지 않는다. 쿠키 최대 수명 ≤ 유휴 만료 ≤ 절대 만료 여야 하며 어긋나면 기동 실패 |
+| `SESSION_SWEEP_ENABLED` | `true` | 만료된 세션을 지우는 정리 작업을 예약한다. Spring Session 의 기본 정리 작업은 꺼 두었고(`spring.session.jdbc.cleanup-cron: "-"`) 이 작업이 대신한다. 지우기 전에 세션 종료 훅(`SessionEndHook`)을 호출하기 위해서다. `false` 면 **만료된 세션 행을 아무도 지우지 않으니** 테스트·점검에만 끈다 |
+| `SESSION_SWEEP_INTERVAL` | `1m` | 정리 작업 실행 간격(이전 실행이 끝난 뒤부터). 만료된 세션의 종료 훅은 만료 직후가 아니라 이 간격만큼 늦게 호출된다 |
+| `SESSION_SWEEP_BATCH_SIZE` | `100` | 한 번 실행에서 정리를 시도하는 세션 수의 상한. 넘으면 다음 실행에서 이어서 한다 |
+| `SESSION_SWEEP_RETRY_DELAY` | `5m` | 정리에 실패한(훅 또는 삭제 실패) 세션을 다시 시도하기까지 기다리는 시간. 그동안은 건너뛰어서 계속 실패하는 세션이 뒤의 정상 세션을 막지 않는다 |
 | `LOGIN_MAX_FAILURES` | `3` | 로그인 시도 제한. 이메일 하나에서 확정 실패가 이 횟수에 닿으면 잠근다. 진행 중인 시도도 이 수에 포함되어 동시에 이보다 많이 시도할 수 없다. 5회로 올릴 예정 |
 | `LOGIN_LOCK_DURATION` | `30s` | 로그인 시도 제한으로 잠그는 시간. 잠금 중에는 비밀번호가 맞아도 429 |
 | `LOGIN_ATTEMPT_TTL` | `15m` | 마지막 시도 후 실패 횟수를 기억하는 시간 |
@@ -150,8 +154,56 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `mairor.login.attempts` | `result`: `success` `invalid_credentials` `locked` `pending` `saturated` `gate_rejected` `error` | 로그인 결과. `locked`·`pending`·`saturated` 는 시도 제한 사유, `gate_rejected` 는 동시 처리 상한 거절 |
 | `mairor.session.failures` | `cause`: `store_unavailable` `corrupted_session` `unexpected` | 필터 단계의 세션 조회·저장·삭제 실패. 조회·저장·삭제 중 어느 쪽인지는 나누지 않는다(로그의 스택으로 본다) |
 | `mairor.session.cookie_refresh.failures` | 없음 | 세션 쿠키 갱신 실패. 갱신이 실패해도 업무 응답은 그대로 나간다 |
+| `mairor.session.end_hook.failures` | `reason`: `logout` `device_revoked` `all_devices_revoked` `replaced_by_login` `absolute_expired` `idle_expired` | 세션 종료 훅이 실패한 횟수. 어느 훅인지는 로그로 본다 |
+| `mairor.session.sweep.removed` / `mairor.session.sweep.failed` | 없음 | 만료된 세션을 정리 작업이 지운 횟수 / 지우지 못해(훅 또는 삭제 실패) 다음으로 미룬 횟수. 실패가 계속 늘면 종료 훅이 막혀 있는 것이다 |
 
 - 지표를 내보내는 방법(`/actuator/metrics`, Prometheus 등)과 알림 기준은 아직 정하지 않았다. 지금 노출하는 actuator 엔드포인트는 `health` 뿐이다. 노출 방식은 배포 환경(S15P31A306-203)에서 정한다.
+
+### 세션 종료 연동 지점 (`SessionEndHook`)
+
+세션에 묶인 데이터를 정리해야 하는 쪽(예: 가이드 중도 종료가 진행 중인 실행을 `ABANDONED` 로 바꾸는 일, S15P31A306-191)은 `SessionEndHook` 을 구현해 빈으로 등록한다. 세션이 끝나는 **모든 경로**에서 지우기 **전에** 호출된다. 구현이 하나도 없으면 아무 일도 일어나지 않는다.
+
+```java
+@Component
+class AbandonUnfinishedExecutions implements SessionEndHook {
+  @Override
+  public void beforeSessionEnds(SessionEnd end) {   // end.userId(), end.sessionId(), end.reason()
+    executions.abandonUnfinishedOf(end.sessionId());   // 멱등하게 (예시)
+  }
+}
+```
+
+| 종료 이유 (`SessionEndReason`) | 언제 | 훅이 실패하면 |
+|---|---|---|
+| `LOGOUT` | 로그아웃. 기기 목록에서 현재 기기를 지정해 지운 경우도 포함 | 세션을 지우지 않고 오류 응답(500, 저장소 장애면 503). 로그인은 유지되고 같은 요청으로 재시도 |
+| `DEVICE_REVOKED` | 다른 기기 로그아웃 | 그 기기를 지우지 않고 오류 응답. 재시도 가능 |
+| `ALL_DEVICES_REVOKED` | 전체 로그아웃(세션마다 한 번, 현재 기기가 마지막) | 실패한 기기와 현재 기기는 남기고 나머지는 계속 처리한 뒤 오류 응답. 같은 요청으로 마무리 |
+| `REPLACED_BY_LOGIN` | 로그인된 쿠키로 다시 로그인하거나 다른 계정으로 전환해 이전 인증 세션이 대체됨 | 로그인은 막지 않는다. 이전 세션은 지워지고 실패는 로그·지표로만 남음 |
+| `ABSOLUTE_EXPIRED` | 로그인한 지 절대 만료 시간이 지남(요청이 올 때 발견) | 세션을 남기고 401 로 응답. 다음 요청에서 다시 시도. 단 로그인처럼 인증 없이 열린 경로로 온 요청은 만료 세션을 이어 쓰면 안 되므로 훅이 실패해도 지우고 계속 진행 |
+| `IDLE_EXPIRED` | 마지막 요청으로부터 유휴 만료 시간이 지남. 정리 작업(`ExpiredSessionSweeper`)이 호출 | 그 세션을 남기고 `SESSION_SWEEP_RETRY_DELAY` 뒤에 다시 시도 |
+
+**구현이 지켜야 할 것**
+- **멱등이어야 한다.** 같은 세션에 두 번 이상 호출될 수 있다(실패 후 재시도, 정리 작업의 재시도, 서버 여러 대의 동시 정리). 최소 한 번 호출됨(at-least-once)이 보장이고 정확히 한 번은 보장하지 않는다.
+- 요청 스레드에서 **동기**로 호출된다. 오래 걸리는 일은 비동기로 넘기고 빠른 상태 변경만 한다. 세션 삭제 트랜잭션 밖에서 호출되므로 필요하면 자기 트랜잭션을 연다.
+- **`end.userId()`·`end.sessionId()` 만 믿는다.** 세션이 이미 만료됐을 수 있어 세션 속성은 읽지 않는다. 특히 `IDLE_EXPIRED` 에서 `sessions.findById()` 를 부르지 않는다. 만료된 세션에 `findById` 를 부르면 Spring Session 이 그 행을 지워 버린다.
+- 세션 ID 는 비밀 값이다. 로그·응답·지표에 내보내지 않는다(`SessionEnd#toString` 은 가려 준다).
+- 여러 구현이 있으면 `@Order` 순으로 호출된다. 엄격한 경로(로그아웃 계열, 절대 만료, 유휴 만료)에서는 앞 구현이 실패하면 뒤 구현은 호출되지 않는다.
+
+**한계**
+- 유휴 만료의 훅은 만료 직후가 아니라 정리 주기(`SESSION_SWEEP_INTERVAL`, 기본 1분)만큼 늦게 호출된다. Spring Session JDBC 는 만료 이벤트를 발행하지 않아서, Spring 의 기본 정리 작업을 끄고 `ExpiredSessionSweeper` 가 대신한다.
+- 세션 행을 DB 에서 직접 지우는 등 이 경로들을 거치지 않고 사라지는 세션에는 호출되지 않는다.
+- 훅이 영구히 실패하면 그 세션의 만료된 행이 남아 매 재시도 때 훅이 다시 호출된다. 사용자에게는 영향이 없다(쓸 수 없는 상태). `mairor.session.end_hook.failures`, `mairor.session.sweep.failed` 로 알아챈다. 재시도 시각은 서버 메모리에만 있어서 재시작하면 즉시 다시 시도한다.
+- 서버를 여러 대 두면 같은 만료 행에 두 서버가 동시에 훅을 부를 수 있다(멱등으로 흡수).
+
+### 소유권 규칙 (회원 데이터)
+
+회원 데이터(파우치, 실행, 기록, 얼굴 등록 등)를 다루는 API 는 아래를 지킨다. 공용 도우미 코드는 아직 없다(쓸 도메인이 없다). 첫 도메인이 필요로 할 때 그 이슈에서 만든다. 기기 관리(`UserSessionService`)가 이미 이 규칙을 지킨다.
+
+- **남의 데이터는 없는 것과 똑같이 `404 NOT_FOUND`** 로 응답한다(같은 코드·메시지). `403` 으로 구분하면 "그 ID 에는 남의 데이터가 있다"는 사실이 새어 나간다.
+- **조회할 때부터 소유자 조건을 건다.** `findByIdAndUserId(id, principal.userId())` 처럼 내 것만 찾는다. 먼저 `findById` 로 찾은 뒤 비교하는 방식은 비교를 빠뜨리기 쉽다.
+- 소유자는 **`@AuthenticationPrincipal AuthenticatedUser` 의 `userId()`** 로만 정한다. 요청 본문이나 경로로 받은 userId 를 믿지 않는다(경로는 `/users/me/...`).
+- 목록 조회도 소유자 조건으로 거른다. 존재 여부를 응답 개수나 순서로 드러내지 않는다.
+- 도메인마다 "다른 회원의 리소스 → 404" 테스트를 하나 둔다. 본보기: `UserSessionControllerTest.anotherUsersDeviceCannotBeLoggedOut`.
 
 ### 운영 전 확인 (코드에 있는 것과 적용 확인된 것은 다르다)
 

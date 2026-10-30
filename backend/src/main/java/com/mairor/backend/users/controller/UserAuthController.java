@@ -6,6 +6,8 @@ import com.mairor.backend.users.dto.request.LoginRequest;
 import com.mairor.backend.users.dto.response.LoginResponse;
 import com.mairor.backend.users.service.UserAccountService;
 import com.mairor.backend.users.service.UserLoginService;
+import com.mairor.backend.users.service.UserSessionService;
+import com.mairor.backend.users.support.AuthenticatedUser;
 import com.mairor.backend.users.support.CurrentSessionEnder;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -17,12 +19,14 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,11 +53,15 @@ public class UserAuthController {
 
   private final UserLoginService userLoginService;
   private final UserAccountService userAccountService;
+  private final UserSessionService userSessionService;
 
   public UserAuthController(
-      UserLoginService userLoginService, UserAccountService userAccountService) {
+      UserLoginService userLoginService,
+      UserAccountService userAccountService,
+      UserSessionService userSessionService) {
     this.userLoginService = userLoginService;
     this.userAccountService = userAccountService;
+    this.userSessionService = userSessionService;
   }
 
   /** 로그인 (API-USERS-002). 성공하면 세션 쿠키와, 이후 변경 요청에 쓸 {@code csrfToken} 을 준다. */
@@ -162,12 +170,20 @@ public class UserAuthController {
       responseCode = "204",
       description = "로그아웃됐다.",
       headers = @Header(name = "Set-Cookie", description = AuthApiDocs.SET_COOKIE_EXPIRED))
+  @ApiResponse(
+      responseCode = "500",
+      description = "세션을 정리하지 못해 로그아웃하지 못했다. 로그인은 유지되니 같은 요청을 다시 보낸다. (INTERNAL_ERROR)")
   @AuthApiDocs.Unauthorized
   @AuthApiDocs.CsrfRejected
   @PostMapping("/logout")
   @ResponseStatus(HttpStatus.NO_CONTENT)
-  public void logout(HttpServletRequest request) {
-    // TODO(GUIDE-011): 미완료 실행을 ABANDONED 로 바꾸고 사진 접근을 막는다. 세션 폐기 이전에 실행해야 한다
+  public void logout(
+      @AuthenticationPrincipal AuthenticatedUser principal, HttpServletRequest request) {
+    HttpSession session = request.getSession(false);
+    if (session != null) {
+      // 세션을 끝내기 전에 종료 훅(SessionEndHook)이 호출된다. 훅이 실패하면 예외가 나고 세션은 남는다
+      userSessionService.beforeLogout(principal.userId(), session.getId());
+    }
     CurrentSessionEnder.end(request);
   }
 

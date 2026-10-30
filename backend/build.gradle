@@ -83,4 +83,6 @@ tasks.named('test') {
     // 개발자 .env 의 값(메일 발송·가입 이메일 인증 요구)이 테스트 결과를 바꾸지 않도록 고정한다. 필요한 테스트는 properties 로 직접 켠다
     environment 'MAIL_ENABLED', 'false'
     environment 'SIGNUP_REQUIRE_EMAIL_VERIFICATION', 'false'
+    // 만료 세션 정리 작업이 테스트 중에 끼어들지 않게 끈다. 정리 작업을 검증하는 테스트는 properties 로 직접 켜거나 직접 실행한다
+    environment 'SESSION_SWEEP_ENABLED', 'false'
 }

@@ -12,6 +12,10 @@ import org.springframework.stereotype.Component;
  *       조회·저장·삭제 중 어느 쪽이었는지는 예외만으로는 알 수 없어서 나누지 않는다. 로그의 스택으로 확인한다.
  *   <li>{@code mairor.session.cookie_refresh.failures}: 세션 쿠키 갱신 실패 횟수. 갱신이 실패해도 업무 응답은 그대로 나가므로,
  *       반복되는지는 이 지표로 본다.
+ *   <li>{@code mairor.session.end_hook.failures{reason}}: 세션 종료 훅({@link SessionEndHook})이 실패한 횟수.
+ *       {@code reason} 은 {@link SessionEndReason} 의 소문자 이름이다. 어느 훅이 실패했는지는 로그로 본다.
+ *   <li>{@code mairor.session.sweep.removed} / {@code mairor.session.sweep.failed}: 만료된 세션을 정리 작업이
+ *       지운 횟수 / 지우지 못해(훅 또는 삭제 실패) 다음으로 미룬 횟수. 실패가 계속 늘면 종료 훅이 막혀 있는 것이다.
  * </ul>
  */
 @Component
@@ -19,6 +23,9 @@ public class SessionMetrics {
 
   static final String FAILURES = "mairor.session.failures";
   static final String COOKIE_REFRESH_FAILURES = "mairor.session.cookie_refresh.failures";
+  static final String END_HOOK_FAILURES = "mairor.session.end_hook.failures";
+  static final String SWEEP_REMOVED = "mairor.session.sweep.removed";
+  static final String SWEEP_FAILED = "mairor.session.sweep.failed";
 
   private final MeterRegistry registry;
 
@@ -32,7 +39,21 @@ public class SessionMetrics {
         .increment();
   }
 
+  void sweepRemoved() {
+    registry.counter(SWEEP_REMOVED).increment();
+  }
+
+  void sweepFailed() {
+    registry.counter(SWEEP_FAILED).increment();
+  }
+
   void cookieRefreshFailure() {
     registry.counter(COOKIE_REFRESH_FAILURES).increment();
+  }
+
+  void endHookFailure(SessionEndReason reason) {
+    registry
+        .counter(END_HOOK_FAILURES, "reason", reason.name().toLowerCase(java.util.Locale.ROOT))
+        .increment();
   }
 }

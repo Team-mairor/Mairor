@@ -2,8 +2,10 @@ package com.mairor.backend.users.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -11,10 +13,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.mairor.backend.common.security.SessionAttributes;
+import com.mairor.backend.common.security.SessionEnd;
+import com.mairor.backend.common.security.SessionEndHook;
+import com.mairor.backend.common.security.SessionEndNotifier;
+import com.mairor.backend.common.security.SessionEndReason;
 import com.mairor.backend.common.security.SessionLifetimePolicy;
+import com.mairor.backend.common.security.SessionMetrics;
 import com.mairor.backend.testsupport.MutableClock;
 import com.mairor.backend.users.dto.response.SessionItemResponse;
 import com.mairor.backend.users.support.UserSessionAttributes;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -25,6 +33,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.MapSession;
 
@@ -41,7 +51,19 @@ class UserSessionServiceTest {
   private final FindByIndexNameSessionRepository<MapSession> sessions =
       mock(FindByIndexNameSessionRepository.class);
 
+  private final SessionEndHook hook = mock(SessionEndHook.class);
+  private final SessionEndNotifier notifier = notifierWith(hook);
   private UserSessionService service;
+
+  private static SessionEndNotifier notifierWith(SessionEndHook... hooks) {
+    DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
+    for (int i = 0; i < hooks.length; i++) {
+      factory.registerSingleton("hook" + i, hooks[i]);
+    }
+    return new SessionEndNotifier(
+        factory.getBeanProvider(SessionEndHook.class),
+        new SessionMetrics(new SimpleMeterRegistry()));
+  }
 
   @BeforeEach
   void setUp() {
@@ -51,7 +73,10 @@ class UserSessionServiceTest {
         .thenReturn(Map.of());
     service =
         new UserSessionService(
-            sessions, new SessionLifetimePolicy(THREE_DAYS, THREE_DAYS, THIRTY_DAYS), clock);
+            sessions,
+            new SessionLifetimePolicy(THREE_DAYS, THREE_DAYS, THIRTY_DAYS),
+            notifier,
+            clock);
   }
 
   /** 기기 정보가 모두 있는 유효한 세션. */
@@ -170,7 +195,7 @@ class UserSessionServiceTest {
     device("phone", phoneRef, "Safari · iOS", Instant.now());
     device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
 
-    Optional<String> revoked = service.revoke(userId, phoneRef);
+    Optional<String> revoked = service.revoke(userId, phoneRef, "tablet");
 
     assertThat(revoked).contains("phone");
     verify(sessions).deleteById("phone");
@@ -181,7 +206,7 @@ class UserSessionServiceTest {
   void revokingAnUnknownReferenceDeletesNothing() {
     device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
 
-    assertThat(service.revoke(userId, UUID.randomUUID())).isEmpty();
+    assertThat(service.revoke(userId, UUID.randomUUID(), null)).isEmpty();
 
     verify(sessions, never()).deleteById(anyString());
   }
@@ -193,7 +218,7 @@ class UserSessionServiceTest {
     UUID otherUser = UUID.randomUUID();
 
     // 조회는 호출한 회원의 principal 로만 하므로 다른 회원의 sessionRef 로는 찾을 수 없다
-    assertThat(service.revoke(otherUser, ref)).isEmpty();
+    assertThat(service.revoke(otherUser, ref, null)).isEmpty();
 
     verify(sessions, never()).deleteById(anyString());
   }
@@ -203,7 +228,7 @@ class UserSessionServiceTest {
     UUID ref = UUID.randomUUID();
     device("idle-expired", ref, "Chrome · Windows", Instant.now().minus(Duration.ofDays(4)));
 
-    assertThat(service.revoke(userId, ref)).isEmpty();
+    assertThat(service.revoke(userId, ref, null)).isEmpty();
   }
 
   // ---- 전체 로그아웃 ----
@@ -299,5 +324,127 @@ class UserSessionServiceTest {
     assertThat(service.revokeAll(UUID.randomUUID())).isZero();
 
     verify(sessions, never()).deleteById(anyString());
+  }
+
+  // ---- 종료 훅 ----
+
+  private static SessionEnd end(String sessionId, SessionEndReason reason, UUID user) {
+    return new SessionEnd(user.toString(), sessionId, reason);
+  }
+
+  @Test
+  void beforeLogoutCallsTheHookWithTheLogoutReason() {
+    service.beforeLogout(userId, "tablet");
+
+    verify(hook).beforeSessionEnds(end("tablet", SessionEndReason.LOGOUT, userId));
+  }
+
+  @Test
+  void beforeLogoutPropagatesAFailingHookSoTheCallerKeepsTheSession() {
+    doThrow(new IllegalStateException("cleanup failed")).when(hook).beforeSessionEnds(any());
+
+    assertThatThrownBy(() -> service.beforeLogout(userId, "tablet"))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void revokeCallsTheHookBeforeDeletingTheDevice() {
+    UUID phoneRef = UUID.randomUUID();
+    device("phone", phoneRef, "Safari · iOS", Instant.now());
+
+    service.revoke(userId, phoneRef, "tablet");
+
+    InOrder order = inOrder(hook, sessions);
+    order.verify(hook).beforeSessionEnds(end("phone", SessionEndReason.DEVICE_REVOKED, userId));
+    order.verify(sessions).deleteById("phone");
+  }
+
+  @Test
+  void revokingTheCurrentDeviceUsesTheLogoutReason() {
+    UUID ref = UUID.randomUUID();
+    device("tablet", ref, "Chrome · Windows", Instant.now());
+
+    service.revoke(userId, ref, "tablet");
+
+    verify(hook).beforeSessionEnds(end("tablet", SessionEndReason.LOGOUT, userId));
+  }
+
+  @Test
+  void aFailingHookKeepsTheDeviceAndPropagates() {
+    UUID phoneRef = UUID.randomUUID();
+    device("phone", phoneRef, "Safari · iOS", Instant.now());
+    doThrow(new IllegalStateException("cleanup failed")).when(hook).beforeSessionEnds(any());
+
+    assertThatThrownBy(() -> service.revoke(userId, phoneRef, "tablet"))
+        .isInstanceOf(IllegalStateException.class);
+
+    verify(sessions, never()).deleteById(anyString());
+  }
+
+  @Test
+  void anUnknownReferenceDoesNotCallTheHook() {
+    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+
+    assertThat(service.revoke(userId, UUID.randomUUID(), "tablet")).isEmpty();
+
+    verify(hook, never()).beforeSessionEnds(any());
+  }
+
+  @Test
+  void revokeAllCallsTheHookForEverySessionBeforeDeletingIt() {
+    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+
+    service.revokeAll(userId, "current");
+
+    InOrder order = inOrder(hook, sessions);
+    order
+        .verify(hook)
+        .beforeSessionEnds(end("phone", SessionEndReason.ALL_DEVICES_REVOKED, userId));
+    order.verify(sessions).deleteById("phone");
+    order
+        .verify(hook)
+        .beforeSessionEnds(end("current", SessionEndReason.ALL_DEVICES_REVOKED, userId));
+    order.verify(sessions).deleteById("current");
+  }
+
+  @Test
+  void revokeAllKeepsTheSessionWhoseHookFailedAndTheCurrentOneButTriesTheRest() {
+    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    device("blocked", UUID.randomUUID(), "Safari · iOS", Instant.now());
+    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    doThrow(new IllegalStateException("cleanup failed"))
+        .when(hook)
+        .beforeSessionEnds(end("blocked", SessionEndReason.ALL_DEVICES_REVOKED, userId));
+
+    assertThatThrownBy(() -> service.revokeAll(userId, "current"))
+        .isInstanceOf(IllegalStateException.class);
+
+    verify(sessions).deleteById("tablet");
+    verify(sessions, never()).deleteById("blocked");
+    verify(sessions, never()).deleteById("current");
+    // 현재 기기는 다른 기기가 모두 정리되기 전에는 훅도 호출하지 않는다
+    verify(hook, never())
+        .beforeSessionEnds(end("current", SessionEndReason.ALL_DEVICES_REVOKED, userId));
+  }
+
+  @Test
+  void revokeAllWithoutACurrentSessionCallsTheHookForEverySession() {
+    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+
+    assertThat(service.revokeAll(userId)).isEqualTo(2);
+
+    verify(hook).beforeSessionEnds(end("phone", SessionEndReason.ALL_DEVICES_REVOKED, userId));
+    verify(hook).beforeSessionEnds(end("tablet", SessionEndReason.ALL_DEVICES_REVOKED, userId));
+  }
+
+  @Test
+  void revokeAllNeverCallsTheHookForAnotherUsersSessions() {
+    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+
+    service.revokeAll(UUID.randomUUID(), "x");
+
+    verify(hook, never()).beforeSessionEnds(any());
   }
 }

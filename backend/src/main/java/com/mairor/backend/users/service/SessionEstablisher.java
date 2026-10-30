@@ -2,6 +2,9 @@ package com.mairor.backend.users.service;
 
 import com.mairor.backend.common.security.AuthenticationState;
 import com.mairor.backend.common.security.SessionAttributes;
+import com.mairor.backend.common.security.SessionEnd;
+import com.mairor.backend.common.security.SessionEndNotifier;
+import com.mairor.backend.common.security.SessionEndReason;
 import com.mairor.backend.users.entity.User;
 import com.mairor.backend.users.support.AuthenticatedUser;
 import com.mairor.backend.users.support.CurrentSessionEnder;
@@ -39,16 +42,19 @@ public class SessionEstablisher {
   private final SecurityContextRepository securityContextRepository;
   private final CsrfTokenRepository csrfTokenRepository;
   private final CsrfTokenRequestHandler csrfTokenRequestHandler;
+  private final SessionEndNotifier sessionEnd;
   private final Clock clock;
 
   public SessionEstablisher(
       SecurityContextRepository securityContextRepository,
       CsrfTokenRepository csrfTokenRepository,
       CsrfTokenRequestHandler csrfTokenRequestHandler,
+      SessionEndNotifier sessionEnd,
       Clock clock) {
     this.securityContextRepository = securityContextRepository;
     this.csrfTokenRepository = csrfTokenRepository;
     this.csrfTokenRequestHandler = csrfTokenRequestHandler;
+    this.sessionEnd = sessionEnd;
     this.clock = clock;
   }
 
@@ -135,6 +141,12 @@ public class SessionEstablisher {
       request.getSession(true);
     } else if (AuthenticationState.isAuthenticated(
         SecurityContextHolder.getContext().getAuthentication())) {
+      // 이전 인증 세션이 새 로그인으로 대체된다. 정리 실패가 로그인을 막으면 안 되므로 실패는 로그·지표로만 남긴다
+      sessionEnd.bestEffort(
+          new SessionEnd(
+              SecurityContextHolder.getContext().getAuthentication().getName(),
+              existing.getId(),
+              SessionEndReason.REPLACED_BY_LOGIN));
       existing.invalidate();
       request.getSession(true);
     } else {

@@ -103,6 +103,9 @@ public class UserSessionController {
           "기기를 로그아웃시켰다. 다른 기기를 지정했으면 현재 기기의 세션 쿠키가 평소처럼 갱신되어 내려오고,"
               + " 자기 자신을 지정했으면 만료 쿠키(Max-Age=0)가 내려온다.",
       headers = @Header(name = "Set-Cookie", description = AuthApiDocs.SET_COOKIE_REFRESHED))
+  @ApiResponse(
+      responseCode = "500",
+      description = "세션을 정리하지 못해 그 기기를 로그아웃하지 못했다. 기기는 그대로이니 같은 요청을 다시 보낸다. (INTERNAL_ERROR)")
   @AuthApiDocs.Unauthorized
   @AuthApiDocs.CsrfRejected
   @AuthApiDocs.DeviceNotFound
@@ -115,13 +118,14 @@ public class UserSessionController {
       @AuthenticationPrincipal AuthenticatedUser principal,
       HttpServletRequest request) {
     Optional<UUID> ref = parse(sessionRef);
-    // TODO(GUIDE-011): 지워지는 세션의 미완료 실행을 ABANDONED 로 바꾼다. 세션을 지우기 이전에 실행해야 한다
+    HttpSession current = request.getSession(false);
+    String currentId = current == null ? null : current.getId();
+    // 세션을 지우기 전에 종료 훅이 호출된다(SessionEndHook). 훅이 실패하면 세션을 지우지 않고 예외가 난다
     Optional<String> revoked =
-        ref.flatMap(value -> userSessionService.revoke(principal.userId(), value));
+        ref.flatMap(value -> userSessionService.revoke(principal.userId(), value, currentId));
     if (revoked.isEmpty()) {
       throw new BusinessException(ErrorCode.NOT_FOUND);
     }
-    HttpSession current = request.getSession(false);
     if (current != null && current.getId().equals(revoked.get())) {
       CurrentSessionEnder.end(request);
     }
@@ -154,7 +158,7 @@ public class UserSessionController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void revokeAll(
       @AuthenticationPrincipal AuthenticatedUser principal, HttpServletRequest request) {
-    // TODO(GUIDE-011): 지워지는 세션들의 미완료 실행을 ABANDONED 로 바꾼다. 세션을 지우기 이전에 실행해야 한다
+    // 세션마다 지우기 전에 종료 훅이 호출된다(SessionEndHook). 훅이 실패한 세션과 현재 기기는 남는다
     HttpSession current = request.getSession(false);
     userSessionService.revokeAll(principal.userId(), current == null ? null : current.getId());
     CurrentSessionEnder.end(request);

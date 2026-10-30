@@ -116,8 +116,8 @@ API-USERS-003 · POST /api/v1/users/logout
 관련 기능: USERS-002 · USERS-003 · GUIDE-011
 
 - 회원·CSRF 필요. Body 없음. 204 본문 없음. 만료 쿠키(Max-Age=0)가 내려간다.
-- 현재 세션의 미완료 실행을 ABANDONED로 전환하고 단계 사진·연결 얼굴 등록 이미지 접근을 차단·정리 예약한 뒤 세션·쿠키 폐기. 실패 시 성공 응답 금지. 다른 기기의 세션·완료 기록 유지. (구현 상태: 세션·쿠키 폐기까지 구현, 실행 ABANDONED 전환·사진 접근 차단은 GUIDE-011 구현 때 같은 지점에 추가 — `TODO(GUIDE-011)`)
-- 오류: 403 CSRF\_INVALID(CSRF 토큰 없음·불일치, 세션이 없는 요청 포함) · 401 UNAUTHORIZED(절대 만료로 세션이 끝난 요청 포함). FE는 403이면 내 계정 조회로 확인해 200이면 새 토큰으로 한 번만 재시도하고, 401이면 이미 로그아웃된 상태로 정리한다.
+- 현재 세션의 미완료 실행을 ABANDONED로 전환하고 단계 사진·연결 얼굴 등록 이미지 접근을 차단·정리 예약한 뒤 세션·쿠키 폐기. 실패 시 성공 응답 금지. 다른 기기의 세션·완료 기록 유지. (구현 상태: 세션을 끝내기 전에 세션 종료 훅 `SessionEndHook`(이유 LOGOUT)을 호출하는 연동 지점까지 구현. 실행 ABANDONED 전환·사진 접근 차단은 GUIDE-011 이 훅을 구현해 붙인다. 훅이 실패하면 세션을 지우지 않고 500 INTERNAL\_ERROR(저장소 장애면 503)로 응답하며 로그인은 유지되므로 같은 요청을 다시 보낸다)
+- 오류: 403 CSRF\_INVALID(CSRF 토큰 없음·불일치, 세션이 없는 요청 포함) · 401 UNAUTHORIZED(절대 만료로 세션이 끝난 요청 포함) · 500 INTERNAL\_ERROR(세션 정리 실패, 로그인 유지). FE는 403이면 내 계정 조회로 확인해 200이면 새 토큰으로 한 번만 재시도하고, 401이면 이미 로그아웃된 상태로 정리한다.
 </toggle>
 
 <toggle>
@@ -541,8 +541,8 @@ DELETE /api/v1/users/me/sessions/\{sessionRef\}
 
 - 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
 - 요청: Path <code>sessionRef</code> string 필수. 성공 204 본문 없음
-- 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 404 NOT\_FOUND(없는 값·형식 오류·이미 끝난 기기·다른 회원의 값을 구분하지 않음)
-- 정책: 다른 기기를 지정하면 현재 기기는 그대로 유지되고 쿠키는 평소처럼 갱신된다. 자기 자신을 지정하면 로그아웃과 같아 만료 쿠키가 내려간다. 지워지는 세션의 미완료 실행 처리는 API-USERS-003과 같다(GUIDE-011)
+- 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 404 NOT\_FOUND(없는 값·형식 오류·이미 끝난 기기·다른 회원의 값을 구분하지 않음) · 500 INTERNAL\_ERROR(그 기기의 세션 정리 실패, 기기는 그대로이니 재시도)
+- 정책: 다른 기기를 지정하면 현재 기기는 그대로 유지되고 쿠키는 평소처럼 갱신된다. 자기 자신을 지정하면 로그아웃과 같아 만료 쿠키가 내려간다. 지워지는 세션의 미완료 실행 처리는 API-USERS-003과 같다: 세션을 지우기 전에 종료 훅을 호출하고(이유 DEVICE_REVOKED, 현재 기기를 지정하면 LOGOUT) 훅이 실패하면 그 기기를 지우지 않는다(GUIDE-011)
 
 ### API-USERS-016 · 전체 기기 로그아웃
 
@@ -551,7 +551,7 @@ DELETE /api/v1/users/me/sessions
 - 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
 - 요청 필드 없음. 성공 204 본문 없음. 현재 기기도 함께 로그아웃되고 만료 쿠키가 내려간다
 - 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 500 INTERNAL\_ERROR(일부 기기를 끊지 못함)
-- 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓸 예정이다(S15P31A306-210)
+- 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 세션마다 지우기 전에 종료 훅을 호출하고(이유 ALL\_DEVICES\_REVOKED) 훅이 실패한 기기는 지우지 않는다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓸 예정이다(S15P31A306-210)
 
 ### API-VIDEO-006 · 분석 재시도
 
@@ -696,6 +696,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 - 서버 세션(Spring Session JDBC, PostgreSQL) 쿠키는 \_\_Host-sessionId, HttpOnly·Secure·SameSite=Strict·Path=/·Domain 없음. JWT는 쓰지 않는다. 자체 로그인과 내 계정 조회가 csrfToken을 반환한다. Google callback은 세션 발급 후 메인으로 리다이렉트하며 내 계정 조회로 csrfToken을 받는다.
 - 인증된 POST·PUT·PATCH·DELETE는 X-CSRF-TOKEN을 검증한다. 공개 진입점은 JSON·허용 Origin 검증, Google callback은 일회성 state·nonce·PKCE 및 트랜잭션 검증. 외부 인증 복귀용 임시 쿠키의 Lax와 서비스 세션의 Strict를 분리한다.
 - 세션 수명(설정값): 유휴 만료 3일(마지막 인증 요청 기준) · 쿠키 Max-Age 3일(인증된 요청이 성공하면 갱신, 절대 만료까지 남은 시간이 더 짧으면 그 값) · 절대 만료 30일(로그인 시점 기준, 활동해도 연장하지 않음). 쿠키 수명 ≤ 유휴 만료 ≤ 절대 만료를 어기면 서버가 기동하지 않는다. 만료된 세션의 요청은 변경 요청이어도 403이 아니라 401이다.
+- 세션 종료 연동: 세션이 끝나는 모든 경우(로그아웃, 기기 로그아웃, 전체 로그아웃, 로그인으로 대체, 절대 만료, 유휴 만료)에 세션을 지우기 전에 세션 종료 훅을 호출한다. 훅 구현(GUIDE-011 등)은 멱등이어야 하며 최소 한 번 호출된다. 유휴 만료는 서버의 정리 작업이 주기적으로 처리하므로 만료 직후가 아니라 정리 주기만큼 늦게 호출된다. 훅이 실패하면 로그아웃 계열은 오류로 응답하고 세션을 남겨 재시도하게 하며, 만료 경로는 세션을 남겨 다시 시도한다(로그인으로 대체하는 경우는 로그인을 막지 않는다).
 - 로그인 응답과 내 계정 조회 응답은 Cache-Control:no-store로 csrfToken이 캐시에 남지 않게 한다. csrfToken은 로그인마다 새로 발급되며 이전 토큰은 거절된다.
 - 프론트·API·인증 사진 경로를 같은 Origin으로 제공해 쿠키가 사진 조회에도 전달되게 한다. 서브도메인 분리 배포는 별도 검토한다.
 - 본인 소유 리소스는 /api/v1/users/me 아래, 공용 카탈로그·영상·검수 가이드는 /products·/videos·/guides 아래. 공개 인증 진입점: /users/signup · /users/email-availability · /users/login · /users/password-reset(/verification, /password) · /users/oauth/google(/callback).
@@ -813,7 +814,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | AnalysisJob.reviewStatus | NOT\_READY → (COMPLETED 후) PENDING → APPROVED(guideId 발급) / REJECTED. APPROVED 전에는 guideAvailable=false |
 | GuideMatch | 생성(API-RECOMMEND-001) → pouchVersion·guideVersion 변경 시 stale=true → 새로 생성. 실행 시작 후에는 실행 스냅샷만 사용 |
 | FaceRegistration.status | REGISTERED(API-CAMERA-001) → LINKED(API-GUIDE-001) → RETAINED(API-GUIDE-006). REGISTERED는 재촬영·API-CAMERA-003으로 폐기, LINKED는 실행 ABANDONED 시 정리, RETAINED는 API-REPORT-003으로만 삭제 |
-| Execution.status | IN\_PROGRESS(API-GUIDE-001) → COMPLETED(API-GUIDE-006, recordId 발급) / ABANDONED(API-GUIDE-007 · 로그아웃·기기 로그아웃(API-USERS-003·015·016, GUIDE-011 구현 때 연결) · 같은 세션의 새 실행 시작 · 세션 만료 정리). 종료 상태의 변경 요청은 409 GUIDE\_EXECUTION\_NOT\_ACTIVE |
+| Execution.status | IN\_PROGRESS(API-GUIDE-001) → COMPLETED(API-GUIDE-006, recordId 발급) / ABANDONED(API-GUIDE-007 · 로그아웃·기기 로그아웃(API-USERS-003·015·016)·로그인으로 세션 대체·세션 만료(절대·유휴)는 세션 종료 훅으로 연결, 구현은 GUIDE-011 · 같은 세션의 새 실행 시작). 종료 상태의 변경 요청은 409 GUIDE\_EXECUTION\_NOT\_ACTIVE |
 
 ## 5. 확정이 필요한 항목
 

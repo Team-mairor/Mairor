@@ -112,6 +112,7 @@ public class SecurityConfig {
       CsrfTokenRepository csrfTokenRepository,
       CsrfTokenRequestHandler csrfTokenRequestHandler,
       SessionMetrics sessionMetrics,
+      SessionEndNotifier sessionEndNotifier,
       Clock clock,
       CookieSerializer cookieSerializer)
       throws Exception {
@@ -143,7 +144,8 @@ public class SecurityConfig {
             CsrfFilter.class)
         // 세션을 읽은 뒤(SecurityContextHolderFilter), CSRF 검사 전에 절대 만료를 판단하고 쿠키를 갱신한다
         .addFilterAfter(
-            new SessionLifetimeFilter(sessionLifetimePolicy, clock, errorWriter, PERMIT_ALL),
+            new SessionLifetimeFilter(
+                sessionLifetimePolicy, clock, errorWriter, PERMIT_ALL, sessionEndNotifier),
             SecurityContextHolderFilter.class)
         .addFilterAfter(
             new SessionCookieRefreshFilter(

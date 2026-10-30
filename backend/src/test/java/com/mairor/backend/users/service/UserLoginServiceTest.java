@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -16,6 +17,11 @@ import static org.mockito.Mockito.when;
 
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.security.SessionAttributes;
+import com.mairor.backend.common.security.SessionEnd;
+import com.mairor.backend.common.security.SessionEndHook;
+import com.mairor.backend.common.security.SessionEndNotifier;
+import com.mairor.backend.common.security.SessionEndReason;
+import com.mairor.backend.common.security.SessionMetrics;
 import com.mairor.backend.testsupport.MutableClock;
 import com.mairor.backend.users.dto.request.LoginRequest;
 import com.mairor.backend.users.dto.response.LoginResponse;
@@ -37,6 +43,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -69,6 +76,8 @@ class UserLoginServiceTest {
       spy(PasswordEncoderFactories.createDelegatingPasswordEncoder());
   private final MutableClock clock = new MutableClock(NOW);
   private final LoginHashGate gate = new LoginHashGate(4);
+  private final SessionEndHook endHook = mock(SessionEndHook.class);
+  private final SessionEndNotifier endNotifier = notifierWith(endHook);
   private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
   private final LoginMetrics metrics = new LoginMetrics(registry);
 
@@ -99,7 +108,16 @@ class UserLoginServiceTest {
         new HttpSessionSecurityContextRepository(),
         new HttpSessionCsrfTokenRepository(),
         new XorCsrfTokenRequestAttributeHandler(),
+        endNotifier,
         clock);
+  }
+
+  private static SessionEndNotifier notifierWith(SessionEndHook hook) {
+    DefaultListableBeanFactory factory = new DefaultListableBeanFactory();
+    factory.registerSingleton("hook", hook);
+    return new SessionEndNotifier(
+        factory.getBeanProvider(SessionEndHook.class),
+        new SessionMetrics(new SimpleMeterRegistry()));
   }
 
   @AfterEach
@@ -287,6 +305,7 @@ class UserLoginServiceTest {
                 new HttpSessionSecurityContextRepository(),
                 broken,
                 new XorCsrfTokenRequestAttributeHandler(),
+                endNotifier,
                 clock),
             metrics,
             clock);
@@ -621,5 +640,50 @@ class UserLoginServiceTest {
     login("member@example.com", PASSWORD);
 
     assertThat(gate.availablePermits()).isEqualTo(4);
+  }
+
+  // ---- 이전 인증 세션 대체 → 종료 훅 ----
+
+  @Test
+  void replacingALoggedInSessionCallsTheHookBeforeItIsDiscarded() {
+    login("member@example.com", PASSWORD);
+    MockHttpSession first = (MockHttpSession) request.getSession();
+    String firstId = first.getId();
+    boolean[] discardedWhenCalled = new boolean[1];
+    doAnswer(
+            call -> {
+              discardedWhenCalled[0] = first.isInvalid();
+              return null;
+            })
+        .when(endHook)
+        .beforeSessionEnds(any());
+
+    login("member@example.com", PASSWORD);
+
+    verify(endHook)
+        .beforeSessionEnds(
+            new SessionEnd(member.getId().toString(), firstId, SessionEndReason.REPLACED_BY_LOGIN));
+    assertThat(discardedWhenCalled[0]).as("훅은 이전 세션을 폐기하기 전에 호출된다").isFalse();
+    assertThat(first.isInvalid()).isTrue();
+  }
+
+  @Test
+  void aFirstLoginOrAnAnonymousSessionDoesNotCallTheHook() {
+    login("member@example.com", PASSWORD);
+
+    verify(endHook, never()).beforeSessionEnds(any());
+  }
+
+  @Test
+  void aFailingHookDoesNotBlockReplacingTheSession() {
+    login("member@example.com", PASSWORD);
+    MockHttpSession first = (MockHttpSession) request.getSession();
+    doThrow(new IllegalStateException("cleanup failed")).when(endHook).beforeSessionEnds(any());
+
+    LoginResponse result = login("member@example.com", PASSWORD);
+
+    assertThat(result.csrfToken()).isNotBlank();
+    assertThat(first.isInvalid()).isTrue();
+    assertThat(request.getSession()).isNotSameAs(first);
   }
 }

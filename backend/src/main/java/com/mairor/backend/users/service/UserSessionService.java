@@ -1,6 +1,10 @@
 package com.mairor.backend.users.service;
 
 import com.mairor.backend.common.security.SessionAttributes;
+import com.mairor.backend.common.security.SessionEnd;
+import com.mairor.backend.common.security.SessionEndHook;
+import com.mairor.backend.common.security.SessionEndNotifier;
+import com.mairor.backend.common.security.SessionEndReason;
 import com.mairor.backend.common.security.SessionLifetimePolicy;
 import com.mairor.backend.users.dto.response.SessionItemResponse;
 import com.mairor.backend.users.support.UserSessionAttributes;
@@ -29,14 +33,17 @@ public class UserSessionService {
 
   private final FindByIndexNameSessionRepository<? extends Session> sessions;
   private final SessionLifetimePolicy policy;
+  private final SessionEndNotifier sessionEnd;
   private final Clock clock;
 
   public UserSessionService(
       FindByIndexNameSessionRepository<? extends Session> sessions,
       SessionLifetimePolicy policy,
+      SessionEndNotifier sessionEnd,
       Clock clock) {
     this.sessions = sessions;
     this.policy = policy;
+    this.sessionEnd = sessionEnd;
     this.clock = clock;
   }
 
@@ -57,18 +64,34 @@ public class UserSessionService {
   }
 
   /**
-   * 내 기기 하나를 로그아웃시킨다.
+   * 현재 기기를 로그아웃하기 직전의 정리. 세션을 끝내는 쪽({@code CurrentSessionEnder})을 부르기 <b>전에</b> 호출한다. 종료 훅이 실패하면
+   * 예외를 던지고, 그러면 호출한 쪽이 세션을 끝내지 않으므로 회원은 세션이 남은 채 같은 요청을 다시 보낼 수 있다.
+   */
+  public void beforeLogout(UUID userId, String currentSessionId) {
+    sessionEnd.strict(new SessionEnd(userId.toString(), currentSessionId, SessionEndReason.LOGOUT));
+  }
+
+  /**
+   * 내 기기 하나를 로그아웃시킨다. 세션을 지우기 <b>전에</b> 종료 훅을 호출하고, 훅이 실패하면 세션을 지우지 않고 예외를 던진다.
    *
+   * @param currentSessionId 요청을 보낸 세션의 ID. 지정한 기기가 이 세션이면 로그아웃과 같으므로 종료 이유가 {@code LOGOUT} 이다. 없으면
+   *     {@code null}
    * @return 지운 세션의 ID. 이 회원에게 그 {@code sessionRef} 의 유효한 기기가 없으면(없는 값·이미 끝남·다른 회원의 값) 빈 값
    */
-  public Optional<String> revoke(UUID userId, UUID sessionRef) {
+  public Optional<String> revoke(UUID userId, UUID sessionRef, String currentSessionId) {
     return activeSessions(userId).stream()
         .filter(s -> s.ref().equals(sessionRef))
         .findFirst()
         .map(
             s -> {
-              sessions.deleteById(s.session().getId());
-              return s.session().getId();
+              String id = s.session().getId();
+              SessionEndReason reason =
+                  id.equals(currentSessionId)
+                      ? SessionEndReason.LOGOUT
+                      : SessionEndReason.DEVICE_REVOKED;
+              sessionEnd.strict(new SessionEnd(userId.toString(), id, reason));
+              sessions.deleteById(id);
+              return id;
             });
   }
 
@@ -76,9 +99,12 @@ public class UserSessionService {
    * 내 모든 기기를 로그아웃시킨다. 유효하지 않거나 기기 정보가 없는 세션도 함께 지운다. 현재 세션({@code currentSessionId})은 다른 세션을 모두 지운
    * 뒤 마지막에 지운다. 요청이 들고 있는 현재 세션은 응답을 커밋할 때 되살아날 수 있으므로 호출자가 따로 끝내야 한다({@code CurrentSessionEnder}).
    *
+   * <p>세션마다 지우기 <b>전에</b> 종료 훅({@link SessionEndHook})을 호출한다. 훅이 실패한 세션은 지우지 않는다.
+   *
    * <p><b>원자적이지 않다.</b> 세션은 하나씩 지우고, Spring Session JDBC 는 삭제마다 별도 트랜잭션을 쓰므로 {@code @Transactional}
-   * 로 묶어도 되돌려지지 않는다. 도중에 지우지 못한 세션이 있으면 나머지는 끝까지 지우려 시도하고, 현재 세션은 지우지 않은 채 첫 번째 실패를 던진다(나머지 실패는
-   * suppressed 로 붙는다). 현재 기기가 살아 있으므로 같은 요청을 다시 보내 마무리할 수 있다.
+   * 로 묶어도 되돌려지지 않는다. 도중에 정리하지 못한 세션(훅 또는 삭제 실패)이 있으면 나머지는 끝까지 시도하고, 현재 세션은 지우지 않은 채 첫 번째 실패를
+   * 던진다(나머지 실패는 suppressed 로 붙는다). 현재 기기가 살아 있으므로 같은 요청을 다시 보내 마무리할 수 있다. 이미 끝난 세션은 다시 조회되지 않아 훅이
+   * 다시 호출되지 않는다.
    *
    * @param currentSessionId 요청을 보낸 세션의 ID. 없거나 이 회원의 세션이 아니면 {@code null} 로 두거나 무시된다
    * @return 지운 세션 수
@@ -98,7 +124,7 @@ public class UserSessionService {
     RuntimeException failure = null;
     for (String id : others) {
       try {
-        sessions.deleteById(id);
+        endForAll(userId, id);
         deleted++;
       } catch (RuntimeException e) {
         if (failure == null) {
@@ -112,7 +138,7 @@ public class UserSessionService {
       throw failure;
     }
     if (hasCurrent) {
-      sessions.deleteById(currentSessionId);
+      endForAll(userId, currentSessionId);
       deleted++;
     }
     return deleted;
@@ -121,6 +147,12 @@ public class UserSessionService {
   /** 현재 세션이 없는 호출(예: 비밀번호 재설정)을 위한 형태. 이 회원의 모든 세션을 지운다. */
   public int revokeAll(UUID userId) {
     return revokeAll(userId, null);
+  }
+
+  private void endForAll(UUID userId, String sessionId) {
+    sessionEnd.strict(
+        new SessionEnd(userId.toString(), sessionId, SessionEndReason.ALL_DEVICES_REVOKED));
+    sessions.deleteById(sessionId);
   }
 
   private record ActiveSession(Session session, UUID ref, Instant loggedInAt) {}
