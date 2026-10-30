@@ -11,6 +11,9 @@
 -- provider: LOCAL(자체 가입) | GOOGLE. gender: MALE | FEMALE.
 -- nickname·name·phone·birth_date·gender 는 가입 때 선택 입력이라 NULL 을 허용한다. phone 은 유니크가 아니다.
 -- email_verified_at: 이메일 인증 토큰으로 소유를 확인하고 가입한 시각 (인증 없이 가입했으면 NULL).
+-- password_version: 비밀번호를 바꿀 때마다 1씩 오른다 (S15P31A306-210). 로그인이 비밀번호 재설정과 겹쳤는지 세션 발급 뒤에 확인하는 데 쓴다.
+--   이미 users 테이블이 있는 DB 에는 이 파일을 다시 적용할 수 없으므로 아래 한 줄만 따로 적용한다.
+--   ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;
 CREATE TABLE users (
     id            uuid                        NOT NULL,
     email         varchar(254)                NOT NULL,
@@ -22,6 +25,7 @@ CREATE TABLE users (
     birth_date    date,
     gender        varchar(10),
     email_verified_at timestamp(6) with time zone,
+    password_version integer                 NOT NULL DEFAULT 0,
     created_at    timestamp(6) with time zone NOT NULL,
     updated_at    timestamp(6) with time zone NOT NULL,
     CONSTRAINT users_pkey PRIMARY KEY (id),

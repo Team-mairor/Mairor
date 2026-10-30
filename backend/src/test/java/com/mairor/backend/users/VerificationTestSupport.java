@@ -1,7 +1,7 @@
 package com.mairor.backend.users;
 
+import com.mairor.backend.common.mail.AuthMailSender;
 import com.mairor.backend.common.mail.MailDeliveryException;
-import com.mairor.backend.common.mail.VerificationMailSender;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -24,24 +24,49 @@ public final class VerificationTestSupport {
 
   private VerificationTestSupport() {}
 
-  /** 보낸 메일을 모아 두고, 원하면 실패시키는 발송기. */
-  public static class CapturingMailSender implements VerificationMailSender {
+  /**
+   * 보낸 메일을 종류별로 모아 두고, 원하면 실패시키는 발송기. 가입 인증번호는 {@link #sent}, 비밀번호 재설정 인증번호는 {@link #resetCodes},
+   * Google 전용 계정 안내는 {@link #googleNotices}에 쌓인다. {@code failing} 은 모든 종류에 적용된다.
+   */
+  public static class CapturingMailSender implements AuthMailSender {
 
     public record Mail(String to, String code, Duration validFor) {}
 
     public final List<Mail> sent = new CopyOnWriteArrayList<>();
+    public final List<Mail> resetCodes = new CopyOnWriteArrayList<>();
+    public final List<String> googleNotices = new CopyOnWriteArrayList<>();
     public volatile boolean failing;
 
     @Override
     public void send(String to, String code, Duration validFor) {
-      if (failing) {
-        throw new MailDeliveryException("test failure");
-      }
+      failIfAsked();
       sent.add(new Mail(to, code, validFor));
+    }
+
+    @Override
+    public void sendResetCode(String to, String code, Duration validFor) {
+      failIfAsked();
+      resetCodes.add(new Mail(to, code, validFor));
+    }
+
+    @Override
+    public void sendGoogleAccountNotice(String to) {
+      failIfAsked();
+      googleNotices.add(to);
     }
 
     public Mail last() {
       return sent.get(sent.size() - 1);
+    }
+
+    public Mail lastResetCode() {
+      return resetCodes.get(resetCodes.size() - 1);
+    }
+
+    private void failIfAsked() {
+      if (failing) {
+        throw new MailDeliveryException("test failure");
+      }
     }
   }
 

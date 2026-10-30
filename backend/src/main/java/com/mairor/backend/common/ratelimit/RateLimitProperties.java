@@ -14,7 +14,9 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "app.rate-limit")
 public record RateLimitProperties(
-    @Valid @NotNull Rule emailAvailability, @Valid @NotNull Rule emailVerification) {
+    @Valid @NotNull Rule emailAvailability,
+    @Valid @NotNull Rule emailVerification,
+    @Valid @NotNull Rule passwordReset) {
 
   /** 시간 창({@code window}) 안에 허용하는 요청 수({@code limit}). */
   public record Rule(@Min(1) int limit, @NotNull Duration window) {}

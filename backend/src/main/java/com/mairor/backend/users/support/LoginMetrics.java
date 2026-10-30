@@ -27,6 +27,8 @@ public class LoginMetrics {
     SATURATED,
     /** 서버 전체 동시 처리 상한(해시 게이트)에 걸려 거절했다. */
     GATE_REJECTED,
+    /** 비밀번호를 확인한 뒤 세션을 발급하는 사이에 비밀번호가 바뀌었거나 회원이 사라져서 만든 세션을 버렸다. */
+    PASSWORD_CHANGED,
     /** 자격 증명과 무관한 내부 오류. */
     ERROR
   }

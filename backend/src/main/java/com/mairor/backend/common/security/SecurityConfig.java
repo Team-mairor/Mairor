@@ -28,10 +28,10 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.session.web.http.CookieSerializer;
 
 /**
- * 보안 설정. 헬스체크, 공개 POST({@link #PUBLIC_POSTS}), Swagger 만 열고 나머지는 인증을 요구한다. 오류는 공통 형식으로 응답한다: 미인증
+ * 보안 설정. 헬스체크, 공개 변경 요청({@link #PUBLIC_WRITES}), Swagger 만 열고 나머지는 인증을 요구한다. 오류는 공통 형식으로 응답한다: 미인증
  * 401 {@code UNAUTHORIZED}, CSRF 실패 403 {@code CSRF_INVALID}, 그 밖의 권한 실패 403 {@code FORBIDDEN}.
  *
- * <p>CSRF 필터가 인가보다 먼저 돌아 세션 없는 변경 요청은 401이 아니라 403 {@code CSRF_INVALID}가 된다. 공개 POST 는 CSRF 검사를 빼고
+ * <p>CSRF 필터가 인가보다 먼저 돌아 세션 없는 변경 요청은 401이 아니라 403 {@code CSRF_INVALID}가 된다. 공개 변경 요청은 CSRF 검사를 빼고
  * 허용 Origin 검증({@link OriginCheckFilter})으로 보호한다.
  */
 @Configuration
@@ -56,10 +56,31 @@ public class SecurityConfig {
   private static final RequestMatcher LOGIN =
       PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/v1/users/login");
 
-  /** 세션·CSRF 토큰 없이 호출하는 공개 POST. 인가·CSRF 제외·Origin 검증이 모두 이 목록을 따른다. */
-  private static final List<RequestMatcher> PUBLIC_POSTS =
+  private static final RequestMatcher PASSWORD_RESET_SEND =
+      PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/v1/users/password-reset");
+
+  private static final RequestMatcher PASSWORD_RESET_VERIFY =
+      PathPatternRequestMatcher.withDefaults()
+          .matcher(HttpMethod.POST, "/v1/users/password-reset/verification");
+
+  private static final RequestMatcher PASSWORD_RESET_SAVE =
+      PathPatternRequestMatcher.withDefaults()
+          .matcher(HttpMethod.PUT, "/v1/users/password-reset/password");
+
+  /**
+   * 세션·CSRF 토큰 없이 호출하는 공개 변경 요청(POST, 비밀번호 재설정 저장만 PUT). 인가·CSRF 제외·Origin 검증이 모두 이 목록을 따른다. 로그인한
+   * 세션 쿠키가 함께 와도 CSRF 검사를 하지 않는다. 대신 허용 Origin 검증을 받는다.
+   */
+  private static final List<RequestMatcher> PUBLIC_WRITES =
       List.of(
-          SIGN_UP, EMAIL_AVAILABILITY, EMAIL_VERIFICATION_SEND, EMAIL_VERIFICATION_CONFIRM, LOGIN);
+          SIGN_UP,
+          EMAIL_AVAILABILITY,
+          EMAIL_VERIFICATION_SEND,
+          EMAIL_VERIFICATION_CONFIRM,
+          LOGIN,
+          PASSWORD_RESET_SEND,
+          PASSWORD_RESET_VERIFY,
+          PASSWORD_RESET_SAVE);
 
   /**
    * 인증 컨텍스트 저장소. 필터 체인과 로그인 컨트롤러가 같은 인스턴스를 쓴다. 컨트롤러는 필터 체인 밖에서 로그인하므로 {@code SecurityContextHolder}
@@ -96,7 +117,7 @@ public class SecurityConfig {
 
   /** 인증 없이 열려 있는 경로 전체. 인가 규칙과 {@link SessionLifetimeFilter}(만료된 세션이어도 이 경로는 막지 않는다)가 같은 목록을 쓴다. */
   private static final RequestMatcher PERMIT_ALL =
-      new OrRequestMatcher(HEALTH, new OrRequestMatcher(PUBLIC_POSTS), SWAGGER);
+      new OrRequestMatcher(HEALTH, new OrRequestMatcher(PUBLIC_WRITES), SWAGGER);
 
   private static RequestMatcher path(String pattern) {
     return PathPatternRequestMatcher.withDefaults().matcher(pattern);
@@ -137,10 +158,10 @@ public class SecurityConfig {
             csrf ->
                 csrf.csrfTokenRepository(csrfTokenRepository)
                     .csrfTokenRequestHandler(csrfTokenRequestHandler)
-                    .ignoringRequestMatchers(new OrRequestMatcher(PUBLIC_POSTS)))
+                    .ignoringRequestMatchers(new OrRequestMatcher(PUBLIC_WRITES)))
         // 필터를 빈으로 노출하면 서블릿 컨테이너에 한 번 더 등록되므로 여기서 만들어 보안 체인에만 끼운다
         .addFilterBefore(
-            new OriginCheckFilter(PUBLIC_POSTS, originProperties.allowedOrigins(), errorWriter),
+            new OriginCheckFilter(PUBLIC_WRITES, originProperties.allowedOrigins(), errorWriter),
             CsrfFilter.class)
         // 세션을 읽은 뒤(SecurityContextHolderFilter), CSRF 검사 전에 절대 만료를 판단하고 쿠키를 갱신한다
         .addFilterAfter(

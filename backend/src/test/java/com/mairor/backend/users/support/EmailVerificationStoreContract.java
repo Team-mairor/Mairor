@@ -14,6 +14,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -124,36 +126,37 @@ abstract class EmailVerificationStoreContract {
   @Test
   void cancelSendRestoresTheCooldownAndTheHourlyCount() {
     EmailVerificationStore store = create(Duration.ofSeconds(60), 1);
-    store.reserveSend(EMAIL, T0);
-    store.saveCode(EMAIL, "hash", T0.plusSeconds(600));
+    SendPermit permit = store.reserveSend(EMAIL, T0);
+    store.saveCode(EMAIL, "hash", T0.plusSeconds(600), permit.generation());
 
-    store.cancelSend(EMAIL);
+    store.cancelSend(EMAIL, permit.generation());
 
     // 쿨다운과 시간당 횟수에서 빠져 같은 시각에 바로 다시 보낼 수 있다
     assertThat(store.reserveSend(EMAIL, T0).isAllowed()).isTrue();
   }
 
   @Test
-  void cancelSendDiscardsTheCode() {
+  void cancelSendDiscardsTheCodeOfThatGeneration() {
     EmailVerificationStore store = store();
-    store.reserveSend(EMAIL, T0);
-    store.saveCode(EMAIL, "hash", T0.plusSeconds(600));
+    SendPermit permit = store.reserveSend(EMAIL, T0);
+    store.saveCode(EMAIL, "hash", T0.plusSeconds(600), permit.generation());
 
-    store.cancelSend(EMAIL);
+    store.cancelSend(EMAIL, permit.generation());
 
     assertThat(store.confirmCode(EMAIL, "hash", T0.plusSeconds(1), MAX_ATTEMPTS))
         .isEqualTo(ConfirmOutcome.EXPIRED_OR_MISSING);
   }
 
   @Test
-  void cancelSendOnlyRemovesTheLatestReservation() {
+  void cancelSendOnlyRemovesTheGivenReservation() {
     EmailVerificationStore store = create(Duration.ofSeconds(60), 2);
-    store.reserveSend(EMAIL, T0);
-    store.reserveSend(EMAIL, T0.plusSeconds(60));
+    SendPermit first = store.reserveSend(EMAIL, T0);
+    SendPermit second = store.reserveSend(EMAIL, T0.plusSeconds(60));
 
-    store.cancelSend(EMAIL);
+    store.cancelSend(EMAIL, second.generation());
 
     // 첫 발송은 남아 있어서 한도(2) 중 1을 쓴 상태 → 쿨다운이 지난 뒤 한 번 더 허용, 그다음은 막힘
+    assertThat(first.generation()).isNotEqualTo(second.generation());
     assertThat(store.reserveSend(EMAIL, T0.plusSeconds(60)).isAllowed()).isTrue();
     assertThat(store.reserveSend(EMAIL, T0.plusSeconds(120)).status())
         .isEqualTo(SendPermit.Status.HOURLY_LIMIT);
@@ -163,9 +166,81 @@ abstract class EmailVerificationStoreContract {
   void cancelSendWithoutAReservationDoesNothing() {
     EmailVerificationStore store = store();
 
-    store.cancelSend(EMAIL);
+    store.cancelSend(EMAIL, 12345);
 
     assertThat(store.reserveSend(EMAIL, T0).isAllowed()).isTrue();
+  }
+
+  // ---- 발송 세대 ----
+
+  @Test
+  void everyAllowedReservationGetsANewGeneration() {
+    EmailVerificationStore store = create(Duration.ZERO, 5);
+
+    long first = store.reserveSend(EMAIL, T0).generation();
+    long second = store.reserveSend(EMAIL, T0).generation();
+    long other = store.reserveSend("other@example.com", T0).generation();
+
+    assertThat(List.of(first, second, other)).doesNotHaveDuplicates();
+  }
+
+  @Test
+  void aLateCancelDoesNotDeleteTheCodeSavedByANewerReservation() {
+    EmailVerificationStore store = create(Duration.ZERO, 5);
+    SendPermit slow = store.reserveSend(EMAIL, T0);
+    store.saveCode(EMAIL, "hash-slow", T0.plusSeconds(600), slow.generation());
+    // 느린 요청의 메일이 아직 나가지 않은 사이에 같은 이메일로 새 인증번호가 저장된다
+    SendPermit newer = store.reserveSend(EMAIL, T0.plusSeconds(1));
+    store.saveCode(EMAIL, "hash-new", T0.plusSeconds(601), newer.generation());
+
+    // 느린 요청의 메일 발송이 실패해 취소한다
+    store.cancelSend(EMAIL, slow.generation());
+
+    assertThat(store.confirmCode(EMAIL, "hash-new", T0.plusSeconds(2), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.OK);
+  }
+
+  @Test
+  void aLateCancelStillGivesBackItsOwnSendRecord() {
+    EmailVerificationStore store = create(Duration.ZERO, 2);
+    SendPermit slow = store.reserveSend(EMAIL, T0);
+    SendPermit newer = store.reserveSend(EMAIL, T0.plusSeconds(1));
+    store.saveCode(EMAIL, "hash-new", T0.plusSeconds(601), newer.generation());
+    assertThat(store.reserveSend(EMAIL, T0.plusSeconds(2)).status())
+        .isEqualTo(SendPermit.Status.HOURLY_LIMIT);
+
+    store.cancelSend(EMAIL, slow.generation());
+
+    // 취소한 예약만큼 시간당 횟수가 돌아와 한 번 더 보낼 수 있다
+    assertThat(store.reserveSend(EMAIL, T0.plusSeconds(2)).isAllowed()).isTrue();
+  }
+
+  @Test
+  void aCodeSavedByAnOlderReservationDoesNotReplaceANewerCode() {
+    EmailVerificationStore store = create(Duration.ZERO, 5);
+    SendPermit old = store.reserveSend(EMAIL, T0);
+    SendPermit newer = store.reserveSend(EMAIL, T0.plusSeconds(1));
+    store.saveCode(EMAIL, "hash-new", T0.plusSeconds(601), newer.generation());
+
+    // 늦게 도착한 오래된 예약의 저장은 무시된다
+    store.saveCode(EMAIL, "hash-old", T0.plusSeconds(600), old.generation());
+
+    assertThat(store.confirmCode(EMAIL, "hash-old", T0.plusSeconds(2), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.MISMATCH);
+    assertThat(store.confirmCode(EMAIL, "hash-new", T0.plusSeconds(3), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.OK);
+  }
+
+  @Test
+  void cancelAfterTheCodeWasUsedOnlyGivesBackTheSendRecord() {
+    EmailVerificationStore store = create(Duration.ofSeconds(60), 1);
+    SendPermit permit = store.reserveSend(EMAIL, T0);
+    store.saveCode(EMAIL, "hash", T0.plusSeconds(600), permit.generation());
+    store.confirmCode(EMAIL, "hash", T0.plusSeconds(1), MAX_ATTEMPTS);
+
+    store.cancelSend(EMAIL, permit.generation());
+
+    assertThat(store.reserveSend(EMAIL, T0.plusSeconds(2)).isAllowed()).isTrue();
   }
 
   // ---- 인증번호 확인 ----
@@ -173,7 +248,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void correctCodeIsAcceptedOnceOnly() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     assertThat(store.confirmCode(EMAIL, "hash-1", T0.plusSeconds(10), MAX_ATTEMPTS))
         .isEqualTo(ConfirmOutcome.OK);
@@ -184,7 +259,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void wrongCodeIsAMismatchAndTheCodeStaysUsable() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     assertThat(store.confirmCode(EMAIL, "wrong", T0.plusSeconds(1), MAX_ATTEMPTS))
         .isEqualTo(ConfirmOutcome.MISMATCH);
@@ -195,7 +270,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void afterTheAllowedWrongAttempts_evenTheCorrectCodeIsRefused() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
     for (int i = 0; i < MAX_ATTEMPTS; i++) {
       assertThat(store.confirmCode(EMAIL, "wrong", T0.plusSeconds(1), MAX_ATTEMPTS))
           .as("틀린 시도 %d", i + 1)
@@ -211,7 +286,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void correctCodeAfterFewerWrongAttemptsStillWorks() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
     for (int i = 0; i < MAX_ATTEMPTS - 1; i++) {
       store.confirmCode(EMAIL, "wrong", T0.plusSeconds(1), MAX_ATTEMPTS);
     }
@@ -223,7 +298,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void codeIsExpiredAtExactlyItsExpiryTime() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     assertThat(store.confirmCode(EMAIL, "hash-1", T0.plusSeconds(600), MAX_ATTEMPTS))
         .isEqualTo(ConfirmOutcome.EXPIRED_OR_MISSING);
@@ -232,7 +307,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void codeIsStillValidJustBeforeItsExpiryTime() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     assertThat(store.confirmCode(EMAIL, "hash-1", T0.plusMillis(599_999), MAX_ATTEMPTS))
         .isEqualTo(ConfirmOutcome.OK);
@@ -247,12 +322,12 @@ abstract class EmailVerificationStoreContract {
   @Test
   void resendReplacesTheOldCodeAndResetsTheAttempts() {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
     for (int i = 0; i < MAX_ATTEMPTS; i++) {
       store.confirmCode(EMAIL, "wrong", T0.plusSeconds(1), MAX_ATTEMPTS);
     }
 
-    store.saveCode(EMAIL, "hash-2", T0.plusSeconds(1200));
+    store.saveCode(EMAIL, "hash-2", T0.plusSeconds(1200), 2);
 
     // 이전 코드는 무효, 새 코드는 시도 횟수가 처음부터
     assertThat(store.confirmCode(EMAIL, "hash-1", T0.plusSeconds(61), MAX_ATTEMPTS))
@@ -264,8 +339,8 @@ abstract class EmailVerificationStoreContract {
   @Test
   void codesAreTrackedPerEmail() {
     EmailVerificationStore store = store();
-    store.saveCode("a@example.com", "hash-a", T0.plusSeconds(600));
-    store.saveCode("b@example.com", "hash-b", T0.plusSeconds(600));
+    store.saveCode("a@example.com", "hash-a", T0.plusSeconds(600), 1);
+    store.saveCode("b@example.com", "hash-b", T0.plusSeconds(600), 1);
 
     assertThat(store.confirmCode("a@example.com", "hash-b", T0, MAX_ATTEMPTS))
         .isEqualTo(ConfirmOutcome.MISMATCH);
@@ -277,7 +352,7 @@ abstract class EmailVerificationStoreContract {
   void savingACodeDoesNotResetTheSendHistory() {
     EmailVerificationStore store = store();
     store.reserveSend(EMAIL, T0);
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     assertThat(store.reserveSend(EMAIL, T0.plusSeconds(1)).status())
         .isEqualTo(SendPermit.Status.COOLDOWN);
@@ -287,7 +362,7 @@ abstract class EmailVerificationStoreContract {
   void confirmingACodeDoesNotResetTheSendHistory() {
     EmailVerificationStore store = store();
     store.reserveSend(EMAIL, T0);
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
     store.confirmCode(EMAIL, "hash-1", T0.plusSeconds(5), MAX_ATTEMPTS);
 
     assertThat(store.reserveSend(EMAIL, T0.plusSeconds(6)).status())
@@ -355,12 +430,202 @@ abstract class EmailVerificationStoreContract {
     assertThat(store.hasValidToken("token-hash", EMAIL, T0)).isTrue();
   }
 
+  // ---- 토큰 조회, 이메일당 토큰 하나 ----
+
+  @Test
+  void findTokenEmailReturnsTheEmailOfAValidToken() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-hash", EMAIL, T0.plusSeconds(600));
+
+    assertThat(store.findTokenEmail("token-hash", T0.plusSeconds(10))).contains(EMAIL);
+  }
+
+  @Test
+  void findTokenEmailIsEmptyForUnknownExpiredAndDeletedTokens() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-hash", EMAIL, T0.plusSeconds(600));
+    store.saveToken("deleted-hash", "other@example.com", T0.plusSeconds(600));
+    store.deleteToken("deleted-hash");
+
+    assertThat(store.findTokenEmail("unknown", T0)).isEmpty();
+    assertThat(store.findTokenEmail("deleted-hash", T0)).isEmpty();
+    assertThat(store.findTokenEmail("token-hash", T0.plusMillis(599_999))).isPresent();
+    assertThat(store.findTokenEmail("token-hash", T0.plusSeconds(600))).isEmpty();
+  }
+
+  @Test
+  void findingATokenDoesNotConsumeIt() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-hash", EMAIL, T0.plusSeconds(600));
+
+    assertThat(store.findTokenEmail("token-hash", T0)).isPresent();
+    assertThat(store.findTokenEmail("token-hash", T0.plusSeconds(1))).isPresent();
+    assertThat(store.hasValidToken("token-hash", EMAIL, T0.plusSeconds(2))).isTrue();
+  }
+
+  @Test
+  void aNewTokenForTheSameEmailInvalidatesThePreviousOne() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-a", EMAIL, T0.plusSeconds(600));
+
+    store.saveToken("token-b", EMAIL, T0.plusSeconds(600));
+
+    assertThat(store.hasValidToken("token-a", EMAIL, T0)).isFalse();
+    assertThat(store.findTokenEmail("token-a", T0)).isEmpty();
+    assertThat(store.hasValidToken("token-b", EMAIL, T0)).isTrue();
+    assertThat(store.findTokenEmail("token-b", T0)).contains(EMAIL);
+  }
+
+  @Test
+  void tokensOfDifferentEmailsAreIndependent() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-a", "a@example.com", T0.plusSeconds(600));
+
+    store.saveToken("token-b", "b@example.com", T0.plusSeconds(600));
+
+    assertThat(store.findTokenEmail("token-a", T0)).contains("a@example.com");
+    assertThat(store.findTokenEmail("token-b", T0)).contains("b@example.com");
+  }
+
+  @Test
+  void deletingAReplacedTokenDoesNotDeleteTheCurrentOne() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-a", EMAIL, T0.plusSeconds(600));
+    store.saveToken("token-b", EMAIL, T0.plusSeconds(600));
+
+    store.deleteToken("token-a");
+
+    assertThat(store.hasValidToken("token-b", EMAIL, T0)).isTrue();
+  }
+
+  @Test
+  void aTokenRemembersTheStampItWasSavedWith() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-hash", EMAIL, 7, T0.plusSeconds(600));
+
+    assertThat(store.findToken("token-hash", T0))
+        .contains(new EmailVerificationStore.IssuedToken(EMAIL, 7));
+  }
+
+  @Test
+  void aTokenSavedWithoutAStampHasStampZero() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-hash", EMAIL, T0.plusSeconds(600));
+
+    assertThat(store.findToken("token-hash", T0))
+        .contains(new EmailVerificationStore.IssuedToken(EMAIL, 0));
+  }
+
+  @Test
+  void findTokenFollowsTheSameValidityRulesAsFindTokenEmail() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-a", EMAIL, 1, T0.plusSeconds(600));
+    store.saveToken("token-b", EMAIL, 2, T0.plusSeconds(600));
+
+    // 교체된 토큰, 만료된 토큰, 없는 토큰은 비어 있다
+    assertThat(store.findToken("token-a", T0)).isEmpty();
+    assertThat(store.findToken("token-b", T0.plusSeconds(600))).isEmpty();
+    assertThat(store.findToken("unknown", T0)).isEmpty();
+    assertThat(store.findToken("token-b", T0)).map(t -> t.stamp()).contains(2L);
+  }
+
+  @Test
+  void savingTheSameTokenAgainKeepsItValid() {
+    EmailVerificationStore store = store();
+    store.saveToken("token-a", EMAIL, T0.plusSeconds(600));
+
+    store.saveToken("token-a", EMAIL, T0.plusSeconds(1200));
+
+    assertThat(store.hasValidToken("token-a", EMAIL, T0.plusSeconds(900))).isTrue();
+  }
+
+  // ---- 이메일 단위 폐기 ----
+
+  @Test
+  void invalidateAllRemovesTheTokenAndTheCode() {
+    EmailVerificationStore store = store();
+    SendPermit permit = store.reserveSend(EMAIL, T0);
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), permit.generation());
+    store.saveToken("token-hash", EMAIL, T0.plusSeconds(600));
+
+    store.invalidateAll(EMAIL);
+
+    assertThat(store.findTokenEmail("token-hash", T0.plusSeconds(1))).isEmpty();
+    assertThat(store.confirmCode(EMAIL, "hash-1", T0.plusSeconds(1), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.EXPIRED_OR_MISSING);
+  }
+
+  @Test
+  void invalidateAllKeepsTheSendHistory() {
+    EmailVerificationStore store = create(Duration.ofSeconds(60), 1);
+    SendPermit permit = store.reserveSend(EMAIL, T0);
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), permit.generation());
+
+    store.invalidateAll(EMAIL);
+
+    // 쿨다운과 시간당 한도는 그대로라서 이 호출로 제한을 우회할 수 없다
+    assertThat(store.reserveSend(EMAIL, T0.plusSeconds(1)).status())
+        .isEqualTo(SendPermit.Status.HOURLY_LIMIT);
+  }
+
+  @Test
+  void invalidateAllOnlyAffectsTheGivenEmail() {
+    EmailVerificationStore store = store();
+    store.saveCode("a@example.com", "hash-a", T0.plusSeconds(600), 1);
+    store.saveToken("token-a", "a@example.com", T0.plusSeconds(600));
+    store.saveCode("b@example.com", "hash-b", T0.plusSeconds(600), 2);
+    store.saveToken("token-b", "b@example.com", T0.plusSeconds(600));
+
+    store.invalidateAll("a@example.com");
+
+    assertThat(store.findTokenEmail("token-b", T0)).contains("b@example.com");
+    assertThat(store.confirmCode("b@example.com", "hash-b", T0, MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.OK);
+  }
+
+  @Test
+  void invalidateAllOfAnEmailWithoutStateDoesNothing() {
+    EmailVerificationStore store = store();
+
+    store.invalidateAll("nobody@example.com");
+
+    assertThat(store.reserveSend("nobody@example.com", T0).isAllowed()).isTrue();
+  }
+
+  // ---- 아무도 맞힐 수 없는 인증번호 (가입 여부를 숨기는 데 쓴다) ----
+
+  @Test
+  void aCodeNobodyCanGuessBehavesLikeARealOneUntilItRunsOut() {
+    EmailVerificationStore store = store();
+    SendPermit permit = store.reserveSend(EMAIL, T0);
+    store.saveCode(
+        EMAIL, "decoy-" + java.util.UUID.randomUUID(), T0.plusSeconds(600), permit.generation());
+
+    for (int i = 0; i < MAX_ATTEMPTS; i++) {
+      assertThat(store.confirmCode(EMAIL, "any-code-" + i, T0.plusSeconds(1), MAX_ATTEMPTS))
+          .isEqualTo(ConfirmOutcome.MISMATCH);
+    }
+    assertThat(store.confirmCode(EMAIL, "any-code", T0.plusSeconds(2), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.ATTEMPTS_EXCEEDED);
+  }
+
+  @Test
+  void aCodeNobodyCanGuessExpiresLikeARealOne() {
+    EmailVerificationStore store = store();
+    store.saveCode(EMAIL, "decoy-" + java.util.UUID.randomUUID(), T0.plusSeconds(600), 1);
+
+    assertThat(store.confirmCode(EMAIL, "any-code", T0.plusSeconds(599), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.MISMATCH);
+    assertThat(store.confirmCode(EMAIL, "any-code", T0.plusSeconds(600), MAX_ATTEMPTS))
+        .isEqualTo(ConfirmOutcome.EXPIRED_OR_MISSING);
+  }
+
   // ---- 동시성 ----
 
   @Test
   void concurrentWrongCodesCountEveryAttempt() throws Exception {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     List<ConfirmOutcome> outcomes =
         runConcurrently(64, () -> store.confirmCode(EMAIL, "wrong", T0, MAX_ATTEMPTS));
@@ -375,7 +640,7 @@ abstract class EmailVerificationStoreContract {
   @Test
   void concurrentCorrectCodesSucceedExactlyOnce() throws Exception {
     EmailVerificationStore store = store();
-    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600));
+    store.saveCode(EMAIL, "hash-1", T0.plusSeconds(600), 1);
 
     List<ConfirmOutcome> outcomes =
         runConcurrently(64, () -> store.confirmCode(EMAIL, "hash-1", T0, MAX_ATTEMPTS));
@@ -401,6 +666,75 @@ abstract class EmailVerificationStoreContract {
     List<SendPermit> permits = runConcurrently(64, () -> store.reserveSend(EMAIL, T0));
 
     assertThat(permits).filteredOn(SendPermit::isAllowed).hasSize(5);
+  }
+
+  @Test
+  void concurrentTokenSavesForOneEmailLeaveExactlyOneValidToken() throws Exception {
+    EmailVerificationStore store = store();
+    int threads = 32;
+    AtomicInteger sequence = new AtomicInteger();
+
+    runConcurrently(
+        threads,
+        () -> {
+          store.saveToken("token-" + sequence.incrementAndGet(), EMAIL, T0.plusSeconds(600));
+          return null;
+        });
+
+    long valid =
+        IntStream.rangeClosed(1, threads)
+            .filter(i -> store.hasValidToken("token-" + i, EMAIL, T0))
+            .count();
+    assertThat(valid).isEqualTo(1);
+    // 유효한 토큰은 조회로도 같은 이메일을 가리킨다
+    assertThat(
+            IntStream.rangeClosed(1, threads)
+                .filter(i -> store.findTokenEmail("token-" + i, T0).isPresent())
+                .count())
+        .isEqualTo(1);
+  }
+
+  @Test
+  void mixedTokenOperationsNeverLeaveMoreThanOneValidTokenPerEmail() throws Exception {
+    EmailVerificationStore store = store();
+    int threads = 8;
+    int rounds = 400;
+    int tokens = 16;
+    AtomicInteger sequence = new AtomicInteger();
+
+    runConcurrently(
+        threads,
+        () -> {
+          int seed = sequence.incrementAndGet();
+          for (int r = 0; r < rounds; r++) {
+            String hash = "token-" + ((seed * 31 + r) % tokens);
+            switch (r % 4) {
+              case 0 -> store.saveToken(hash, EMAIL, T0.plusSeconds(600));
+              case 1 -> store.findTokenEmail(hash, T0);
+              case 2 -> store.deleteToken(hash);
+              default -> store.hasValidToken(hash, EMAIL, T0);
+            }
+            if (r % 97 == 0) {
+              store.invalidateAll(EMAIL);
+            }
+          }
+          return null;
+        });
+
+    long valid =
+        IntStream.range(0, tokens)
+            .filter(i -> store.findTokenEmail("token-" + i, T0).isPresent())
+            .count();
+    assertThat(valid).isLessThanOrEqualTo(1);
+  }
+
+  @Test
+  void concurrentReservationsGetDistinctGenerations() throws Exception {
+    EmailVerificationStore store = create(Duration.ZERO, 1_000);
+
+    List<SendPermit> permits = runConcurrently(64, () -> store.reserveSend(EMAIL, T0));
+
+    assertThat(permits.stream().map(SendPermit::generation).distinct().count()).isEqualTo(64);
   }
 
   private static <T> List<T> runConcurrently(int threads, Callable<T> task) throws Exception {

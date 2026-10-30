@@ -62,6 +62,16 @@ public class VerificationHasher {
     }
   }
 
+  /**
+   * 아무도 맞힐 수 없는 인증번호 해시. 가입되지 않았거나 인증번호를 보내지 않을 이메일에도 실제 인증번호가 있는 것처럼 저장해서, 확인 요청이 가입 여부와 상관없이 같게
+   * 동작하게 하는 데 쓴다. 실제 해시와 같은 모양(64자리 16진수)의 난수라서 어떤 입력과도 일치하지 않고, 저장소에서 꺼내 봐도 구별되지 않는다.
+   */
+  public String decoyCodeHash() {
+    byte[] random = new byte[32];
+    new SecureRandom().nextBytes(random);
+    return HexFormat.of().formatHex(random);
+  }
+
   /** 인증 토큰 해시 (SHA-256). */
   public String hashToken(String token) {
     try {

@@ -106,4 +106,66 @@ class SmtpVerificationMailSenderTest {
     assertThatThrownBy(() -> sender.send("not an address", "123456", Duration.ofMinutes(10)))
         .isInstanceOf(MailDeliveryException.class);
   }
+
+  // ---- 비밀번호 재설정 ----
+
+  @Test
+  void resetCodeMailHasItsOwnSubjectAndBodyWithTheCode() throws Exception {
+    sender.sendResetCode("member@example.com", "654321", Duration.ofMinutes(10));
+
+    assertThat(mailSender.sent).hasSize(1);
+    MimeMessage mail = mailSender.sent.get(0);
+    mail.saveChanges();
+    assertThat(mail.getSubject()).isEqualTo("[Mairor] 비밀번호 재설정 인증번호");
+    assertThat(((InternetAddress) mail.getRecipients(Message.RecipientType.TO)[0]).getAddress())
+        .isEqualTo("member@example.com");
+    assertThat(((InternetAddress) mail.getFrom()[0]).getAddress()).isEqualTo("noreply@example.com");
+
+    assertThat(textOf(mail, "text/html"))
+        .contains("654321")
+        .contains("10분")
+        .contains("비밀번호 재설정")
+        .contains("요청하지 않았다면")
+        .doesNotContain("{{");
+    assertThat(textOf(mail, "text/plain")).contains("654321").contains("10분").contains("비밀번호 재설정");
+  }
+
+  @Test
+  void resetCodeHtmlEscapesTheValuesItInserts() {
+    assertThat(sender.resetHtml("<b>1</b>", Duration.ofMinutes(10)))
+        .contains("&lt;b&gt;1&lt;/b&gt;")
+        .doesNotContain("<b>1</b>");
+  }
+
+  @Test
+  void googleNoticeTellsToUseGoogleLoginAndCarriesNoCode() throws Exception {
+    sender.sendGoogleAccountNotice("google@example.com");
+
+    assertThat(mailSender.sent).hasSize(1);
+    MimeMessage mail = mailSender.sent.get(0);
+    mail.saveChanges();
+    assertThat(mail.getSubject()).isEqualTo("[Mairor] 비밀번호 재설정 안내");
+    assertThat(((InternetAddress) mail.getRecipients(Message.RecipientType.TO)[0]).getAddress())
+        .isEqualTo("google@example.com");
+
+    String html = textOf(mail, "text/html");
+    assertThat(html).contains("Google로 로그인").contains("요청하지 않았다면").doesNotContain("{{");
+    assertThat(html).doesNotContain("인증 번호");
+    assertThat(textOf(mail, "text/plain")).contains("Google로 로그인");
+  }
+
+  @Test
+  void resetMailFailuresBecomeMailDeliveryExceptionWithoutLeakingDetails() {
+    mailSender.failure = new MailSendException("smtp down for member@example.com code 654321");
+
+    assertThatThrownBy(
+            () -> sender.sendResetCode("member@example.com", "654321", Duration.ofMinutes(10)))
+        .isInstanceOf(MailDeliveryException.class)
+        .hasMessageNotContaining("member@example.com")
+        .hasMessageNotContaining("654321")
+        .hasCauseInstanceOf(MailSendException.class);
+    assertThatThrownBy(() -> sender.sendGoogleAccountNotice("google@example.com"))
+        .isInstanceOf(MailDeliveryException.class)
+        .hasMessageNotContaining("google@example.com");
+  }
 }

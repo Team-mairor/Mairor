@@ -25,6 +25,12 @@ public interface LoginAttemptLimiter {
   /** 실패로 세지 않을 시도를 취소한다. 자리만 반환한다. */
   void refund(Ticket ticket);
 
+  /**
+   * 이메일의 확정 실패와 잠금을 지운다(비밀번호 재설정 성공 시). 진행 중인 시도는 건드리지 않아서 그 자리는 계속 차지하고, 끝나면 평소처럼 센다. 상태가 없는 이메일이면
+   * 아무 일도 하지 않는다. 호출자는 {@code tryAcquire} 에 넘기는 것과 같은 정규화 이메일을 넘겨야 한다.
+   */
+  void reset(String email);
+
   /** {@link #tryAcquire} 결과. */
   sealed interface Result permits Allowed, Locked, Pending, Saturated {}
 

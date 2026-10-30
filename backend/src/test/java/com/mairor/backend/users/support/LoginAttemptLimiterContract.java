@@ -165,6 +165,167 @@ abstract class LoginAttemptLimiterContract {
     assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Locked.class);
   }
 
+  // ---- 초기화 (비밀번호 재설정) ----
+
+  @Test
+  void resetUnlocksALockedEmail() {
+    LoginAttemptLimiter limiter = create(1);
+    failOnce(limiter, "a@x.com", T0);
+    assertThat(limiter.tryAcquire("a@x.com", T0.plusSeconds(1))).isInstanceOf(Locked.class);
+
+    limiter.reset("a@x.com");
+
+    assertThat(limiter.tryAcquire("a@x.com", T0.plusSeconds(1))).isInstanceOf(Allowed.class);
+  }
+
+  @Test
+  void resetClearsConfirmedFailures() {
+    LoginAttemptLimiter limiter = create(3);
+    failOnce(limiter, "a@x.com", T0);
+    failOnce(limiter, "a@x.com", T0);
+
+    limiter.reset("a@x.com");
+
+    // 실패 2 가 남아 있었다면 두 번째 실패에서 잠겼을 것이다
+    failOnce(limiter, "a@x.com", T0);
+    failOnce(limiter, "a@x.com", T0);
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Allowed.class);
+  }
+
+  @Test
+  void resetAfterTheLockStartsCountingFromZeroAgain() {
+    LoginAttemptLimiter limiter = create(2);
+    failOnce(limiter, "a@x.com", T0);
+    failOnce(limiter, "a@x.com", T0);
+    limiter.reset("a@x.com");
+
+    failOnce(limiter, "a@x.com", T0.plusSeconds(1));
+
+    // 초기화 뒤 첫 실패일 뿐이라 아직 잠기지 않는다
+    assertThat(limiter.tryAcquire("a@x.com", T0.plusSeconds(1))).isInstanceOf(Allowed.class);
+  }
+
+  @Test
+  void resetOnlyAffectsTheGivenEmail() {
+    LoginAttemptLimiter limiter = create(1);
+    failOnce(limiter, "a@x.com", T0);
+    failOnce(limiter, "b@x.com", T0);
+
+    limiter.reset("a@x.com");
+
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Allowed.class);
+    assertThat(limiter.tryAcquire("b@x.com", T0)).isInstanceOf(Locked.class);
+  }
+
+  @Test
+  void resetOfAnEmailWithoutStateDoesNothing() {
+    LoginAttemptLimiter limiter = create(2);
+
+    limiter.reset("unknown@x.com");
+
+    failOnce(limiter, "unknown@x.com", T0);
+    assertThat(limiter.tryAcquire("unknown@x.com", T0)).isInstanceOf(Allowed.class);
+  }
+
+  @Test
+  void resetKeepsAttemptsThatAreStillInFlightCounted() {
+    LoginAttemptLimiter limiter = create(3);
+    Ticket inFlight = acquire(limiter, "a@x.com", T0);
+    failOnce(limiter, "a@x.com", T0);
+
+    limiter.reset("a@x.com");
+
+    // 확정 실패는 지워졌지만 진행 중인 시도는 그대로 자리를 차지한다: 둘 더 허용, 그 뒤는 Pending
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Allowed.class);
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Allowed.class);
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Pending.class);
+    limiter.refund(inFlight);
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Allowed.class);
+  }
+
+  @Test
+  void aTicketOpenedBeforeTheResetStillClosesNormally() {
+    LoginAttemptLimiter limiter = create(2);
+    Ticket before = acquire(limiter, "a@x.com", T0);
+
+    limiter.reset("a@x.com");
+    limiter.fail(before, T0);
+
+    // 초기화 전에 시작한 시도의 실패는 초기화 뒤의 첫 실패로 센다: 아직 잠기지 않았고(한 건), 한 번 더 실패하면 잠긴다
+    Ticket next = acquire(limiter, "a@x.com", T0);
+    limiter.fail(next, T0);
+    assertThat(limiter.tryAcquire("a@x.com", T0)).isInstanceOf(Locked.class);
+  }
+
+  @Test
+  void resetFreesTheSlotOfALockedEmailWhenTheStoreIsFull() {
+    LoginAttemptLimiter limiter = create(1, Duration.ofSeconds(30), Duration.ofMinutes(15), 2);
+    failOnce(limiter, "a@x.com", T0);
+    failOnce(limiter, "b@x.com", T0.plusSeconds(1));
+    assertThat(limiter.tryAcquire("c@x.com", T0.plusSeconds(2))).isInstanceOf(Saturated.class);
+
+    limiter.reset("a@x.com");
+
+    assertThat(limiter.tryAcquire("c@x.com", T0.plusSeconds(2))).isInstanceOf(Allowed.class);
+  }
+
+  @Test
+  void slotsAreNeverExceededWhileResettingConcurrently() throws Exception {
+    int maxFailures = 3;
+    int threads = 16;
+    int rounds = 300;
+    LoginAttemptLimiter limiter = create(maxFailures);
+    AtomicInteger inside = new AtomicInteger();
+    AtomicInteger maxInside = new AtomicInteger();
+    ExecutorService pool = Executors.newFixedThreadPool(threads + 1);
+    CountDownLatch ready = new CountDownLatch(threads + 1);
+    CountDownLatch go = new CountDownLatch(1);
+    try {
+      List<Future<?>> futures = new ArrayList<>();
+      for (int t = 0; t < threads; t++) {
+        futures.add(
+            pool.submit(
+                () -> {
+                  ready.countDown();
+                  go.await();
+                  for (int r = 0; r < rounds; r++) {
+                    if (limiter.tryAcquire("shared@x.com", T0) instanceof Allowed allowed) {
+                      maxInside.accumulateAndGet(inside.incrementAndGet(), Math::max);
+                      Thread.onSpinWait();
+                      inside.decrementAndGet();
+                      limiter.fail(allowed.ticket(), T0);
+                    }
+                  }
+                  return null;
+                }));
+      }
+      futures.add(
+          pool.submit(
+              () -> {
+                ready.countDown();
+                go.await();
+                for (int r = 0; r < rounds * 4; r++) {
+                  limiter.reset("shared@x.com");
+                }
+                return null;
+              }));
+      assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+      go.countDown();
+      for (Future<?> future : futures) {
+        future.get(60, TimeUnit.SECONDS);
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+
+    assertThat(maxInside.get()).isLessThanOrEqualTo(maxFailures);
+    limiter.reset("shared@x.com");
+    // 끝난 뒤에는 자리가 새지 않았고 잠금도 남지 않는다: 다시 세 번 모두 허용된다
+    for (int i = 0; i < maxFailures; i++) {
+      assertThat(limiter.tryAcquire("shared@x.com", T0)).isInstanceOf(Allowed.class);
+    }
+  }
+
   // ---- 임계치에 닿는 요청 ----
 
   @Test

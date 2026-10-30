@@ -38,6 +38,26 @@ class VerificationHasherTest {
   }
 
   @Test
+  void decoyCodeHashLooksLikeARealOneButIsDifferentEveryTime() {
+    String first = hasher.decoyCodeHash();
+    String second = hasher.decoyCodeHash();
+
+    // 실제 해시와 같은 모양이라 저장소에서 꺼내 봐도 구별되지 않고, 매번 달라서 맞힐 수 없다
+    assertThat(first).matches("[0-9a-f]{64}");
+    assertThat(second).matches("[0-9a-f]{64}");
+    assertThat(first).isNotEqualTo(second);
+  }
+
+  @Test
+  void decoyCodeHashDoesNotMatchAnySixDigitCode() {
+    String decoy = hasher.decoyCodeHash();
+
+    for (int code = 0; code < 1_000; code++) {
+      assertThat(hasher.hashCode("member@example.com", "%06d".formatted(code))).isNotEqualTo(decoy);
+    }
+  }
+
+  @Test
   void tokenHashIsSha256() {
     // SHA-256("abc") 의 알려진 값
     assertThat(hasher.hashToken("abc"))

@@ -9,7 +9,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.util.StringUtils;
 
 /**
- * 인증번호 메일 발송기를 고른다. 셋 중 하나만 빈이 된다.
+ * 인증 메일(가입 인증번호, 비밀번호 재설정) 발송기를 고른다. 셋 중 하나만 {@link AuthMailSender} 빈이 되고, {@link
+ * VerificationMailSender}와 {@link PasswordResetMailSender} 어느 쪽으로 주입받아도 이 빈이 온다.
  *
  * <ul>
  *   <li>{@code app.mail.enabled=true}: {@link SmtpVerificationMailSender}. SMTP 계정({@code
@@ -23,7 +24,7 @@ public class MailConfig {
 
   @Bean
   @ConditionalOnProperty(prefix = "app.mail", name = "enabled", havingValue = "true")
-  VerificationMailSender smtpVerificationMailSender(
+  AuthMailSender smtpVerificationMailSender(
       JavaMailSender mailSender, AppMailProperties app, MailProperties smtp) {
     if (!StringUtils.hasText(smtp.getUsername()) || !StringUtils.hasText(smtp.getPassword())) {
       throw new IllegalStateException(
@@ -41,7 +42,7 @@ public class MailConfig {
       name = "enabled",
       havingValue = "false",
       matchIfMissing = true)
-  VerificationMailSender loggingVerificationMailSender() {
+  AuthMailSender loggingVerificationMailSender() {
     return new LoggingVerificationMailSender();
   }
 
@@ -52,7 +53,7 @@ public class MailConfig {
       name = "enabled",
       havingValue = "false",
       matchIfMissing = true)
-  VerificationMailSender unavailableVerificationMailSender() {
+  AuthMailSender unavailableVerificationMailSender() {
     return new UnavailableVerificationMailSender();
   }
 }

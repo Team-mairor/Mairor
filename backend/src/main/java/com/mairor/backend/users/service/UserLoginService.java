@@ -86,6 +86,7 @@ public class UserLoginService {
       User user = authenticate(request, ticket);
       limiter.succeed(ticket);
       String csrfToken = sessionEstablisher.establish(user, httpRequest, httpResponse);
+      confirmPasswordUnchanged(user, httpRequest);
       metrics.record(LoginMetrics.Result.SUCCESS);
       return new LoginResponse(UserResponse.from(user), csrfToken);
     } catch (BusinessException e) {
@@ -97,6 +98,31 @@ public class UserLoginService {
     } finally {
       // 이미 종료된 ticket 이면 아무 일도 하지 않는다. 예외로 빠져나온 경우에만 환불된다
       limiter.refund(ticket);
+    }
+  }
+
+  /**
+   * 세션을 발급한 뒤, 비밀번호를 확인할 때 읽은 버전이 그대로인지 다시 확인한다. 비밀번호 재설정은 새 해시와 버전을 커밋한 다음 이 회원의 모든 세션을 끊는데, 이전
+   * 해시로 검증을 끝낸 로그인이 그 뒤에 세션을 만들면 끊긴 세션 목록에 없어서 살아남기 때문이다. 세션은 {@link SessionEstablisher#establish}
+   * 가 돌아올 때 이미 저장소에 있으므로, 이 확인이 옛 버전을 읽었다면 재설정의 세션 정리가 이 세션을 끊고, 새 버전을 읽었다면 여기서 스스로 버린다.
+   *
+   * <p>버전이 다르거나 회원이 사라졌으면 만든 세션을 버리고 같은 401 로 거절한다(실패 횟수는 세지 않는다). 조회가 실패하면 세션을 버리고 원래 예외를 그대로 던진다.
+   */
+  private void confirmPasswordUnchanged(User user, HttpServletRequest httpRequest) {
+    Integer current;
+    try {
+      current = userRepository.findPasswordVersionById(user.getId()).orElse(null);
+    } catch (RuntimeException e) {
+      try {
+        sessionEstablisher.discard(httpRequest);
+      } catch (RuntimeException cleanupFailure) {
+        e.addSuppressed(cleanupFailure);
+      }
+      throw e;
+    }
+    if (current == null || current != user.getPasswordVersion()) {
+      sessionEstablisher.discard(httpRequest);
+      throw rejected(LoginMetrics.Result.PASSWORD_CHANGED, invalidCredentials());
     }
   }
 

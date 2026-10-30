@@ -24,6 +24,9 @@ spring:
     # 서버 세션 유휴 만료. 인증 요청이 올 때마다 연장된다
     timeout: ${SESSION_TIMEOUT:3d}
     jdbc:
+      # 세션을 만들고 속성을 바꾸는 즉시 저장한다(기본값 on_save 는 응답을 커밋할 때 저장). 로그인이 세션을 발급한 직후 비밀번호 버전을
+      # 다시 확인하는 방어(UserLoginService)가 의미를 가지려면, 비밀번호 재설정이 세션 목록을 읽을 때 그 세션이 이미 저장돼 있어야 한다
+      flush-mode: immediate
       # Flyway 도입 전까지 세션 테이블을 직접 만든다
       initialize-schema: always
       # Spring 의 만료 세션 정리 작업을 끈다("-"). 종료 훅을 호출한 뒤 지우는 ExpiredSessionSweeper 가 대신한다 (app.session.sweep)
@@ -105,6 +108,14 @@ app:
     hourly-limit: 5
     max-attempts: 5
     token-ttl: 30m
+  password-reset:
+    # 비밀번호 재설정. 가입 이메일 인증(app.email-verification)과 저장소·인증번호가 섞이지 않고, 인증번호 해시 비밀키는 같은 것을 쓴다
+    code-ttl: 10m
+    resend-cooldown: 60s
+    hourly-limit: 5
+    max-attempts: 5
+    # 인증번호를 확인한 뒤 새 비밀번호를 저장하기까지의 시간
+    token-ttl: 10m
   rate-limit:
     # 키는 클라이언트 IP, 초과하면 429 + Retry-After
     email-availability:
@@ -114,6 +125,10 @@ app:
     email-verification:
       limit: ${RATE_LIMIT_EMAIL_VERIFICATION_LIMIT:10}
       window: ${RATE_LIMIT_EMAIL_VERIFICATION_WINDOW:10m}
+    # 비밀번호 재설정 인증번호 발송 (이메일별 쿨다운·시간당 횟수는 app.password-reset)
+    password-reset:
+      limit: ${RATE_LIMIT_PASSWORD_RESET_LIMIT:10}
+      window: ${RATE_LIMIT_PASSWORD_RESET_WINDOW:10m}
   session:
     # 절대 만료. 로그인 성공 시점부터 이 시간이 지나면 활동 중이어도 다시 로그인해야 한다. 일반 요청으로 연장하지 않는다.
     # 쿠키 최대 수명 <= 서버 유휴 만료 <= 절대 만료 여야 하며 어긋나면 앱이 기동하지 않는다

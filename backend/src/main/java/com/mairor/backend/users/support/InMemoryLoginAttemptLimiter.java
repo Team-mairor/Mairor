@@ -179,6 +179,22 @@ public class InMemoryLoginAttemptLimiter implements LoginAttemptLimiter {
     }
   }
 
+  @Override
+  public void reset(String email) {
+    lock.lock();
+    try {
+      locked.remove(email);
+      Attempts attempts = active.get(email);
+      if (attempts != null) {
+        // 진행 중인 시도(inFlight)와 epoch 는 그대로 둔다. 그 시도의 ticket 은 평소처럼 종료된다
+        attempts.failures = 0;
+        removeIfIdle(email, attempts);
+      }
+    } finally {
+      lock.unlock();
+    }
+  }
+
   /** ticket 이 가리키는 상태. 상태가 없거나 다른 인스턴스(epoch 다름)면 {@code null}. */
   private Attempts ownedAttempts(Ticket ticket) {
     Attempts attempts = active.get(ticket.email());

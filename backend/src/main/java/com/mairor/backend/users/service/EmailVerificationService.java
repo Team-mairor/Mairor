@@ -14,6 +14,7 @@ import com.mairor.backend.users.support.EmailVerificationProperties;
 import com.mairor.backend.users.support.EmailVerificationStore;
 import com.mairor.backend.users.support.EmailVerificationStore.ConfirmOutcome;
 import com.mairor.backend.users.support.EmailVerificationStore.SendPermit;
+import com.mairor.backend.users.support.EmailVerificationStoreConfig;
 import com.mairor.backend.users.support.VerificationCodeGenerator;
 import com.mairor.backend.users.support.VerificationHasher;
 import com.mairor.backend.users.support.VerificationTokens;
@@ -51,7 +52,7 @@ public class EmailVerificationService {
 
   public EmailVerificationService(
       UserRepository userRepository,
-      EmailVerificationStore store,
+      @Qualifier(EmailVerificationStoreConfig.SIGNUP) EmailVerificationStore store,
       VerificationHasher hasher,
       VerificationCodeGenerator codeGenerator,
       VerificationTokens tokens,
@@ -91,15 +92,16 @@ public class EmailVerificationService {
     }
 
     String code = codeGenerator.generate();
-    store.saveCode(email, hasher.hashCode(email, code), now.plus(properties.codeTtl()));
+    store.saveCode(
+        email, hasher.hashCode(email, code), now.plus(properties.codeTtl()), permit.generation());
     try {
       mailSender.send(email, code, properties.codeTtl());
     } catch (MailDeliveryException e) {
-      store.cancelSend(email);
+      store.cancelSend(email, permit.generation());
       throw new BusinessException(
           HttpStatus.SERVICE_UNAVAILABLE, SEND_FAILED, "인증번호 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } catch (RuntimeException e) {
-      store.cancelSend(email);
+      store.cancelSend(email, permit.generation());
       throw e;
     }
     return new EmailVerificationSentResponse(

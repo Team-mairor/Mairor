@@ -12,6 +12,7 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -60,6 +61,14 @@ public class User {
   /** 이메일 인증 토큰으로 소유를 확인하고 가입한 시각. 인증 없이 가입했으면 {@code null}. */
   @Column(name = "email_verified_at")
   private Instant emailVerifiedAt;
+
+  /**
+   * 비밀번호를 바꿀 때마다 1씩 오른다. 로그인이 비밀번호를 확인한 뒤 재설정이 끝난 경우를 세션 발급 뒤에 알아채는 데 쓴다. 값은 {@link
+   * com.mairor.backend.users.repository.UserRepository#updatePassword}로만 바꾸고 엔티티에서 직접 고치지 않는다.
+   */
+  @ColumnDefault("0")
+  @Column(name = "password_version", nullable = false)
+  private int passwordVersion;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
@@ -135,6 +144,10 @@ public class User {
 
   public Instant getEmailVerifiedAt() {
     return emailVerifiedAt;
+  }
+
+  public int getPasswordVersion() {
+    return passwordVersion;
   }
 
   public Instant getCreatedAt() {

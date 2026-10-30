@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiDocsTest {
 
   /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 11;
+  private static final int ALL_OPERATIONS = 14;
 
   @Autowired private MockMvc mockMvc;
 
@@ -74,6 +74,45 @@ class OpenApiDocsTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/v1/users/email-verification'].post").exists())
         .andExpect(jsonPath("$.paths['/v1/users/email-verification/verification'].post").exists());
+  }
+
+  @Test
+  void apiDocs_includesPasswordResetAndDocumentsItsErrorCodes() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/password-reset'].post.tags[0]").value("비밀번호 재설정"))
+        .andExpect(jsonPath("$.paths['/v1/users/password-reset'].post.security").doesNotExist())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/password-reset'].post.responses['429'].description")
+                .value(containsString("USERS_RESET_RATE_LIMITED")))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/password-reset'].post.responses['503'].description")
+                .value(containsString("USERS_RESET_SEND_FAILED")))
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/password-reset/verification'].post.responses['400'].description")
+                .value(containsString("USERS_RESET_CODE_INVALID")))
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/password-reset/verification'].post.responses['410'].description")
+                .value(containsString("USERS_RESET_CODE_EXPIRED")))
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/password-reset/verification'].post.responses['429'].description")
+                .value(containsString("USERS_RESET_CODE_ATTEMPTS_EXCEEDED")))
+        .andExpect(
+            jsonPath("$.components.schemas.PasswordResetRequest.properties.email.example")
+                .value("user@example.com"))
+        .andExpect(jsonPath("$.paths['/v1/users/password-reset/password'].put").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/password-reset/password'].put.security").doesNotExist())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/password-reset/password'].put.responses['410'].description")
+                .value(containsString("USERS_RESET_TOKEN_EXPIRED")))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/password-reset/password'].put.parameters").doesNotExist());
   }
 
   @Test

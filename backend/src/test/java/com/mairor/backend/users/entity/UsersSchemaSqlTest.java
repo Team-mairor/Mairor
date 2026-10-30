@@ -60,9 +60,11 @@ class UsersSchemaSqlTest {
             "birth_date",
             "gender",
             "email_verified_at",
+            "password_version",
             "created_at",
             "updated_at");
     assertThat(column(columns, "password_hash").get("is_nullable")).isEqualTo("YES");
+    assertThat(column(columns, "password_version").get("is_nullable")).isEqualTo("NO");
     assertThat(column(columns, "email").get("is_nullable")).isEqualTo("NO");
     assertThat(column(columns, "email").get("character_maximum_length")).isEqualTo(254);
     assertThat(column(columns, "password_hash").get("character_maximum_length")).isEqualTo(255);
@@ -78,6 +80,19 @@ class UsersSchemaSqlTest {
     assertThat(column(columns, "name").get("character_maximum_length")).isEqualTo(50);
     assertThat(column(columns, "phone").get("character_maximum_length")).isEqualTo(11);
     assertThat(column(columns, "gender").get("character_maximum_length")).isEqualTo(10);
+  }
+
+  @Test
+  void passwordVersionDefaultsToZeroForRowsInsertedWithoutIt() {
+    jdbc.update(
+        "insert into users (id, email, provider, created_at, updated_at) "
+            + "values (gen_random_uuid(), 'version@example.com', 'LOCAL', now(), now())");
+
+    assertThat(
+            jdbc.queryForObject(
+                "select password_version from users where email = 'version@example.com'",
+                Integer.class))
+        .isZero();
   }
 
   @Test

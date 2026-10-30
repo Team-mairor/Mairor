@@ -17,6 +17,7 @@ import com.mairor.backend.users.VerificationTestSupport.MutableClock;
 import com.mairor.backend.users.entity.User;
 import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.users.support.EmailVerificationStore;
+import com.mairor.backend.users.support.EmailVerificationStoreConfig;
 import com.mairor.backend.users.support.VerificationHasher;
 import java.time.Duration;
 import java.util.UUID;
@@ -62,7 +63,8 @@ class UserSignUpEmailVerificationTest {
   @Autowired private VerificationHasher hasher;
   @Autowired private UserRepository userRepository;
 
-  @MockitoSpyBean private EmailVerificationStore store;
+  @MockitoSpyBean(name = EmailVerificationStoreConfig.SIGNUP)
+  private EmailVerificationStore store;
 
   private final String email = "verified-" + UUID.randomUUID() + "@example.com";
   private final String ip = "10.8." + IPS.incrementAndGet() / 250 + "." + IPS.get() % 250;

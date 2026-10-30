@@ -107,6 +107,7 @@ API-USERS-002 · POST /api/v1/users/login
 - 200: \{user:User, csrfToken:string\}. 새 세션 ID·쿠키 발급, Cache-Control:no-store. 로그인할 때마다 세션 ID와 csrfToken이 새로 발급되고, 기존 로그인 세션이 있는 쿠키로 요청하면 그 세션은 폐기한다(계정 전환 포함).
 - 오류: 400 VALIDATION\_FAILED(누락·빈 값·길이 초과·깨진 JSON) · 401 USERS\_INVALID\_CREDENTIALS(미가입 이메일·틀린 비밀번호·Google 전용 계정·72바이트 초과 비밀번호를 구분하지 않음) · 403 FORBIDDEN(허용되지 않은 Origin) · 415 UNSUPPORTED\_MEDIA\_TYPE · 429 USERS\_LOGIN\_RATE\_LIMITED(이메일 잠금) + Retry-After · 429 TOO\_MANY\_REQUESTS(서버 혼잡, Retry-After: 1).
 - 시도 제한: 이메일 하나에서 확정 실패가 3회에 닿으면 30초 잠금(5회로 올릴 예정, 설정값). 잠금 중에는 비밀번호가 맞아도 429이고 잠금 시간을 연장하지 않는다. 진행 중인 시도도 횟수에 포함되어 동시에 한도보다 많이 시도할 수 없다. 이메일 단위 제한이라 서로 다른 이메일의 대량 시도는 막지 못하며, 서버 전체 BCrypt 동시 계산 수를 제한해 CPU 소모를 막는다(초과분은 429 TOO\_MANY\_REQUESTS, 시도 횟수 미차감). IP 단위 제한은 프록시 담당(배포 조건).
+- 비밀번호 재설정과 겹친 로그인: 비밀번호를 확인한 뒤 세션을 발급하는 사이에 같은 계정의 비밀번호 재설정(API-USERS-010)이 끝나면, 만든 세션을 버리고 401 USERS\_INVALID\_CREDENTIALS로 끝난다(실패 횟수에는 세지 않음). 세션은 발급 즉시 저장되므로, 재설정이 먼저 세션 목록을 읽었다면 이 세션도 함께 끊긴다.
 - FE는 기기 온보딩 완료 여부로 최초 안내 또는 홈 분기. 파우치 등록은 선택, 얼굴 등록은 실행 준비 단계에서 수행.
 </toggle>
 
@@ -465,11 +466,14 @@ POST /api/v1/users/password-reset
 - 관련 기능: USERS-005 · 공개(비회원) · JSON·허용 Origin 검증
 - 요청 Body: <code>email</code> string Y — 앞뒤 공백 제거·소문자 정규화, 254자 이하
 - 성공 202: <code>{ "expiresInSeconds": 600, "resendAvailableInSeconds": 60 }</code> — 가입 여부와 무관하게 동일 응답
-- 오류: 400 <code>VALIDATION_FAILED</code>(형식) · 429 <code>USERS_RESET_RATE_LIMITED</code>(재발송 60초 간격·요청 제한, Retry-After)
+- 오류: 400 <code>VALIDATION_FAILED</code>(형식) · 429 <code>USERS_RESET_RATE_LIMITED</code>(이메일별 재발송 60초 간격·시간당 5회, IP 요청 제한, Retry-After) · 429 <code>TOO_MANY_REQUESTS</code>(같은 이메일의 다른 재설정 요청이 처리 중, Retry-After: 1) · 503 <code>USERS_RESET_SEND_FAILED</code>(메일 발송 실패. 예약이 되돌려져 바로 다시 요청 가능)
 - 정책
-  - 자체 계정: 6자리 숫자 코드 메일 발송. 10분 유효·1회용, 재발송 시 이전 코드 무효
-  - Google로만 가입한 계정: 코드 대신 'Google로 로그인' 안내 메일 발송, 자동 연결 없음(USERS-004). 응답 차이로 가입 여부가 노출되지 않도록 메일로 안내(화면 안내 방식은 5절 미결)
+  - 자체 계정(비밀번호가 있는 회원): 6자리 숫자 코드 메일 발송. 10분 유효·1회용, 재발송 시 이전 코드 무효
+  - Google로만 가입한 계정(비밀번호 없음): 코드 대신 'Google로 로그인' 안내 메일 발송, 자동 연결 없음(USERS-004). 화면 응답은 다른 이메일과 같다(메일로만 안내, 확정)
   - 미가입 이메일: 메일 미발송, 응답은 동일
+  - 가입 여부 비노출: 세 경우 모두 같은 응답·같은 재발송 제한을 받는다. 미가입·Google 전용 이메일에도 아무도 맞힐 수 없는 코드를 저장해 API-USERS-009가 같은 방식(틀림 400 → 시도 초과 429 → 만료 410)으로 동작한다. 응답 시간 차이와 메일 발송 실패(503, 메일을 보내는 자체 계정에서만 생김)로는 드러날 수 있다(허용)
+  - IP 요청 제한: 10분 10회(설정값). 이메일별 제한과 따로 센다
+  - 같은 이메일의 코드 발송·코드 확인·새 비밀번호 저장은 한 번에 하나만 처리한다. 처리 중이면 기다리지 않고 429
 
 ### API-USERS-009 · 인증 코드 확인
 
@@ -477,19 +481,24 @@ POST /api/v1/users/password-reset/verification
 
 - 관련 기능: USERS-005 · 공개(비회원)
 - 요청 Body: <code>email</code> string Y · <code>code</code> string Y(6자리 숫자)
-- 성공 200: <code>{ "resetToken": "...", "expiresAt": "2026-10-27T08:10:00Z" }</code> — 1회용, 유효 시간 초안 10분(미정)
-- 오류: 400 <code>USERS_RESET_CODE_INVALID</code>(불일치·미가입 이메일 동일) · 410 <code>USERS_RESET_CODE_EXPIRED</code> · 429 <code>USERS_RESET_CODE_ATTEMPTS_EXCEEDED</code>(시도 횟수 미정)
-- 화면: 코드 만료 / 시도 초과를 구분 안내(USERS-005). FE는 410·429를 구분해 안내
+- 성공 200: <code>{ "resetToken": "...", "expiresAt": "2026-10-27T08:10:00Z" }</code> — 유효 시간 10분(설정값) 동안 새 비밀번호 저장(API-USERS-010)에 쓸 수 있다. 비밀번호 변경과 세션 정리가 성공하면 폐기된다. 입력 규칙 위반(400)이나 세션 정리 실패(500·503) 뒤에는 같은 토큰으로 다시 보낼 수 있다. 같은 이메일로 다시 인증하면 이전 토큰은 무효
+- 오류: 400 <code>USERS_RESET_CODE_INVALID</code>(불일치. 미가입·Google 전용 이메일도 동일) · 410 <code>USERS_RESET_CODE_EXPIRED</code>(만료·이미 사용·발송 이력 없음. 가입 여부와 무관) · 429 <code>USERS_RESET_CODE_ATTEMPTS_EXCEEDED</code>(5회 틀린 뒤에는 맞는 코드도 거절, 코드를 다시 받으면 풀림) · 429 <code>TOO_MANY_REQUESTS</code>(같은 이메일의 다른 재설정 요청이 처리 중, Retry-After: 1. 시도 횟수에 세지 않음)
+- 화면: 코드 만료 / 시도 초과를 구분 안내(USERS-005). FE는 410·429를 code로 구분해 안내
 
 ### API-USERS-010 · 새 비밀번호 저장
 
 PUT /api/v1/users/password-reset/password
 
 - 관련 기능: USERS-005 · 공개(resetToken으로 인가)
-- 요청 Body: <code>resetToken</code> string Y · <code>newPassword</code> string Y · <code>newPasswordConfirm</code> string Y — USERS-001과 같은 규칙(8\~64자, 영문·숫자·ASCII 특수문자 각 1개 이상, UTF-8 72바이트 이하)
-- 성공 204
-- 오류: 400 <code>VALIDATION_FAILED</code>(규칙·불일치·72바이트 초과, details\[\].field) · 410 <code>USERS_RESET_TOKEN_EXPIRED</code>
-- 정책: 성공 시 해당 회원의 모든 세션 종료, 자동 로그인 없음, 로그인 실패 횟수 초기화, 토큰·코드 폐기 → 로그인 화면 + 완료 안내
+- 요청 Body: <code>resetToken</code> string Y · <code>newPassword</code> string Y · <code>newPasswordConfirm</code> string Y — USERS-001과 같은 규칙(8\~64자, 영문·숫자·ASCII 특수문자 각 1개 이상, UTF-8 72바이트 이하). 현재 비밀번호와 같으면 거절
+- 성공 204 본문 없음
+- 오류: 400 <code>VALIDATION_FAILED</code>(규칙·불일치·72바이트 초과·현재 비밀번호와 같음, details\[\].field. 토큰은 그대로라 고쳐서 다시 보낸다) · 410 <code>USERS_RESET_TOKEN_EXPIRED</code>(만료·이미 사용·같은 이메일로 다시 인증해 교체됨) · 429 <code>TOO_MANY_REQUESTS</code>(같은 이메일의 다른 재설정 요청이 처리 중, Retry-After: 1) · 500 <code>INTERNAL_ERROR</code>·503 <code>SERVICE_UNAVAILABLE</code>(비밀번호는 바꿨지만 일부 기기를 로그아웃시키지 못함. 아래 재시도)
+- 정책: 성공 시 해당 회원의 모든 세션 종료, 자동 로그인 없음, 로그인 실패 횟수 초기화(잠금 해제), 그 이메일의 토큰·남은 코드 폐기(발송 이력은 유지). 토큰은 이 시점, 즉 세션 정리까지 성공했을 때 폐기된다 → 로그인 화면 + 완료 안내
+  - 같은 계정으로 로그인한 기기에서 보내면 그 기기도 로그아웃되고 만료 쿠키가 내려간다. 다른 계정으로 로그인한 기기의 세션은 그대로다
+  - 같은 토큰을 동시에 보내도 한 번만 바뀐다(나머지는 429, 끝난 뒤에는 410)
+  - 현재 비밀번호와 같은지는 이 토큰으로 아직 비밀번호를 바꾸지 않았을 때만 본다(토큰 발급 시점의 비밀번호 버전으로 판단). 아래 재시도에서는 이미 바뀐 비밀번호와 같은 값을 다시 보내도 거절하지 않는다
+  - 비밀번호를 먼저 저장하고 세션을 끊는다. 세션 정리가 도중에 실패하면 500·503이 오는데, 토큰은 남아 있으므로 같은 요청을 다시 보내면 비밀번호를 한 번 더 저장하고 남은 세션(그 사이 새로 로그인한 세션 포함)을 끊어 마무리한다. 토큰이 그사이 만료·교체됐으면 410이고 코드를 다시 받아 진행한다
+  - 비밀번호를 확인한 직후 재설정이 끝나 버린 로그인은 세션을 만들지 않고 401 <code>USERS_INVALID_CREDENTIALS</code>로 끝난다(API-USERS-002)
 
 ### API-USERS-011 · 가입 가능 이메일 확인
 
@@ -551,7 +560,7 @@ DELETE /api/v1/users/me/sessions
 - 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
 - 요청 필드 없음. 성공 204 본문 없음. 현재 기기도 함께 로그아웃되고 만료 쿠키가 내려간다
 - 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 500 INTERNAL\_ERROR(일부 기기를 끊지 못함)
-- 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 세션마다 지우기 전에 종료 훅을 호출하고(이유 ALL\_DEVICES\_REVOKED) 훅이 실패한 기기는 지우지 않는다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓸 예정이다(S15P31A306-210)
+- 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 세션마다 지우기 전에 종료 훅을 호출하고(이유 ALL\_DEVICES\_REVOKED) 훅이 실패한 기기는 지우지 않는다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓴다(로그인한 같은 계정의 요청이면 그 세션 포함)
 
 ### API-VIDEO-006 · 분석 재시도
 
@@ -683,7 +692,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 401 | 인증 정보 없음·유효하지 않음·만료. 로그인 자격 증명 불일치도 401, 시도 제한 도달은 429 |
 | 403 / 404 | 403: 역할·보호 정책·CSRF 위반. 404: 리소스 없음 또는 타인 소유 리소스 접근은 동일한 NOT\_FOUND |
 | 409 | 중복 생성 또는 현재 상태와 충돌하는 요청 |
-| 410 | 만료된 1회용 자원(비밀번호 재설정 코드·토큰) |
+| 410 | 만료됐거나 이미 쓴 자원(비밀번호 재설정 코드, 비밀번호 변경이 끝난 재설정 토큰) |
 | 429 | 분석 일일 제한·로그인 시도·재설정·중복 확인 요청 제한 초과. Retry-After 반환 |
 | 413 / 415 | 파일 용량 초과 / 지원하지 않는 파일 형식 |
 | 500 | 서버의 예기치 않은 오류 |
@@ -821,7 +830,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 항목 | 남은 결정 |
 | --- | --- |
 | 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정, Google 최초 로그인 시 약관·추가 정보 수집, 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
-| 비밀번호 재설정 | Google 전용 계정 안내를 메일로 할지 화면으로 할지, resetToken 유효 시간·코드 시도 횟수, 요청 제한 수치 |
+| 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
 | 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
 | 얼굴 등록 | 촬영 조건 서버 재검증 여부, 미연결 등록 정리 시점, 저장 위치·암호화·보관 기간, 정면·좌·우 3장 확장(P1)(확인 필요 7) |

@@ -28,4 +28,14 @@ public class RateLimitConfig {
     RateLimitProperties.Rule rule = properties.emailVerification();
     return new InMemoryRateLimiter(rule.limit(), rule.window());
   }
+
+  /**
+   * 비밀번호 재설정 인증번호 발송(API-USERS-008). 키는 클라이언트 IP. 이메일마다 쿨다운·시간당 횟수 제한이 따로 있지만, 한 곳에서 여러 이메일로 요청을
+   * 쏟아내는 것은 이쪽에서 막는다. 가입 인증과 따로 센다.
+   */
+  @Bean
+  RateLimiter passwordResetRateLimiter(RateLimitProperties properties) {
+    RateLimitProperties.Rule rule = properties.passwordReset();
+    return new InMemoryRateLimiter(rule.limit(), rule.window());
+  }
 }

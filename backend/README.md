@@ -54,17 +54,18 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `AGREEMENT_TERMS_VERSION` | `2026-10-26` | 서비스 이용약관의 현재 버전. 가입 요청의 `agreements[].version` 이 같아야 한다 |
 | `AGREEMENT_PRIVACY_VERSION` | `2026-10-26` | 개인정보 수집·이용의 현재 버전 |
 | `AGREEMENT_AGE_OVER_14_VERSION` | `2026-10-26` | 만 14세 이상 확인의 현재 버전 |
-| `MAIL_ENABLED` | `false` | `true`면 SMTP 로 인증번호 메일을 실제로 보낸다. `false`면 dev 는 인증번호를 서버 로그로만 남기고, prod 는 발송이 항상 실패한다 |
+| `MAIL_ENABLED` | `false` | `true`면 SMTP 로 인증 메일(가입 인증번호, 비밀번호 재설정 인증번호·Google 로그인 안내)을 실제로 보낸다. `false`면 dev 는 내용을 서버 로그로만 남기고, prod 는 발송이 항상 실패한다 |
 | `MAIL_USERNAME` | (없음) | SMTP 계정(Gmail 주소). `MAIL_ENABLED=true` 인데 비어 있으면 기동 실패 |
 | `MAIL_PASSWORD` | (없음) | Gmail **앱 비밀번호**(2단계 인증 필요). 비어 있으면 기동 실패. 코드·문서에 적지 않는다 |
 | `MAIL_FROM` | `MAIL_USERNAME` | 보내는 사람 주소. Gmail 은 인증한 계정 주소로만 보낼 수 있다 |
 | `MAIL_FROM_NAME` | `Mairor` | 받는 사람에게 보이는 보내는 사람 이름 |
 | `MAIL_HOST` / `MAIL_PORT` | `smtp.gmail.com` / `587` | SMTP 서버 (STARTTLS) |
 | `SIGNUP_REQUIRE_EMAIL_VERIFICATION` | `false` | `true`면 가입 요청에 `emailVerificationToken` 이 필요하다(없거나 다른 이메일의 토큰이면 `USERS_EMAIL_NOT_VERIFIED`). 이메일 소유 확인은 명세 확정 전 확장이라 기본은 꺼져 있다. prod 에서 켜면 `MAIL_ENABLED=true`(+SMTP 계정)와 `EMAIL_VERIFICATION_SECRET` 이 없을 때 기동 실패한다 |
-| `EMAIL_VERIFICATION_SECRET` | (없음) | 인증번호 해시용 비밀키. 비우면 서버를 켤 때마다 임의로 만들어져 재시작 시 진행 중인 인증이 무효가 된다. 서버를 여러 대 두기 전에 반드시 설정한다 |
-| `VERIFICATION_STORE` | `memory` | 인증 임시 상태 저장소. 지금은 `memory` 만 있다 ([인메모리 저장소의 한계](#인메모리-저장소의-한계)) |
+| `EMAIL_VERIFICATION_SECRET` | (없음) | 인증번호 해시용 비밀키(가입 인증과 비밀번호 재설정이 같이 쓴다). 비우면 서버를 켤 때마다 임의로 만들어져 재시작 시 진행 중인 인증이 무효가 된다. 서버를 여러 대 두기 전에 반드시 설정한다 |
+| `VERIFICATION_STORE` | `memory` | 인증 임시 상태 저장소. 가입 인증용과 비밀번호 재설정용이 따로 만들어진다. 지금은 `memory` 만 있다 ([인메모리 저장소의 한계](#인메모리-저장소의-한계)) |
 | `RATE_LIMIT_EMAIL_AVAILABILITY_LIMIT` / `_WINDOW` | `30` / `1m` | 이메일 중복 확인의 IP 당 요청 제한 |
 | `RATE_LIMIT_EMAIL_VERIFICATION_LIMIT` / `_WINDOW` | `10` / `10m` | 인증번호 발송의 IP 당 요청 제한 |
+| `RATE_LIMIT_PASSWORD_RESET_LIMIT` / `_WINDOW` | `10` / `10m` | 비밀번호 재설정 인증번호 발송의 IP 당 요청 제한(가입 인증과 따로 센다) |
 | `SESSION_TIMEOUT` | `3d` | 서버 세션 유휴 만료. 마지막 인증 요청으로부터 이 시간이 지나면 다시 로그인해야 한다 |
 | `SESSION_COOKIE_MAX_AGE` | `3d` | 세션 쿠키 최대 수명. 인증 요청이 성공하면 이 값으로 갱신된다(절대 만료까지 남은 시간이 더 짧으면 그 값) |
 | `SESSION_ABSOLUTE_TIMEOUT` | `30d` | 절대 만료. 로그인 성공 시점부터 이 시간이 지나면 활동 중이어도 다시 로그인한다. 일반 요청으로 연장하지 않는다. 쿠키 최대 수명 ≤ 유휴 만료 ≤ 절대 만료 여야 하며 어긋나면 기동 실패 |
@@ -110,12 +111,14 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 
 ### 인메모리 저장소의 한계
 
-인증번호·재발송 기록·인증 토큰(`VERIFICATION_STORE=memory`), 요청 제한(`RateLimiter`), 로그인 시도 제한(`LoginAttemptLimiter`)은 서버 메모리에 있다.
+인증번호·재발송 기록·인증 토큰(`VERIFICATION_STORE=memory`, 가입 인증과 비밀번호 재설정 각각), 요청 제한(`RateLimiter`), 로그인 시도 제한(`LoginAttemptLimiter`), 비밀번호 재설정의 이메일 단위 잠금(`PasswordResetLocks`)은 서버 메모리에 있다.
 
 - **서버 1대에서만 정확하다.** 여러 대면 인증번호를 발송한 서버와 확인하는 서버가 달라 인증이 실패하고, 요청 제한도 서버마다 따로 센다.
 - **재시작하면 사라진다.** 진행 중인 인증은 다시 받아야 하고 제한 횟수도 초기화된다(`EMAIL_VERIFICATION_SECRET` 이 없으면 인증번호 해시도 달라진다). 로그인 시도 제한의 잠금도 풀린다.
 - 로그인 시도 제한은 이메일 단위라서 **서로 다른 이메일로 오는 대량 시도는 막지 못한다.** 그 CPU·DB 소모는 `LOGIN_MAX_CONCURRENT_HASHES` 로 서버 전체 동시 처리 수(사용자 조회 + BCrypt)를 제한해 막고, IP 단위 제한은 프록시의 로그인 경로 요청 제한(배포 조건)에 맡긴다.
 - 저장소가 가득 차서(`LOGIN_MAX_ENTRIES`) 상태를 지우면 해당 이메일의 실패 횟수가 초기화된 것과 같다. 제거·거절 횟수는 로그에 최대 1분에 한 번 요약해서 남긴다.
+- 인증 임시 상태 저장소는 맵마다 10만 개 상한이 있다. 넘으면 **어떤 항목을 지울지는 Caffeine 이 정하며 가장 오래된 것이라는 보장은 없다.** 정상 사용자의 진행 중 인증(인증번호·쿨다운 기록·토큰)이 사라질 수 있고, 그 사용자는 인증번호를 다시 받아야 한다. 비밀번호 재설정은 가입하지 않은 이메일에도 항목을 만들어서(가입 여부를 숨기기 위해) 이 상한을 채우는 요청을 IP 제한과 이메일당 시간당 한도로만 막는다.
+- 비밀번호 재설정의 이메일 단위 잠금은 프로세스 안에서만 유효하다. 서버를 여러 대 두면 분산 잠금으로 바꿔야 한다.
 - 클라이언트 IP 는 `getRemoteAddr()` 라서 리버스 프록시 뒤에서는 모든 요청이 프록시 IP 하나로 보인다. 배포 환경이 정해지면 전달 헤더 처리를 맞춘다(S15P31A306-203).
 - 저장소·제한기는 인터페이스(`EmailVerificationStore`, `RateLimiter`, `LoginAttemptLimiter`)와 계약 테스트가 있어서, Redis 구현을 더하고 `VERIFICATION_STORE` 로 고르게 하면 바꿀 수 있다(후속).
 
@@ -136,6 +139,7 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 - **CSRF**: 로그인 외 변경 요청(POST/PUT/PATCH/DELETE)은 `X-CSRF-TOKEN: <csrfToken>` 이 필요하다. 토큰은 로그인과 `/me` 응답으로만 받는다. 없거나 틀리면 403 `CSRF_INVALID`. 세션이 없는 변경 요청도 403 이다.
 - **세션 수명**: 유휴 3일(`SESSION_TIMEOUT`) · 쿠키 3일(`SESSION_COOKIE_MAX_AGE`, 인증 요청이 성공하면 갱신) · 절대 30일(`SESSION_ABSOLUTE_TIMEOUT`, 로그인 시점 기준). 만료되면 401.
 - **로그인 실패**: 미가입 이메일, 틀린 비밀번호, Google 전용 계정은 구분 없이 401 `USERS_INVALID_CREDENTIALS`. 이메일 하나에서 반복 실패하면 잠기고(429 `USERS_LOGIN_RATE_LIMITED` + `Retry-After`), 서버가 혼잡하면 429 `TOO_MANY_REQUESTS`. 수치는 위 환경변수 표(`LOGIN_*`).
+- **비밀번호 재설정과 겹친 로그인**: 로그인은 비밀번호를 확인할 때 읽은 비밀번호 버전(`users.password_version`)을 세션을 발급한 뒤 다시 읽어, 그 사이 재설정이 끝났으면 만든 세션을 버리고 401 `USERS_INVALID_CREDENTIALS` 로 끝낸다(실패 횟수에는 세지 않고 지표는 `password_changed`). 이 확인이 의미가 있도록 세션은 만들자마자 저장한다(`spring.session.jdbc.flush-mode: immediate`). 그래서 재설정이 세션 목록을 먼저 읽었다면 그 세션도 함께 끊긴다. 즉시 저장으로 바뀐 세션 쓰기: 인증된 일반 요청은 1건 그대로(마지막 접근 시각, 응답 커밋 대신 요청 처리 시작 시점), 로그인 성공은 2건 → 8건(속성마다 저장, 1회성), 로그아웃은 1건 → 2건.
 - **기기 식별**: 기기는 `sessionRef` 로 가리킨다. 세션 ID(쿠키 값)와 다른 값이고, 다른 회원의 값이나 없는 값은 모두 404 다.
 - **Swagger 에서 호출**: `login` 을 실행하면 브라우저가 쿠키를 저장하고, 응답의 `csrfToken` 은 이후 변경 요청에 자동으로 실린다(Authorize 에 넣을 필요 없음). Swagger 출처(`http://localhost:8080`)가 `ALLOWED_ORIGINS` 에 있어야 한다.
 
@@ -151,7 +155,8 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 
 | 이름 | 라벨 | 뜻 |
 |---|---|---|
-| `mairor.login.attempts` | `result`: `success` `invalid_credentials` `locked` `pending` `saturated` `gate_rejected` `error` | 로그인 결과. `locked`·`pending`·`saturated` 는 시도 제한 사유, `gate_rejected` 는 동시 처리 상한 거절 |
+| `mairor.login.attempts` | `result`: `success` `invalid_credentials` `locked` `pending` `saturated` `gate_rejected` `password_changed` `error` | 로그인 결과. `locked`·`pending`·`saturated` 는 시도 제한 사유, `gate_rejected` 는 동시 처리 상한 거절, `password_changed` 는 비밀번호 재설정과 겹쳐 만든 세션을 버린 경우. 비밀번호가 맞은 뒤에 실패한 로그인(버전 재확인 중 DB 오류는 `error`, 비밀번호가 바뀐 경우는 `password_changed`)은 로그인 실패 횟수에 넣지 않고, 비밀번호가 맞았으므로 그 전의 실패 횟수는 0 으로 돌아간다 |
+| `mairor.password_reset` | `result`: `success` `session_revoke_failed` `busy` | 비밀번호 재설정 결과. `session_revoke_failed` 는 비밀번호는 바뀌었는데 기존 세션을 다 끊지 못한 경우로, 사용자가 다시 요청하지 않으면 옛 세션이 남으니 알림 대상이다. `busy` 는 같은 이메일의 재설정 요청이 겹쳐 거절한 수 |
 | `mairor.session.failures` | `cause`: `store_unavailable` `corrupted_session` `unexpected` | 필터 단계의 세션 조회·저장·삭제 실패. 조회·저장·삭제 중 어느 쪽인지는 나누지 않는다(로그의 스택으로 본다) |
 | `mairor.session.cookie_refresh.failures` | 없음 | 세션 쿠키 갱신 실패. 갱신이 실패해도 업무 응답은 그대로 나간다 |
 | `mairor.session.end_hook.failures` | `reason`: `logout` `device_revoked` `all_devices_revoked` `replaced_by_login` `absolute_expired` `idle_expired` | 세션 종료 훅이 실패한 횟수. 어느 훅인지는 로그로 본다 |
@@ -217,7 +222,35 @@ class AbandonUnfinishedExecutions implements SessionEndHook {
 | DB 쿼리 실행 시간 제한(`statement_timeout` 등) | **미설정**. 느린 쿼리는 연결을 오래 쥔다. DB 서버 또는 접속 URL 로 정한다 |
 | 요청 전체 처리 시간 제한(서버·프록시) | **확인 필요** (203) |
 | 사용자별 활성 세션 수 상한 | **정책 미정**. 지금은 상한이 없어 반복 로그인으로 세션이 쌓일 수 있다. 초과 시 가장 오래된 세션 제거 또는 새 로그인 거절 중 정해야 한다(후속) |
-| 지표 노출·알림 | **미정** (203) |
+| 지표 노출·알림 | **미정** (203). 특히 `mairor.password_reset{result=session_revoke_failed}` |
+| 운영 DB 의 `users.password_version` 컬럼 | **배포 전 필수** ([DB 스키마](#db-스키마)). 없으면 앱이 기동하지 않는다. 적용 담당·시점은 203 에서 확정 |
+| 재설정·인증 IP 제한의 클라이언트 IP | **확인 필요** (203). 지금은 `getRemoteAddr()` 라 프록시 뒤에서는 모든 요청이 한 IP 로 센다 |
+| 배포 방식(새 프로세스와 옛 프로세스의 동시 기동) | **확인 필요** (203). 겹치는 동안 인메모리 인증 상태·재설정 잠금이 프로세스마다 따로라 어긋날 수 있다. 재시작하면 진행 중인 재설정은 사라지고 인증번호를 다시 받아야 한다 |
+
+## 비밀번호 재설정
+
+공개 API 3개이고 모두 허용 Origin 검사를 받는다(세션·CSRF 토큰 불필요). 자동 로그인은 하지 않는다.
+
+| API | 경로 | 설명 |
+|---|---|---|
+| API-USERS-008 | `POST /api/v1/users/password-reset` | 인증번호 발송. 202 `{expiresInSeconds, resendAvailableInSeconds}` (가입 여부와 무관하게 같은 응답) |
+| API-USERS-009 | `POST /api/v1/users/password-reset/verification` | 인증번호 확인 → `resetToken` 발급 |
+| API-USERS-010 | `PUT /api/v1/users/password-reset/password` | 새 비밀번호 저장(204) → 이 계정의 모든 기기 로그아웃 |
+
+```
+인증번호 발송 ─▶ 인증번호 확인(resetToken) ─▶ 새 비밀번호 저장 ─▶ 로그인 화면에서 새 비밀번호로 로그인
+```
+
+- **정책**(`app.password-reset`, 설정값): 인증번호 6자리·유효 10분·1회용 · 재발송 60초 간격(재발송하면 이전 코드 무효) · 이메일당 시간당 5회 · 틀릴 수 있는 횟수 5 · 토큰 유효 10분(같은 이메일로 다시 인증하면 이전 토큰 무효). 발송은 IP 당 10분 10회(`RATE_LIMIT_PASSWORD_RESET_*`). 가입 인증과 저장소·수치·제한을 공유하지 않는다.
+- **받는 메일**: 비밀번호가 있는 회원은 인증번호(`mail/password-reset-code.html`), 비밀번호가 없는 Google 로그인 전용 회원은 인증번호 대신 "Google 로 로그인" 안내(`mail/google-account-notice.html`), 가입하지 않은 이메일은 메일 없음.
+- **가입 여부를 숨긴다.** 세 경우 모두 같은 응답·같은 재발송 제한을 받고, 인증번호가 없는 이메일에도 아무도 맞힐 수 없는 인증번호를 저장해서 확인 API 가 똑같이 틀림 400 → 시도 초과 429 → 만료 410 으로 동작한다. **허용한 예외**: 응답 시간 차이(메일 발송이 동기라서), 메일 발송 실패 503 `USERS_RESET_SEND_FAILED`(메일을 보내는 자체 계정에서만 생긴다).
+- **같은 이메일은 한 번에 하나**: 발송(예약·저장 구간), 확인, 저장이 이메일 단위 잠금(`PasswordResetLocks`)을 쓴다. 이미 처리 중이면 기다리지 않고 429 `TOO_MANY_REQUESTS`(`Retry-After: 1`). 같은 토큰을 동시에 보내도 비밀번호는 한 번만 바뀐다. 메일 발송은 잠금 밖에서 한다(SMTP 가 느려서). 발송은 IP 요청 제한을 잠금보다 먼저 확인하므로 **잠금 충돌로 거절된 요청도 IP 횟수에 포함된다**. 순서를 바꾸면 IP 한도를 다 쓴 요청도 피해자 이메일의 잠금을 계속 잡아 정상 요청을 429 로 밀어낼 수 있어서 이 순서를 유지한다.
+- **발송 실패 되돌리기**: 재발송 예약 뒤 무엇이든 실패하면(회원 조회, 저장, 메일 발송) 그 예약을 되돌려 쿨다운·시간당 횟수가 줄지 않는다. 되돌리기는 세대 값으로 자기 예약만 지워서, 그사이 다른 요청이 저장한 새 인증번호를 지우지 않는다.
+- **현재 비밀번호와 같은 새 비밀번호는 거절**한다(400 `VALIDATION_FAILED`, 필드 `newPassword`). 단 이 토큰으로 이미 비밀번호를 바꿨는데 세션 정리만 실패한 재시도는 같은 값을 다시 보내도 받는다. 토큰을 발급할 때 그 시점의 `password_version` 을 함께 저장해 두고, 버전이 그대로일 때만 비교해서 구분한다.
+- **저장(010) 순서**: 입력 확인 → 토큰 확인 → 잠금 → 토큰 재확인 → 새 해시와 `password_version` 을 먼저 커밋 → 모든 세션 종료(종료 훅 이유 `ALL_DEVICES_REVOKED`) → 로그인 잠금 해제 → 그 이메일의 토큰과 남은 인증번호 폐기(발송 기록은 유지). 같은 계정으로 로그인한 기기에서 보내면 그 기기도 로그아웃되고 만료 쿠키가 내려간다. 규칙 위반 400 은 토큰을 쓰지 않는다.
+- **세션 정리가 실패하면** 비밀번호는 이미 바뀐 채 500(저장소 일시 장애면 503)이 나가고 `session_revoke_failed` 지표와 ERROR 로그(원인 예외 이름만)가 남는다. 토큰은 남아 있어서 **같은 요청을 다시 보내면** 비밀번호를 한 번 더 저장하고 남은 세션(그 사이 새로 로그인한 세션 포함)을 끊어 마무리한다. 토큰이 그사이 만료·교체·퇴거됐으면 410 이고 인증번호부터 다시 받는다. 남은 옛 세션은 새 비밀번호로 로그인한 뒤 "전체 기기 로그아웃"으로도 끊을 수 있다.
+- **재설정과 겹친 로그인**은 세션을 만들지 못한다([로그인·로그아웃](#로그인로그아웃) 참고).
+- **메일 발송 설정**은 가입 인증과 같다(`MAIL_*`). `MAIL_ENABLED=false` 면 dev 는 인증번호를 서버 로그에만 남기고(받는 사람 주소는 가린다), prod 는 발송이 실패한다(503).
 
 ## DB 스키마
 
@@ -230,6 +263,12 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록) |
 
 - 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`
+- **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column` 으로 앱 기동을 막는다.
+
+| 변경 | 이슈 | 기존 DB 에 적용할 문장 |
+|---|---|---|
+| `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
+
 - 누가·언제 적용하는지는 아직 정해지지 않았다 (배포 환경 이슈에서 확정). 확정 전에는 운영 배포를 하지 않는다.
 - 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).
 - 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인).

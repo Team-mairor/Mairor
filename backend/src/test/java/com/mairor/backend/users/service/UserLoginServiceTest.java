@@ -100,6 +100,8 @@ class UserLoginServiceTest {
     response = new MockHttpServletResponse();
     member = user("member@example.com", PASSWORD);
     when(userRepository.findByEmail("member@example.com")).thenReturn(Optional.of(member));
+    // 세션을 발급한 뒤 비밀번호 버전을 다시 읽는다. 기본은 비밀번호가 바뀌지 않은 상태(읽어 둔 값과 같다)
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.of(0));
   }
 
   /** 운영과 같은 구성: CSRF 필터가 쓰는 저장소·핸들러와 같은 종류를 쓴다. */
@@ -533,6 +535,139 @@ class UserLoginServiceTest {
 
     assertThat(count("success")).isEqualTo(1);
     assertThat(count("invalid_credentials")).isZero();
+  }
+
+  // ---- 세션 발급 뒤 비밀번호 버전 재확인 ----
+
+  @Test
+  void aPasswordChangedWhileLoggingInRejectsTheLoginAndDiscardsTheSession() {
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.of(1));
+
+    BusinessException e = failedLogin("member@example.com", PASSWORD);
+
+    assertThat(e.status()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    assertThat(e.code()).isEqualTo("USERS_INVALID_CREDENTIALS");
+    assertThat(request.getSession(false)).as("만든 세션을 버린다").isNull();
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    assertThat(count("password_changed")).isEqualTo(1);
+    assertThat(count("success")).isZero();
+  }
+
+  @Test
+  void aUserWhoVanishedWhileLoggingInIsTreatedTheSameWay() {
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.empty());
+
+    BusinessException e = failedLogin("member@example.com", PASSWORD);
+
+    assertThat(e.code()).isEqualTo("USERS_INVALID_CREDENTIALS");
+    assertThat(request.getSession(false)).isNull();
+    assertThat(count("password_changed")).isEqualTo(1);
+  }
+
+  @Test
+  void aRejectedRecheckDoesNotCountAsAWrongPassword() {
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.of(1));
+    for (int i = 0; i < 5; i++) {
+      failedLogin("member@example.com", PASSWORD);
+    }
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.of(0));
+
+    // 올바른 비밀번호를 다섯 번 보냈지만 비밀번호 실패로 세지 않았으므로 잠기지 않았다
+    login("member@example.com", PASSWORD);
+
+    assertThat(count("invalid_credentials")).isZero();
+    assertThat(gate.availablePermits()).isEqualTo(4);
+  }
+
+  /**
+   * 재확인은 비밀번호가 맞은 뒤에 일어난다. 그래서 재확인 실패는 비밀번호 실패로 세지 않고, 비밀번호가 맞았으므로 그 전의 실패 횟수는 0 으로 돌아간다. 제한기에는 실패
+   * 횟수를 읽는 메서드가 없어서 동작으로 확인한다(한도 3회): 남아 있었다면 다음 실패에서 바로 잠긴다.
+   */
+  private void assertFailuresStartFromZeroAgain() {
+    assertThat(failedLogin("member@example.com", "Wrong-Password1!").code())
+        .as("초기화되지 않았다면 여기서 세 번째 실패로 잠긴다")
+        .isEqualTo("USERS_INVALID_CREDENTIALS");
+    assertThat(failedLogin("member@example.com", "Wrong-Password1!").code())
+        .isEqualTo("USERS_INVALID_CREDENTIALS");
+    assertThat(failedLogin("member@example.com", "Wrong-Password1!").code())
+        .isEqualTo("USERS_INVALID_CREDENTIALS");
+    // 제한기는 다시 센다: 세 번 틀렸으니 이제 잠긴다
+    assertThat(failedLogin("member@example.com", PASSWORD).code())
+        .isEqualTo("USERS_LOGIN_RATE_LIMITED");
+  }
+
+  @Test
+  void aDatabaseErrorDuringTheRecheckIsAnErrorNotAWrongPasswordAndClearsEarlierFailures() {
+    failedLogin("member@example.com", "Wrong-Password1!");
+    failedLogin("member@example.com", "Wrong-Password1!");
+    when(userRepository.findPasswordVersionById(any()))
+        .thenThrow(new IllegalStateException("DB 장애"));
+
+    assertThatThrownBy(() -> login("member@example.com", PASSWORD))
+        .isInstanceOf(IllegalStateException.class);
+
+    assertThat(count("error")).isEqualTo(1);
+    assertThat(count("invalid_credentials")).as("앞의 틀린 비밀번호 두 번뿐").isEqualTo(2);
+    assertThat(count("success")).isZero();
+    assertFailuresStartFromZeroAgain();
+  }
+
+  @Test
+  void aPasswordChangedDuringTheLoginIsCountedSeparatelyAndClearsEarlierFailures() {
+    failedLogin("member@example.com", "Wrong-Password1!");
+    failedLogin("member@example.com", "Wrong-Password1!");
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.of(1));
+
+    assertThat(failedLogin("member@example.com", PASSWORD).code())
+        .isEqualTo("USERS_INVALID_CREDENTIALS");
+
+    assertThat(count("password_changed")).isEqualTo(1);
+    assertThat(count("invalid_credentials")).as("앞의 틀린 비밀번호 두 번뿐").isEqualTo(2);
+    assertThat(count("error")).isZero();
+    assertFailuresStartFromZeroAgain();
+  }
+
+  @Test
+  void aFailingRecheckDiscardsTheSessionAndThrowsTheOriginalException() {
+    IllegalStateException original = new IllegalStateException("DB 장애");
+    when(userRepository.findPasswordVersionById(any())).thenThrow(original);
+
+    assertThatThrownBy(() -> login("member@example.com", PASSWORD)).isSameAs(original);
+
+    assertThat(request.getSession(false)).isNull();
+    assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    assertThat(count("error")).isEqualTo(1);
+    assertThat(count("success")).isZero();
+  }
+
+  @Test
+  void aFailureWhileDiscardingAfterAFailingRecheckIsAttachedToTheOriginalException() {
+    IllegalStateException original = new IllegalStateException("DB 장애");
+    IllegalStateException cleanup = new IllegalStateException("정리 실패");
+    when(userRepository.findPasswordVersionById(any())).thenThrow(original);
+    SessionEstablisher failingDiscard = spy(establisher());
+    doThrow(cleanup).when(failingDiscard).discard(any());
+    service =
+        new UserLoginService(
+            userRepository, encoder, limiter, gate, failingDiscard, metrics, clock);
+
+    assertThatThrownBy(() -> login("member@example.com", PASSWORD))
+        .isSameAs(original)
+        .hasSuppressedException(cleanup);
+  }
+
+  @Test
+  void aFailureWhileDiscardingAfterAChangedPasswordIsNotHiddenBehindA401() {
+    IllegalStateException cleanup = new IllegalStateException("정리 실패");
+    when(userRepository.findPasswordVersionById(any())).thenReturn(Optional.of(1));
+    SessionEstablisher failingDiscard = spy(establisher());
+    doThrow(cleanup).when(failingDiscard).discard(any());
+    service =
+        new UserLoginService(
+            userRepository, encoder, limiter, gate, failingDiscard, metrics, clock);
+
+    // 세션을 버리지 못했는데 401 로 끝나면 응답은 실패인데 세션이 살아 있게 된다
+    assertThatThrownBy(() -> login("member@example.com", PASSWORD)).isSameAs(cleanup);
   }
 
   @Test

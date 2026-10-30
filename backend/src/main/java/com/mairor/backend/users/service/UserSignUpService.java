@@ -15,6 +15,7 @@ import com.mairor.backend.users.repository.UserAgreementRepository;
 import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.users.support.AgreementPolicy;
 import com.mairor.backend.users.support.EmailVerificationStore;
+import com.mairor.backend.users.support.EmailVerificationStoreConfig;
 import com.mairor.backend.users.support.PasswordNormalizer;
 import com.mairor.backend.users.support.SignupProperties;
 import com.mairor.backend.users.support.VerificationHasher;
@@ -28,6 +29,7 @@ import java.util.Map;
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -73,7 +75,7 @@ public class UserSignUpService {
       PasswordEncoder passwordEncoder,
       AgreementPolicy agreementPolicy,
       SignupProperties signupProperties,
-      EmailVerificationStore verificationStore,
+      @Qualifier(EmailVerificationStoreConfig.SIGNUP) EmailVerificationStore verificationStore,
       VerificationHasher verificationHasher,
       Clock clock,
       PlatformTransactionManager transactionManager) {

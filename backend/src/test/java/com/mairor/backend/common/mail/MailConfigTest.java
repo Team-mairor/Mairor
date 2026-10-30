@@ -1,6 +1,7 @@
 package com.mairor.backend.common.mail;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -50,10 +51,42 @@ class MailConfigTest {
             context -> {
               VerificationMailSender sender = context.getBean(VerificationMailSender.class);
               assertThat(sender).isInstanceOf(UnavailableVerificationMailSender.class);
-              org.assertj.core.api.Assertions.assertThatThrownBy(
+              assertThatThrownBy(
                       () -> sender.send("member@example.com", "123456", Duration.ofMinutes(10)))
                   .isInstanceOf(MailDeliveryException.class);
+              PasswordResetMailSender reset = context.getBean(PasswordResetMailSender.class);
+              assertThatThrownBy(
+                      () ->
+                          reset.sendResetCode(
+                              "member@example.com", "123456", Duration.ofMinutes(10)))
+                  .isInstanceOf(MailDeliveryException.class);
+              assertThatThrownBy(() -> reset.sendGoogleAccountNotice("google@example.com"))
+                  .isInstanceOf(MailDeliveryException.class);
             });
+  }
+
+  @Test
+  void bothKindsOfMailGoThroughTheSameSender() {
+    runner.run(
+        context -> {
+          // 메일 설정은 하나이고 발송기도 하나다. 어느 타입으로 주입받아도 같은 빈이 온다
+          assertThat(context).hasSingleBean(AuthMailSender.class);
+          assertThat(context.getBean(PasswordResetMailSender.class))
+              .isSameAs(context.getBean(VerificationMailSender.class));
+        });
+  }
+
+  @Test
+  void enabled_usesTheSmtpSenderForPasswordResetToo() {
+    runner
+        .withPropertyValues(
+            "app.mail.enabled=true",
+            "spring.mail.username=bot@gmail.com",
+            "spring.mail.password=app-password")
+        .run(
+            context ->
+                assertThat(context.getBean(PasswordResetMailSender.class))
+                    .isInstanceOf(SmtpVerificationMailSender.class));
   }
 
   @Test

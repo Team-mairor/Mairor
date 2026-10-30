@@ -16,6 +16,7 @@ import com.mairor.backend.users.VerificationTestSupport.MutableClock;
 import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.users.service.UserSignUpService;
 import com.mairor.backend.users.support.EmailVerificationStore;
+import com.mairor.backend.users.support.EmailVerificationStoreConfig;
 import com.mairor.backend.users.support.VerificationHasher;
 import java.time.Duration;
 import java.time.Instant;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
@@ -63,7 +65,11 @@ class EmailVerificationControllerTest {
   @Autowired private MockMvc mockMvc;
   @Autowired private CapturingMailSender mail;
   @Autowired private MutableClock clock;
-  @Autowired private EmailVerificationStore store;
+
+  @Autowired
+  @Qualifier(EmailVerificationStoreConfig.SIGNUP)
+  private EmailVerificationStore store;
+
   @Autowired private VerificationHasher hasher;
   @Autowired private UserRepository userRepository;
   @Autowired private UserSignUpService signUpService;
