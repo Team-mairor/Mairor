@@ -20,6 +20,10 @@ import { cn } from "@/lib/utils";
 // 레시피 연동 전까지는 ?layers=경로 로 레이어 파일을 바꿔 본다.
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
 const PARTS = TRY_STEPS.map((i) => REF_PRODUCTS[i]);
+/** 색을 입혀 볼 수 없는 단계 이름 (피부 표현·마스카라·쉐딩 등) */
+const SKIPPED = [
+  ...new Set(REF_PRODUCTS.filter((_, i) => !TRY_STEPS.includes(i)).map((r) => r.cat)),
+].join(" · ");
 
 /** 07 미리보기 · 실시간 입혀보기 (PREVIEW-001 · CAMERA-001 · CAMERA-004). ?alert=lost|turn|cover|far|light 는 알림 확인용 */
 export default function PreviewPage() {
@@ -69,8 +73,8 @@ export default function PreviewPage() {
           </h1>
         </div>
         <p className="-mt-2 text-[18px] leading-[1.5] text-pretty text-line-2">
-          피부 표현(파운데이션 · 컨실러)은 색 비교가 어려워 빠져요 · {PARTS.length} /{" "}
-          {REF_PRODUCTS.length} 단계 미리보기
+          {SKIPPED && `색 비교가 어려운 ${SKIPPED} 단계는 빠져요 · `}
+          {PARTS.length} / {REF_PRODUCTS.length} 단계 미리보기
         </p>
         <div className="-mt-1 grid grid-cols-2 gap-2.5">
           {[

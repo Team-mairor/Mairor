@@ -26,6 +26,9 @@ const TAG_POS: [number, number][] = [
   [50, 80],
 ];
 
+/** i번째 제품을 찾았다고 보여 줄 진행률. 단계 수와 상관없이 6~90% 사이에 고르게 나눈다 */
+const foundAt = (i: number) => 6 + (i * 84) / REF_PRODUCTS.length;
+
 type Fail = null | "timeout" | "failed";
 type Review = null | "pending" | "rejected";
 
@@ -123,8 +126,8 @@ export default function LoadingPage() {
 
   const rows = REF_PRODUCTS.map((r, i) => ({
     ...r,
-    found: pct >= 6 + i * 11,
-    next: pct < 6 + i * 11 && (i === 0 || pct >= 6 + (i - 1) * 11),
+    found: pct >= foundAt(i),
+    next: pct < foundAt(i) && (i === 0 || pct >= foundAt(i - 1)),
     have: r.have || hasSame(r, state.pouch),
   }));
   const foundCount = rows.filter((r) => r.found).length;
@@ -247,14 +250,15 @@ export default function LoadingPage() {
               style={{ top: `${10 + ((pct * 9) % 100) * 0.8}%` }}
             />
           )}
+          {/* 자리가 TAG_POS만큼이라, 단계가 많으면 가장 최근에 찾은 것만 남겨 겹치지 않게 한다 */}
           {rows.map((r, i) =>
-            r.found ? (
+            r.found && i >= foundCount - TAG_POS.length ? (
               <div
                 key={r.id}
                 className="absolute flex items-center gap-2"
                 style={{
-                  left: `${TAG_POS[i][0]}%`,
-                  top: `${TAG_POS[i][1]}%`,
+                  left: `${TAG_POS[i % TAG_POS.length][0]}%`,
+                  top: `${TAG_POS[i % TAG_POS.length][1]}%`,
                   animation: "mr-fade 600ms cubic-bezier(.34,1.56,.64,1) both",
                 }}
               >
@@ -347,7 +351,8 @@ export default function LoadingPage() {
                 {foundCount} / {REF_PRODUCTS.length} · 파우치 {haveCount}
               </span>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            {/* 단계 수는 영상마다 달라, 두 줄을 넘으면 이 안에서 넘겨 본다 */}
+            <div className="grid max-h-[168px] grid-cols-4 gap-2 overflow-y-auto">
               {rows.map((r) =>
                 r.found ? (
                   <button

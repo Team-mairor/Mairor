@@ -27,7 +27,6 @@ import {
   REF_PRODUCTS,
   REF_STATE_LABEL,
   TRY_STEPS,
-  type PouchCat,
   type PouchItem,
   type RefProduct,
 } from "@/lib/mock-data";
@@ -35,18 +34,6 @@ import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
-
-/** 레퍼런스 부위 → 파우치 카테고리 */
-const CAT_OF: Record<string, PouchCat> = {
-  파운데이션: "베이스",
-  컨실러: "베이스",
-  아이섀도: "아이",
-  아이라이너: "아이",
-  블러셔: "치크",
-  하이라이터: "치크",
-  립: "립",
-  브로우: "브로우",
-};
 
 const GROUPS: { k: MatchKind; label: string; dot: string }[] = [
   { k: "same", label: "보유", dot: "#B9C9E7" },
@@ -82,6 +69,10 @@ export default function CheckPage() {
   const [group, setGroup] = useState<MatchKind | null>(null);
   const [focus, setFocus] = useState<number | null>(null);
   const [tryIdx, setTryIdx] = useState(0);
+  const activeTab = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    activeTab.current?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [tryIdx, view]);
   const [swapFor, setSwapFor] = useState<number | null>(null);
   const [swapBack, setSwapBack] = useState(false);
   const [compare, setCompare] = useState(false);
@@ -117,7 +108,7 @@ export default function CheckPage() {
   /** 같은 카테고리 파우치 제품을 색이 가까운 순으로 */
   const candidates = (r: RefProduct) =>
     (emptyPouch ? [] : pouch)
-      .filter((p) => p.cat === (CAT_OF[r.cat] ?? r.cat) && p.color)
+      .filter((p) => p.cat === r.matchCat && p.color)
       .map((p) => ({ p, s: similarity(r.color, p.color!) }))
       .sort((a, b) => b.s - a.s)
       .map((x) => x.p);
@@ -231,17 +222,19 @@ export default function CheckPage() {
 
       {view === "try" && (
         <div className="absolute inset-x-5 top-[84px] flex justify-center">
-          <div className="flex gap-1.5 rounded-full border border-white/15 bg-[rgba(42,10,28,.78)] p-[5px]">
+          {/* 단계 수가 영상마다 달라, 넘치면 가로로 넘겨 보고 지금 탭이 보이게 맞춘다 */}
+          <div className="flex max-w-full [scrollbar-width:none] gap-1.5 overflow-x-auto rounded-full border border-white/15 bg-[rgba(42,10,28,.78)] p-[5px]">
             {TRY_STEPS.map((ri, k) => {
               const on = k === tryIdx;
               const pr = m(ri);
               return (
                 <button
                   key={ri}
+                  ref={on ? activeTab : undefined}
                   type="button"
                   onClick={() => setTryIdx(k)}
                   className={cn(
-                    "flex h-11 items-center gap-2 rounded-full py-0 pr-4 pl-3 text-[16px] font-bold whitespace-nowrap transition-colors",
+                    "flex h-11 shrink-0 items-center gap-2 rounded-full py-0 pr-4 pl-3 text-[16px] font-bold whitespace-nowrap transition-colors",
                     on ? "bg-white text-ink" : "text-line-2",
                   )}
                 >

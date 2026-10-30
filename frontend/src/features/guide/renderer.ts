@@ -3,13 +3,15 @@ import {
   isGuideVisible,
   isRegionInView,
   MIN_IN_FRAME_RATIO,
+  REGIONS,
   type FaceFrame,
   type GuideShape,
   type Point,
+  type RegionName,
 } from "@/features/face";
 import { resolveAnchor, type FaceMesh } from "@/features/overlay";
 
-import type { GuideStep } from "./types";
+import type { GuideItem, GuideStep } from "./types";
 
 type Px = { x: number; y: number };
 
@@ -65,7 +67,7 @@ export function isStepVisible(
 
 /**
  * 얼굴 위에 튜토리얼 가이드를 그린다. 도형마다 모양을 달리해 한 단계 안에서 겹쳐도 구분되게 한다.
- * - 영역(polygon): 둥근 점선 테두리 (멈춤)
+ * - 영역(polygon): 둥근 점선 테두리 (멈춤). 빼는 부위(exclude)는 안쪽을 지우고 그 테두리를 구멍으로 그린다
  * - 경로(polyline): 진행 방향으로 천천히 흐르는 점선. 점 지름은 도형의 width와 기본값 중 큰 쪽
  * - 붓 자국(polyline, brush): 양 끝이 가는 결 방향 자국 (눈썹 결·속눈썹)
  * - 방향(arrow): 굵은 실선과 화살촉
@@ -122,11 +124,102 @@ export class GuideRenderer {
     const dot = sized(projection.unit, STYLE.dot);
     const dashOffset = -(now / 1000) * STYLE.flow * dot * (1 + STYLE.dot.gap);
 
+    // 빼는 부위 테두리는 이번 화면에서 부위마다 한 번만 픽셀로 바꾼다
+    const holePx = new Map<RegionName, Px[]>();
+    const holeOf = (name: RegionName) => {
+      let px = holePx.get(name);
+      if (!px) {
+        px = REGIONS[name].indices.map((k) => projection.toPx(frame.landmarks[k]));
+        holePx.set(name, px);
+      }
+      return px;
+    };
+
     // 붓 자국은 다른 도형보다 먼저 깔아 시작점·화살표가 위에 보이게 한다.
     const ordered = [...step.guides].sort((a, b) => Number(isBrush(b)) - Number(isBrush(a)));
+    const yaw = frame.pose.yaw;
+    const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
     for (const guide of ordered) {
-      this.drawGuide(guide, at, projection.unit, dashOffset);
+      const draw = () => {
+        if (guide.type === "polygon" && guide.exclude?.length)
+          this.drawPolygonWithHoles(guide, guide.exclude.map(holeOf), at, dot);
+        else this.drawGuide(guide, at, projection.unit, dashOffset);
+      };
+      // 얼굴 윤곽처럼 양쪽 끝까지 걸친 도형은 먼 쪽 절반만 옅게 한다
+      if (spans(guide, mesh)) {
+        this.drawHalves(draw, toPx(MIDLINE[0]), toPx(MIDLINE[1]), toPx(LEFT_EDGE), yaw);
+        continue;
+      }
+      const alpha = turnFade(guide, mesh, yaw);
+      if (alpha <= 0) continue;
+      ctx.globalAlpha = alpha;
+      draw();
     }
+    ctx.globalAlpha = 1;
+  }
+
+  /** 얼굴 가운데 선(top → bottom)으로 나눠 반쪽마다 고개 각도에 맞는 진하기로 그린다 */
+  private drawHalves(draw: () => void, top: Px, bottom: Px, leftEdge: Px, yaw: number) {
+    const ctx = this.ctx;
+    const len = Math.hypot(bottom.x - top.x, bottom.y - top.y) || 1;
+    const d = { x: (bottom.x - top.x) / len, y: (bottom.y - top.y) / len };
+    // 본인 기준 왼쪽 반쪽을 향하는 법선
+    let n = { x: -d.y, y: d.x };
+    if ((leftEdge.x - top.x) * n.x + (leftEdge.y - top.y) * n.y < 0) n = { x: d.y, y: -d.x };
+    const far = HALF_PLANE;
+    for (const side of [1, -1]) {
+      const alpha = 1 - smoothstep(AWAY_FADE.side[0], AWAY_FADE.side[1], side * yaw);
+      if (alpha <= 0) continue;
+      const a = { x: top.x - d.x * far, y: top.y - d.y * far };
+      const b = { x: bottom.x + d.x * far, y: bottom.y + d.y * far };
+      const o = { x: n.x * side * far, y: n.y * side * far };
+      ctx.save();
+      tracePath(ctx, [a, b, { x: b.x + o.x, y: b.y + o.y }, { x: a.x + o.x, y: a.y + o.y }], true);
+      ctx.clip();
+      ctx.globalAlpha = alpha;
+      draw();
+      ctx.restore();
+    }
+  }
+
+  /** 영역 테두리에서 빼는 부위 안쪽을 지우고, 영역 안에 걸친 빼는 부위 테두리를 구멍으로 그린다 */
+  private drawPolygonWithHoles(
+    guide: Extract<GuideItem, { type: "polygon" }>,
+    holes: Px[][],
+    at: (anchor: Parameters<typeof resolveAnchor>[0]) => Px,
+    dot: number,
+  ) {
+    const ctx = this.ctx;
+    const points = guide.outline.map(at);
+    if (points.length < 3) return;
+    // 입을 다물 때처럼 거의 닫힌 구멍은 빼지 않는다
+    const minHole = Math.abs(polygonArea(points)) * MIN_HOLE_AREA;
+    holes = holes.filter((hole) => Math.abs(polygonArea(hole)) >= minHole);
+    if (!holes.length) {
+      traceSmooth(ctx, points, true);
+      this.dotted(dot, 0);
+      return;
+    }
+    const { width, height } = this.canvas;
+    // 영역 테두리: 빼는 부위 밖에서만. 구멍마다 따로 잘라 겹친 구멍이 서로 지워지지 않게 한다
+    ctx.save();
+    for (const hole of holes) {
+      ctx.beginPath();
+      ctx.rect(0, 0, width, height);
+      traceSmooth(ctx, hole, true, false);
+      ctx.clip("evenodd");
+    }
+    traceSmooth(ctx, points, true);
+    this.dotted(dot, 0);
+    ctx.restore();
+    // 구멍 테두리: 영역 안에서만, 한 경로로 모아 한 번에 긋는다
+    ctx.save();
+    traceSmooth(ctx, points, true);
+    ctx.clip();
+    ctx.beginPath();
+    for (const hole of holes) traceSmooth(ctx, hole, true, false);
+    this.dotted(dot, 0);
+    ctx.restore();
   }
 
   private drawGuide(
@@ -243,6 +336,68 @@ export class GuideRenderer {
   }
 }
 
+// 고개를 돌리면 먼 쪽 점은 얼굴 뒤로 넘어가 어긋나므로, 이 각도(라디안) 사이에서 옅어지다 숨긴다
+const AWAY_FADE = { side: [0.15, 0.35], center: [0.4, 0.6] } as const;
+/** 얼굴 가운데 선(이마 위, 턱 끝)과 본인 기준 왼쪽 끝 랜드마크 */
+const MIDLINE = [10, 152] as const;
+const LEFT_EDGE = 454;
+/** 반쪽 영역을 화면 밖까지 덮는 길이 (px) */
+const HALF_PLANE = 10000;
+
+function anchorsOf(guide: GuideShape) {
+  switch (guide.type) {
+    case "point":
+      return [guide.at];
+    case "polyline":
+      return guide.path;
+    case "polygon":
+      return guide.outline;
+    case "arrow":
+      return [guide.from, guide.to];
+  }
+}
+
+const uvXs = (guide: GuideShape, mesh: FaceMesh) =>
+  anchorsOf(guide).map(({ triangle, bary }) =>
+    mesh.triangles[triangle].reduce((sum, i, k) => sum + mesh.uv[i][0] * bary[k], 0),
+  );
+
+/** 얼굴 윤곽처럼 양쪽 끝까지 걸친 도형인지 */
+function spans(guide: GuideShape, mesh: FaceMesh) {
+  const us = uvXs(guide, mesh);
+  return us.length > 0 && Math.min(...us) < 0.25 && Math.max(...us) > 0.75;
+}
+
+/** 고개 각도에 따른 진하기. UV 가로 0.5가 코, 클수록 본인 기준 왼쪽 */
+function turnFade(guide: GuideShape, mesh: FaceMesh, yaw: number) {
+  const us = uvXs(guide, mesh);
+  if (!us.length) return 1;
+  const mean = us.reduce((a, b) => a + b, 0) / us.length;
+  if (Math.abs(mean - 0.5) < 0.08)
+    return 1 - smoothstep(AWAY_FADE.center[0], AWAY_FADE.center[1], Math.abs(yaw));
+  // yaw +면 본인 기준 왼쪽이 멀어진다
+  const away = mean > 0.5 ? yaw : -yaw;
+  return 1 - smoothstep(AWAY_FADE.side[0], AWAY_FADE.side[1], away);
+}
+
+const smoothstep = (lo: number, hi: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - lo) / (hi - lo)));
+  return t * t * (3 - 2 * t);
+};
+
+/** 영역 대비 이보다 작은 구멍은 무시한다 */
+const MIN_HOLE_AREA = 0.03;
+
+/** 다각형 넓이 (부호 있음) */
+function polygonArea(points: Px[]): number {
+  let sum = 0;
+  points.forEach((p, i) => {
+    const q = points[(i + 1) % points.length];
+    sum += p.x * q.y - q.x * p.y;
+  });
+  return sum / 2;
+}
+
 /** IOD 기준 크기를 픽셀로. 멀어져도 최소 픽셀은 지킨다 */
 const sized = (unit: number, s: { size: number; min: number }) => Math.max(s.min, s.size * unit);
 
@@ -255,11 +410,17 @@ function tracePath(ctx: CanvasRenderingContext2D, points: Px[], close: boolean) 
 }
 
 /** 점을 모두 지나는 곡선(Catmull-Rom)으로 이어 각지지 않게 그린다. 영역이 정의한 점보다 줄어들지 않는다. */
-function traceSmooth(ctx: CanvasRenderingContext2D, points: Px[], close: boolean) {
+function traceSmooth(
+  ctx: CanvasRenderingContext2D,
+  points: Px[],
+  close: boolean,
+  /** false면 지금 경로에 이어 붙인다 (구멍을 한 경로로 모을 때) */
+  begin = true,
+) {
   const n = points.length;
   const pt = (i: number) =>
     close ? points[((i % n) + n) % n] : points[Math.max(0, Math.min(n - 1, i))];
-  ctx.beginPath();
+  if (begin) ctx.beginPath();
   ctx.moveTo(points[0].x, points[0].y);
   for (let i = 0; i < (close ? n : n - 1); i++) {
     const [p0, p1, p2, p3] = [pt(i - 1), pt(i), pt(i + 1), pt(i + 2)];

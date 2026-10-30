@@ -1,13 +1,19 @@
 // 프로토타입 v11의 샘플 데이터. API 연동 전까지 화면을 채우는 용도이며 서버 응답 규격이 아니다.
 // ponytail: 하드코딩 샘플. API 클라이언트가 붙으면 이 파일을 지우고 타입만 lib/api/types로 옮긴다.
 
+import type { Makeup } from "@/features/guide";
+
+import { MOCK_GUIDE_STEPS, type MockGuideStep } from "./mock-guide";
+
 /** 영상 속 제품 인식 상태. 확정 제품은 라벨 없음 */
 export type RefState = "guess" | "desc" | "unreg";
 
 export interface RefProduct {
   id: string;
-  /** 단계 부위 (파운데이션·컨실러·아이섀도·…) */
+  /** 단계 부위 이름 (파운데이션·크림 블러셔·…) */
   cat: string;
+  /** 대체 후보를 찾을 파우치 카테고리 (API의 matchCategory) */
+  matchCat: PouchCat;
   brand: string;
   name: string;
   color: string;
@@ -20,79 +26,6 @@ export interface RefProduct {
   refState?: RefState;
 }
 
-export const REF_PRODUCTS: RefProduct[] = [
-  {
-    id: "r1",
-    cat: "파운데이션",
-    brand: "에스쁘아",
-    name: "Pro Tailor Be Glow",
-    color: "#E9D2C2",
-    have: true,
-    time: "00:48",
-  },
-  {
-    id: "r2",
-    cat: "컨실러",
-    brand: "더샘",
-    name: "Cover Perfection Tip",
-    color: "#E6C7AE",
-    have: false,
-    time: "01:52",
-    sub: null,
-    refState: "desc",
-  },
-  {
-    id: "r3",
-    cat: "아이섀도",
-    brand: "롬앤",
-    name: "Better Than Palette",
-    color: "#C99A86",
-    have: false,
-    time: "02:40",
-    sub: { brand: "에뛰드", name: "Play Color Eyes", color: "#C9A98B" },
-  },
-  {
-    id: "r4",
-    cat: "아이라이너",
-    brand: "클리오",
-    name: "Sharp So Simple",
-    color: "#4A3228",
-    have: false,
-    time: "03:31",
-    refState: "unreg",
-    sub: { brand: "페리페라", name: "Ink V Shadow 딥브라운", color: "#6B4E3D" },
-  },
-  {
-    id: "r5",
-    cat: "블러셔",
-    brand: "클리오",
-    name: "Prism Air Blusher",
-    color: "#EF8E8A",
-    have: true,
-    time: "04:15",
-  },
-  {
-    id: "r6",
-    cat: "하이라이터",
-    brand: "바닐라코",
-    name: "Glow Highlighter",
-    color: "#F3E3D3",
-    have: false,
-    time: "05:02",
-    sub: null,
-    refState: "guess",
-  },
-  {
-    id: "r7",
-    cat: "립",
-    brand: "롬앤",
-    name: "Juicy Lasting Tint",
-    color: "#B5706B",
-    have: true,
-    time: "06:10",
-  },
-];
-
 export const REF_STATE_LABEL: Record<RefState, string> = {
   guess: "추정",
   desc: "설명란에만 있음",
@@ -100,6 +33,9 @@ export const REF_STATE_LABEL: Record<RefState, string> = {
 };
 
 export interface GuideStepInfo {
+  /** 원본 가이드의 단계 ID. 얼굴 위 가이드 영역도 이 ID로 찾는다 */
+  stepId: string;
+  makeup: Makeup;
   en: string;
   short: string;
   title: string;
@@ -110,95 +46,90 @@ export interface GuideStepInfo {
   a: [number, number, number, number];
   /** 레퍼런스 진하기 위치 (0~100) */
   target: number;
-  /** 영상에서 위치를 찾지 못해 기본 위치를 쓰는 단계 */
-  fallback?: boolean;
-  /** 얼굴 위에 그릴 가이드의 stepId (GuideSet.steps[].stepId). null이면 설명만 보여 준다 */
-  guideId: string | null;
 }
 
-export const GUIDE_STEPS: GuideStepInfo[] = [
-  {
-    en: "BASE",
-    guideId: "base",
-    short: "베이스",
-    title: "얇게 펴 바르는 베이스",
-    acts: ["얼굴 중앙에서 바깥으로", "스펀지로 두드리듯 얇게"],
-    guide: "얼굴 중앙에서 바깥으로, 스펀지로 두드리듯 얇게 펴 발라 주세요.",
-    area: "얼굴 전체",
-    a: [50, 55, 86, 80],
-    target: 55,
-  },
-  {
-    en: "CONCEAL",
-    guideId: null,
-    short: "컨실",
-    title: "눈 밑 다크서클 커버",
-    acts: ["눈 밑 삼각존에 소량 찍기", "약지로 경계 풀기"],
-    guide: "눈 밑 삼각존에 소량을 찍고 약지로 경계를 풀어 주세요.",
-    area: "눈 밑",
-    a: [74, 51, 20, 6],
-    target: 50,
-  },
-  {
-    en: "EYES",
-    guideId: "eyeshadow",
-    short: "섀도",
-    title: "음영 아이섀도",
-    acts: ["쌍꺼풀 라인보다 살짝 넓게", "눈꼬리 쪽을 더 진하게"],
-    guide: "쌍꺼풀 라인보다 살짝 넓게, 눈꼬리 쪽을 더 진하게 쌓아 주세요.",
-    area: "눈두덩",
-    a: [74, 39, 24, 8],
-    target: 56,
-  },
-  {
-    en: "LINER",
-    guideId: "eyeliner",
-    short: "라인",
-    title: "눈꼬리 아이라인",
-    acts: ["눈 중앙부터 눈꼬리까지", "끝을 3mm 살짝 올려 빼기"],
-    guide: "눈 중앙부터 눈꼬리까지 그리고, 끝을 3mm 정도 살짝 올려 빼 주세요.",
-    area: "눈꼬리",
-    a: [80, 44, 18, 4],
-    target: 58,
-  },
-  {
-    en: "BLUSH",
-    guideId: "blush",
-    short: "블러셔",
-    title: "광대 블러셔",
-    acts: ["가장 높은 광대에서 시작", "관자놀이 쪽으로 2~3번 톡톡"],
-    guide: "웃었을 때 가장 높은 광대에서 시작해 관자놀이 방향으로 2~3번 톡톡 두드려 주세요.",
-    area: "광대",
-    a: [86, 59, 20, 14],
-    target: 86,
-  },
-  {
-    en: "GLOW",
-    guideId: "highlight",
-    short: "하이라이트",
-    title: "콧대 하이라이트",
-    acts: ["콧대에 얇게 한 줄", "광대 윗부분에만 살짝"],
-    guide: "콧대와 광대 윗부분에만 얇게 얹어 주세요.",
-    area: "콧대",
-    a: [50, 55, 8, 20],
-    target: 50,
-    fallback: true,
-  },
-  {
-    en: "LIPS",
-    guideId: "lip",
-    short: "립",
-    title: "촉촉한 립",
-    acts: ["입술 안쪽에 바르기", "손가락으로 경계 풀기"],
-    guide: "입술 안쪽에 바르고 손가락으로 바깥 경계를 자연스럽게 풀어 주세요.",
-    area: "입술",
-    a: [50, 88, 34, 9],
-    target: 60,
-  },
-];
+/** 화장 종류별 화면 표시값. 진하기 목표·색은 API가 붙기 전까지 쓰는 샘플 */
+const BY_MAKEUP: Record<
+  Exclude<Makeup, "other">,
+  { en: string; area: string; a: GuideStepInfo["a"]; target: number; color: string }
+> = {
+  foundation: { en: "BASE", area: "얼굴 전체", a: [50, 55, 86, 80], target: 55, color: "#E9D2C2" },
+  eyeshadow: { en: "EYES", area: "눈두덩", a: [74, 39, 24, 8], target: 56, color: "#C99A86" },
+  eyeliner: { en: "LINER", area: "눈꼬리", a: [80, 44, 18, 4], target: 58, color: "#4A3228" },
+  blush: { en: "BLUSH", area: "광대", a: [86, 59, 20, 14], target: 86, color: "#EF8E8A" },
+  lip: { en: "LIPS", area: "입술", a: [50, 88, 34, 9], target: 60, color: "#B5706B" },
+  brow: { en: "BROW", area: "눈썹", a: [74, 32, 24, 6], target: 55, color: "#6B4E3D" },
+  mascara: { en: "LASH", area: "속눈썹", a: [74, 42, 22, 6], target: 60, color: "#2B2220" },
+  contour: { en: "CONTOUR", area: "얼굴 윤곽", a: [80, 70, 30, 20], target: 50, color: "#B88B6E" },
+  highlight: { en: "GLOW", area: "콧대", a: [50, 55, 8, 20], target: 50, color: "#F3E3D3" },
+};
 
-/** 미리보기·입혀보기 대상 단계(색 있는 단계). 베이스·컨실러는 제외 */
-export const TRY_STEPS = [2, 3, 4, 5, 6] as const;
+/** 따라 하는 단계. 가이드 대상이 아닌 단계(EXCLUDED)는 빼고 원본 순서대로 */
+const PLAY_STEPS = MOCK_GUIDE_STEPS.filter(
+  (s): s is MockGuideStep & { makeup: Exclude<Makeup, "other"> } => s.type === "GUIDE",
+);
+
+export const GUIDE_STEPS: GuideStepInfo[] = PLAY_STEPS.map((s) => {
+  const m = BY_MAKEUP[s.makeup];
+  return {
+    stepId: s.stepId,
+    makeup: s.makeup,
+    en: m.en,
+    short: s.part,
+    title: s.part,
+    acts: s.actions.map((x) => x.text),
+    guide: s.actions.map((x) => x.text).join(" "),
+    area: m.area,
+    a: m.a,
+    target: m.target,
+  };
+});
+
+// 샘플: 파우치에 같은 제품이 있는 단계, 대체 후보가 있는 단계, 인식 상태 라벨
+const HAVE = new Set(["s5", "s7", "s18"]);
+const SUBS: Record<string, RefProduct["sub"]> = {
+  s10: { brand: "에뛰드", name: "Play Color Eyes", color: "#C9A98B" },
+  s12: { brand: "페리페라", name: "Ink V Shadow 딥브라운", color: "#6B4E3D" },
+  s17: { brand: "롬앤", name: "Juicy Lasting Tint", color: "#B5706B" },
+};
+const REF_STATE: Record<string, RefState> = { s9: "guess", s13: "unreg", s19: "desc" };
+
+/** 화장 종류 → 파우치 카테고리 */
+const MATCH_CAT: Record<Exclude<Makeup, "other">, PouchCat> = {
+  foundation: "베이스",
+  eyeshadow: "아이",
+  eyeliner: "아이",
+  mascara: "아이",
+  brow: "브로우",
+  blush: "치크",
+  highlight: "치크",
+  contour: "치크",
+  lip: "립",
+};
+
+const mmss = (sec: number) =>
+  `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+
+/** 단계마다 영상 속 제품. GUIDE_STEPS와 같은 순서 */
+export const REF_PRODUCTS: RefProduct[] = PLAY_STEPS.map((s) => ({
+  id: `r-${s.stepId}`,
+  cat: s.part,
+  matchCat: MATCH_CAT[s.makeup],
+  brand: s.product?.brand ?? "",
+  // 파우치는 이름과 호수를 따로 두고 이름으로 같은 제품을 찾으므로 호수는 붙이지 않는다
+  name: s.product?.name ?? "",
+  color: BY_MAKEUP[s.makeup].color,
+  have: HAVE.has(s.stepId),
+  time: mmss(s.videoRange.startSeconds),
+  sub: SUBS[s.stepId] ?? null,
+  refState: REF_STATE[s.stepId],
+}));
+
+/** 미리보기·입혀보기 대상 단계(색 있는 단계)의 GUIDE_STEPS 순번. 베이스는 제외 */
+const TRY_MAKEUPS: Makeup[] = ["eyeshadow", "eyeliner", "blush", "highlight", "lip"];
+export const TRY_STEPS: number[] = GUIDE_STEPS.flatMap((s, i) =>
+  TRY_MAKEUPS.includes(s.makeup) ? [i] : [],
+);
 
 export interface VideoItem {
   id: string;
@@ -272,15 +203,11 @@ export interface Chapter {
   label: string;
 }
 
-export const CHAPTERS: Chapter[] = [
-  { time: "0:00", label: "피부 표현 · 파운데이션" },
-  { time: "2:14", label: "컨실러" },
-  { time: "3:31", label: "아이섀도" },
-  { time: "5:02", label: "아이라인" },
-  { time: "7:04", label: "블러셔" },
-  { time: "8:40", label: "하이라이터" },
-  { time: "10:12", label: "립" },
-];
+/** 영상 챕터. 가이드 대상이 아닌 단계(스킨케어 등 EXCLUDED)는 빼고 따라 하는 단계만 보여 준다 */
+export const CHAPTERS: Chapter[] = PLAY_STEPS.map((s) => ({
+  time: mmss(s.videoRange.startSeconds),
+  label: s.part,
+}));
 
 export const POUCH_CATS = [
   "베이스",
@@ -423,14 +350,16 @@ export interface PouchItem {
   color?: string | null;
 }
 
+/** 샘플 파우치. 보유로 보여 줄 단계(HAVE)의 영상 제품과 대체 추천 제품(SUBS)을 넣는다 */
 export const DEFAULT_POUCH: PouchItem[] = [
-  { id: "p1", cat: "베이스", brand: "에스쁘아", name: "Pro Tailor Be Glow", color: "#E9D2C2" },
-  { id: "p2", cat: "치크", brand: "클리오", name: "Prism Air Blusher", color: "#EF8E8A" },
-  { id: "p3", cat: "립", brand: "롬앤", name: "Juicy Lasting Tint", color: "#B5706B" },
-  { id: "p4", cat: "아이", brand: "에뛰드", name: "Play Color Eyes", color: "#C9A98B" },
-  { id: "p5", cat: "아이", brand: "페리페라", name: "Ink V Shadow 딥브라운", color: "#6B4E3D" },
-  { id: "p6", cat: "브로우", brand: "어뮤즈", name: "Brow Pencil", color: "#8A6A5A" },
-];
+  ...REF_PRODUCTS.filter((r) => r.have).map((r) => ({
+    cat: r.matchCat,
+    brand: r.brand,
+    name: r.name,
+    color: r.color,
+  })),
+  ...REF_PRODUCTS.flatMap((r) => (r.sub ? [{ cat: r.matchCat, ...r.sub }] : [])),
+].map((p, i) => ({ id: `p${i + 1}`, ...p }));
 
 /** 샘플 호수 목록 (API-POUCH-001 흉내) */
 export const SHADE_OPTIONS: { name: string; color: string }[] = [

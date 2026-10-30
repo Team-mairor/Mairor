@@ -968,11 +968,11 @@
         {
           "type": "point",
           "at": {
-            "triangle": 629,
+            "triangle": 39,
             "bary": [
-              0.88,
               0,
-              0.12
+              0,
+              1
             ]
           }
         },
@@ -980,51 +980,51 @@
           "type": "polyline",
           "path": [
             {
-              "triangle": 629,
+              "triangle": 39,
               "bary": [
-                0.88,
                 0,
-                0.12
+                0,
+                1
               ]
             },
             {
-              "triangle": 627,
+              "triangle": 165,
               "bary": [
-                0.12,
+                1,
                 0,
-                0.88
+                0
               ]
             },
             {
-              "triangle": 575,
+              "triangle": 163,
               "bary": [
-                0.12,
                 0,
-                0.88
+                1,
+                0
               ]
             },
             {
-              "triangle": 591,
+              "triangle": 91,
               "bary": [
-                0.88,
                 0,
-                0.12
+                0,
+                1
               ]
             },
             {
-              "triangle": 527,
+              "triangle": 93,
               "bary": [
-                0.88,
+                1,
                 0,
-                0.12
+                0
               ]
             },
             {
               "triangle": 1,
               "bary": [
-                0.88,
+                1,
                 0,
-                0.12
+                0
               ]
             },
             {

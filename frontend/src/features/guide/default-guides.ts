@@ -70,10 +70,9 @@ function anchorTools(mesh: FaceMesh) {
   return { uvPt, anchorAt, at, between, outline };
 }
 
-// 아이라인: 눈 안쪽 1/3 지점에서 눈꼬리까지 속눈썹 라인을 따라가고, 꼬리는 아래 속눈썹 라인의 연장선으로
-// 짧게 뺀다 (눈매 방향 그대로, 위로 올리지 않음). MediaPipe 윗눈꺼풀 점은 눈꺼풀 가장자리라, 선이 눈꺼풀
-// 위로 뜨지 않게 아래 눈꺼풀 쪽으로 조금 내린다.
-const LASH_LINE_SHIFT = 0.12; // 눈 뜬 높이 대비
+// 아이라인: 눈 안쪽 1/3 지점에서 눈꼬리까지 윗눈꺼풀 점(속눈썹 뿌리)을 그대로 따라가고, 꼬리는 아래 속눈썹
+// 라인의 연장선으로 짧게 뺀다 (눈매 방향 그대로, 위로 올리지 않음). 아래 눈꺼풀 쪽으로 내리면 실기기에서
+// 선이 흰자 위로 내려간다.
 const WING_LENGTH = 0.15; // 눈 너비 대비
 
 // 블러셔 영역: 볼 영역 위쪽 점과 50(280). 볼 아래쪽까지 칠하면 처져 보인다.
@@ -83,18 +82,16 @@ export const BLUSH_POINTS = {
   left: [352, 345, 346, 347, 330, 280],
 };
 
-// 윗눈꺼풀과 같은 자리의 아래 눈꺼풀 점 (안쪽 1/3 → 눈꼬리 직전). 눈꼬리 점은 아래로 꺾여 있어 건너뛴다
+// 윗눈꺼풀 점 (안쪽 1/3 → 눈꼬리 직전). 눈꼬리 점은 아래로 꺾여 있어 건너뛴다
 const EYELINER = {
   right: {
     upper: [157, 158, 159, 160, 161, 246],
-    lower: [154, 153, 145, 144, 163, 7],
     lowerNearOuter: 163,
     inner: 133,
     outer: 33,
   },
   left: {
     upper: [384, 385, 386, 387, 388, 466],
-    lower: [381, 380, 374, 373, 390, 249],
     lowerNearOuter: 390,
     inner: 362,
     outer: 263,
@@ -108,16 +105,9 @@ const unit = (v: Uv): Uv => {
 
 /** 아이라인 경로. 미리보기 레이어도 같은 경로를 쓴다 */
 export function eyelinerPaths(mesh: FaceMesh): { right: MeshAnchor[]; left: MeshAnchor[] } {
-  const { uvPt, anchorAt } = anchorTools(mesh);
-  const path = ({ upper, lower, lowerNearOuter, inner, outer }: typeof EYELINER.right) => {
-    const points = upper.map((i, k) => {
-      const u = uvPt(i);
-      const l = uvPt(lower[k]);
-      return anchorAt({
-        x: u.x + (l.x - u.x) * LASH_LINE_SHIFT,
-        y: u.y + (l.y - u.y) * LASH_LINE_SHIFT,
-      });
-    });
+  const { uvPt, anchorAt, at } = anchorTools(mesh);
+  const path = ({ upper, lowerNearOuter, inner, outer }: typeof EYELINER.right) => {
+    const points = upper.map(at);
     const corner = uvPt(outer);
     const dir = unit({
       x: corner.x - uvPt(lowerNearOuter).x,
@@ -243,7 +233,7 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
   const steps: Omit<GuideStep, "order" | "source">[] = [
     {
       // 얼굴 윤곽 전체, 얼굴 가운데에서 볼·이마·턱 바깥쪽으로
-      stepId: "base",
+      stepId: "foundation",
       title: "베이스: 얼굴 가운데에서 바깥쪽으로 얇게 펴 발라요",
       regions: ["faceOval"],
       guides: [
@@ -389,7 +379,8 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       title: "립: 입술 안쪽에 바르고 바깥쪽으로 톡톡 펴 그라데이션해요",
       regions: ["lipsOuter"],
       guides: [
-        outline(regions.lipsOuter.indices),
+        // AI 립 영역처럼 입 안은 뺀다
+        { ...outline(regions.lipsOuter.indices), exclude: ["lipsInner"] },
         point(between(0, 17)),
         arrow(between(0, 17), between(61, 0, 0.15)),
         arrow(between(0, 17), between(291, 0, 0.15)),

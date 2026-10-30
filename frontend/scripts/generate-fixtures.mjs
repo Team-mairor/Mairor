@@ -155,6 +155,8 @@ writeJson("faces/front.json", faceFrame());
 // 랜드마크는 정면 그대로 두고 방향 값만 바꿔, 왼쪽 부위가 가려진 상태를 만든다.
 writeJson("faces/turned-left.json", faceFrame({ yaw: 0.8 }));
 writeJson("faces/close-up.json", faceFrame({ placement: { scale: 1.6, offsetY: 160 } }));
+// 멀리: 얼굴 폭이 화면의 약 30%로 '조금 더 가까이' 안내 기준(40%)보다 작지만 추적은 된다
+writeJson("faces/far.json", faceFrame({ placement: { scale: 0.45 } }));
 writeJson(
   "faces/blink-hold.json",
   faceFrame({
@@ -402,5 +404,110 @@ const rightSteps = defaultGuides.steps
   .filter((step) => step.regions.length > 0 && step.guides.length > 0)
   .map((step, i) => ({ ...step, order: i + 1 }));
 writeJson("guides/right-only.json", { ...defaultGuides, steps: rightSteps });
+
+// ── AI 가이드 영역 (shared/guide-area) ──
+// 상태 네 가지와 하위 단계 전환, 빼는 영역을 한 파일에서 확인한다. ?area= 로 불러온다.
+// 기준점은 랜드마크 점 그대로 둔다. 입 안은 UV에서 위아래 입술 삼각형이 겹쳐 좌표로 다시 찾으면 반대쪽에 붙는다.
+const vertexAnchor = (i) => {
+  const triangle = triangles.findIndex((tri) => tri.includes(i));
+  const bary = [0, 0, 0];
+  bary[triangles[triangle].indexOf(i)] = 1;
+  return { triangle, bary };
+};
+// 눈과 눈두덩을 함께 덮는 눈 둘레 고리 (눈 밑 → 눈두덩). 눈(exclude)을 빼서 눈 안쪽이 비어 보이는지 본다
+const EYE_RINGS = {
+  rightEye: [226, 31, 228, 229, 230, 231, 232, 233, 244, 189, 221, 222, 223, 224, 225, 113],
+  leftEye: [446, 261, 448, 449, 450, 451, 452, 453, 464, 413, 441, 442, 443, 444, 445, 342],
+};
+const ring = (indices) => indices.map(vertexAnchor);
+const areaSet = (region, outline, exclude) => ({
+  region,
+  source: "extracted",
+  guides: [{ type: "polygon", outline }],
+  ...(exclude ? { exclude } : {}),
+});
+const sub = (stepId, order, status, extra = {}) => ({
+  subStepId: `${stepId}-${order}`,
+  order,
+  status,
+  reasons: [],
+  templateId: null,
+  guideSets: [],
+  ...extra,
+});
+const areaStep = (order, makeup, subSteps) => ({ stepId: `s${order}`, order, makeup, subSteps });
+writeJson("guide-areas/sample.json", {
+  videoId: "fixture",
+  meshVersion: "v1",
+  steps: [
+    areaStep(1, "other", [sub("s1", 1, "notApplicable")]),
+    areaStep(2, "foundation", [
+      sub("s2", 1, "template", { reasons: ["noUsableFrame"], templateId: "foundation" }),
+    ]),
+    areaStep(3, "eyeshadow", [
+      sub("s3", 1, "extracted", {
+        guideSets: [
+          areaSet("rightEye", ring(EYE_RINGS.rightEye), ["rightEye"]),
+          areaSet("leftEye", ring(EYE_RINGS.leftEye), ["leftEye"]),
+        ],
+      }),
+    ]),
+    areaStep(4, "lip", [
+      sub("s4", 1, "extracted", {
+        guideSets: [areaSet("lipsOuter", ring(REGIONS.lipsOuter.indices), ["lipsInner"])],
+      }),
+      sub("s4", 2, "template", { reasons: ["noUsableFrame"], templateId: "lip" }),
+    ]),
+    areaStep(5, "blush", [sub("s5", 1, "failed", { reasons: ["FRAME_UNREADABLE"] })]),
+    areaStep(6, "eyeliner", [
+      sub("s6", 1, "template", { reasons: ["noUsableFrame"], templateId: "eyeliner" }),
+    ]),
+  ],
+});
+
+// 목업 가이드(lib/mock-guide.ts)와 같은 AI 샘플 영상의 가이드 영역. 튜토리얼이 단계 ID로 찾는다.
+// 샘플의 extracted 좌표는 형식을 보이기 위한 예시라, 같은 부위의 랜드마크 테두리로 바꿔 화면에서 알아볼 수 있게 한다.
+// 하위 단계 전환을 보려고 아이섀도 단계(s10)는 눈두덩 → 기본 영역 → 애교살 세 하위 단계로 나눈다.
+// 애교살 띠: 아래 눈꺼풀(눈꼬리 → 눈앞머리) → 눈 밑 고리(눈앞머리 → 눈꼬리)
+const UNDER_EYE = {
+  rightEye: [33, 7, 163, 144, 145, 153, 154, 155, 133, 244, 233, 232, 231, 230, 229, 228, 31, 226],
+  leftEye: [
+    263, 249, 390, 373, 374, 380, 381, 382, 362, 464, 453, 452, 451, 450, 449, 448, 261, 446,
+  ],
+};
+const eyeshadowSubSteps = [
+  sub("s10", 1, "extracted", {
+    guideSets: [
+      areaSet("rightEye", ring(EYE_RINGS.rightEye), ["rightEye"]),
+      areaSet("leftEye", ring(EYE_RINGS.leftEye), ["leftEye"]),
+    ],
+  }),
+  sub("s10", 2, "template", { reasons: ["notAnalyzed"], templateId: "eyeshadow" }),
+  sub("s10", 3, "extracted", {
+    guideSets: [
+      areaSet("rightEye", ring(UNDER_EYE.rightEye)),
+      areaSet("leftEye", ring(UNDER_EYE.leftEye)),
+    ],
+  }),
+];
+const aiArea = JSON.parse(
+  readFileSync(join(frontendDir, "../ai/samples/local_01/guide_area.json"), "utf8"),
+);
+writeJson("guide-areas/local_01.json", {
+  ...aiArea,
+  steps: aiArea.steps.map((step) => ({
+    ...step,
+    subSteps:
+      step.stepId === "s10"
+        ? eyeshadowSubSteps
+        : step.subSteps.map((s) => ({
+            ...s,
+            guideSets: s.guideSets.map((set) => ({
+              ...set,
+              guides: [{ type: "polygon", outline: ring(REGIONS[set.region].indices) }],
+            })),
+          })),
+  })),
+});
 
 console.log(`[generate-fixtures] ${outDir}에 픽스처를 만들었습니다.`);

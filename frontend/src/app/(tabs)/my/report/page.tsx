@@ -56,7 +56,7 @@ export default function ReportPage() {
       used: !used ? "없음 · 설명만" : `${used.brand} ${used.name}`,
       // 단계 사진: captures가 없는 샘플 기록은 전부 있음으로 본다
       noPhoto: !!rep?.noPhoto || (rep?.captures ? !rep.captures.includes(i) : false),
-      bare: i < 2,
+      bare: x.makeup === "foundation",
     };
   });
   // 최종 사진: 샘플 기록은 있음으로 본다

@@ -4,39 +4,90 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { GuideOverlay, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/features/guide";
+import {
+  GuideOverlay,
+  loadDefaultGuideSet,
+  loadGuideArea,
+  loadGuideSet,
+  resolveSubStep,
+  type AreaStatus,
+  type GuideStep,
+} from "@/features/guide";
 
+/** 한 화면에 보여 줄 가이드. AI 영역은 하위 단계마다 하나다 */
+interface Item {
+  title: string;
+  detail: string;
+  step: GuideStep | null;
+}
+
+const STATUS_LABEL: Record<AreaStatus, string> = {
+  extracted: "영상에서 찾은 영역",
+  template: "기본 영역",
+  notApplicable: "영역 없음",
+  failed: "영역을 찾지 못함",
+};
+
+/** 그릴 영역이 없을 때 안내 */
+const EMPTY_NOTE: Partial<Record<AreaStatus, string>> = {
+  notApplicable: "이 단계는 바를 영역이 없어요",
+  failed: "영상에서 바를 곳을 찾지 못했어요. 설명을 보고 따라 해 주세요",
+};
+
+/**
+ * 튜토리얼 가이드 확인 화면. 기본은 9개 부위 기본 가이드이고,
+ * ?guides=경로 는 가이드 파일, ?area=경로 는 AI 가이드 영역 파일을 하위 단계마다 넘겨 본다.
+ */
 export default function TutorialPage() {
-  // 레시피 연동 전까지는 기본 가이드를 쓰고, ?guides=경로 로 가이드 파일을 바꿔 본다.
-  const [guideSet, setGuideSet] = useState<GuideSet | null>(null);
+  const [items, setItems] = useState<Item[] | null>(null);
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const url = new URLSearchParams(window.location.search).get("guides");
-    (url ? loadGuideSet(url) : loadDefaultGuideSet())
-      .then(setGuideSet)
+    const params = new URLSearchParams(window.location.search);
+    const area = params.get("area");
+    const guides = params.get("guides");
+    const load = async (): Promise<Item[]> => {
+      if (area) {
+        const [data, defaults] = await Promise.all([loadGuideArea(area), loadDefaultGuideSet()]);
+        return data.steps.flatMap((step) =>
+          step.subSteps.map((sub) => {
+            const resolved = resolveSubStep(sub, defaults);
+            const reasons = sub.reasons.length ? ` (${sub.reasons.join(", ")})` : "";
+            return {
+              title: resolved?.title || EMPTY_NOTE[sub.status] || STATUS_LABEL[sub.status],
+              detail: `${sub.subStepId} · ${step.makeup} · ${STATUS_LABEL[sub.status]}${reasons}`,
+              step: resolved,
+            };
+          }),
+        );
+      }
+      const set = await (guides ? loadGuideSet(guides) : loadDefaultGuideSet());
+      return set.steps.map((step) => ({ title: step.title, detail: step.stepId, step }));
+    };
+    load()
+      .then(setItems)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
-  const steps = guideSet?.steps ?? [];
-  const step = steps[index] ?? null;
+  const list = items ?? [];
+  const item = list[index] ?? null;
 
   return (
     <main className="relative flex flex-1 flex-col justify-between p-6">
-      <GuideOverlay step={step} />
+      <GuideOverlay step={item?.step ?? null} />
 
       <header className="relative rounded-lg bg-black/50 px-4 py-3 text-white">
-        {step ? (
+        {item ? (
           <>
             <p className="text-sm opacity-80">
-              {index + 1} / {steps.length}
+              {index + 1} / {list.length} · {item.detail}
             </p>
-            <h1 className="text-lg font-semibold">{step.title}</h1>
+            <h1 className="text-lg font-semibold">{item.title}</h1>
           </>
         ) : (
           <h1 className="text-lg font-semibold">
-            {error ?? (guideSet ? "이 영상에는 가이드가 없어요" : "가이드를 불러오는 중")}
+            {error ?? (items ? "이 영상에는 가이드가 없어요" : "가이드를 불러오는 중")}
           </h1>
         )}
       </header>
@@ -56,8 +107,8 @@ export default function TutorialPage() {
           </Button>
           <Button
             size="lg"
-            disabled={index >= steps.length - 1}
-            onClick={() => setIndex((i) => Math.min(steps.length - 1, i + 1))}
+            disabled={index >= list.length - 1}
+            onClick={() => setIndex((i) => Math.min(list.length - 1, i + 1))}
           >
             다음
           </Button>

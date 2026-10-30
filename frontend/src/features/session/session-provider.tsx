@@ -82,7 +82,8 @@ const DEFAULT_STATE: SessionState = {
   run: EMPTY_RUN,
 };
 
-const STORAGE_KEY = "mairor-session";
+// 목업 단계·파우치가 바뀌면 판을 올려, 예전 단계 기준으로 저장된 파우치·기록을 버린다
+const STORAGE_KEY = "mairor-session-v2";
 
 interface SessionContextValue {
   state: SessionState;

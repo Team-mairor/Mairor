@@ -13,7 +13,7 @@ import { GuideRenderer, loadDefaultGuideSet, loadGuideSet, type GuideSet } from 
 import { loadFaceMesh, loadLayerSet, OverlayRenderer, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
-const FACES = ["front", "turned-left", "close-up", "blink-hold", "lost"];
+const FACES = ["front", "turned-left", "close-up", "far", "blink-hold", "lost"];
 const LAYERS = ["sample", "lip-only", "empty", "no-color", "missing-mask"];
 
 /**

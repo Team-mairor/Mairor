@@ -18,7 +18,7 @@ import { observeCanvasSize } from "@/lib/canvas-size";
 
 import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer, isStepVisible } from "./renderer";
-import type { GuideSet, GuideStep } from "./types";
+import type { AreaSubStep, GuideArea, GuideSet, GuideStep } from "./types";
 
 function anchorsOf(guide: GuideShape): MeshAnchor[] {
   switch (guide.type) {
@@ -65,6 +65,56 @@ export async function loadGuideSet(url: string): Promise<GuideSet> {
     }),
   }));
   return { ...set, steps };
+}
+
+/**
+ * AI가 넘기는 단계별 도포 영역을 불러온다. 쓸 수 없는 부위별 묶음은 경고만 남기고 빼고,
+ * 그 때문에 영역이 하나도 남지 않은 extracted 하위 단계는 failed로 바꾼다.
+ */
+export async function loadGuideArea(url: string): Promise<GuideArea> {
+  const response = await fetch(url);
+  if (!response.ok)
+    throw new Error(`가이드 영역 파일을 불러오지 못했습니다: ${url} (${response.status})`);
+  const area = (await response.json()) as GuideArea;
+  if (area.meshVersion !== MESH_VERSION) {
+    throw new Error(
+      `가이드 영역 파일의 meshVersion(${area.meshVersion})이 ${MESH_VERSION}이 아닙니다: ${url}`,
+    );
+  }
+  if (!Array.isArray(area.steps))
+    throw new Error(`가이드 영역 파일에 steps 배열이 없습니다: ${url}`);
+  const mesh = await loadFaceMesh();
+  const checkSub = (sub: AreaSubStep): AreaSubStep => {
+    if (sub.status !== "extracted") return sub;
+    const guideSets = (sub.guideSets ?? []).filter((set) => {
+      const error =
+        regionNamesError([set.region]) ??
+        regionNamesError(set.exclude ?? [], { allowEmpty: true }) ??
+        (!Array.isArray(set.guides) || set.guides.length === 0
+          ? "도형 없음"
+          : set.guides.some((g) => g.type !== "polygon" || (g.outline?.length ?? 0) < 3)
+            ? "테두리 점이 3개보다 적음"
+            : set.guides
+                .flatMap(anchorsOf)
+                .map((a) => anchorError(a, mesh))
+                .find(Boolean));
+      if (error) console.warn(`${sub.subStepId} ${set.region} 영역을 쓸 수 없어 뺍니다: ${error}`);
+      return !error;
+    });
+    return guideSets.length
+      ? { ...sub, guideSets }
+      : { ...sub, status: "failed", reasons: ["invalidArea"], guideSets: [] };
+  };
+  // 하위 단계가 없는 단계는 영역 데이터가 없는 것으로 보고 빼서, 화면이 화장 종류의 기본 가이드를 쓰게 한다
+  const steps = area.steps.filter((step) => {
+    const ok = Array.isArray(step.subSteps) && step.subSteps.length > 0;
+    if (!ok) console.warn(`${step.stepId} 단계에 하위 단계가 없어 영역 데이터에서 뺍니다`);
+    return ok;
+  });
+  return {
+    ...area,
+    steps: steps.map((step) => ({ ...step, subSteps: step.subSteps.map(checkSub) })),
+  };
 }
 
 let defaultGuideSet: Promise<GuideSet> | null = null;

@@ -2,14 +2,17 @@
 
 import { ArrowRight, Check, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import {
   GuideOverlay,
   loadDefaultGuideSet,
-  loadGuideSet,
+  loadGuideArea,
+  resolveSubStep,
   useStepInView,
+  type AreaSubStep,
+  type GuideArea,
   type GuideSet,
 } from "@/features/guide";
 import {
@@ -21,9 +24,22 @@ import {
   type LiveReason,
 } from "@/features/live/live-chrome";
 import { matchFor, useSession } from "@/features/session";
-import { GUIDE_STEPS, REF_PRODUCTS } from "@/lib/mock-data";
+import { MOCK_GUIDE_AREA_URL } from "@/lib/mock-guide";
+import { GUIDE_STEPS, REF_PRODUCTS, type GuideStepInfo } from "@/lib/mock-data";
 import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
+
+/** 영역 데이터에 없는 단계는 화장 종류의 기본 가이드로 그린다 */
+function templateOf(info: GuideStepInfo): AreaSubStep {
+  return {
+    subStepId: `${info.stepId}-1`,
+    order: 1,
+    status: "template",
+    reasons: [],
+    templateId: info.makeup,
+    guideSets: [],
+  };
+}
 
 /** 측정 불가 이유 (게이지 아래 한 줄) */
 const BLOCK_WHY: Record<LiveReason, string> = {
@@ -60,21 +76,25 @@ export default function TutorialPage() {
   const run = state.run;
   const alert = parseAlert(query?.get("alert"));
 
-  const [guideSet, setGuideSet] = useState<GuideSet | null>(null);
+  const [defaults, setDefaults] = useState<GuideSet | null>(null);
+  const [area, setArea] = useState<GuideArea | null>(null);
   const [step, setStep] = useState(0);
+  const [subIdx, setSubIdx] = useState(0);
   const [gauge, setGauge] = useState(10);
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<typeof SHEET_OK | null>(null);
   const [exitAsk, setExitAsk] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 레시피 연동 전까지는 기본 가이드를 쓰고, ?guides=경로 로 가이드 파일을 바꿔 본다.
+  // API 연동 전까지는 목업 가이드와 같은 샘플 영상의 가이드 영역을 쓰고, ?area=경로 로 다른 파일을 본다.
   useEffect(() => {
     if (!query) return;
-    const url = query.get("guides");
-    (url ? loadGuideSet(url) : loadDefaultGuideSet())
-      .then(setGuideSet)
-      .catch((e) => console.warn("가이드를 불러오지 못해 설명만 보여 줍니다", e));
+    loadDefaultGuideSet()
+      .then(setDefaults)
+      .catch((e) => console.warn("기본 가이드를 불러오지 못했습니다", e));
+    loadGuideArea(query.get("area") ?? MOCK_GUIDE_AREA_URL)
+      .then(setArea)
+      .catch((e) => console.warn("가이드 영역을 불러오지 못해 기본 가이드로 보여 줍니다", e));
   }, [query]);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
@@ -83,10 +103,18 @@ export default function TutorialPage() {
   const pr = matchFor(step, run, state.pouch);
   const hasProduct = pr.kind !== "none";
   const last = step >= GUIDE_STEPS.length - 1;
-  // 설명·제품(GUIDE_STEPS)과 얼굴 위 도형(GuideSet)은 stepId로 묶는다. 없는 단계는 설명만 보여 준다
-  const guideStep =
-    info.guideId == null ? null : (guideSet?.steps.find((s) => s.stepId === info.guideId) ?? null);
-  const descOnly = guideSet != null && guideStep == null;
+  // 설명·제품(GUIDE_STEPS)과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다.
+  // 영역에 없는 단계는 화장 종류의 기본 가이드를 쓰고, 그릴 것이 없으면 설명만 보여 준다
+  const subs = useMemo(
+    () => area?.steps.find((s) => s.stepId === info.stepId)?.subSteps ?? [templateOf(info)],
+    [area, info],
+  );
+  // 한 단계 안에서 영역이 바뀌면 하위 단계를 차례로 보여 준다. 게이지와 단계 사진은 단계마다 한 번이다
+  const sub = subs[Math.min(subIdx, subs.length - 1)];
+  const lastSub = subIdx >= subs.length - 1;
+  const guideStep = useMemo(() => resolveSubStep(sub, defaults), [sub, defaults]);
+  // 기본 가이드를 쓰는 하위 단계만 기본 가이드를 불러올 때까지 기다린다
+  const descOnly = guideStep == null && (sub.status !== "template" || defaults != null);
   // 가까이 다가가 지금 단계 부위만 잘려도 화면 밖으로 잘린 것으로 안내하고 측정을 멈춘다
   const stepInView = useStepInView(guideStep);
   const { note, canRender, canMeasure, reason } = useLiveState(
@@ -129,11 +157,15 @@ export default function TutorialPage() {
   const actIdx = !hasProduct ? -1 : gv >= 45 ? 1 : 0;
 
   // 진행바·이전 버튼으로 옮기면 촬영 대기 타이머는 버린다. 예전 step으로 advance가 실행되지 않게
-  const goStep = (i: number) => {
+  const cancelTimer = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
     setBusy(false);
+  };
+  const goStep = (i: number) => {
+    cancelTimer();
     setStep(i);
+    setSubIdx(0);
     setGauge(10);
     setSheet(null);
   };
@@ -147,6 +179,10 @@ export default function TutorialPage() {
   };
   const next = () => {
     if (busy || sheet) return;
+    if (!lastSub) {
+      setSubIdx((k) => k + 1);
+      return;
+    }
     setBusy(true);
     timer.current = setTimeout(() => {
       setBusy(false);
@@ -164,11 +200,13 @@ export default function TutorialPage() {
     ? run.photoOk && hasProduct
       ? "사진 찍는 중…"
       : "저장 중…"
-    : last
-      ? "완성하기"
-      : hasProduct
-        ? "다음 스텝"
-        : "건너뛰기";
+    : !lastSub
+      ? `다음 영역 · ${subIdx + 2}/${subs.length}`
+      : last
+        ? "완성하기"
+        : hasProduct
+          ? "다음 스텝"
+          : "건너뛰기";
 
   return (
     <main className="relative flex flex-1 flex-col">
@@ -192,7 +230,7 @@ export default function TutorialPage() {
           >
             {GUIDE_STEPS.map((s, i) => (
               <button
-                key={s.en}
+                key={s.stepId}
                 type="button"
                 onClick={() => goStep(i)}
                 aria-label={`${i + 1}단계 ${s.short}`}
@@ -261,13 +299,20 @@ export default function TutorialPage() {
               {String(step + 1).padStart(2, "0")}
             </span>
             <h1 className="font-display text-[30px] leading-[1.15] text-white">{info.title}</h1>
+            {subs.length > 1 && (
+              <span className="ml-auto shrink-0 text-[17px] text-line-2 tabular">
+                영역 {subIdx + 1}/{subs.length}
+              </span>
+            )}
           </div>
           {descOnly ? (
             <span className="text-[17px] leading-[1.5] text-line-2">
-              이 단계는 얼굴 위 가이드 없이 설명으로만 진행해요
+              {sub.status === "failed"
+                ? "영상에서 바를 곳을 찾지 못해 설명으로만 진행해요"
+                : "이 단계는 얼굴 위 가이드 없이 설명으로만 진행해요"}
             </span>
           ) : (
-            info.fallback && (
+            guideStep?.source === "template" && (
               <span className="text-[17px] leading-[1.5] text-rose">
                 영상에서 위치를 찾지 못해 기본 위치로 보여 드려요
               </span>
@@ -343,9 +388,14 @@ export default function TutorialPage() {
 
         <div className="flex items-center gap-3">
           <RoundBack
-            onClick={() => step > 0 && goStep(step - 1)}
-            label="이전 단계"
-            className={cn(step === 0 && "opacity-35")}
+            onClick={() => {
+              if (subIdx === 0) return step > 0 && goStep(step - 1);
+              cancelTimer();
+              setSheet(null);
+              setSubIdx((k) => k - 1);
+            }}
+            label={subIdx > 0 ? "이전 영역" : "이전 단계"}
+            className={cn(step === 0 && subIdx === 0 && "opacity-35")}
           />
           <button
             type="button"

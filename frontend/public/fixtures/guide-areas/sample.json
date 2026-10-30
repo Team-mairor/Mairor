@@ -1,0 +1,572 @@
+{
+  "videoId": "fixture",
+  "meshVersion": "v1",
+  "steps": [
+    {
+      "stepId": "s1",
+      "order": 1,
+      "makeup": "other",
+      "subSteps": [
+        {
+          "subStepId": "s1-1",
+          "order": 1,
+          "status": "notApplicable",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s2",
+      "order": 2,
+      "makeup": "foundation",
+      "subSteps": [
+        {
+          "subStepId": "s2-1",
+          "order": 1,
+          "status": "template",
+          "reasons": [
+            "noUsableFrame"
+          ],
+          "templateId": "foundation",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s3",
+      "order": 3,
+      "makeup": "eyeshadow",
+      "subSteps": [
+        {
+          "subStepId": "s3-1",
+          "order": 1,
+          "status": "extracted",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": [
+            {
+              "region": "rightEye",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 245,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 183,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 185,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 75,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 77,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 15,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 17,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 29,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 161,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 159,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 187,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 535,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 219,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 219,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 327,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 243,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "exclude": [
+                "rightEye"
+              ]
+            },
+            {
+              "region": "leftEye",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 244,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 182,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 184,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 74,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 76,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 14,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 16,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 28,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 160,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 158,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 186,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 534,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 218,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 218,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 326,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 242,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "exclude": [
+                "leftEye"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stepId": "s4",
+      "order": 4,
+      "makeup": "lip",
+      "subSteps": [
+        {
+          "subStepId": "s4-1",
+          "order": 1,
+          "status": "extracted",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": [
+            {
+              "region": "lipsOuter",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 89,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 65,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 47,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 19,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 11,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 10,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 10,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 18,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 46,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 64,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 88,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 86,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 122,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 136,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 82,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 84,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 83,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 137,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 123,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 87,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "exclude": [
+                "lipsInner"
+              ]
+            }
+          ]
+        },
+        {
+          "subStepId": "s4-2",
+          "order": 2,
+          "status": "template",
+          "reasons": [
+            "noUsableFrame"
+          ],
+          "templateId": "lip",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s5",
+      "order": 5,
+      "makeup": "blush",
+      "subSteps": [
+        {
+          "subStepId": "s5-1",
+          "order": 1,
+          "status": "failed",
+          "reasons": [
+            "FRAME_UNREADABLE"
+          ],
+          "templateId": null,
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s6",
+      "order": 6,
+      "makeup": "eyeliner",
+      "subSteps": [
+        {
+          "subStepId": "s6-1",
+          "order": 1,
+          "status": "template",
+          "reasons": [
+            "noUsableFrame"
+          ],
+          "templateId": "eyeliner",
+          "guideSets": []
+        }
+      ]
+    }
+  ]
+}
