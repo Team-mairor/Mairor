@@ -44,4 +44,33 @@ class SessionCookieTest {
         .contains("; HttpOnly")
         .contains("; SameSite=Strict");
   }
+
+  @Test
+  void sessionCookie_maxAgeIsTheConfiguredThreeDays() {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setSecure(true);
+    request.setContextPath("/api");
+    MockHttpServletResponse response = new MockHttpServletResponse();
+
+    cookieSerializer.writeCookieValue(new CookieValue(request, response, "session-id"));
+
+    assertThat(response.getHeader(HttpHeaders.SET_COOKIE)).contains("; Max-Age=259200;");
+  }
+
+  @Test
+  void sessionCookie_maxAgeCanBeSetPerRequestWithoutChangingTheSharedDefault() {
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setSecure(true);
+    request.setContextPath("/api");
+    MockHttpServletResponse shortLived = new MockHttpServletResponse();
+    CookieValue cookie = new CookieValue(request, shortLived, "session-id");
+    cookie.setCookieMaxAge(3600);
+
+    cookieSerializer.writeCookieValue(cookie);
+    MockHttpServletResponse byDefault = new MockHttpServletResponse();
+    cookieSerializer.writeCookieValue(new CookieValue(request, byDefault, "session-id"));
+
+    assertThat(shortLived.getHeader(HttpHeaders.SET_COOKIE)).contains("; Max-Age=3600;");
+    assertThat(byDefault.getHeader(HttpHeaders.SET_COOKIE)).contains("; Max-Age=259200;");
+  }
 }

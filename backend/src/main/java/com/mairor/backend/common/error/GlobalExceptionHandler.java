@@ -178,9 +178,14 @@ public class GlobalExceptionHandler {
     return fromStatus(e.getStatusCode(), headers);
   }
 
-  /** 처리하지 못한 예외: 내부 정보는 응답에 넣지 않고 로그에만 남긴다. */
+  /** 처리하지 못한 예외: 내부 정보는 응답에 넣지 않고 로그에만 남긴다. 저장소 장애({@link StoreFailure})는 503, 나머지는 500. */
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ErrorResponse> handleUnexpected(Exception e) {
+    if (StoreFailure.isUnavailable(e)) {
+      // 연결 실패·일시적 장애는 서버 버그가 아니라서 503 으로 알린다. 필터 단계와 같은 기준이다
+      log.error("저장소를 일시적으로 사용하지 못했습니다.", e);
+      return of(ErrorCode.SERVICE_UNAVAILABLE);
+    }
     log.error("처리하지 못한 예외", e);
     return of(ErrorCode.INTERNAL_ERROR);
   }

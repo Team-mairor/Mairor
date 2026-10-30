@@ -1,5 +1,9 @@
 package com.mairor.backend.common.web;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -19,6 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest
 @AutoConfigureMockMvc
 class OpenApiDocsTest {
+
+  /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
+  private static final int ALL_OPERATIONS = 11;
 
   @Autowired private MockMvc mockMvc;
 
@@ -75,6 +82,198 @@ class OpenApiDocsTest {
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/v1/users/email-availability'].post").exists());
+  }
+
+  // ---- 로그인·기기 관리 ----
+
+  @Test
+  void apiDocs_includesLoginLogoutAndMe() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/login'].post").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/logout'].post").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me'].get").exists());
+  }
+
+  @Test
+  void apiDocs_includesDeviceManagement() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].get").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].delete").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete").exists());
+  }
+
+  /** Swagger UI 의 기본 입력이 "string" 이 아니라 바로 보낼 수 있는 값이어야 한다. */
+  @Test
+  void apiDocs_loginHasUsableExamples() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/login'].post.requestBody.content['application/json'].examples")
+                .isNotEmpty())
+        .andExpect(
+            jsonPath("$.components.schemas.LoginRequest.properties.email.example")
+                .value("user@example.com"))
+        .andExpect(jsonPath("$.components.schemas.LoginResponse.properties.csrfToken").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/login'].post.responses['200'].content['application/json'].examples")
+                .isNotEmpty());
+  }
+
+  @Test
+  void apiDocs_loginDocumentsEveryErrorWithItsRealCode() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/login'].post.responses['400']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/login'].post.responses['401'].content['application/json'].examples.USERS_INVALID_CREDENTIALS")
+                .exists())
+        .andExpect(jsonPath("$.paths['/v1/users/login'].post.responses['403']").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/login'].post.responses['415']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/login'].post.responses['429'].content['application/json'].examples.USERS_LOGIN_RATE_LIMITED")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/login'].post.responses['429'].content['application/json'].examples.TOO_MANY_REQUESTS")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/login'].post.responses['429'].headers['Retry-After']")
+                .exists());
+  }
+
+  @Test
+  void apiDocs_loginSetsTheSessionCookieAndLogoutExpiresIt() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/login'].post.responses['200'].headers['Set-Cookie']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/logout'].post.responses['204'].headers['Set-Cookie']")
+                .exists());
+  }
+
+  @Test
+  void apiDocs_describesTheSessionCookieAndCsrfTokenSchemes() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.components.securitySchemes.sessionCookie.type").value("apiKey"))
+        .andExpect(jsonPath("$.components.securitySchemes.sessionCookie.in").value("cookie"))
+        .andExpect(
+            jsonPath("$.components.securitySchemes.sessionCookie.name").value("__Host-sessionId"))
+        .andExpect(jsonPath("$.components.securitySchemes.csrfToken.type").value("apiKey"))
+        .andExpect(jsonPath("$.components.securitySchemes.csrfToken.in").value("header"))
+        .andExpect(jsonPath("$.components.securitySchemes.csrfToken.name").value("X-CSRF-TOKEN"));
+  }
+
+  /** 로그인은 공개이고, 로그인이 필요한 API 는 세션 쿠키를, 변경 요청은 세션 쿠키와 CSRF 토큰을 함께 요구한다(둘 중 하나가 아니다). */
+  @Test
+  void apiDocs_marksWhichEndpointsNeedWhichCredentials() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/login'].post.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/v1/users/me'].get.security.length()").value(1))
+        .andExpect(jsonPath("$.paths['/v1/users/me'].get.security[0].sessionCookie").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me'].get.security[0].csrfToken").doesNotExist())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions'].get.security[0].sessionCookie").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security.length()").value(1))
+        .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security[0].sessionCookie").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security[0].csrfToken").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].delete.security.length()").value(1))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions'].delete.security[0].csrfToken").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.security.length()")
+                .value(1))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.security[0].csrfToken")
+                .exists());
+  }
+
+  @Test
+  void apiDocs_protectedEndpointsDocumentTheirAuthErrors() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/me'].get.responses['401']").exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].get.responses['401']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/logout'].post.responses['403'].content['application/json'].examples.CSRF_INVALID")
+                .exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].delete.responses['403']").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.responses['403']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.responses['404']")
+                .exists());
+  }
+
+  @Test
+  void apiDocs_deviceListDoesNotExposeInternalParameters() throws Exception {
+    // 인증된 principal 같은 내부 인자가 요청 파라미터로 새어 나오면 안 된다
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].get.parameters").doesNotExist())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.parameters.length()")
+                .value(1))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.parameters[0].name")
+                .value("sessionRef"));
+  }
+
+  /** Swagger UI 의 그룹 이름이 한국어로 통일돼 있어야 한다(기본값 user-controller 같은 영문 이름이 남으면 안 된다). */
+  @Test
+  void apiDocs_everyOperationIsGroupedUnderAKoreanTag() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths.*.*.tags[*]").isNotEmpty())
+        .andExpect(jsonPath("$.paths.*.*.tags[*]", everyItem(matchesPattern(".*[가-힣].*"))))
+        .andExpect(jsonPath("$.paths['/v1/users/signup'].post.tags[0]").value("회원가입"))
+        .andExpect(jsonPath("$.paths['/v1/users/email-verification'].post.tags[0]").value("이메일 인증"))
+        .andExpect(jsonPath("$.paths['/health'].get.tags[0]").value("헬스체크"));
+  }
+
+  /** 모든 API 에 한국어 이름(summary)과 설명(description)이 있어야 한다. 새 API 에서 빠뜨리면 여기서 걸린다. */
+  @Test
+  void apiDocs_everyOperationHasKoreanSummaryAndDescription() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths.*.*.summary", everyItem(matchesPattern(".*[가-힣].*"))))
+        .andExpect(jsonPath("$.paths.*.*.description", everyItem(matchesPattern("(?s).*[가-힣].*"))))
+        .andExpect(jsonPath("$.paths.*.*.summary", hasSize(ALL_OPERATIONS)))
+        .andExpect(jsonPath("$.paths.*.*.description", hasSize(ALL_OPERATIONS)));
+  }
+
+  /** Swagger UI 가 로그인 응답의 csrfToken 을 변경 요청에 자동으로 넣는다(springdoc 의 기본 설정은 그대로 유지). */
+  @Test
+  void swaggerInitializer_autofillsTheCsrfTokenAndKeepsTheDefaultConfig() throws Exception {
+    mockMvc
+        .perform(get("/swagger-ui/swagger-initializer.js"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("SwaggerUIBundle")))
+        .andExpect(content().string(containsString("/v3/api-docs")))
+        .andExpect(content().string(containsString("X-CSRF-TOKEN")))
+        .andExpect(content().string(containsString("/v1/users/login")));
   }
 
   @Test

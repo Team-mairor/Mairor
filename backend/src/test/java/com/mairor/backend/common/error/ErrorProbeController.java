@@ -39,6 +39,40 @@ public class ErrorProbeController {
     throw new IllegalStateException("internal detail that must not leak");
   }
 
+  @GetMapping("/store-down")
+  public void storeDown() {
+    throw new org.springframework.dao.DataAccessResourceFailureException("connection refused");
+  }
+
+  @GetMapping("/store-timeout")
+  public void storeTimeout() {
+    throw new org.springframework.dao.QueryTimeoutException("query timed out");
+  }
+
+  @GetMapping("/store-pool")
+  public void storePool() {
+    throw new org.springframework.transaction.CannotCreateTransactionException(
+        "Could not open JPA EntityManager for transaction");
+  }
+
+  @GetMapping("/store-rollback")
+  public void storeRollback() {
+    throw new org.springframework.orm.jpa.JpaSystemException(
+        new org.hibernate.TransactionException(
+            "Unable to rollback against JDBC Connection",
+            new java.sql.SQLException("Connection is closed")));
+  }
+
+  @GetMapping("/store-raw-sql")
+  public void storeRawSql() throws java.sql.SQLException {
+    throw new java.sql.SQLException("unclassified");
+  }
+
+  @GetMapping("/store-bug")
+  public void storeBug() {
+    throw new org.springframework.dao.DataIntegrityViolationException("duplicate key");
+  }
+
   @PostMapping("/body")
   public Sample body(@Valid @RequestBody Sample sample) {
     return sample;

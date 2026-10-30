@@ -1,7 +1,7 @@
 # API 명세
 
 <callout icon="📌" color="blue_bg">
-<b>API 명세 v2 — 현행 API 41개 · 기능 45개 대응 (Git 공유용)</b><br /><br />기능 정책은 <mention url="https://app.notion.com/p/3fedce3252f680e589b0c4e5476d731f" />, 화면 순서는 <mention url="https://app.notion.com/p/406dce3252f68144abc8e28875775da0" /> 기준. API별 요청·응답·오류와 공통 모델의 단일 기준 문서이며, Notion APIs DB의 구버전 상세보다 우선한다. 명세는 구현 완료를 뜻하지 않는다.
+<b>API 명세 v2 — 현행 API 44개 · 기능 45개 대응 (Git 공유용)</b><br /><br />기능 정책은 <mention url="https://app.notion.com/p/3fedce3252f680e589b0c4e5476d731f" />, 화면 순서는 <mention url="https://app.notion.com/p/406dce3252f68144abc8e28875775da0" /> 기준. API별 요청·응답·오류와 공통 모델의 단일 기준 문서이며, Notion APIs DB의 구버전 상세보다 우선한다. 명세는 구현 완료를 뜻하지 않는다.
 </callout>
 
 ## 0. 구현 규칙 (AI·팀원 공통)
@@ -11,11 +11,11 @@
 - 응답·요청 필드는 4절 모델 기준. 모델에 없는 필드를 추측해 추가하지 않는다
 - FE는 HTTP 상태 + <code>code</code>로 분기 (message 문구로 분기 금지). 화면 문구는 유저플로우 v11 기준
 - API 없이 클라이언트에서 처리: 온보딩·튜토리얼 안내 노출(기기 저장), 로그인 이력 플래그, 얼굴 촬영 조건 판정·추적·좌표 매핑·오버레이, 카메라 오류·인식 알림, 색감·진하기 게이지, 단계 이동, 목록↔입혀보기 선택 상태
-- 표기: <b>공개</b> = 비회원 호출 가능 · <b>회원</b> = 세션 쿠키 필요 · <b>CSRF</b> = X-CSRF-Token 필요
+- 표기: <b>공개</b> = 비회원 호출 가능 · <b>회원</b> = 세션 쿠키 필요 · <b>CSRF</b> = X-CSRF-TOKEN 필요
 
 ## 1. API 요약
 
-현행 API 41개는 모두 P0입니다.
+현행 API 44개는 모두 P0입니다.
 
 공통 경로 Prefix: <code>/api/v1</code> · Endpoint는 공통 Prefix를 포함한 전체 경로입니다. API ID와 기능 ID는 별도 번호 체계입니다(API-USERS-005 등 결번은 재사용 금지).
 
@@ -33,6 +33,9 @@
 | API-USERS-011 | POST /api/v1/users/email-availability | USERS-001 회원가입 |
 | API-USERS-012 | POST /api/v1/users/email-verification | USERS-001 회원가입 (이메일 소유 확인, 초안) |
 | API-USERS-013 | POST /api/v1/users/email-verification/verification | USERS-001 회원가입 (이메일 소유 확인, 초안) |
+| API-USERS-014 | GET /api/v1/users/me/sessions | USERS-003 로그인 기기 관리 (번호 임시) |
+| API-USERS-015 | DELETE /api/v1/users/me/sessions/\{sessionRef\} | USERS-003 로그인 기기 관리 (번호 임시) |
+| API-USERS-016 | DELETE /api/v1/users/me/sessions | USERS-003 로그인 기기 관리 (번호 임시) |
 | API-VIDEO-001 | POST /api/v1/videos | VIDEO-001 · VIDEO-005 · VIDEO-004 |
 | API-VIDEO-002 | POST /api/v1/users/me/analysis-jobs | VIDEO-002 · ANALYSIS-001\~006 |
 | API-VIDEO-003 | GET /api/v1/users/me/analysis-jobs/\{jobId\} | VIDEO-003 · ANALYSIS-006 |
@@ -89,7 +92,7 @@ API-USERS-001 · POST /api/v1/users/signup
 | nickname | N | 공백 제거 후 2\~20자, 한글·영문·숫자·밑줄, 중복 허용 |
 | name | N | 공백 제거 후 2\~50자, 한글·영문·공백 |
 | phone | N | 국내 휴대폰 번호, 하이픈·공백 제거 후 숫자10\~11자리 저장. 인증·계정 찾기에 미사용 |
-| birthDate | N | YYYY-MM-DD 과거 날짜, 입력 시 만14세 미만 거절. 생략/null 가능 |
+| birthDate | N | YYYY-MM-DD 과거 날짜(1900-01-01 이후), 입력 시 만14세 미만 거절(한국 시간 기준). 생략/null 가능 |
 | gender | N | MALE/FEMALE, 생략/null 가능 |
 | agreements | Y | SignupAgreement 배열. TERMS·PRIVACY·AGE\_OVER\_14 모두 true·현재 버전. MARKETING 선택, type 중복 불가 |
 | emailVerificationToken | 조건부(초안) | 이메일 소유 확인을 사용하는 환경에서만 필수. API-USERS-013이 발급한 토큰이며 같은 이메일에 대해서만 유효 |
@@ -100,9 +103,10 @@ API-USERS-002 · POST /api/v1/users/login
 
 관련 기능: USERS-002 로그인 / 로그아웃
 
-- 공개 JSON·허용 Origin 검증. Body: email:string 필수(가입과 동일 정규화), password:string 필수(원문 유지).
-- 200: \{user:User, csrfToken:string\}. 새 세션 ID·쿠키 발급, Cache-Control:no-store.
-- 401 USERS\_INVALID\_CREDENTIALS: 이메일/비밀번호 원인 구분 없음. 429 USERS\_LOGIN\_RATE\_LIMITED + Retry-After. 제한 횟수·기간은 설정 확정 필요.
+- 공개 JSON·허용 Origin 검증. Body: email:string 필수(가입과 동일 정규화, 254자 이하), password:string 필수(공백 자동 제거 안 함, 256자 이하, 강도 규칙은 검사하지 않음).
+- 200: \{user:User, csrfToken:string\}. 새 세션 ID·쿠키 발급, Cache-Control:no-store. 로그인할 때마다 세션 ID와 csrfToken이 새로 발급되고, 기존 로그인 세션이 있는 쿠키로 요청하면 그 세션은 폐기한다(계정 전환 포함).
+- 오류: 400 VALIDATION\_FAILED(누락·빈 값·길이 초과·깨진 JSON) · 401 USERS\_INVALID\_CREDENTIALS(미가입 이메일·틀린 비밀번호·Google 전용 계정·72바이트 초과 비밀번호를 구분하지 않음) · 403 FORBIDDEN(허용되지 않은 Origin) · 415 UNSUPPORTED\_MEDIA\_TYPE · 429 USERS\_LOGIN\_RATE\_LIMITED(이메일 잠금) + Retry-After · 429 TOO\_MANY\_REQUESTS(서버 혼잡, Retry-After: 1).
+- 시도 제한: 이메일 하나에서 확정 실패가 3회에 닿으면 30초 잠금(5회로 올릴 예정, 설정값). 잠금 중에는 비밀번호가 맞아도 429이고 잠금 시간을 연장하지 않는다. 진행 중인 시도도 횟수에 포함되어 동시에 한도보다 많이 시도할 수 없다. 이메일 단위 제한이라 서로 다른 이메일의 대량 시도는 막지 못하며, 서버 전체 BCrypt 동시 계산 수를 제한해 CPU 소모를 막는다(초과분은 429 TOO\_MANY\_REQUESTS, 시도 횟수 미차감). IP 단위 제한은 프록시 담당(배포 조건).
 - FE는 기기 온보딩 완료 여부로 최초 안내 또는 홈 분기. 파우치 등록은 선택, 얼굴 등록은 실행 준비 단계에서 수행.
 </toggle>
 
@@ -111,8 +115,9 @@ API-USERS-003 · POST /api/v1/users/logout
 
 관련 기능: USERS-002 · USERS-003 · GUIDE-011
 
-- 회원·CSRF 필요. Body 없음. 204 본문 없음.
-- 현재 세션의 미완료 실행을 ABANDONED로 전환하고 단계 사진·연결 얼굴 등록 이미지 접근을 차단·정리 예약한 뒤 세션·쿠키 폐기. 실패 시 성공 응답 금지. 다른 기기의 세션·완료 기록 유지.
+- 회원·CSRF 필요. Body 없음. 204 본문 없음. 만료 쿠키(Max-Age=0)가 내려간다.
+- 현재 세션의 미완료 실행을 ABANDONED로 전환하고 단계 사진·연결 얼굴 등록 이미지 접근을 차단·정리 예약한 뒤 세션·쿠키 폐기. 실패 시 성공 응답 금지. 다른 기기의 세션·완료 기록 유지. (구현 상태: 세션·쿠키 폐기까지 구현, 실행 ABANDONED 전환·사진 접근 차단은 GUIDE-011 구현 때 같은 지점에 추가 — `TODO(GUIDE-011)`)
+- 오류: 403 CSRF\_INVALID(CSRF 토큰 없음·불일치, 세션이 없는 요청 포함) · 401 UNAUTHORIZED(절대 만료로 세션이 끝난 요청 포함). FE는 403이면 내 계정 조회로 확인해 200이면 새 토큰으로 한 번만 재시도하고, 401이면 이미 로그아웃된 상태로 정리한다.
 </toggle>
 
 <toggle>
@@ -120,8 +125,8 @@ API-USERS-004 · GET /api/v1/users/me
 
 관련 기능: USERS-003 로그인 상태
 
-- 회원 GET. 요청 필드 없음. 200: \{user:User, csrfToken:string\}, Cache-Control:no-store.
-- 세션 없음·만료: 401 UNAUTHORIZED. SESSION\_EXPIRED 코드 도입(5절) 전까지 FE는 '이 기기 로그인 이력 플래그가 있는데 401'이면 만료 안내로 처리한다(플래그는 로그인 성공 시 저장, 로그아웃 시 제거). 튜토리얼 중 401이면 '기록 없이 종료' 안내를 추가한다.
+- 회원 GET. 요청 필드 없음. 200: \{user:User, csrfToken:string\}, Cache-Control:no-store. csrfToken은 교체하지 않고 현재 세션의 값을 돌려준다. 인증된 요청이 성공하면 세션 쿠키 보관 기간이 함께 연장되므로(아래 '세션 수명') 별도의 주기적 호출은 필요 없다.
+- 세션 없음·만료(유휴 3일 또는 로그인 후 30일 경과): 401 UNAUTHORIZED. SESSION\_EXPIRED 코드 도입(5절) 전까지 FE는 '이 기기 로그인 이력 플래그가 있는데 401'이면 만료 안내로 처리한다(플래그는 로그인 성공 시 저장, 로그아웃 시 제거). 튜토리얼 중 401이면 '기록 없이 종료' 안내를 추가한다.
 </toggle>
 
 <toggle>
@@ -521,6 +526,33 @@ POST /api/v1/users/email-verification/verification
 - 오류: 400 <code>VALIDATION_FAILED</code>(코드 형식) · 400 <code>USERS_EMAIL_CODE_INVALID</code>(불일치) · 410 <code>USERS_EMAIL_CODE_EXPIRED</code>(만료 또는 발송 이력 없음) · 429 <code>USERS_EMAIL_CODE_ATTEMPTS_EXCEEDED</code>(시도 5회 초과, 재발송으로 초기화)
 - 정책: 코드는 확인에 성공하면 즉시 폐기(1회용). 토큰은 이 응답에서만 평문으로 노출한다. FE는 410·429를 구분해 안내하고, 이메일을 바꾸면 인증 상태를 해제한다
 
+### API-USERS-014 · 내 로그인 기기 목록
+
+GET /api/v1/users/me/sessions
+
+- 관련 기능: USERS-003 로그인 기기 관리 · 회원 · 번호·기능 ID는 팀 확정 전 임시
+- 요청 필드 없음. 성공 200: <code>{ "items": [ { "sessionRef": "…", "device": "Chrome · Windows", "createdAt": "…", "lastAccessedAt": "…", "current": true } ] }</code> — 마지막 요청이 최근인 기기가 앞에 오고, 요청을 보낸 기기만 current=true. Cache-Control:no-store
+- 오류: 401 UNAUTHORIZED
+- 정책: 로그인 후 30일이 지난 세션과 로그인 시각·sessionRef가 없는 세션은 목록에서 제외한다. device는 브라우저·운영체제 요약이고(알 수 없으면 '알 수 없는 기기') IP는 제공하지 않는다. sessionRef는 로그인 때 만든 공개용 식별자이며 세션 ID(쿠키 값)와 다르다. 응답·헤더·로그에 세션 ID를 노출하지 않는다
+
+### API-USERS-015 · 기기 하나 로그아웃
+
+DELETE /api/v1/users/me/sessions/\{sessionRef\}
+
+- 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
+- 요청: Path <code>sessionRef</code> string 필수. 성공 204 본문 없음
+- 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 404 NOT\_FOUND(없는 값·형식 오류·이미 끝난 기기·다른 회원의 값을 구분하지 않음)
+- 정책: 다른 기기를 지정하면 현재 기기는 그대로 유지되고 쿠키는 평소처럼 갱신된다. 자기 자신을 지정하면 로그아웃과 같아 만료 쿠키가 내려간다. 지워지는 세션의 미완료 실행 처리는 API-USERS-003과 같다(GUIDE-011)
+
+### API-USERS-016 · 전체 기기 로그아웃
+
+DELETE /api/v1/users/me/sessions
+
+- 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
+- 요청 필드 없음. 성공 204 본문 없음. 현재 기기도 함께 로그아웃되고 만료 쿠키가 내려간다
+- 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 500 INTERNAL\_ERROR(일부 기기를 끊지 못함)
+- 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓸 예정이다(S15P31A306-210)
+
 ### API-VIDEO-006 · 분석 재시도
 
 POST /api/v1/users/me/analysis-jobs/\{jobId\}/retry
@@ -617,7 +649,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | Base URL | 개발 / 운영: 미정 |
 | 경로·버전 | /api/v1/... . 리소스 경로는 복수형 명사·kebab-case |
 | 데이터·필드명 | application/json, UTF-8, camelCase. 사진 등 파일 전송은 별도 명시 |
-| 인증 | 이메일·비밀번호 자체 로그인과 Google 로그인. 공개 진입점(회원가입·이메일 중복 확인·자체 로그인·비밀번호 재설정 3종·Google 인증 시작/callback) 외 업무 API는 회원 인증 필수. 게스트 미제공(확정). 서버 세션 쿠키와 X-CSRF-Token 사용. 운영자·내부 시스템은 별도 주체 인증. 프론트와 API는 같은 Origin의 HTTPS로 배포하며 리버스 프록시로 /api를 연결한다. 세션 수명은 비기능에서 확정 |
+| 인증 | 이메일·비밀번호 자체 로그인과 Google 로그인. 공개 진입점(회원가입·이메일 중복 확인·자체 로그인·비밀번호 재설정 3종·Google 인증 시작/callback) 외 업무 API는 회원 인증 필수. 게스트 미제공(확정). 서버 세션 쿠키와 X-CSRF-TOKEN 사용. 운영자·내부 시스템은 별도 주체 인증. 프론트와 API는 같은 Origin의 HTTPS로 배포하며 리버스 프록시로 /api를 연결한다. 세션 수명은 유휴 3일·절대 30일(설정값) |
 | 호출 주체 | 비회원 / 회원 / 운영자(검수·데이터 관리) / 내부 시스템(분석·정리 작업) |
 | 권한 | 인증 실패는 401. 인증된 회원이 타인 소유 리소스에 접근하면 존재하지 않는 경우와 동일한 404. 소유권과 무관한 역할·보호 정책 위반은 403. 인증된 변경 요청의 CSRF 실패도 403 |
 | 성공 응답 | 데이터 객체를 본문에 직접 반환. 동기 조회·수정 200, 생성 완료 201, 비동기 접수 202, 본문 없는 성공 204. 삭제는 동기 완료 204, 비동기 접수 202 |
@@ -661,8 +693,10 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 
 ### 인증·배포 상세
 
-- 서버 세션 쿠키는 \_\_Host-sessionId, HttpOnly·Secure·SameSite=Strict·Path=/. 자체 로그인과 내 계정 조회가 csrfToken을 반환한다. Google callback은 세션 발급 후 메인으로 리다이렉트하며 내 계정 조회로 csrfToken을 받는다.
-- 인증된 POST·PUT·PATCH·DELETE는 X-CSRF-Token을 검증한다. 공개 진입점은 JSON·허용 Origin 검증, Google callback은 일회성 state·nonce·PKCE 및 트랜잭션 검증. 외부 인증 복귀용 임시 쿠키의 Lax와 서비스 세션의 Strict를 분리한다.
+- 서버 세션(Spring Session JDBC, PostgreSQL) 쿠키는 \_\_Host-sessionId, HttpOnly·Secure·SameSite=Strict·Path=/·Domain 없음. JWT는 쓰지 않는다. 자체 로그인과 내 계정 조회가 csrfToken을 반환한다. Google callback은 세션 발급 후 메인으로 리다이렉트하며 내 계정 조회로 csrfToken을 받는다.
+- 인증된 POST·PUT·PATCH·DELETE는 X-CSRF-TOKEN을 검증한다. 공개 진입점은 JSON·허용 Origin 검증, Google callback은 일회성 state·nonce·PKCE 및 트랜잭션 검증. 외부 인증 복귀용 임시 쿠키의 Lax와 서비스 세션의 Strict를 분리한다.
+- 세션 수명(설정값): 유휴 만료 3일(마지막 인증 요청 기준) · 쿠키 Max-Age 3일(인증된 요청이 성공하면 갱신, 절대 만료까지 남은 시간이 더 짧으면 그 값) · 절대 만료 30일(로그인 시점 기준, 활동해도 연장하지 않음). 쿠키 수명 ≤ 유휴 만료 ≤ 절대 만료를 어기면 서버가 기동하지 않는다. 만료된 세션의 요청은 변경 요청이어도 403이 아니라 401이다.
+- 로그인 응답과 내 계정 조회 응답은 Cache-Control:no-store로 csrfToken이 캐시에 남지 않게 한다. csrfToken은 로그인마다 새로 발급되며 이전 토큰은 거절된다.
 - 프론트·API·인증 사진 경로를 같은 Origin으로 제공해 쿠키가 사진 조회에도 전달되게 한다. 서브도메인 분리 배포는 별도 검토한다.
 - 본인 소유 리소스는 /api/v1/users/me 아래, 공용 카탈로그·영상·검수 가이드는 /products·/videos·/guides 아래. 공개 인증 진입점: /users/signup · /users/email-availability · /users/login · /users/password-reset(/verification, /password) · /users/oauth/google(/callback).
 
@@ -671,14 +705,15 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | HTTP | code | 기본 message | 조건·처리 |
 | --- | --- | --- | --- |
 | 400 | VALIDATION\_FAILED | 입력값이 올바르지 않습니다. | 필수값·타입·범위 오류. 필요 시 details에 필드별 원인 |
-| 401 | UNAUTHORIZED | 로그인이 필요합니다. | 세션 없음·만료. 로그인 화면 안내. 만료 구분 SESSION\_EXPIRED는 제안(확인 필요) |
+| 401 | UNAUTHORIZED | 로그인이 필요합니다. | 세션 없음·만료(유휴 3일·절대 30일)·저장된 세션이 손상돼 읽을 수 없음(이때 세션 쿠키를 만료시킴). 로그인 화면 안내. 만료 구분 SESSION\_EXPIRED는 제안(확인 필요) |
 | 403 | CSRF\_INVALID | 요청 보안 토큰이 유효하지 않습니다. | 변경 요청의 CSRF 토큰 없음·불일치. 세션이 없는 요청도 토큰이 없으면 401보다 먼저 반환. 내 계정 조회로 토큰 갱신, 401이면 로그인 안내 |
 | 403 | FORBIDDEN | 요청 권한이 없습니다. | 역할 또는 허용 Origin 등 보호 정책 위반 |
 | 404 | NOT\_FOUND | 요청한 리소스를 찾을 수 없습니다. | 리소스 없음·타인 소유 접근에 같은 코드와 메시지 |
 | 405 | METHOD\_NOT\_ALLOWED | 허용되지 않는 요청 방식입니다. | 경로는 있으나 지원하지 않는 HTTP 메서드 |
 | 409 | CONFLICT | 요청이 현재 상태와 충돌합니다. | 업무 코드(예: POUCH\_DUPLICATE)를 정의한 API는 그 코드를 쓰고, 정의가 없을 때의 기본값 |
-| 429 | TOO\_MANY\_REQUESTS | 요청 한도를 초과했습니다. | 공통 요청 제한 초과. 로그인·분석·재설정의 업무 코드는 개별 명세 적용. Retry-After 제공 |
+| 429 | TOO\_MANY\_REQUESTS | 요청 한도를 초과했습니다. | 공통 요청 제한 초과. 로그인(USERS\_LOGIN\_RATE\_LIMITED)·분석·재설정의 업무 코드는 개별 명세 적용. 로그인 BCrypt 동시 계산이 가득 찬 경우도 이 코드(Retry-After: 1). Retry-After 제공 |
 | 500 | INTERNAL\_ERROR | 서버에서 예기치 않은 오류가 발생했습니다. | 내부 예외 미노출 |
+| 503 | SERVICE\_UNAVAILABLE | 서비스를 일시적으로 이용할 수 없습니다. 잠시 후 다시 시도해 주세요. | 세션 저장소(DB) 연결 실패·연결 풀 소진·시간 초과·락 경합 같은 일시 장애. 잘못된 SQL·스키마 불일치·제약 위반 같은 서버 문제는 500이다. 401(미인증)로 바꾸지 않는다. 로그인·로그아웃을 포함해 세션을 저장·삭제하지 못하면 성공 응답을 주지 않는다. FE는 잠시 후 다시 시도하게 안내 |
 
 - 각 API에는 업무별 오류와 별도 처리가 필요한 조건만 적는다.
 - 표에 없는 HTTP 오류(406·410·413·415 등)는 업무 코드가 없으면 HTTP 상태 이름을 code로 쓴다(예: 415 UNSUPPORTED\_MEDIA\_TYPE). FE는 message가 아니라 code로 분기한다.
@@ -778,13 +813,13 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | AnalysisJob.reviewStatus | NOT\_READY → (COMPLETED 후) PENDING → APPROVED(guideId 발급) / REJECTED. APPROVED 전에는 guideAvailable=false |
 | GuideMatch | 생성(API-RECOMMEND-001) → pouchVersion·guideVersion 변경 시 stale=true → 새로 생성. 실행 시작 후에는 실행 스냅샷만 사용 |
 | FaceRegistration.status | REGISTERED(API-CAMERA-001) → LINKED(API-GUIDE-001) → RETAINED(API-GUIDE-006). REGISTERED는 재촬영·API-CAMERA-003으로 폐기, LINKED는 실행 ABANDONED 시 정리, RETAINED는 API-REPORT-003으로만 삭제 |
-| Execution.status | IN\_PROGRESS(API-GUIDE-001) → COMPLETED(API-GUIDE-006, recordId 발급) / ABANDONED(API-GUIDE-007 · 로그아웃 · 같은 세션의 새 실행 시작 · 세션 만료 정리). 종료 상태의 변경 요청은 409 GUIDE\_EXECUTION\_NOT\_ACTIVE |
+| Execution.status | IN\_PROGRESS(API-GUIDE-001) → COMPLETED(API-GUIDE-006, recordId 발급) / ABANDONED(API-GUIDE-007 · 로그아웃·기기 로그아웃(API-USERS-003·015·016, GUIDE-011 구현 때 연결) · 같은 세션의 새 실행 시작 · 세션 만료 정리). 종료 상태의 변경 요청은 409 GUIDE\_EXECUTION\_NOT\_ACTIVE |
 
 ## 5. 확정이 필요한 항목
 
 | 항목 | 남은 결정 |
 | --- | --- |
-| 인증·회원 | 세션 수명·로그인 실패 제한 수치, SESSION\_EXPIRED 코드 도입 여부, Google 동일 이메일 연결/중복 계정, Google 최초 로그인 시 약관·추가 정보 수집, 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
+| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정, Google 최초 로그인 시 약관·추가 정보 수집, 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
 | 비밀번호 재설정 | Google 전용 계정 안내를 메일로 할지 화면으로 할지, resetToken 유효 시간·코드 시도 횟수, 요청 제한 수치 |
 | 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |

@@ -19,7 +19,9 @@ public enum ErrorCode {
   METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "허용되지 않는 요청 방식입니다."),
   CONFLICT(HttpStatus.CONFLICT, "요청이 현재 상태와 충돌합니다."),
   TOO_MANY_REQUESTS(HttpStatus.TOO_MANY_REQUESTS, "요청 한도를 초과했습니다."),
-  INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버에서 예기치 않은 오류가 발생했습니다.");
+  INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버에서 예기치 않은 오류가 발생했습니다."),
+  /** 세션 저장소(DB) 장애처럼 서버가 일시적으로 요청을 처리하지 못함. 인증 실패(401)와 다르다. FE는 잠시 후 다시 시도하게 안내한다. */
+  SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "서비스를 일시적으로 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.");
 
   private final HttpStatus status;
   private final String message;

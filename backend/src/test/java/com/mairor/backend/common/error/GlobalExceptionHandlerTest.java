@@ -1,5 +1,7 @@
 package com.mairor.backend.common.error;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,6 +42,40 @@ class GlobalExceptionHandlerTest {
         .andExpect(jsonPath("$.details.length()").value(2))
         .andExpect(
             jsonPath("$.details[*].field").value(org.hamcrest.Matchers.hasItems("name", "count")));
+  }
+
+  @Test
+  void storeUnavailable_returns503NotAServerBug() throws Exception {
+    for (String path :
+        new String[] {
+          "/v1/error-probe/store-down",
+          "/v1/error-probe/store-timeout",
+          "/v1/error-probe/store-pool",
+          "/v1/error-probe/store-rollback"
+        }) {
+      mockMvc
+          .perform(get(path))
+          .andExpect(status().isServiceUnavailable())
+          .andExpect(jsonPath("$.code").value("SERVICE_UNAVAILABLE"))
+          .andExpect(jsonPath("$.message").value(not(containsString("connection"))));
+    }
+  }
+
+  @Test
+  void anUnclassifiedRawSqlException_isNotTreatedAsAnOutage() throws Exception {
+    mockMvc
+        .perform(get("/v1/error-probe/store-raw-sql"))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"));
+  }
+
+  @Test
+  void otherDatabaseErrors_stayAn500WithoutLeakingDetails() throws Exception {
+    mockMvc
+        .perform(get("/v1/error-probe/store-bug"))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
+        .andExpect(jsonPath("$.message").value(not(containsString("duplicate"))));
   }
 
   @Test
