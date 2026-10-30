@@ -28,7 +28,9 @@ export {
   FaceTracker,
   type CloseUpMode,
   type TrackerOptions,
+  formatTiming,
   type TrackerStats,
+  type TrackerTiming,
   VideoStalledError,
 } from "./tracker";
 export {

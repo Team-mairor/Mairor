@@ -10,6 +10,7 @@ import {
   landmarkerInfo,
   coverTransform,
   faceWidthRatio,
+  formatTiming,
   isGuideVisible,
   REGIONS,
   REGION_NAMES,
@@ -207,7 +208,7 @@ export default function DebugFacePage() {
               frame?.trackingState === "tracking"
                 ? (probeRef.current?.sample(video, frame) ?? null)
                 : null;
-            setHud({ frame, stats: { ...stats }, color });
+            setHud({ frame, stats: { ...stats, timing: { ...stats.timing } }, color });
           }
         },
         { closeUp, smoothing: smoothing ? SMOOTHING : null },
@@ -382,8 +383,8 @@ export default function DebugFacePage() {
           <dd>{issue ? TRACKING_ISSUE_TEXT[issue].title : "-"}</dd>
           <dt>fps</dt>
           <dd>{hud.stats.fps}</dd>
-          <dt>detect</dt>
-          <dd>{hud.stats.detectMs.toFixed(1)} ms</dd>
+          <dt>구간별 ms</dt>
+          <dd className="sm:col-span-3">{formatTiming(hud.stats.timing)}</dd>
           <dt>추론</dt>
           <dd>
             {landmarkerInfo.delegate ?? "-"} · {landmarkerInfo.gpu ?? "WebGL2 없음"}

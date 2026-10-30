@@ -55,9 +55,44 @@ export interface TrackerOptions {
   smoothing: SmoothingOptions | null;
 }
 
+/**
+ * 추적 한 프레임의 구간별 시간 (ms, 최근 값 위주 평균). 저사양 기기에서 어느 구간이 느린지 찾는 데 쓴다.
+ * 한 프레임 = input + detect + frame + largest(돌 때만) + listeners, 그 사이 다음 프레임을 기다린 시간이 idle
+ */
+export interface TrackerTiming {
+  /** 근접 축소·가림용 입력 캔버스 그리기 (영상을 바로 넘기면 0에 가깝다) */
+  input: number;
+  /** 얼굴 랜드마크 추론 (detectForVideo) */
+  detect: number;
+  /** 결과를 FaceFrame으로 바꾸기 (떨림 보정·부위 계산) */
+  frame: number;
+  /** 가장 큰 얼굴 검출기. LARGEST_CHECK_MS마다 돌 때만 잰다 */
+  largest: number;
+  /** 화면 쪽 처리 (화장 그리기·피부 분할 등 onFrame) */
+  listeners: number;
+  /** 이전 프레임 처리가 끝나고 이번 프레임이 시작되기까지 */
+  idle: number;
+}
+
+const TIMING_LABELS: Record<keyof TrackerTiming, string> = {
+  input: "입력",
+  detect: "검출",
+  frame: "변환",
+  largest: "큰 얼굴",
+  listeners: "화면",
+  idle: "대기",
+};
+
+/** 확인 화면 표시용 한 줄 (예: "입력 0.4 · 검출 231.0 · …" ms) */
+export function formatTiming(timing: TrackerTiming): string {
+  return (Object.keys(TIMING_LABELS) as (keyof TrackerTiming)[])
+    .map((key) => `${TIMING_LABELS[key]} ${timing[key].toFixed(1)}`)
+    .join(" · ");
+}
+
 export interface TrackerStats {
   fps: number;
-  detectMs: number;
+  timing: TrackerTiming;
   /** 입력 축소 배율 (1이면 근접 모드 꺼짐) */
   inputScale: number;
   /** eyeBlink 원본 점수 (조정용) */
@@ -84,6 +119,8 @@ const DEFAULT_OPTIONS: TrackerOptions = {
   smoothing: DEFAULT_SMOOTHING,
 };
 
+// 구간별 시간 평균에서 새 값의 비중. 4 FPS에서도 1~2초면 바뀐 값이 드러난다.
+const TIMING_WEIGHT = 0.3;
 // 기준값 경계에서 상태가 프레임마다 바뀌지 않도록, degraded에서 돌아올 때는 이만큼 더 넘어야 한다.
 const RECOVER_SCALE_MARGIN = 0.05;
 // 근접 배율이 1 근처에서 오가며 여백이 흔들리지 않도록 1로 붙이고 떼는 기준을 다르게 둔다.
@@ -95,8 +132,12 @@ const SEARCH_SWITCH_FRAMES = 10;
 const STALL_MS = 2000;
 // 다시 재생해도 이만큼 연속으로 멈춰 있으면 오류로 알린다.
 const MAX_STALL_RETRIES = 3;
-// 추적 중인 얼굴이 가장 큰 얼굴인지 이 간격마다 확인한다.
-const LARGEST_CHECK_MS = 500;
+// 추적 중인 얼굴이 가장 큰 얼굴인지 이 간격마다 확인한다. 한 번에 갤럭시탭 S6 Lite에서 35~55ms라
+// 사람이 바뀌는 드문 경우를 위해 자주 돌리지 않는다.
+const LARGEST_CHECK_MS = 1500;
+// 얼굴을 놓쳤다가 다시 잡은 직후에는 뒤 사람을 잡았을 수 있어 잠시 자주 확인한다.
+const REFOUND_MS = 3000;
+const REFOUND_CHECK_MS = 500;
 // 가장 큰 얼굴 주변만 남길 때, 다시 잡는 사이 얼굴이 조금 움직여도 영역 안에 남도록 넓힌다.
 // 너무 넓히면 옆 얼굴까지 남아 다시 잡지 못한다.
 const LOCK_MARGIN = 0.2;
@@ -119,6 +160,8 @@ export class FaceTracker {
   private landmarker: FaceLandmarker | null = null;
   private detector: FaceDetector | null = null;
   private lastCheckAt = -Infinity;
+  /** 얼굴을 처음 또는 놓쳤다가 다시 잡은 시각 */
+  private foundAt = -Infinity;
   /** 다른 얼굴을 따라가고 있을 때, 가장 큰 얼굴을 다시 잡을 때까지 이 영역만 입력에 남긴다. */
   private lockBox: Box | null = null;
   /** 다시 잡으려는 가장 큰 얼굴 박스 (넓히기 전) */
@@ -132,6 +175,9 @@ export class FaceTracker {
   private lastSeenAt = 0;
   private lastTimestamp = -1;
   private frameTimes: number[] = [];
+  private lastTickEnd: number | null = null;
+  /** 시간을 잰 프레임 수. 첫 프레임은 모델 초기화가 섞여 수 초씩 걸리므로 평균에서 뺀다 */
+  private timedTicks = 0;
   private inputScale = 1;
   private searchFrames = 0;
   private frameHandle: { kind: "video" | "animation"; id: number } | null = null;
@@ -143,7 +189,12 @@ export class FaceTracker {
   private smoother: LandmarkSmoother | null = null;
   private options: TrackerOptions;
 
-  stats: TrackerStats = { fps: 0, detectMs: 0, inputScale: 1, blink: { left: 0, right: 0 } };
+  stats: TrackerStats = {
+    fps: 0,
+    timing: { input: 0, detect: 0, frame: 0, largest: 0, listeners: 0, idle: 0 },
+    inputScale: 1,
+    blink: { left: 0, right: 0 },
+  };
 
   constructor(
     private readonly video: HTMLVideoElement,
@@ -224,6 +275,8 @@ export class FaceTracker {
       this.video.play().catch((e) => console.warn("카메라 영상을 다시 재생하지 못했습니다", e));
     }
     this.cancelFrame();
+    // 멈춰 있던 동안은 대기 시간에 넣지 않는다.
+    this.lastTickEnd = null;
     this.scheduleNext();
   }
 
@@ -241,6 +294,7 @@ export class FaceTracker {
     this.watchdog = null;
     // 이미 예약된 콜백이 남아 있으면 다시 start했을 때 루프가 두 개 돈다.
     this.cancelFrame();
+    this.lastTickEnd = null;
   }
 
   /** 카메라·해상도를 바꿨을 때처럼 이전 프레임 기준 상태를 버린다. */
@@ -303,16 +357,21 @@ export class FaceTracker {
       let frame: FaceFrame | null;
       let input: HTMLVideoElement | HTMLCanvasElement;
       let scale: number;
+      if (this.lastTickEnd !== null) this.recordTiming("idle", now - this.lastTickEnd);
       try {
         this.updateInputScale();
         scale = this.inputScale;
         input = scale < 1 || lockBox ? this.drawInput(scale, lockBox) : video;
+        const inputEnd = performance.now();
+        this.recordTiming("input", inputEnd - now);
 
         const result = this.landmarker.detectForVideo(input, now);
-        this.stats.detectMs = performance.now() - now;
+        const detectEnd = performance.now();
+        this.recordTiming("detect", detectEnd - inputEnd);
         this.stats.inputScale = scale;
         this.updateFps(now);
         frame = this.toFrame(result, now, scale);
+        this.recordTiming("frame", performance.now() - detectEnd);
       } catch (e) {
         // GPU 컨텍스트 손실처럼 대개 다시 해도 실패하므로 멈추고 알린다.
         this.stop();
@@ -324,14 +383,25 @@ export class FaceTracker {
       else this.checkLargestFace(input, frame, now, scale);
 
       // 화면 쪽 처리에서 난 예외 때문에 추적이 멈추지 않게 한다.
+      const listenersStart = performance.now();
       try {
         this.onFrame(frame, this.stats);
       } catch (e) {
         console.error(e);
       }
+      this.lastTickEnd = performance.now();
+      this.recordTiming("listeners", this.lastTickEnd - listenersStart);
+      this.timedTicks++;
     }
 
     this.scheduleNext();
+  }
+
+  private recordTiming(key: keyof TrackerTiming, ms: number) {
+    if (this.timedTicks === 0) return;
+    const timing = this.stats.timing;
+    // 처음 값은 그대로 쓰고, 이후에는 최근 값 위주로 평균한다.
+    timing[key] = timing[key] === 0 ? ms : timing[key] + (ms - timing[key]) * TIMING_WEIGHT;
   }
 
   // 얼굴이 너무 크게 잡히면 필요한 만큼만 축소한다. 축소할수록 얼굴 해상도가 떨어져 정확도도 낮아진다.
@@ -364,7 +434,8 @@ export class FaceTracker {
     now: number,
     scale: number,
   ) {
-    if (!this.detector || now - this.lastCheckAt < LARGEST_CHECK_MS) return;
+    const interval = now - this.foundAt < REFOUND_MS ? REFOUND_CHECK_MS : LARGEST_CHECK_MS;
+    if (!this.detector || now - this.lastCheckAt < interval) return;
     this.lastCheckAt = now;
     // 잠깐 가려진 동안은 바꾸지 않는다.
     if (frame?.trackingState === "hold") {
@@ -373,8 +444,10 @@ export class FaceTracker {
     }
 
     let detections: Detection[];
+    const start = performance.now();
     try {
       ({ detections } = this.detector.detectForVideo(input, now));
+      this.recordTiming("largest", performance.now() - start);
     } catch (e) {
       // 부가 기능이라 실패하면 끄고 추적은 계속한다.
       console.warn("얼굴 검출기가 실패해 가장 큰 얼굴 확인을 끕니다", e);
@@ -538,6 +611,7 @@ export class FaceTracker {
       regionVisibility: visibility,
     };
 
+    if (this.lastState === null || this.lastState === "lost") this.foundAt = timestamp;
     this.lastFrame = frame;
     this.lastState = frame.trackingState;
     this.lastSeenAt = timestamp;

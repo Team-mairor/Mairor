@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { landmarkerInfo, useCamera, useFaceFrame } from "@/features/face";
+import { formatTiming, landmarkerInfo, useCamera, useFaceFrame } from "@/features/face";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 import { loadLayerSet, type PreparedLayer } from "./layers";
@@ -14,9 +14,9 @@ import { SkinMask } from "./skin-mask";
 const LOAD_RETRY_MS = 5000;
 // 피부 분할은 무거워 이 프레임 수마다 한 번 갱신한다.
 const SKIN_EVERY = 2;
-// 화장 캔버스는 화면 배율과 상관없이 CSS 픽셀 1배로 그린다. 경계가 흐린 화장이라 차이가 거의 보이지 않고,
-// 배율 1.5 기기에서 그릴 픽셀이 절반 이하로 줄어 GPU를 함께 쓰는 얼굴 검출이 덜 밀린다.
-const OVERLAY_DPR = 1;
+// 화장 캔버스는 CSS 픽셀의 절반 해상도로 그린다. 화장 그리기의 GPU 작업이 끝나야 얼굴 검출 결과를 읽을 수
+// 있어, 그릴 픽셀이 곧 검출 지연이 된다. 하프미러 위에서는 흐린 화장의 해상도 차이가 거의 보이지 않는다.
+const OVERLAY_DPR = 0.5;
 // 피부 분할이 연달아 이만큼 실패하면 끄고 가림 없이 그린다.
 const SKIN_MAX_FAILURES = 3;
 // 피부 분할 한 번이 이 시간(ms)보다 오래 걸리는 일이 연달아 생기면 저사양 기기로 보고 끈다.
@@ -30,7 +30,8 @@ const average = (prev: number | null, value: number) =>
 
 interface Perf {
   fps: number;
-  detectMs: number;
+  /** 추적 구간별 시간 (formatTiming) */
+  timing: string;
   renderMs: number;
   /** 화장 종류별 그리기 시간 */
   layerMs: string;
@@ -207,7 +208,7 @@ export function MakeupOverlay({
     lastPerfUpdate.current = now;
     setPerf({
       fps: stats.fps,
-      detectMs: stats.detectMs,
+      timing: formatTiming(stats.timing),
       renderMs: renderMs.current ?? 0,
       layerMs: Object.entries(rendererRef.current?.layerMs ?? {})
         .map(([k, v]) => `${k} ${v.toFixed(1)}`)
@@ -242,7 +243,7 @@ export function MakeupOverlay({
         <pre className="absolute top-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">
           {[
             `FPS ${perf.fps}`,
-            `검출 ${perf.detectMs.toFixed(1)}ms`,
+            `추적 ms ${perf.timing}`,
             `그리기 ${perf.renderMs.toFixed(1)}ms`,
             ...(perf.layerMs ? [`  ${perf.layerMs}`] : []),
             `피부 분할 ${
