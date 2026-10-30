@@ -157,13 +157,13 @@ src/
 │  │  ├─ home/                # 02 홈
 │  │  └─ my/pouch · my/reports · my/report?id=   # 12 내 파우치 · 13 리포트
 │  ├─ select/                 # 03 영상 입력
-│  ├─ loading/                # 04 로딩 · 얼굴 등록 · 파우치 확인
-│  ├─ (camera)/               # 카메라를 쓰는 연속 화면 (얼굴 화면 유지)
-│  │  ├─ layout.tsx           # 카메라·얼굴 추적을 여기서 한 번만 시작
-│  │  ├─ preview/             # 07 미리보기
-│  │  ├─ check/               # 08 제품 체크 ↔ 입혀보며 고르기
-│  │  ├─ tutorial/guide/      # 09 튜토리얼 안내 · 사진 저장 동의
-│  │  └─ tutorial/            # 10 튜토리얼
+│  ├─ (live)/                 # 카메라를 함께 쓰는 화면 묶음. layout.tsx가 카메라·얼굴 추적을 한 번만 켠다
+│  │  ├─ loading/             # 04 로딩 · 얼굴 등록(카메라 켬) · 파우치 확인
+│  │  └─ (camera)/            # 카메라를 쓰는 연속 화면 (얼굴 화면 유지, 들어오면 카메라 켬)
+│  │     ├─ preview/          # 07 미리보기
+│  │     ├─ check/            # 08 제품 체크 ↔ 입혀보며 고르기
+│  │     ├─ tutorial/guide/   # 09 튜토리얼 안내 · 사진 저장 동의
+│  │     └─ tutorial/         # 10 튜토리얼
 │  ├─ done/                   # 11 완성
 │  └─ debug/                  # 확인 화면 (face·overlay·api·preview·tutorial). 앱 스타일 영향 없이 원래대로 보인다
 ├─ components/                # 하단 탭 · 흐름 단계 · ui/ (버튼·입력·안내·모달)
@@ -183,6 +183,8 @@ public/
 └─ images/                    # 로그인·온보딩 이미지, 샘플 얼굴
 ```
 
+- 얼굴 등록(로딩 화면 모달)은 실시간으로 조명(얼굴 가운데 밝기)·거리(얼굴 폭 비율과 가운데 위치)·정면(yaw·pitch·roll)·가림(핵심 부위와 얼굴 윤곽이 화면 안에 정면으로 보임)을 판정하고, 4개를 1.5초 유지하면 정면 1장을 찍는다. 찍는 순간 눈을 감았으면 버리고 다시 잰다. 표정은 판정하지 않고 안내 문구로만 요청한다. 기준값은 `features/loading/face-register.ts`에 있다. 밝기·좌우·기울기는 갤럭시탭 S6 Lite에서 재서 정했고, 거리·가운데·위아래는 원 표시 방식과 하프미러 보정이 정해지면 확정한다. 손 가림은 아직 판정하지 못하고, 사진은 업로드 API 전까지 메모리에만 둔다
+- 등록에 쓴 카메라는 미리보기에서 그대로 이어 쓴다. 등록 전에 '나중에'를 누르면 카메라를 끈다
 - API 연동 전이라 데이터는 `lib/mock-data.ts`의 샘플이고, 로그인·분석·저장은 타이머로 흉내 낸다.
 - 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`, `/my/pouch?demo=shade-fail`
 

@@ -4,6 +4,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import { saveFacePhoto } from "@/features/loading/face-register";
 import { useSession, type SessionState } from "@/features/session";
 import { GUIDE_STEPS, VIDEOS } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,11 @@ const run = (patch: Partial<SessionState["run"]>) => (s: SessionState) => ({
   ...loggedIn,
   run: { ...s.run, picked: s.run.picked ?? VIDEOS[0], ...patch },
 });
+/** 얼굴 등록을 마친 상태. 등록 완료는 사진이 있어야 인정하므로 빈 사진을 넣어 둔다 */
+const faceRegistered = (s: SessionState) => {
+  saveFacePhoto(s.run.id, new Blob());
+  return run({ replay: null, faceReg: true })(s);
+};
 
 /** 프로토타입 왼쪽 '화면 바로가기' 목록. 개발 모드에서만 보인다 */
 const ITEMS: Item[] = [
@@ -46,13 +52,13 @@ const ITEMS: Item[] = [
     label: "로딩 · 분석 실패",
     sub: "멈춘 단계 · 다시 시도",
     href: "/loading?fail=timeout",
-    prep: run({ replay: null, faceReg: true }),
+    prep: faceRegistered,
   },
   {
     label: "로딩 · 검수 대기",
     sub: "분석 완료 ≠ 이용 가능",
     href: "/loading?review=pending",
-    prep: run({ replay: null, faceReg: true }),
+    prep: faceRegistered,
   },
   { label: "미리보기", sub: "실시간 입혀보기 · 민낯 비교", href: "/preview", prep: run({}) },
   {

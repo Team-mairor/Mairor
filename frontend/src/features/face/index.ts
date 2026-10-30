@@ -1,6 +1,12 @@
 export { CameraError, listCameras, openCamera, RESOLUTIONS, type CameraErrorKind } from "./camera";
 export { isRetryable } from "./camera-error-view";
-export { CameraProvider, useCamera, useFaceFrame, type CameraStatus } from "./camera-provider";
+export {
+  CameraProvider,
+  StartCamera,
+  useCamera,
+  useFaceFrame,
+  type CameraStatus,
+} from "./camera-provider";
 export {
   applyLandmarkerParams,
   createFaceLandmarker,
@@ -16,6 +22,7 @@ export {
   RECOVER_IN_FRAME_MARGIN,
 } from "./visibility";
 export { REGION_NAMES, regionNamesError, REGIONS } from "./regions";
+export { KEY_REGIONS } from "./tracking-rules";
 export {
   DEFAULT_SMOOTHING,
   FaceTracker,

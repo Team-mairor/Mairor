@@ -106,8 +106,11 @@ export function CameraProvider({
   const sessionRef = useRef(0);
   // 다시 시도 버튼과 권한 change 이벤트처럼 start가 겹쳐 불려도 카메라는 한 번만 연다.
   const startingRef = useRef<Promise<void> | null>(null);
+  // 프레임을 받는 곳이 없어 추적을 쉬는 중. 카메라와 모델은 그대로 둔다
+  const pausedRef = useRef(false);
 
   const release = useCallback(() => {
+    pausedRef.current = false;
     trackerRef.current?.dispose();
     trackerRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -203,22 +206,53 @@ export function CameraProvider({
     }
   }, [fail, updateTransform]);
 
+  // 프레임을 받는 곳이 없으면 추적을 쉬고, 생기면 다시 돌린다. 시작 중이면 끝난 뒤 맞춘다
+  const syncTracking = useCallback(() => {
+    const tracker = trackerRef.current;
+    if (!tracker || startingRef.current) return;
+    const wanted = listeners.current.size > 0;
+    if (!wanted && !pausedRef.current) {
+      tracker.stop();
+      pausedRef.current = true;
+    } else if (wanted && pausedRef.current) {
+      pausedRef.current = false;
+      // 쉬는 동안 화면이 꺼졌다 켜지면 브라우저가 영상을 멈춘 채 둔다
+      const video = videoRef.current;
+      if (video?.paused)
+        video.play().catch((e) => console.warn("카메라 영상을 다시 재생하지 못했습니다", e));
+      tracker.reset();
+      tracker.start().then(
+        // 다시 시작하는 사이 또 쉬게 됐으면 시작한 루프를 멈춘다
+        () => {
+          if (pausedRef.current) tracker.stop();
+        },
+        (e) => fail(new CameraError("tracker-failed", e instanceof Error ? e.message : String(e))),
+      );
+    }
+  }, [fail]);
+
   const start = useCallback(() => {
     if (!startingRef.current && !trackerRef.current) {
       const starting = startSession().finally(() => {
         if (startingRef.current === starting) startingRef.current = null;
+        syncTracking();
       });
       startingRef.current = starting;
     }
     return startingRef.current ?? Promise.resolve();
-  }, [startSession]);
+  }, [startSession, syncTracking]);
 
-  const subscribe = useCallback((listener: FrameListener) => {
-    listeners.current.add(listener);
-    return () => {
-      listeners.current.delete(listener);
-    };
-  }, []);
+  const subscribe = useCallback(
+    (listener: FrameListener) => {
+      listeners.current.add(listener);
+      syncTracking();
+      return () => {
+        listeners.current.delete(listener);
+        syncTracking();
+      };
+    },
+    [syncTracking],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -303,6 +337,15 @@ export function useCamera() {
   const context = useContext(CameraContext);
   if (!context) throw new Error("useCamera는 CameraProvider 안에서만 쓸 수 있습니다");
   return context;
+}
+
+/** 그려지면 카메라를 켠다. 이미 켜져 있으면 그대로 쓴다. */
+export function StartCamera() {
+  const { start } = useCamera();
+  useEffect(() => {
+    void start();
+  }, [start]);
+  return null;
 }
 
 /** 프레임마다 호출된다. 화면 그리기처럼 리렌더 없이 처리할 일에 쓴다. */

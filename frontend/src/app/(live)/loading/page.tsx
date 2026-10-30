@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
+import { useCamera } from "@/features/face";
+import { facePhoto } from "@/features/loading/face-register";
 import { FaceRegisterModal, ProgressBar } from "@/features/loading/face-register-modal";
 import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
 import { hasSame, useSession } from "@/features/session";
@@ -36,15 +38,19 @@ export default function LoadingPage() {
   const router = useRouter();
   const query = useQuery();
   const { state, update, updateRun } = useSession();
+  const camera = useCamera();
   const run = state.run;
   const replay = !!run.replay;
   const picked = run.picked ?? VIDEOS[0];
+  // 사진은 메모리에만 있어서, 새로 고침으로 사라졌으면 다시 등록해야 한다
+  const faceOk = run.faceReg && facePhoto(run.id) !== null;
 
   const [pct, setPct] = useState(replay ? 100 : 0);
   const [joined, setJoined] = useState(false);
   const [fail, setFail] = useState<Fail>(null);
   const [review, setReview] = useState<Review>(null);
-  const [faceModal, setFaceModal] = useState(replay);
+  // 다시 따라 하기는 들어오자마자 등록부터 한다. 미리보기에서 돌아왔을 때처럼 이미 등록했으면 띄우지 않는다
+  const [faceModal, setFaceModal] = useState(replay && !faceOk);
   const [faceShown, setFaceShown] = useState(replay);
   const [pouchModal, setPouchModal] = useState(false);
   const [newIds, setNewIds] = useState<string[]>([]);
@@ -81,12 +87,21 @@ export default function LoadingPage() {
 
   // 4%가 되면 얼굴 등록 모달을 한 번 띄운다
   useEffect(() => {
-    if (pct >= 4 && !faceShown && !run.faceReg) {
+    if (pct >= 4 && !faceShown && !faceOk) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 진행률이 문턱을 넘는 순간 한 번만
       setFaceShown(true);
       setFaceModal(true);
     }
-  }, [pct, faceShown, run.faceReg]);
+  }, [pct, faceShown, faceOk]);
+
+  // 등록 중이 아니면 추적을 쉬게 한다. 카메라는 켜 둬서 미리보기에서 바로 다시 돌린다
+  // 등록 모달이 닫히면 프레임을 받는 곳이 없어 추적은 쉬고, 카메라는 미리보기에서 이어 쓴다.
+  // 영상은 등록 모달의 원 안에만 보여 주므로 뒤에 깔린 전체 화면 영상은 숨긴다
+  const { setShowVideo } = camera;
+  useEffect(() => {
+    setShowVideo(false);
+    return () => setShowVideo(true);
+  }, [setShowVideo]);
 
   const done = pct >= 100;
   const phaseIdx = done ? 6 : ANALYSIS_PHASES.filter((p) => pct >= p[2]).length - 1;
@@ -146,7 +161,6 @@ export default function LoadingPage() {
         : null;
 
   const guideOk = replay || (done && !notice);
-  const faceOk = run.faceReg;
   const guideState = fail
     ? "멈춤"
     : review
@@ -189,7 +203,7 @@ export default function LoadingPage() {
   };
 
   return (
-    <main className="relative flex min-h-dvh flex-1 flex-col bg-white">
+    <main className="relative flex min-h-dvh flex-1 flex-col bg-white text-ink">
       <header className="flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-8">
         <IconButton
           size={44}
@@ -452,7 +466,11 @@ export default function LoadingPage() {
           pct={pct}
           replay={replay}
           barText={barText}
-          onLater={() => setFaceModal(false)}
+          runId={run.id}
+          onLater={() => {
+            setFaceModal(false);
+            camera.stop();
+          }}
           onDone={() => {
             updateRun({ faceReg: true });
             setFaceModal(false);

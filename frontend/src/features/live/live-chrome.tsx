@@ -82,7 +82,7 @@ export interface LiveNoteData {
 }
 
 /** 카메라 오류 안내. 오류가 없으면 null */
-function useCameraErrorNote(face: boolean): LiveNoteData | null {
+export function useCameraErrorNote(face: boolean): LiveNoteData | null {
   const { status, error, start } = useCamera();
   if (status !== "error" || !error) return null;
   const [t, d] = ERR[error.kind] ?? ERR.unknown!;
