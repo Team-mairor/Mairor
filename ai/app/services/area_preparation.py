@@ -3,7 +3,7 @@
 check_frames를 거친 결과에서 구간·부위 조건에 맞는 사진을 고르고(usable_rows),
 얼굴 지도에 펴서 칸마다 중앙값을 내고(rows_to_map), 색을 Lab으로 바꾼다(rgb_to_lab).
 전후 사이 조명이 바뀐 만큼은 화장하지 않은 피부로 재서 뺀다(remove_lighting).
-립·블러셔 같은 부위 분석이 같이 쓴다.
+립·블러셔·눈썹 같은 부위 분석이 같이 쓴다.
 """
 
 from collections.abc import Callable, Sequence
