@@ -1,0 +1,64 @@
+# 배포: master 에 머지되면 이미지 4개를 빌드해 ECR 에 올리고(build-images), EC2 에서 롤링 배포를 돌린다(deploy). 담당 BE.
+# 이미지는 러너 서버의 Docker 로 빌드해 캐시가 남는다. 안 바뀐 파트는 몇 초 만에 끝나고, ECR 에 이미 있는 층은 다시 올리지 않는다.
+# 태그는 커밋 해시 8자리 하나($CI_COMMIT_SHORT_SHA). 서버는 이 태그로 4개를 함께 받는다.
+# AWS 자격은 CI 변수 AWS_ACCESS_KEY_ID · AWS_SECRET_ACCESS_KEY(Protected · Masked, IAM 사용자 mairor-ci-deploy)와
+# EC2_INSTANCE_ID(Protected). Protected 변수라 master 파이프라인에서만 보인다.
+# 되돌리기는 master 파이프라인의 rollback 잡을 손으로 실행하면서 ROLLBACK_TAG 를 넣는다(ci/README.md "배포").
+
+.aws:
+  image: docker:29-cli
+  variables:
+    AWS_DEFAULT_REGION: ap-northeast-2
+  before_script:
+    - apk add --no-cache aws-cli bash > /dev/null
+
+build-images:
+  stage: build
+  extends: .aws
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+  script:
+    - REG="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+    - aws ecr get-login-password | docker login --username AWS --password-stdin "$REG"
+    - |
+      for image in nginx:frontend backend:backend ai:ai deploy:deploy; do
+        name=${image%%:*}
+        dir=${image#*:}
+        ref="$REG/mairor-$name:$CI_COMMIT_SHORT_SHA"
+        docker build -f "$dir/Dockerfile" -t "$ref" .
+        docker push "$ref"
+        # 러너 디스크에 이미지가 쌓이지 않게 태그를 지운다. 빌드 캐시는 남아 다음 빌드가 빠르다
+        docker image rm "$ref" > /dev/null
+      done
+
+deploy:
+  stage: deploy
+  extends: .aws
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+  # 배포 · 되돌리기는 한 번에 하나만. 서버의 deploy.sh 도 flock 으로 막는다
+  resource_group: production
+  # 자동 취소가 켜져 있어도 새 master push 가 배포 중인 잡을 끊지 않게 한다
+  interruptible: false
+  script:
+    - bash deploy/run-on-ec2.sh deploy "$CI_COMMIT_SHORT_SHA"
+
+rollback:
+  stage: deploy
+  extends: .aws
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      when: manual
+      allow_failure: true
+  # 이 파이프라인의 빌드 · 배포가 실패했어도 바로 누를 수 있게 앞 잡을 기다리지 않는다
+  needs: []
+  resource_group: production
+  interruptible: false
+  script:
+    - |
+      if [ -z "${ROLLBACK_TAG:-}" ]; then
+        echo "ROLLBACK_TAG 에 되돌릴 태그(커밋 해시 8자리)를 넣고 다시 실행한다."
+        echo "되돌릴 수 있는 태그는 이전 deploy 잡 로그의 'deploy 완료: <태그>' 또는 서버 /opt/mairor/releases.log 의 ok 줄이다."
+        exit 1
+      fi
+    - bash deploy/run-on-ec2.sh rollback "$ROLLBACK_TAG"

@@ -1,0 +1,9 @@
+# backend/Dockerfile 전용. 재료(레포 루트)에서 BE 빌드에 필요한 backend/ 만 남긴다.
+*
+!backend/
+backend/.gradle
+backend/.idea
+backend/build
+backend/docs
+**/.env
+**/.env.*

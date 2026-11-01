@@ -1,0 +1,12 @@
+# ai/Dockerfile 전용. 재료(레포 루트)에서 서버 실행에 필요한 ai/ 와 shared/ 만 남긴다.
+*
+!ai/
+!shared/
+ai/.venv
+ai/samples
+ai/tests
+ai/tools
+ai/docs
+**/__pycache__
+**/.env
+**/.env.*

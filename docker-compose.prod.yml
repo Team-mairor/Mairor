@@ -1,0 +1,143 @@
+# 운영 compose (AWS EC2 /opt/mairor). 로컬 개발용은 docker-compose.yml.
+# 직접 up 하지 않고 deploy/deploy.sh 가 슬롯 하나씩 바꾼다(무중단 배포). 절차는 deploy/README.md
+#
+# 앱 슬롯 2개: 슬롯 a(nginx-a → api-a, 호스트 8081), 슬롯 b(nginx-b → api-b, 호스트 8082).
+# ALB 대상 그룹에 8081·8082가 따로 등록되어, 배포 때 한 슬롯을 빼고 바꾸는 동안 다른 슬롯이 요청을 받는다.
+# 네트워크를 슬롯마다 나눠 nginx 는 같은 슬롯의 api 만 api 라는 이름으로 찾는다(frontend/nginx/api.conf 를 그대로 쓴다).
+# ai·worker 는 슬롯 밖 공용(core)이다. core 에서 api 는 두 api 중 하나로 찾힌다(ai 의 콜백용).
+#
+# 값은 두 파일에서 온다. 둘 다 deploy.sh 가 만들고 레포에는 없다.
+#   .env     compose 가 읽는 이미지 주소·태그 (ECR_REGISTRY, IMAGE_TAG)
+#   app.env  컨테이너 환경변수. Parameter Store /mairor/prod/* 에서 만든다(권한 600, 값을 해석하지 않는 raw 형식)
+name: mairor
+
+x-logging: &logging
+  # 컨테이너 로그를 CloudWatch Logs 로 보낸다. 로그 그룹은 미리 만든다(EC2 역할에 그룹 생성 권한이 없다)
+  driver: awslogs
+  options:
+    awslogs-region: ap-northeast-2
+    awslogs-group: /mairor/prod
+    # 로그 스트림 이름 = 컨테이너 이름(mairor-api-a-1 등)
+    tag: "{{.Name}}"
+    # CloudWatch 가 느려도 앱이 로그를 쓰다 멈추지 않게 한다. 버퍼가 넘치면 그 로그는 버린다
+    mode: non-blocking
+    max-buffer-size: 4m
+
+x-app-env: &app-env
+  env_file:
+    - path: app.env
+      format: raw
+
+x-nginx: &nginx
+  image: ${ECR_REGISTRY}/mairor-nginx:${IMAGE_TAG}
+  restart: unless-stopped
+  logging: *logging
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+    interval: 10s
+    timeout: 3s
+    retries: 3
+  deploy:
+    resources:
+      limits:
+        cpus: "0.5"
+        memory: 128M
+
+x-backend: &backend
+  <<: *app-env
+  image: ${ECR_REGISTRY}/mairor-backend:${IMAGE_TAG}
+  restart: unless-stopped
+  logging: *logging
+  # 진행 중인 요청을 마치고 내린다(Spring 기본 graceful shutdown 30초 + 여유)
+  stop_grace_period: 40s
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/api/health"]
+    interval: 10s
+    timeout: 3s
+    retries: 3
+    start_period: 90s
+
+x-api-limits: &api-limits
+  resources:
+    limits:
+      cpus: "1"
+      memory: 1536M
+
+services:
+  nginx-a:
+    <<: *nginx
+    # 주소를 적는다. 빼면 daemon.json 의 기본 공개 주소(127.0.0.1)에 열려 ALB 가 닿지 못한다
+    ports:
+      - "0.0.0.0:8081:80"
+    networks:
+      - slot-a
+
+  api-a:
+    <<: *backend
+    deploy: *api-limits
+    networks:
+      slot-a:
+        aliases: [api]
+      core:
+        aliases: [api]
+
+  nginx-b:
+    <<: *nginx
+    ports:
+      - "0.0.0.0:8082:80"
+    networks:
+      - slot-b
+
+  api-b:
+    <<: *backend
+    deploy: *api-limits
+    environment:
+      # 만료 세션 정리는 슬롯 a 만 한다. 두 api 가 함께 돌면 같은 세션의 종료 훅이 두 번 불릴 수 있다
+      SESSION_SWEEP_ENABLED: "false"
+    networks:
+      slot-b:
+        aliases: [api]
+      core:
+        aliases: [api]
+
+  ai:
+    <<: *app-env
+    image: ${ECR_REGISTRY}/mairor-ai:${IMAGE_TAG}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      # CloudWatch Logs Insights 에서 칸으로 읽힌다. 호출 기록(TRACING_ENDPOINT)은 관측 스택이 생기면 켠다
+      LOG_FORMAT: json
+    healthcheck:
+      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 6G
+    networks:
+      - core
+
+  # 영상 분석 작업(5B). 정의만 하고 기본으로 띄우지 않는다: docker compose --profile worker up -d worker
+  worker:
+    <<: *backend
+    profiles: [worker]
+    environment:
+      SPRING_PROFILES_ACTIVE: prod,worker
+      SESSION_SWEEP_ENABLED: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 6G
+    networks:
+      - core
+
+networks:
+  slot-a:
+  slot-b:
+  core:

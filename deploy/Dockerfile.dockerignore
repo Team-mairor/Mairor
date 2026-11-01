@@ -1,0 +1,5 @@
+# deploy/Dockerfile 전용. 재료(레포 루트)에서 배포 파일만 남긴다.
+*
+!docker-compose.prod.yml
+!deploy/deploy.sh
+!deploy/rollback.sh

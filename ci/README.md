@@ -6,7 +6,7 @@ MR 승인·머지 규칙은 노션 [Git Convention](https://app.notion.com/p/3f2
 
 ## 언제 무엇이 도나
 
-파이프라인은 **MR**과 **master**에서만 돈다. 브랜치에 push만 하고 MR이 없으면 돌지 않는다. 각 검사는 자기 폴더가 바뀌었을 때만 돈다.
+파이프라인은 **MR**과 **master**에서만 돈다. 브랜치에 push만 하고 MR이 없으면 돌지 않는다. 각 검사는 자기 폴더가 바뀌었을 때만 돈다. master에서는 검사 뒤에 배포가 이어진다(아래 "배포").
 
 | 바뀐 곳 | 도는 검사 |
 |---|---|
@@ -29,6 +29,21 @@ CI가 실패하면 아래 명령을 자기 PC에서 그대로 돌려 같은 오�
 | `repo-guard` | `.gitlab-ci.yml` | 커밋된 `.env`·`*.pem`·`*.key`·`*.keystore`가 있으면 실패(`.env.example`은 허용) | `alpine` |
 
 `repo-guard`가 실패하면 그 파일을 커밋에서 빼고, 안에 있던 키·비밀번호는 이미 GitLab에 올라간 것으로 보고 **폐기·재발급**한다.
+
+## 배포 (master)
+
+master에 머지되면 검사가 끝난 뒤 운영 배포가 이어진다(`ci/deploy.yml`, BE 관리). MR 파이프라인에서는 돌지 않는다.
+
+| 잡 | 하는 일 |
+|---|---|
+| `build-images` | 이미지 4개(`mairor-nginx` · `mairor-backend` · `mairor-ai` · `mairor-deploy`)를 빌드해 ECR에 올린다. 태그는 커밋 해시 8자리 |
+| `deploy` | EC2에서 `deploy.sh <태그>`를 돌린다(SSM Run Command). 슬롯 a → b → ai 순서로 바꿔 배포 중에도 사이트가 끊기지 않는다. 실패하면 서버가 이전 버전으로 되돌리고 잡이 빨강이 된다 |
+| `rollback` (수동) | 이전 버전으로 되돌린다. 아래 방법 |
+
+**되돌리기:** master 파이프라인 화면에서 `rollback` 잡 **이름**을 누른다. 열린 화면의 변수 칸에 키 `ROLLBACK_TAG`, 값에 되돌릴 태그(예전 `deploy` 잡 로그의 `deploy 완료: <태그>`)를 넣고 **Run job**. 서버에서 성공했던 태그만 받는다. ▶ 버튼을 바로 누르면 변수 없이 돌아 안내만 찍고 실패한다.
+
+- AWS 자격은 CI 변수(`AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY` · `EC2_INSTANCE_ID`, Protected)라 master에서만 보인다. 키 교체와 서버 쪽 절차는 `deploy/README.md`.
+- 배포 잡 로그 아래쪽 "서버 오류 출력"에 `credentials are stored unencrypted` 경고가 보여도 정상이다. 성공 · 실패는 마지막 줄 `결과:`로 본다.
 
 ## 결과 보는 곳
 

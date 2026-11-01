@@ -1,0 +1,19 @@
+# frontend/Dockerfile 전용. 재료(레포 루트)에서 FE 빌드에 필요 없는 것을 뺀다.
+# 특히 node_modules: 넣으면 PC(Windows)용 모듈이 이미지 안의 리눅스용을 덮어써 빌드가 깨진다.
+.git
+.claude
+.gitlab
+.githooks
+.idea
+backend
+ai
+deploy
+docs
+ci
+**/node_modules
+frontend/.next
+frontend/out
+frontend/public/mediapipe
+frontend/public/models
+**/.env
+**/.env.*

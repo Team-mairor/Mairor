@@ -4,6 +4,11 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+# 운영은 ALB → nginx → api 를 거친다. X-Forwarded-For·Proto 에서 사용자 IP 와 https 를 꺼내 쓴다.
+# 내부 대역(ALB 10.x, nginx 컨테이너 172.x)만 건너뛰므로, 끄면 요청 제한이 모든 사용자를 nginx IP 하나로 센다
+server:
+  forward-headers-strategy: native
+
 logging:
   level:
     root: INFO
