@@ -10,10 +10,15 @@ import {
   type Health,
   type MockScenario,
   type SignUpRequest,
+  type SignupAgreement,
   type User,
 } from "@/lib/api";
 
 const PASSWORD = "debug-Pass1!";
+// 필수 약관은 서버의 현재 버전(application.yml의 agreement 기본값)으로 동의해야 가입된다.
+const AGREEMENTS: SignupAgreement[] = (["TERMS", "PRIVACY", "AGE_OVER_14"] as const).map(
+  (type) => ({ type, version: "2026-10-26", agreed: true }),
+);
 
 // BE에 실제로 있는 요청으로 성공·오류·취소 흐름을 확인한다. 실제 기능은 각 화면에서 만든다.
 // 모의 응답은 요청 본문을 보지 않으므로, 입력값에 따른 결과는 "실제 서버"로 확인한다.
@@ -31,32 +36,34 @@ const SAMPLES = {
       }),
   },
   signUp: {
-    label: "회원가입 (POST /v1/users, 실제 서버면 계정이 만들어짐)",
+    label: "회원가입 (POST /v1/users/signup, 실제 서버면 계정이 만들어짐)",
     run: (options: SampleOptions) =>
-      api.post<User>("/v1/users", {
+      api.post<User>("/v1/users/signup", {
         ...options,
         body: {
           email: `debug+${Date.now()}@example.com`,
           password: PASSWORD,
           passwordConfirm: PASSWORD,
+          agreements: AGREEMENTS,
         } satisfies SignUpRequest,
       }),
   },
   signUpInvalid: {
     label: "회원가입 비밀번호 확인 불일치 (실제 서버에서 400)",
     run: (options: SampleOptions) =>
-      api.post<User>("/v1/users", {
+      api.post<User>("/v1/users/signup", {
         ...options,
         body: {
           email: `debug+${Date.now()}@example.com`,
           password: PASSWORD,
           passwordConfirm: `${PASSWORD}x`,
+          agreements: AGREEMENTS,
         } satisfies SignUpRequest,
       }),
   },
   csrf: {
-    label: "로그아웃 (DELETE /v1/users/me/sessions/current, CSRF 토큰 없음 → 403)",
-    run: (options: SampleOptions) => api.delete("/v1/users/me/sessions/current", options),
+    label: "로그아웃 (POST /v1/users/logout, CSRF 토큰 없음 → 403)",
+    run: (options: SampleOptions) => api.post("/v1/users/logout", options),
   },
 } as const;
 

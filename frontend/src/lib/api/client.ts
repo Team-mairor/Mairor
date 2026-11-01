@@ -149,7 +149,7 @@ async function toApiError(response: Response, signal?: AbortSignal): Promise<Api
 
 /**
  * BE API를 호출한다. 성공하면 본문을 그대로(본문이 없으면 undefined), 실패하면 ApiError를 던진다.
- * path는 /api 뒤의 경로다. 예: request("POST", "/v1/users", { body })
+ * path는 /api 뒤의 경로다. 예: request("POST", "/v1/users/signup", { body })
  */
 export async function request<T>(
   method: string,

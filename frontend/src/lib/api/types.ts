@@ -34,18 +34,37 @@ export interface Health {
 }
 
 /**
- * POST /v1/users 요청 (SignUpRequest). 비밀번호는 8~64자에 영문자·숫자·기호를 하나씩 포함한다.
- * 규칙에 맞지 않거나 확인값이 다르면 400 VALIDATION_FAILED, 이미 가입된 이메일이면 409 USERS_EMAIL_DUPLICATE
+ * POST /v1/users/signup 요청 (SignUpRequest). 비밀번호는 8~64자에 영문자·숫자·기호를 하나씩 포함한다.
+ * 규칙에 맞지 않거나 확인값이 다르면 400 VALIDATION_FAILED, 필수 약관이 빠지면 400 USERS_REQUIRED_AGREEMENT_MISSING,
+ * 이미 가입된 이메일이면 409 USERS_EMAIL_DUPLICATE
  */
 export interface SignUpRequest {
   email: string;
   password: string;
   passwordConfirm: string;
+  nickname?: string;
+  name?: string;
+  phone?: string;
+  /** YYYY-MM-DD, 만 14세 이상 */
+  birthDate?: string;
+  gender?: "MALE" | "FEMALE";
+  /** TERMS·PRIVACY·AGE_OVER_14는 서버의 현재 버전으로 동의해야 한다 */
+  agreements: SignupAgreement[];
+  /** 가입에 이메일 인증을 요구하도록 설정했을 때만 필수 */
+  emailVerificationToken?: string;
+}
+
+export interface SignupAgreement {
+  type: "TERMS" | "PRIVACY" | "AGE_OVER_14" | "MARKETING";
+  version: string;
+  agreed: boolean;
 }
 
 /** 회원 (UserResponse) */
 export interface User {
   userId: string;
   email: string;
+  nickname: string | null;
+  provider: "LOCAL" | "GOOGLE";
   createdAt: string;
 }

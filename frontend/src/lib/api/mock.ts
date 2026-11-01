@@ -33,12 +33,14 @@ const ROUTES: MockRoute[] = [
   {
     // 회원가입은 세션이 없어 CSRF 토큰 대신 허용 Origin으로 검사한다.
     method: "POST",
-    path: /^\/v1\/users$/,
+    path: /^\/v1\/users\/signup$/,
     success: () => ({
       status: 201,
       body: {
         userId: "usr_mock_01",
         email: "mock@example.com",
+        nickname: null,
+        provider: "LOCAL",
         createdAt: "2026-10-27T00:00:00Z",
       } satisfies User,
     }),
@@ -51,9 +53,8 @@ const ROUTES: MockRoute[] = [
   },
   {
     // 로그인이 필요한 변경 요청 예시. CSRF 토큰이 없거나 맞지 않으면 인증 확인보다 먼저 403으로 막힌다.
-    // BE 미구현이라 로그인 이슈에서 경로를 확정한다. 실제 서버도 CSRF 검사가 먼저라 403 CSRF_INVALID가 나온다.
-    method: "DELETE",
-    path: /^\/v1\/users\/me\/sessions\/current$/,
+    method: "POST",
+    path: /^\/v1\/users\/logout$/,
     success: () => ({ status: 204 }),
     error: () =>
       error(403, { code: "CSRF_INVALID", message: "요청 보안 토큰이 유효하지 않습니다." }),
