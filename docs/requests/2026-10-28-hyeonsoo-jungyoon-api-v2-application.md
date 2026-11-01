@@ -70,4 +70,4 @@ AI 영역 데이터의 부위 이름으로 아래처럼 계산할 수 있습니�
 ```
 
 - `s17` 립: 가운데 부위(`lipsOuter`)만 있어 `side`는 `CENTER`, 기본 영역이 아니라 `isFallback: false`입니다
-- 삼각형 번호·비율은 예시입니다. 19단계 전체 예시는 FE 요청 문서에 있습니다: [2026-10-28-hyeonsoo-seoyun-guide-region-format.md](2026-10-28-hyeonsoo-seoyun-guide-region-format.md)
+- 삼각형 번호·비율은 예시입니다. 19단계 전체 예시는 AI 샘플에 있습니다: [ai/samples/local_01/guide_area.json](../../ai/samples/local_01/guide_area.json)

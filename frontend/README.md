@@ -15,6 +15,7 @@ http://localhost:3000 에서 확인한다.
 
 - Node 20.9 이상이 필요하다 (`.nvmrc` 기준 24).
 - 환경변수는 `.env.local`에 넣는다. 항목은 `.env.example`을 참고하고, `.env.local`은 커밋하지 않는다.
+- 카메라·얼굴 추적·화장 레이어·가이드를 화면에서 쓰는 방법과 기기별 측정 결과는 [docs/FACE_CAMERA_OVERLAY.md](docs/FACE_CAMERA_OVERLAY.md)에 있다.
 
 ### 폰에서 카메라 테스트
 

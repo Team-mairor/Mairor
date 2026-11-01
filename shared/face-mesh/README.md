@@ -2,6 +2,7 @@
 
 FE(브라우저, `@mediapipe/tasks-vision`)와 AI(Python, `mediapipe`)가 **같은 파일**을 쓴다.
 파일이 다르면 랜드마크 위치와 화장 위치(`MeshAnchor`)가 어긋난다.
+좌표·좌우·크기 단위·화면 변환 규칙은 [FACE_DATA_RULES.md](FACE_DATA_RULES.md)에 있다.
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
