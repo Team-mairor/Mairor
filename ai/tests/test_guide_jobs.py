@@ -15,13 +15,23 @@ from app.schemas.guide_job import (
     GuideJobRequest,
     LlmAction,
     LlmSentence,
+    LlmSentenceCheck,
     LlmTip,
+    StepCheck,
     StepExplanation,
 )
+from app.services.explanation_checker import PROMPT as CHECK_PROMPT
 from app.services.step_explainer import PROMPT
 from tests.fakes import FakeLlm
 
 JOBS = "/api/v1/guide-jobs"
+
+PASSED = StepCheck(
+    sentences=[
+        LlmSentenceCheck(id=id, evidence="", verdict="ok", reason="")
+        for id in ("a1", "a1.tip", "done")
+    ]
+)
 
 
 def jpeg() -> bytes:
@@ -146,7 +156,9 @@ def explanation(text: str, tip: str | None = None, done_when: str | None = None)
 def test_job_is_accepted_explained_and_called_back(backend):
     llm = FakeLlm(
         explanation("얼굴 중앙부터 펴 발라요", tip="얇게 여러 번 발라요"),
+        PASSED,
         explanation("입술 안쪽부터 발라요", done_when="입술 전체가 물들면 넘어가요"),
+        PASSED,
     )
     client = make_client(llm)
 
@@ -192,7 +204,9 @@ def test_job_is_accepted_explained_and_called_back(backend):
 def test_sentence_end_periods_are_removed(backend):
     llm = FakeLlm(
         explanation("펴 발라요.", tip="얇게 여러 번 발라요. ", done_when="고르게 펴지면 넘어가요."),
+        PASSED,
         explanation("발라요"),
+        PASSED,
     )
 
     make_client(llm).post(JOBS, json=guide_request(backend))
@@ -205,11 +219,11 @@ def test_sentence_end_periods_are_removed(backend):
 
 
 def test_each_step_is_sent_with_its_inputs_and_images(backend):
-    llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
 
     make_client(llm).post(JOBS, json=guide_request(backend))
 
-    first, second = llm.calls
+    first, _, second, _ = llm.calls
     assert first.system == PROMPT
     assert first.output is StepExplanation
     assert first.text == (
@@ -223,6 +237,64 @@ def test_each_step_is_sent_with_its_inputs_and_images(backend):
         f"{backend.url}/images/s2-1.jpg",
         f"{backend.url}/images/s2-2.jpg",
     ]
+
+
+def test_each_explanation_is_checked_against_inputs_without_images(backend):
+    llm = FakeLlm(
+        explanation("펴 발라요", tip="얇게 발라요", done_when="고르게 펴지면 넘어가요"),
+        PASSED,
+        explanation("발라요"),
+        PASSED,
+    )
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    check = llm.calls[1]
+    assert check.system == CHECK_PROMPT
+    assert check.output is StepCheck
+    assert check.images == []
+    assert check.text == (
+        "단계 이름: 파운데이션\n\n[입력]\n"
+        "summary: 파운데이션을 얼굴 중앙부터 펴 바릅니다.\n"
+        "tool: 퍼프\n"
+        "t1: 얇게 여러 번 바르면 뭉치지 않습니다.\n\n[설명]\n"
+        "a1: 펴 발라요\n"
+        "a1.tip: 얇게 발라요\n"
+        "done: 고르게 펴지면 넘어가요"
+    )
+
+
+def test_failed_check_is_recorded_but_explanation_is_still_sent(backend):
+    verdict = LlmSentenceCheck(
+        id="a1", evidence="", verdict="not_in_input", reason="'톡톡'은 입력에 없음"
+    )
+    llm = FakeLlm(
+        explanation("톡톡 펴 발라요"),
+        StepCheck(sentences=[verdict]),
+        explanation("발라요"),
+        PASSED,
+    )
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    (callback,) = backend.callbacks
+    assert callback["status"] == "COMPLETED"
+    assert callback["guide"]["steps"][0]["actions"] == [{"text": "톡톡 펴 발라요", "tip": None}]
+
+
+def test_failed_check_call_does_not_fail_job(backend):
+    llm = FakeLlm(
+        explanation("펴 발라요"),
+        LlmError("retryable", "Claude 응답 시간이 초과됐습니다"),
+        explanation("발라요"),
+        PASSED,
+    )
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    (callback,) = backend.callbacks
+    assert callback["status"] == "COMPLETED"
+    assert callback["guide"]["steps"][0]["actions"] == [{"text": "펴 발라요", "tip": None}]
 
 
 def test_invalid_request_is_rejected_without_job(backend):
@@ -268,7 +340,9 @@ def test_unusable_image_fails_job(backend):
 
 
 def test_failed_step_explanation_fails_job(backend):
-    llm = FakeLlm(LlmError("retryable", "Claude 응답 시간이 초과됐습니다"), explanation("발라요"))
+    llm = FakeLlm(
+        LlmError("retryable", "Claude 응답 시간이 초과됐습니다"), explanation("발라요"), PASSED
+    )
 
     make_client(llm).post(JOBS, json=guide_request(backend))
 
@@ -296,7 +370,7 @@ def test_unexpected_error_fails_job_without_internal_details(backend):
 
 def test_callback_is_retried_until_delivered(backend):
     backend.callback_statuses = [500, 429]
-    client = make_client(FakeLlm(explanation("펴 발라요"), explanation("발라요")))
+    client = make_client(FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED))
 
     job_id = client.post(JOBS, json=guide_request(backend)).json()["jobId"]
 
@@ -307,7 +381,7 @@ def test_callback_is_retried_until_delivered(backend):
 
 def test_callback_is_not_retried_on_client_error(backend):
     backend.callback_statuses = [400]
-    client = make_client(FakeLlm(explanation("펴 발라요"), explanation("발라요")))
+    client = make_client(FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED))
 
     job_id = client.post(JOBS, json=guide_request(backend)).json()["jobId"]
 
@@ -319,7 +393,7 @@ def test_callback_is_not_retried_on_client_error(backend):
 
 def test_callback_gives_up_after_max_retries(backend):
     backend.callback_statuses = [503] * 5
-    llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
     client = make_client(llm, callback_max_retries=2)
 
     job_id = client.post(JOBS, json=guide_request(backend)).json()["jobId"]
@@ -335,7 +409,7 @@ def test_unreachable_callback_is_recorded(backend):
     closed.server.server_close()
     body = guide_request(backend)
     body["callbackUrl"] = f"{closed.url}/callback"
-    llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
     client = make_client(llm, callback_max_retries=1)
 
     job_id = client.post(JOBS, json=body).json()["jobId"]

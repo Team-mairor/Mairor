@@ -5,6 +5,7 @@ import json
 import anthropic
 import httpx2
 import pytest
+from openinference.instrumentation import TracerProvider as OpenInferenceTracerProvider
 from openinference.instrumentation.anthropic import AnthropicInstrumentor
 from opentelemetry import trace
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
@@ -15,9 +16,17 @@ from opentelemetry.trace import StatusCode
 from app.clients.llm import ClaudeLlm, LlmError
 from app.core import tracing
 from app.schemas.guide import GuideInputStep
+from app.schemas.guide_job import LlmSentenceCheck, StepCheck
 from app.services.step_explainer import PROMPT, PROMPT_VERSION, explain_step
 from tests.fakes import FakeLlm
-from tests.test_guide_jobs import JOBS, FakeBackend, explanation, guide_request, make_client
+from tests.test_guide_jobs import (
+    JOBS,
+    PASSED,
+    FakeBackend,
+    explanation,
+    guide_request,
+    make_client,
+)
 from tests.test_llm import KEY, PNG, Image, make_settings, message_json
 
 
@@ -29,13 +38,16 @@ def backend():
 
 
 EXPORTER = InMemorySpanExporter()
-PROVIDER = TracerProvider()
+PROVIDER = OpenInferenceTracerProvider()
 PROVIDER.add_span_processor(SimpleSpanProcessor(EXPORTER))
 
 
 @pytest.fixture
 def provider() -> TracerProvider:
     """실제 서버처럼 전역 provider를 둔다. FastAPI·SDK 자체 기록이 켜져 있으면 span이 더 생긴다.
+
+    phoenix.otel.register()와 같은 OpenInference provider를 쓴다. 이 provider는 span을 열 때
+    문맥의 metadata로 덮어써서, 일반 OTel provider로는 metadata가 빠지는 것을 못 잡는다.
 
     전역 provider는 한 번만 정할 수 있어서 모듈에 하나 두고 테스트마다 비운다.
     """
@@ -63,7 +75,7 @@ def all_values(spans: dict[str, ReadableSpan]) -> str:
 
 
 def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
-    llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
 
     job_id = make_client(llm).post(JOBS, json=guide_request(backend)).json()["jobId"]
 
@@ -72,7 +84,9 @@ def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
         "guide_job",
         "load_images",
         "explain_step s1",
+        "check_step s1",
         "explain_step s2",
+        "check_step s2",
         "callback",
     }
     job = spans["guide_job"]
@@ -92,6 +106,12 @@ def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
         "video_id": "test_01",
         "step_id": "s2",
     }
+    assert metadata(spans["check_step s2"]) == {
+        "job_id": job_id,
+        "video_id": "test_01",
+        "step_id": "s2",
+        "explanation_prompt": PROMPT_VERSION,
+    }
     assert output(job)["status"] == "COMPLETED"
     assert output(spans["explain_step s1"])["actions"] == [{"text": "펴 발라요", "tip": None}]
     assert output(spans["callback"]) == {"attempts": 1, "delivered": True, "lastError": None}
@@ -99,7 +119,7 @@ def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
 
 
 def test_image_and_callback_urls_are_not_recorded(backend, provider):
-    llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
 
     make_client(llm).post(JOBS, json=guide_request(backend))
 
@@ -108,7 +128,7 @@ def test_image_and_callback_urls_are_not_recorded(backend, provider):
 
 def test_failed_step_and_job_are_marked_with_reason(backend, provider):
     llm = FakeLlm(
-        explanation("펴 발라요"), LlmError("invalid_output", "답이 정해 둔 형식과 다릅니다")
+        explanation("펴 발라요"), PASSED, LlmError("invalid_output", "답이 정해 둔 형식과 다릅니다")
     )
 
     make_client(llm).post(JOBS, json=guide_request(backend))
@@ -126,9 +146,55 @@ def test_failed_step_and_job_are_marked_with_reason(backend, provider):
     ]
 
 
+def test_failed_check_marks_check_step_with_reason_but_not_job(backend, provider):
+    verdict = LlmSentenceCheck(
+        id="a1", evidence="", verdict="not_in_input", reason="'톡톡'은 입력에 없음"
+    )
+    llm = FakeLlm(
+        explanation("톡톡 펴 발라요"), StepCheck(sentences=[verdict]), explanation("발라요"), PASSED
+    )
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    spans = finished(provider)
+    check = spans["check_step s1"]
+    assert check.status.status_code is StatusCode.ERROR
+    assert check.status.description == "a1 \"톡톡 펴 발라요\": '톡톡'은 입력에 없음"
+    assert output(check) == {
+        "passed": False,
+        "problems": [
+            {
+                "id": "a1",
+                "text": "톡톡 펴 발라요",
+                "kind": "not_in_input",
+                "reason": "'톡톡'은 입력에 없음",
+            }
+        ],
+    }
+    assert output(spans["check_step s2"]) == {"passed": True, "problems": []}
+    assert spans["guide_job"].status.status_code is StatusCode.UNSET
+
+
+def test_failed_check_call_marks_check_step_with_reason_but_not_job(backend, provider):
+    llm = FakeLlm(
+        explanation("펴 발라요"),
+        LlmError("retryable", "Claude 응답 시간이 초과됐습니다"),
+        explanation("발라요"),
+        PASSED,
+    )
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    spans = finished(provider)
+    check = spans["check_step s1"]
+    assert check.status.status_code is StatusCode.ERROR
+    assert check.status.description == "확인하지 못함: Claude 응답 시간이 초과됐습니다 (retryable)"
+    assert spans["guide_job"].status.status_code is StatusCode.UNSET
+
+
 def test_undelivered_callback_marks_job_as_error(backend, provider):
     backend.callback_statuses = [400]
-    llm = FakeLlm(explanation("펴 발라요"), explanation("발라요"))
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
 
     make_client(llm).post(JOBS, json=guide_request(backend))
 

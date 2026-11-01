@@ -11,6 +11,8 @@ FinishedStatus = Literal["COMPLETED", "FAILED"]
 
 TipKind = Literal["tip", "caution"]
 
+CheckVerdict = Literal["ok", "not_in_input", "meaning_changed", "not_action", "hard_word"]
+
 
 class GuideJobRequest(CamelModel):
     """BE의 가이드 생성 요청. 결과는 callback_url로 보낸다."""
@@ -98,3 +100,19 @@ class StepExplanation(CamelModel):
     actions: list[LlmAction]
     done_when: LlmSentence | None
     unused: list[LlmUnused]
+
+
+class LlmSentenceCheck(CamelModel):
+    id: str
+    evidence: str
+    verdict: CheckVerdict
+    reason: str
+
+
+class StepCheck(CamelModel):
+    """Claude에게 받는 문장별 확인 결과.
+
+    evidence를 verdict보다 먼저 쓰게 해서 근거를 찾은 뒤에 판정하게 한다.
+    """
+
+    sentences: list[LlmSentenceCheck]

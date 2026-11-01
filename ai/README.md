@@ -115,6 +115,7 @@ BE가 가이드 입력을 보내면 바로 202로 접수하고, 백그라운드�
 - 작업은 서버 메모리에만 있어서 서버가 다시 시작되면 사라집니다. 끝난 작업은 1시간 뒤 지웁니다.
 - 형식(`app/schemas/guide_job.py`)을 고치면 공유 스키마를 다시 만듭니다 (`uv run python tools/export_guide_schema.py`).
 - 지시문은 `app/prompts/step_explanation.txt`입니다. 단계 설명 모델 비교의 프롬프트 v2에 대표 장면 이미지 한 줄을 더했습니다.
+- 만든 설명은 코드와 Claude로 입력에 근거하는지 한 번 더 확인합니다. 확인 기준은 [docs/EXPLANATION_CHECK.md](docs/EXPLANATION_CHECK.md)에 있습니다.
 - 근거 번호(`sources`)와 쓰지 않은 입력(`unused`)은 BE에 보내지 않고 로그에 남깁니다. 설명 원문은 `LOG_LEVEL=DEBUG`일 때만 남깁니다.
 
 ## 호출 기록 (Phoenix)

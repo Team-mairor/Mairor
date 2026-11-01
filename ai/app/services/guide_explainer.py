@@ -6,23 +6,32 @@ import logging
 from app.clients.image_store import fetch_image
 from app.clients.llm import Llm, LlmError
 from app.core.errors import AppError
-from app.core.tracing import set_output, traced
+from app.core.tracing import set_failed, set_output, traced
 from app.schemas.common import ErrorDetail
 from app.schemas.guide import GuideInput, GuideInputStep
 from app.schemas.guide_job import ExplainedGuide, ExplainedStep
+from app.services.explanation_checker import Problem, check_explanation
 from app.services.guide_input import Fetch, load_step_images, move_misplaced_facts
-from app.services.step_explainer import explain_step, to_explained_step
+from app.services.step_explainer import PROMPT_VERSION, explain_step, to_explained_step
 
 logger = logging.getLogger(__name__)
+
+
+def check_view(problems: list[Problem]) -> list[dict[str, str]]:
+    """걸린 문장을 번호만이 아니라 글과 함께 남겨 기록만 보고도 어느 문장인지 알게 한다."""
+    return [
+        {"id": p.sentence_id, "text": p.text, "kind": p.kind, "reason": p.reason} for p in problems
+    ]
 
 
 async def build_explained_guide(
     guide_input: GuideInput, llm: Llm, fetch: Fetch = fetch_image
 ) -> ExplainedGuide:
-    """이미지를 받아 검사하고, 단계마다 Claude로 설명을 만든다.
+    """이미지를 받아 검사하고, 단계마다 Claude로 설명을 만든 뒤 입력에 근거하는지 확인한다.
 
     단계는 한꺼번에 보내고 동시 호출 수는 llm이 맞춘다.
     한 단계라도 설명을 못 받으면 GENERATION_FAILED로 거절하고 details에 그 단계를 모두 적는다.
+    확인에서 걸리거나 확인 호출이 실패해도 지금은 기록만 남기고 설명은 그대로 보낸다.
     """
     image_count = sum(len(step.images) for step in guide_input.steps)
     with traced("load_images", {"images": image_count}):
@@ -47,7 +56,34 @@ async def build_explained_guide(
             )
             explained = to_explained_step(step, result.output)
             set_output(span, explained.model_dump(mode="json", by_alias=True))
-            return explained
+        with traced(
+            f"check_step {step.step_id}",
+            inputs,
+            step_id=step.step_id,
+            explanation_prompt=PROMPT_VERSION,
+        ) as span:
+            try:
+                check = await check_explanation(llm, step, result.output)
+            except LlmError as error:
+                reason = f"확인하지 못함: {error} ({error.kind})"
+                logger.warning("%s %s", step.step_id, reason)
+                set_failed(span, reason)
+                return explained
+            problems = [f'{p.sentence_id} "{p.text}" {p.kind}: {p.reason}' for p in check.problems]
+            logger.info(
+                "%s 확인: %s, 토큰 입력 %d·답 %d·생각 %d, 문제 %s",
+                step.step_id,
+                "통과" if check.passed else "실패",
+                check.usage.input_tokens,
+                check.usage.output_tokens,
+                check.usage.thinking_tokens,
+                problems,
+            )
+            set_output(span, {"passed": check.passed, "problems": check_view(check.problems)})
+            if not check.passed:
+                reasons = [f'{p.sentence_id} "{p.text}": {p.reason}' for p in check.failures]
+                set_failed(span, "; ".join(reasons))
+        return explained
 
     results = await asyncio.gather(*(explain(step) for step in steps), return_exceptions=True)
     explained: list[ExplainedStep] = []

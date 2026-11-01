@@ -3,6 +3,8 @@
 tracing_endpoint가 비어 있으면 아무것도 보내지 않고, traced()는 기록되지 않는 빈 span을 준다.
 Claude 호출은 AnthropicInstrumentor가 기록하고 작업·단계·콜백은 traced()로 남긴다.
 traced() 안의 span과 Claude 호출은 바깥 traced()의 metadata(job_id 등)를 이어받는다.
+OpenInference는 span을 열 때 문맥의 metadata로 span의 metadata를 덮어써서,
+traced()는 문맥에 metadata를 먼저 넣고 span을 연다.
 
 Claude 호출의 입력 칸은 통째로 숨긴다. 요청 전체를 담는 input.value에 이미지 base64가 들어가고
 hide_input_images로는 그 칸이 지워지지 않아서다. 보낸 글은 using_prompt()의 지시문·변수로 남긴다.
@@ -63,8 +65,8 @@ def traced(name: str, inputs: Mapping[str, Any], **metadata: Any) -> Iterator[Sp
         SpanAttributes.METADATA: _json(merged),
     }
     with (
-        tracer.start_as_current_span(name, attributes=attributes) as span,
         using_attributes(metadata=merged),
+        tracer.start_as_current_span(name, attributes=attributes) as span,
     ):
         yield span
 
