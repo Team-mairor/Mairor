@@ -11,6 +11,8 @@ from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
 from app.schemas.manifest import Step
 from app.services import guide_area_builder
 from app.services.blush_area import BlushArea, cheek_range
+from app.services.brow_area import BrowArea, brow_range
+from app.services.eyeshadow_area import EyeshadowArea, eyeshadow_range
 from app.services.face_map import MAP_SIZE, map_points
 from app.services.guide_area_builder import ANALYSIS_ERROR, NOT_ANALYZED, build_guide_area
 from app.services.lip_area import LipArea, check_lip_area, lip_area_on_map
@@ -172,6 +174,64 @@ def test_blush_found_on_one_cheek_logs_the_other_cheek_and_its_reason(monkeypatc
     assert "s4-1" in caplog.text
     assert "leftCheek" in caplog.text
     assert "noUsableFrame" in caplog.text
+
+
+def build_one(monkeypatch, name, finder, makeup):
+    monkeypatch.setattr(guide_area_builder, name, finder)
+    step = Step(step_id="s5", order=1, start_seconds=8, end_seconds=10.5, makeup=makeup)
+    return build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+
+
+def test_brow_step_gets_one_area_on_each_brow_without_exclude(monkeypatch):
+    seen = []
+
+    def found(result, step_start_ms, step_end_ms, load_photo, brow):
+        seen.append((step_start_ms, step_end_ms, brow))
+        return BrowArea(mask=brow_range(brow), darkening=3.0)
+
+    sub_step = build_one(monkeypatch, "find_brow_area", found, "brow")
+    assert seen == [(8000, 10500, "leftBrow"), (8000, 10500, "rightBrow")]
+    assert (sub_step.status, sub_step.reasons) == ("extracted", [])
+    assert [(s.region, s.exclude) for s in sub_step.guide_sets] == [
+        ("leftBrow", []),
+        ("rightBrow", []),
+    ]
+
+
+def test_eyeshadow_step_leaves_out_each_eye_from_its_own_area(monkeypatch):
+    def found(result, step_start_ms, step_end_ms, load_photo, eye):
+        return EyeshadowArea(mask=eyeshadow_range(eye), strength=2.0)
+
+    sub_step = build_one(monkeypatch, "find_eyeshadow_area", found, "eyeshadow")
+    assert sub_step.status == "extracted"
+    assert [(s.region, s.exclude) for s in sub_step.guide_sets] == [
+        ("leftEye", ["leftEye"]),
+        ("rightEye", ["rightEye"]),
+    ]
+    assert all(len(s.guides[0].outline) >= 3 for s in sub_step.guide_sets)
+
+
+def test_brow_and_eyeshadow_not_found_use_default_guide_with_reasons(monkeypatch):
+    brow = build_one(
+        monkeypatch,
+        "find_brow_area",
+        lambda *_: BrowArea(mask=None, reason="browColorNotFound"),
+        "brow",
+    )
+    assert (brow.status, brow.template_id, brow.reasons) == (
+        "template",
+        "brow",
+        ["browColorNotFound"],
+    )
+    reasons = {"leftEye": "noUsableFrame", "rightEye": "eyeshadowColorNotFound"}
+    eyeshadow = build_one(
+        monkeypatch,
+        "find_eyeshadow_area",
+        lambda *args: EyeshadowArea(mask=None, reason=reasons[args[-1]]),
+        "eyeshadow",
+    )
+    assert (eyeshadow.status, eyeshadow.template_id) == ("template", "eyeshadow")
+    assert eyeshadow.reasons == ["noUsableFrame", "eyeshadowColorNotFound"]
 
 
 @pytest.mark.parametrize("makeup", ["mascara", "eyeliner", "contour"])

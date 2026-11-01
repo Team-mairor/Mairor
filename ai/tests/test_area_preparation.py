@@ -1,7 +1,7 @@
 import numpy as np
 
 from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
-from app.services.area_preparation import rgb_to_lab, rows_to_map, usable_rows
+from app.services.area_preparation import remove_lighting, rgb_to_lab, rows_to_map, usable_rows
 from app.services.face_map import MAP_SIZE
 from app.services.frame_checker import outside_count_name
 from app.services.region_points import REGION_POINTS
@@ -72,3 +72,22 @@ def test_map_keeps_the_color_most_photos_show():
 
     out = rows_to_map(rows, load_photo)
     assert tuple(out[round(UV[13, 1] * MAP_SIZE), round(UV[13, 0] * MAP_SIZE)]) == SKIN
+
+
+def test_lighting_change_on_skin_is_removed_and_makeup_stays():
+    exclude = np.zeros((200, 200), dtype=bool)
+    exclude[80:120, 80:120] = True
+    change = np.full((200, 200), 4.0, dtype=np.float32)
+    change[90:110, 90:110] += 6.0
+    corrected = remove_lighting(change, exclude)
+    assert np.abs(corrected[~exclude]).max() < 0.01
+    assert abs(corrected[100, 100] - 6.0) < 0.01
+
+
+def test_lighting_is_removed_place_by_place():
+    exclude = np.zeros((200, 400), dtype=bool)
+    change = np.zeros((200, 400), dtype=np.float32)
+    change[:, 200:] = -5.0
+    corrected = remove_lighting(change, exclude)
+    assert np.abs(corrected[:, :50]).max() < 0.1
+    assert np.abs(corrected[:, 350:]).max() < 0.1
