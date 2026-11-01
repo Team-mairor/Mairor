@@ -4,13 +4,29 @@
 """
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+
+import numpy as np
 
 from app.schemas.guide import GuideInputStep
-from app.schemas.guide_area import AreaStep, AreaSubStep, GuideArea, GuideSet, PolygonShape
+from app.schemas.guide_area import (
+    AreaStep,
+    AreaSubStep,
+    GuideArea,
+    GuideSet,
+    PolygonShape,
+    RegionName,
+)
 from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
-from app.services.blush_area import CHEEKS, find_blush_area, symmetric_blush
+from app.services.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
+from app.services.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
+from app.services.eyeshadow_area import (
+    EYES,
+    EyeshadowArea,
+    find_eyeshadow_area,
+    symmetric_eyeshadow,
+)
 from app.services.face_map import points_to_anchors
 from app.services.lip_area import PhotoLoader, find_lip_area
 from app.services.mask_outline import mask_outline, simplify_outline
@@ -145,32 +161,88 @@ def _blush_sub_step(
     load_photo: PhotoLoader,
     sub_step_id: str,
 ) -> AreaSubStep:
-    """블러셔를 볼마다 찾아 symmetric_blush로 좌우 같은 모양을 만들고, 볼마다 영역 하나씩 적는다.
-
-    두 볼 모두 못 찾으면 볼마다의 이유를 겹치지 않게 모아 기본 블러셔 가이드(template)를 쓴다.
-    한쪽 볼만 못 찾으면 형식상 extracted의 reasons는 비워야 하므로, 그 볼과 이유를 로그에 남긴다.
-    """
+    """블러셔를 볼마다 찾아 symmetric_blush로 좌우 같은 모양을 만들고, 볼마다 영역 하나씩 적는다."""
     areas = {
         cheek: find_blush_area(result, step_start_ms, step_end_ms, load_photo, cheek)
         for cheek in CHEEKS
     }
-    masks = symmetric_blush(areas)
+    return _pair_sub_step(
+        sub_step_id, "blush", areas, symmetric_blush(areas), "blushColorNotFound", False
+    )
+
+
+def _brow_sub_step(
+    result: LandmarksResult,
+    step_start_ms: int,
+    step_end_ms: int,
+    load_photo: PhotoLoader,
+    sub_step_id: str,
+) -> AreaSubStep:
+    """눈썹을 눈썹마다 찾아 symmetric_brows로 좌우 같은 모양을 만들고, 눈썹마다 영역을 적는다."""
+    areas = {
+        brow: find_brow_area(result, step_start_ms, step_end_ms, load_photo, brow) for brow in BROWS
+    }
+    return _pair_sub_step(
+        sub_step_id, "brow", areas, symmetric_brows(areas), "browColorNotFound", False
+    )
+
+
+def _eyeshadow_sub_step(
+    result: LandmarksResult,
+    step_start_ms: int,
+    step_end_ms: int,
+    load_photo: PhotoLoader,
+    sub_step_id: str,
+) -> AreaSubStep:
+    """섀도를 눈마다 찾아 symmetric_eyeshadow로 좌우 같은 모양을 만들고, 눈마다 영역 하나씩 적는다.
+
+    윗눈두덩과 눈 아래를 같이 바르면 영역이 눈을 감싸므로, 묶음마다 그 눈을 exclude에 넣어
+    FE가 눈 구멍을 뚫고 그리게 한다.
+    """
+    areas = {
+        eye: find_eyeshadow_area(result, step_start_ms, step_end_ms, load_photo, eye)
+        for eye in EYES
+    }
+    return _pair_sub_step(
+        sub_step_id,
+        "eyeshadow",
+        areas,
+        symmetric_eyeshadow(areas),
+        "eyeshadowColorNotFound",
+        True,
+    )
+
+
+def _pair_sub_step(
+    sub_step_id: str,
+    makeup: Makeup,
+    areas: Mapping[RegionName, BlushArea | BrowArea | EyeshadowArea],
+    masks: Mapping[RegionName, np.ndarray] | None,
+    not_found: str,
+    exclude_self: bool,
+) -> AreaSubStep:
+    """좌우 짝 부위(볼·눈썹·눈)의 결과를 하위 단계 하나로 적는다.
+
+    areas는 부위마다 찾은 결과, masks는 대칭으로 만든 양쪽 마스크다(못 찾았으면 None).
+    두 쪽 모두 못 찾으면 쪽마다의 이유를 겹치지 않게 모아
+    그 화장 종류의 기본 가이드(template)를 쓴다.
+    한쪽만 못 찾으면 형식상 extracted의 reasons는 비워야 하므로, 그쪽과 이유를 로그에 남긴다.
+    테두리가 나오지 않으면 not_found 이유로 기본 가이드를 쓴다.
+    exclude_self가 참이면 묶음마다 자기 부위를 exclude에 넣는다(섀도의 눈 구멍).
+    """
     if masks is None:
-        reasons = list(dict.fromkeys(areas[cheek].reason for cheek in CHEEKS))
-        return _template(sub_step_id, "blush", reasons)
-    for cheek in CHEEKS:
-        if areas[cheek].mask is None:
+        reasons = list(dict.fromkeys(area.reason for area in areas.values()))
+        return _template(sub_step_id, makeup, reasons)
+    for side, area in areas.items():
+        if area.mask is None:
             logger.info(
-                "%s 블러셔 %s 못 찾음(%s), 반대쪽 볼을 뒤집어 씀",
-                sub_step_id,
-                cheek,
-                areas[cheek].reason,
+                "%s %s %s 못 찾음(%s), 반대쪽을 뒤집어 씀", sub_step_id, makeup, side, area.reason
             )
     outlines = {
-        cheek: points_to_anchors(simplify_outline(mask_outline(masks[cheek]))) for cheek in CHEEKS
+        side: points_to_anchors(simplify_outline(mask_outline(masks[side]))) for side in areas
     }
     if not all(outlines.values()):
-        return _template(sub_step_id, "blush", ["blushColorNotFound"])
+        return _template(sub_step_id, makeup, [not_found])
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,
@@ -179,13 +251,19 @@ def _blush_sub_step(
         template_id=None,
         guide_sets=[
             GuideSet(
-                region=cheek,
+                region=side,
                 source="extracted",
-                guides=[PolygonShape(type="polygon", outline=outlines[cheek])],
+                guides=[PolygonShape(type="polygon", outline=outlines[side])],
+                exclude=[side] if exclude_self else [],
             )
-            for cheek in CHEEKS
+            for side in areas
         ],
     )
 
 
-AREA_FINDERS: dict[Makeup, AreaFinder] = {"lip": _lip_sub_step, "blush": _blush_sub_step}
+AREA_FINDERS: dict[Makeup, AreaFinder] = {
+    "lip": _lip_sub_step,
+    "blush": _blush_sub_step,
+    "brow": _brow_sub_step,
+    "eyeshadow": _eyeshadow_sub_step,
+}

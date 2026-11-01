@@ -174,7 +174,7 @@ def test_blush_found_on_one_cheek_logs_the_other_cheek_and_its_reason(monkeypatc
     assert "noUsableFrame" in caplog.text
 
 
-@pytest.mark.parametrize("makeup", ["eyeshadow", "eyeliner", "contour"])
+@pytest.mark.parametrize("makeup", ["mascara", "eyeliner", "contour"])
 def test_makeup_without_analysis_falls_back_to_its_default_guide(monkeypatch, makeup):
     step = Step(step_id="s1", order=1, start_seconds=0, end_seconds=5, makeup=makeup)
     sub_step = build(monkeypatch, lips_found, steps=[step]).steps[0].sub_steps[0]
