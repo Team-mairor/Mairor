@@ -26,3 +26,4 @@
 | [회원 화면(가입·로그인·로그아웃·기기 관리) FE 구현](2026-10-29-seoyeon-fe-users-screens.md) | 2026-10-29 | 김서연 → FE | 요청 |
 | [기본 블러셔 가이드 넓히기](2026-10-30-hyeonsoo-seoyun-default-blush-size.md) | 2026-10-30 | 김현수 → 한서윤 | 요청 |
 | [얼굴 좌표 규칙 이동에 따른 후속 요청](2026-10-31-seoyun-hyeonsoo-face-rules-followup.md) | 2026-10-31 | 한서윤 → 김현수 | 요청 |
+| [기본 아이섀도 가이드에 눈 아래 안내 추가](2026-11-01-hyeonsoo-seoyun-default-eyeshadow-under-eye.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
