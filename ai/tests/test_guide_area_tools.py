@@ -1,7 +1,9 @@
 import numpy as np
+from PIL import Image
 
 from app.schemas.guide_area import AreaStep, AreaSubStep, GuideArea, MeshAnchor
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
+from app.services.region_points import REGION_POINTS
 from tools import build_guide_area, draw_guide_area
 
 
@@ -97,3 +99,51 @@ def test_check_picture_is_saved(tmp_path):
     path = draw_guide_area.save(photo, lines, tmp_path, "s10_473.0s")
     assert path == tmp_path / "output" / "guide_area_s10_473.0s_check.jpg"
     assert path.is_file()
+
+
+def test_default_photo_needs_the_guide_regions_in_frame():
+    eye_cut = make_row(1300).model_copy(
+        update={
+            "measures": {
+                "faceWidthRatio": 1.0,
+                "lipsOuterOutsideCount": 0,
+                "leftEyeOutsideCount": 3,
+            }
+        }
+    )
+    all_in = make_row(1600).model_copy(
+        update={
+            "measures": {
+                "faceWidthRatio": 1.0,
+                "lipsOuterOutsideCount": 0,
+                "leftEyeOutsideCount": 0,
+            }
+        }
+    )
+    result = LandmarksResult(video_id="test_01", frames=[eye_cut, all_in])
+    assert [r.timestamp_ms for r in draw_guide_area._first_row(result, 1000, ["leftEye"])] == [1600]
+    assert [r.timestamp_ms for r in draw_guide_area._first_row(result, 1000, ["lipsOuter"])] == [
+        1300
+    ]
+    assert draw_guide_area._first_row(result, 2000, ["leftEye"]) == []
+
+
+def test_hole_uses_the_face_points_of_that_region():
+    face = make_face()
+    pixels = draw_guide_area._region_pixels("leftEye", face, 300, 200)
+    expected = [
+        (face.landmarks[i].x * 300, face.landmarks[i].y * 200) for i in REGION_POINTS["leftEye"]
+    ]
+    assert np.allclose(pixels, expected)
+
+
+def test_hole_is_drawn_only_on_the_right_half(tmp_path):
+    photo = np.full((40, 60, 3), 200, dtype=np.uint8)
+    lines = [[(10.0, 10.0), (40.0, 12.0), (30.0, 25.0)]]
+    hole = [(20.0, 14.0), (30.0, 14.0), (25.0, 20.0)]
+    path = draw_guide_area.save(photo, lines, tmp_path, "s10", [hole])
+    sheet = np.asarray(Image.open(path)).astype(int)
+    blue = (sheet[..., 2] - sheet[..., 0]) > 120
+    half = sheet.shape[1] // 2
+    assert blue[:, half:].any()
+    assert not blue[:, :half].any()
