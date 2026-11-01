@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -46,6 +47,41 @@ def span(points: Sequence[Pixel]) -> float:
     """좌표들의 가로 길이."""
     xs = [x for x, _ in points]
     return max(xs) - min(xs)
+
+
+def open_close(mask: np.ndarray, cells: int) -> np.ndarray:
+    """마스크의 가는 돌기를 떼고 좁은 틈을 메운다. cells는 지름(칸)이다.
+
+    지름 cells의 원으로 깎았다가 불려서(열기) 그보다 가는 돌기를 떼고,
+    불렸다가 깎아서(닫기) 그보다 좁은 틈과 움푹한 곳을 메운다.
+    """
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (cells, cells))
+    opened = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+    return cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel) > 0
+
+
+def largest_piece(mask: np.ndarray) -> np.ndarray:
+    """마스크에서 가로·세로·대각선으로 이어진 덩어리 중 가장 큰 것만 남긴다.
+
+    칠한 칸이 없으면 빈 표다.
+    """
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
+    if count <= 1:
+        return np.zeros(mask.shape, dtype=bool)
+    return labels == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+
+
+def fill_holes(mask: np.ndarray) -> np.ndarray:
+    """덩어리 안에 갇힌 빈칸(표 가장자리에 닿지 않는 빈 곳)을 칠한다."""
+    empty = (~mask.astype(bool)).astype(np.uint8)
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(empty, 4)
+    height, width = mask.shape
+    filled = mask.astype(bool).copy()
+    for i in range(1, count):
+        x, y, w, h = stats[i, :4]
+        if x > 0 and y > 0 and x + w < width and y + h < height:
+            filled[labels == i] = True
+    return filled
 
 
 def _pixels(face: Face, indices: Sequence[int], width: int, height: int) -> list[Pixel]:

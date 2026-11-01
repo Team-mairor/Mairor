@@ -26,7 +26,7 @@ from app.services.area_preparation import (
     usable_rows,
 )
 from app.services.face_map import MAP_SIZE, map_points
-from app.services.region_mask import polygon_mask
+from app.services.region_mask import largest_piece, open_close, polygon_mask
 from app.services.region_points import REGION_POINTS
 
 BEFORE_WINDOW_MS = 1000
@@ -130,7 +130,7 @@ def brow_shape(mask: np.ndarray) -> np.ndarray:
     칸이 MIN_COLUMN_CELLS개 이상인 줄이 MIN_CURVE_COLUMNS개가 안 되면
     곡선을 맞추지 않고 정리한 덩어리를 돌려준다.
     """
-    tidy = _largest(_open_close(mask))
+    tidy = largest_piece(open_close(mask, TIDY_CELLS))
     rows, cols = np.nonzero(tidy)
     if cols.size == 0:
         return tidy
@@ -179,16 +179,3 @@ def _light_exclude() -> np.ndarray:
     ]
     face = polygon_mask(map_points(REGION_POINTS["faceOval"]), MAP_SIZE, MAP_SIZE)
     return np.any([*brows, *eyes], axis=0) | ~face
-
-
-def _open_close(mask: np.ndarray) -> np.ndarray:
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (TIDY_CELLS, TIDY_CELLS))
-    opened = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, kernel)
-    return cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel) > 0
-
-
-def _largest(mask: np.ndarray) -> np.ndarray:
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
-    if count <= 1:
-        return np.zeros_like(mask, dtype=bool)
-    return labels == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
