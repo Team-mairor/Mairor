@@ -139,7 +139,13 @@ export default function TutorialPage() {
   }, [sheet, blocked, busy, exitAsk, hasProduct, info.target]);
 
   const gv = Math.round(gauge);
-  const meterColor = blocked ? "#C9B5BF" : gv > 62 ? "#FF8FC0" : gv < 45 ? "#EFC0DA" : "#DBE586";
+  const meterColor = blocked
+    ? "var(--color-ash)"
+    : gv > 62
+      ? "var(--color-rose)"
+      : gv < 45
+        ? "var(--color-sky)"
+        : "var(--color-lime)";
   const gaugeLabel = blocked
     ? "지금은 잴 수 없어요"
     : gv > 62
@@ -216,12 +222,12 @@ export default function TutorialPage() {
         <button
           type="button"
           onClick={() => setExitAsk(true)}
-          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-[rgba(42,10,28,.82)] py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-[rgba(42,10,28,.95)]"
+          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-[rgba(11,20,48,.82)] py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-[rgba(11,20,48,.95)]"
         >
           <X className="size-[18px]" strokeWidth={2.4} aria-hidden />
           나가기
         </button>
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-[rgba(42,10,28,.82)] px-[18px]">
+        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-[rgba(11,20,48,.82)] px-[18px]">
           <div
             className="flex min-w-0 flex-1 gap-1"
             role="progressbar"
@@ -249,9 +255,9 @@ export default function TutorialPage() {
       <LiveNote note={note} />
 
       <GlassPanel>
-        <div className="absolute top-0 left-5 flex h-[60px] max-w-[calc(100%-40px)] -translate-y-[calc(100%+12px)] items-center gap-3 rounded-full bg-white/92 py-0 pr-5 pl-2.5 text-ink shadow-[0_10px_24px_rgba(20,4,12,.28)] backdrop-blur-md">
+        <div className="absolute top-0 left-5 flex h-[60px] max-w-[calc(100%-40px)] -translate-y-[calc(100%+12px)] items-center gap-3 rounded-full bg-white/92 py-0 pr-5 pl-2.5 text-ink shadow-[0_10px_24px_rgba(6,10,26,.28)] backdrop-blur-md">
           <span
-            className="size-10 shrink-0 rounded-full border-[3px] border-white shadow-[0_0_0_1px_#EFE4EA]"
+            className="size-10 shrink-0 rounded-full border-[3px] border-white shadow-[0_0_0_1px_#E4E7EE]"
             style={{ background: ref.color }}
           />
           <span className="flex min-w-0 flex-col">
@@ -266,7 +272,7 @@ export default function TutorialPage() {
           {hasProduct ? (
             <>
               <span
-                className="size-10 shrink-0 rounded-full border-[3px] border-white shadow-[0_0_0_1px_#EFE4EA]"
+                className="size-10 shrink-0 rounded-full border-[3px] border-white shadow-[0_0_0_1px_#E4E7EE]"
                 style={{ background: pr.p?.color ?? "#fff" }}
               />
               <span className="flex min-w-0 flex-col">
@@ -401,7 +407,7 @@ export default function TutorialPage() {
             type="button"
             onClick={next}
             disabled={busy}
-            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_rgba(219,19,116,.38)] active:scale-[.98] disabled:opacity-60"
+            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_color-mix(in_srgb,var(--color-pink)_38%,transparent)] active:scale-[.98] disabled:opacity-60"
           >
             <span className="truncate text-[22px] font-bold">{nextLabel}</span>
             <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
@@ -414,11 +420,11 @@ export default function TutorialPage() {
       {/* 사진 확인 (GUIDE-008) */}
       {sheet && (
         <div
-          className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-[rgba(40,10,26,.58)] px-[60px] py-8 backdrop-blur-sm"
+          className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-[rgba(11,20,48,.58)] px-[60px] py-8 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex w-full max-w-[560px] flex-col gap-6 rounded-[36px] bg-white px-4 pt-4 pb-6 text-ink shadow-[0_40px_80px_rgba(20,4,12,.4)]">
+          <div className="flex w-full max-w-[560px] flex-col gap-6 rounded-[36px] bg-white px-4 pt-4 pb-6 text-ink shadow-[0_40px_80px_rgba(6,10,26,.4)]">
             <div className="relative h-[300px] overflow-hidden rounded-3xl bg-ink-deep">
               {/* TODO(GUIDE-008): 실제 촬영 결과 */}
               {/* eslint-disable-next-line @next/next/no-img-element -- 샘플 */}
@@ -428,7 +434,7 @@ export default function TutorialPage() {
                 className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
                 style={{ marginTop: "-112%" }}
               />
-              <span className="absolute top-3.5 left-3.5 flex h-8 items-center gap-1.5 rounded-full bg-[rgba(42,10,28,.82)] px-3.5 text-[14px] font-bold text-white">
+              <span className="absolute top-3.5 left-3.5 flex h-8 items-center gap-1.5 rounded-full bg-[rgba(11,20,48,.82)] px-3.5 text-[14px] font-bold text-white">
                 <Check className="size-3.5" strokeWidth={3} aria-hidden />
                 {sheet.fail ? "저장 실패" : "사진 저장됨"}
               </span>
@@ -458,7 +464,7 @@ export default function TutorialPage() {
               <button
                 type="button"
                 onClick={() => advance(false)}
-                className="flex h-20 min-w-0 flex-1 items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] active:scale-[.97]"
+                className="flex h-20 min-w-0 flex-1 items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
               >
                 <span className="truncate text-[23px] font-bold">
                   {sheet.fail ? "사진 없이 진행" : last ? "완성하기" : "다음 스텝"}

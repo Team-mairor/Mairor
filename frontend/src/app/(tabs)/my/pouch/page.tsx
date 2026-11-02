@@ -142,8 +142,8 @@ export default function MyPouchPage() {
                     className="flex min-w-0 items-center gap-3.5 rounded-[20px] border border-line bg-white py-3.5 pr-[18px] pl-3.5 text-left transition-colors hover:border-plum"
                   >
                     <span
-                      className="size-14 shrink-0 rounded-full border-4 border-white shadow-[0_0_0_1px_#EFE4EA,0_4px_10px_rgba(58,14,37,.12)]"
-                      style={{ background: p.color ?? "#F6F1F4" }}
+                      className="size-14 shrink-0 rounded-full border-4 border-white shadow-[0_0_0_1px_#E4E7EE,0_4px_10px_rgba(11,20,48,.12)]"
+                      style={{ background: p.color ?? "var(--color-cream)" }}
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="text-[14px] font-bold text-plum">

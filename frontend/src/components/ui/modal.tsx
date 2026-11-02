@@ -37,7 +37,7 @@ export function Modal({
   return (
     <div
       className={cn(
-        "absolute inset-0 z-20 flex justify-center bg-[rgba(40,10,26,.5)]",
+        "absolute inset-0 z-20 flex justify-center bg-[rgba(11,20,48,.5)]",
         align === "center" ? "items-center p-6" : "items-end",
       )}
       onClick={onClose}
@@ -48,7 +48,7 @@ export function Modal({
         aria-labelledby={labelledBy}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          "w-full bg-white shadow-[0_30px_60px_rgba(20,4,12,.3)]",
+          "w-full bg-white shadow-[0_30px_60px_rgba(6,10,26,.3)]",
           align === "center"
             ? "max-w-[560px] animate-fade rounded-[28px] p-7 pb-6"
             : "animate-sheet-up rounded-t-[28px] px-8 pt-6 pb-8",

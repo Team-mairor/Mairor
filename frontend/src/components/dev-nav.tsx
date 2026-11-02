@@ -4,6 +4,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import { MirrorToggle } from "@/components/mirror-toggle";
 import { saveFacePhoto } from "@/features/loading/face-register";
 import { useSession, type SessionState } from "@/features/session";
 import { GUIDE_STEPS, VIDEOS } from "@/lib/mock-data";
@@ -208,7 +209,7 @@ export function DevNav() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "바로가기 닫기" : "바로가기 열기"}
-        className="fixed bottom-4 left-4 z-[100] flex size-11 items-center justify-center rounded-full bg-ink text-white shadow-[0_8px_20px_rgba(58,14,37,.3)]"
+        className="fixed bottom-4 left-4 z-[100] flex size-11 items-center justify-center rounded-full bg-ink text-white shadow-[0_8px_20px_rgba(11,20,48,.3)]"
       >
         {open ? (
           <PanelLeftClose className="size-5" aria-hidden />
@@ -219,7 +220,7 @@ export function DevNav() {
       {open && (
         <nav
           aria-label="화면 바로가기"
-          className="fixed top-4 bottom-[72px] left-4 z-[99] flex w-[212px] flex-col gap-1 overflow-y-auto rounded-[20px] bg-white px-3 py-[18px] text-ink shadow-[0_12px_32px_rgba(58,14,37,.18)]"
+          className="fixed top-4 bottom-[72px] left-4 z-[99] flex w-[212px] flex-col gap-1 overflow-y-auto rounded-[20px] bg-white px-3 py-[18px] text-ink shadow-[0_12px_32px_rgba(11,20,48,.18)]"
         >
           <div className="mb-2 flex flex-col gap-0.5 border-b border-line px-2.5 pb-3">
             <span className="font-serif text-[28px] leading-none text-plum italic">mairor</span>
@@ -254,13 +255,14 @@ export function DevNav() {
               </button>
             );
           })}
+          <MirrorToggle className="mt-auto justify-between" />
           <button
             type="button"
             onClick={() => {
               reset();
               router.push("/");
             }}
-            className="mt-auto flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-line text-[16px] font-semibold"
+            className="mt-1 flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-line text-[16px] font-semibold"
           >
             처음부터 다시
           </button>

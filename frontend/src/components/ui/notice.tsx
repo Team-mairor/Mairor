@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 const TONES = {
   success: { box: "bg-lime-pale", icon: "text-lime-ink", Icon: Check },
   info: { box: "bg-cream", icon: "text-mute", Icon: AlertCircle },
-  error: { box: "bg-pink-tint", icon: "text-pink", Icon: AlertCircle },
+  error: { box: "bg-pink-tint", icon: "text-error", Icon: AlertCircle },
   expired: { box: "bg-cream", icon: "text-plum", Icon: Clock },
-  locked: { box: "bg-pink-tint", icon: "text-pink", Icon: Clock },
+  locked: { box: "bg-pink-tint", icon: "text-plum", Icon: Clock },
 } as const;
 
 /** 화면 안 안내 상자. 한 줄이면 가로, 설명이 있으면 세로로 쌓는다 */

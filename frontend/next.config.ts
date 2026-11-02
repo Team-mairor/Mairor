@@ -14,6 +14,14 @@ if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_API_MOCK) {
 // cacheComponents·partialPrefetching은 정적 내보내기와 호환되지 않아 쓰지 않는다.
 const nextConfig: NextConfig = {
   output: "export",
+  // 같은 와이파이의 폰·태블릿(https://<PC의 IP>:3000)에서 개발 서버 화면이 동작하게 사설 IP 대역을 허용한다.
+  // 없으면 Next 16이 /_next 개발 요청을 막아 화면은 보여도 버튼이 눌리지 않는다.
+  // 172는 사설 대역(172.16~31)만 연다
+  allowedDevOrigins: [
+    "10.*.*.*",
+    ...Array.from({ length: 16 }, (_, i) => `172.${16 + i}.*.*`),
+    "192.168.*.*",
+  ],
   ...(apiProxyTarget && {
     rewrites: async () => [{ source: "/api/:path*", destination: `${apiProxyTarget}/api/:path*` }],
   }),

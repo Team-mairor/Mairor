@@ -87,7 +87,7 @@ export default function HomePage() {
         <div className="grid h-[292px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
           <Link
             href="/select"
-            className="flex min-w-0 flex-col justify-between rounded-3xl bg-plum p-6 hover:bg-[#86184E]"
+            className="flex min-w-0 flex-col justify-between rounded-3xl bg-plum p-6 hover:brightness-90"
           >
             <div className="flex items-start justify-between gap-3">
               <span className="font-label text-[15px] font-semibold tracking-[.16em] text-pink-soft">

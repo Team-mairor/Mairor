@@ -43,8 +43,8 @@ export default function TutorialGuidePage() {
   return (
     <main className="relative flex flex-1 flex-col">
       <CameraErrorNote className="z-[6]" />
-      <div className="absolute inset-0 z-[5] flex animate-fade items-center justify-center bg-[rgba(40,10,26,.58)] px-[60px] py-8 backdrop-blur-sm">
-        <div className="relative flex w-full max-w-[680px] flex-col rounded-[36px] bg-white px-4 pt-[18px] pb-6 text-ink shadow-[0_40px_80px_rgba(20,4,12,.4)]">
+      <div className="absolute inset-0 z-[5] flex animate-fade items-center justify-center bg-[rgba(11,20,48,.58)] px-[60px] py-8 backdrop-blur-sm">
+        <div className="relative flex w-full max-w-[680px] flex-col rounded-[36px] bg-white px-4 pt-[18px] pb-6 text-ink shadow-[0_40px_80px_rgba(6,10,26,.4)]">
           {phase < 3 ? (
             <>
               <div className="flex items-center gap-5 px-3 pt-2 pb-5">

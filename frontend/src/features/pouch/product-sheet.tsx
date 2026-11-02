@@ -159,7 +159,7 @@ export function ProductSheet({
 
   return (
     <div
-      className="absolute inset-0 z-30 flex animate-fade items-end bg-[rgba(58,14,37,.45)]"
+      className="absolute inset-0 z-30 flex animate-fade items-end bg-[rgba(11,20,48,.45)]"
       onClick={onClose}
     >
       <div
@@ -244,7 +244,7 @@ export function ProductSheet({
               value={f.brand}
               onChange={(e) => patch({ brand: e.target.value })}
               placeholder="예) 클리오"
-              className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-pink"
+              className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-plum"
             />
           </label>
           <label className="flex min-w-0 flex-col gap-2">
@@ -253,7 +253,7 @@ export function ProductSheet({
               value={f.name}
               onChange={(e) => patch({ name: e.target.value })}
               placeholder="예) 킬커버 파운웨어 쿠션"
-              className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-pink"
+              className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-plum"
             />
           </label>
         </div>
@@ -267,7 +267,7 @@ export function ProductSheet({
               </span>
             </span>
             {!ready ? (
-              <div className="flex h-[68px] items-center gap-3 rounded-[18px] border-2 border-dashed border-line bg-[#FBF7F9] px-[22px] text-[19px] font-semibold text-[#9A8590]">
+              <div className="flex h-[68px] items-center gap-3 rounded-[18px] border-2 border-dashed border-line bg-cream-2 px-[22px] text-[19px] font-semibold text-ash-3">
                 <Search className="size-5" strokeWidth={2.2} aria-hidden />
                 브랜드와 제품명을 입력하면 컬러가 나와요
               </div>
@@ -275,7 +275,7 @@ export function ProductSheet({
               <div
                 className={cn(
                   "overflow-hidden rounded-[18px] border-2 transition-colors",
-                  shOpen ? "border-pink" : "border-line",
+                  shOpen ? "border-plum" : "border-line",
                 )}
               >
                 <button
@@ -286,12 +286,12 @@ export function ProductSheet({
                 >
                   <span
                     className="size-9 shrink-0 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,.08)]"
-                    style={{ background: cur ? cur[1] : "#F4EEF1" }}
+                    style={{ background: cur ? cur[1] : "var(--color-cream)" }}
                   />
                   <span
                     className={cn(
                       "min-w-0 flex-1 truncate text-[21px] font-bold",
-                      cur || f.shade ? "text-ink" : "text-[#9A8590]",
+                      cur || f.shade ? "text-ink" : "text-ash-3",
                     )}
                   >
                     {cur ? cur[0] : f.shade ? `직접 입력 · ${f.shade}` : "컬러를 선택해 주세요"}
@@ -345,8 +345,8 @@ export function ProductSheet({
                             setCustom(false);
                           }}
                           className={cn(
-                            "flex min-h-[60px] items-center gap-3.5 pr-[18px] pl-4 text-left hover:bg-[#FBF3F7]",
-                            on && "bg-[#FBF3F7]",
+                            "flex min-h-[60px] items-center gap-3.5 pr-[18px] pl-4 text-left hover:bg-pink-pale",
+                            on && "bg-pink-pale",
                           )}
                         >
                           <span
@@ -369,7 +369,7 @@ export function ProductSheet({
                           </span>
                           {on && (
                             <Check
-                              className="size-[22px] text-pink"
+                              className="size-[22px] text-plum"
                               strokeWidth={2.6}
                               aria-hidden
                             />
@@ -384,7 +384,7 @@ export function ProductSheet({
                         setShOpen(false);
                         setCustom(true);
                       }}
-                      className="flex min-h-[60px] items-center gap-3.5 border-t border-dashed border-line pr-[18px] pl-4 text-[18px] font-bold text-plum hover:bg-[#FBF3F7]"
+                      className="flex min-h-[60px] items-center gap-3.5 border-t border-dashed border-line pr-[18px] pl-4 text-[18px] font-bold text-plum hover:bg-pink-pale"
                     >
                       <Pencil className="size-5" strokeWidth={2.4} aria-hidden />
                       목록에 없어요 · 직접 입력
@@ -399,7 +399,7 @@ export function ProductSheet({
                   value={f.shade ?? ""}
                   onChange={(e) => patch({ shade: e.target.value })}
                   placeholder="예) 21N 린넨 · 03 로지"
-                  className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-pink"
+                  className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-plum"
                 />
                 <div className="mt-1.5 flex flex-col gap-2.5">
                   <Label>색상 (선택)</Label>
@@ -416,7 +416,7 @@ export function ProductSheet({
                           background: c,
                           boxShadow:
                             f.color === c
-                              ? "0 0 0 3px #fff, 0 0 0 5px #3A0E25"
+                              ? "0 0 0 3px #fff, 0 0 0 5px #0B1430"
                               : "inset 0 0 0 1px rgba(0,0,0,.08)",
                         }}
                       />
@@ -449,7 +449,7 @@ export function ProductSheet({
             className="flex items-center gap-2.5 rounded-2xl bg-pink-pale px-[18px] py-3.5 text-[17px] font-semibold text-plum"
             role="alert"
           >
-            <span className="size-2 shrink-0 rounded-full bg-pink" />
+            <span className="size-2 shrink-0 rounded-full bg-pink-deep" />
             이미 파우치에 있는 제품이에요 · 같은 제품·호수는 한 번만 등록할 수 있어요
           </div>
         )}
@@ -459,7 +459,7 @@ export function ProductSheet({
             <button
               type="button"
               onClick={() => setDelAsk(true)}
-              className="flex h-20 shrink-0 items-center justify-center rounded-full border-2 border-[#F0C9C5] px-[30px] text-[21px] font-bold whitespace-nowrap text-error active:scale-[.96]"
+              className="flex h-20 shrink-0 items-center justify-center rounded-full border-2 border-error/25 px-[30px] text-[21px] font-bold whitespace-nowrap text-error active:scale-[.96]"
             >
               삭제
             </button>

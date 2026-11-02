@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 import { Spinner } from "./spinner";
 
-// 프로토타입의 둥근 큰 버튼. 비활성은 연한 분홍 배경(#E6D5DD)으로 눌리지 않는다.
+// 프로토타입의 둥근 큰 버튼. 비활성은 연한 회색 배경(line-2)으로 눌리지 않는다.
 const pillVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2.5 rounded-full font-semibold whitespace-nowrap transition-[background,transform] select-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40 active:not-disabled:scale-[.99] disabled:cursor-default tabular",
   {
@@ -18,7 +18,7 @@ const pillVariants = cva(
           "border border-ink text-ink hover:bg-cream-2 disabled:border-line-2 disabled:text-ash-2",
         soft: "bg-cream text-ink hover:bg-cream-3 disabled:text-ash-2",
         dark: "bg-ink text-white disabled:bg-line-2",
-        white: "bg-white text-ink shadow-[0_8px_24px_rgba(58,14,37,.12)] disabled:text-ash-2",
+        white: "bg-white text-ink shadow-[0_8px_24px_rgba(11,20,48,.12)] disabled:text-ash-2",
       },
       size: {
         md: "h-[52px] px-6 text-[17px]",

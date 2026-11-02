@@ -163,7 +163,7 @@ export function LiveTag({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "flex h-12 items-center gap-2.5 rounded-full border border-white/15 bg-[rgba(42,10,28,.78)] py-0 pr-[18px] pl-3.5 font-label text-[15px] font-bold tracking-[.14em] text-white",
+        "flex h-12 items-center gap-2.5 rounded-full border border-white/15 bg-[rgba(11,20,48,.78)] py-0 pr-[18px] pl-3.5 font-label text-[15px] font-bold tracking-[.14em] text-white",
         className,
       )}
     >
@@ -190,7 +190,7 @@ export function LiveNote({ note, className }: { note: LiveNoteData | null; class
     <div
       role="status"
       className={cn(
-        "absolute inset-x-5 top-[84px] z-[2] flex animate-fade items-center gap-[18px] rounded-3xl border border-white/15 bg-[rgba(42,10,28,.9)] px-[22px] py-[18px] text-white",
+        "absolute inset-x-5 top-[84px] z-[2] flex animate-fade items-center gap-[18px] rounded-3xl border border-white/15 bg-[rgba(11,20,48,.9)] px-[22px] py-[18px] text-white",
         className,
       )}
     >
@@ -228,7 +228,7 @@ export function GlassPanel({
     <div
       ref={coversFace ? setCoverPanel : undefined}
       className={cn(
-        "absolute inset-x-4 bottom-4 flex flex-col gap-5 rounded-[36px] border border-white/10 bg-[rgba(42,10,28,.92)] px-7 pt-6 pb-[18px] text-white shadow-[0_24px_60px_rgba(20,4,12,.45)] backdrop-blur-2xl",
+        "absolute inset-x-4 bottom-4 flex flex-col gap-5 rounded-[36px] border border-white/10 bg-[rgba(11,20,48,.92)] px-7 pt-6 pb-[18px] text-white shadow-[0_24px_60px_rgba(6,10,26,.45)] backdrop-blur-2xl",
         className,
       )}
     >

@@ -59,7 +59,7 @@ export function Sticker({
         style={{
           transform: `translate(-50%,-50%) rotate(${r}deg) scale(${s})`,
           opacity: dim ? 0.42 : 1,
-          filter: dim ? "grayscale(.6)" : "drop-shadow(0 12px 16px rgba(58,14,37,.2))",
+          filter: dim ? "grayscale(.6)" : "drop-shadow(0 12px 16px rgba(11,20,48,.2))",
         }}
         aria-label={`${item.brand} ${item.name} 수정`}
       >
@@ -70,7 +70,7 @@ export function Sticker({
         />
         <span
           className={cn(
-            "relative flex flex-col items-center rounded-2xl bg-white shadow-[0_4px_10px_rgba(58,14,37,.12)]",
+            "relative flex flex-col items-center rounded-2xl bg-white shadow-[0_4px_10px_rgba(11,20,48,.12)]",
             size === "lg"
               ? "-mt-3.5 max-w-[300px] gap-1 px-[22px] pt-3 pb-3.5"
               : "-mt-2.5 max-w-[240px] gap-px px-4 py-2",
@@ -134,7 +134,7 @@ export function PouchBoard({
       className={cn("relative overflow-hidden rounded-3xl border border-line bg-white", className)}
       style={{
         backgroundImage:
-          "linear-gradient(rgba(58,14,37,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(58,14,37,.10) 1px,transparent 1px)",
+          "linear-gradient(rgba(11,20,48,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(11,20,48,.10) 1px,transparent 1px)",
         backgroundSize: `${grid}px ${grid}px`,
         backgroundPosition: "-1px -1px",
       }}

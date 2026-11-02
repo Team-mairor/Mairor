@@ -46,7 +46,7 @@ export function HowItWorksSlide({ index }: { index: number }) {
         />
         {index === 0 && (
           <div
-            className="absolute rounded-full shadow-[0_0_0_1600px_rgba(40,10,26,.36)]"
+            className="absolute rounded-full shadow-[0_0_0_1600px_rgba(11,20,48,.36)]"
             style={{
               left: "61.8%",
               top: 62,
@@ -60,8 +60,8 @@ export function HowItWorksSlide({ index }: { index: number }) {
               className="absolute -inset-0.5 rounded-full border-2 border-white"
               style={{ animation: "mr-halo 1.6s cubic-bezier(.2,.8,.2,1) infinite" }}
             />
-            <span className="absolute top-[calc(100%+12px)] left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-3.5 py-2 text-[16px] font-bold whitespace-nowrap text-ink shadow-[0_8px_20px_rgba(58,14,37,.18)]">
-              <span className="size-2 rounded-full bg-pink" />
+            <span className="absolute top-[calc(100%+12px)] left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white px-3.5 py-2 text-[16px] font-bold whitespace-nowrap text-ink shadow-[0_8px_20px_rgba(11,20,48,.18)]">
+              <span className="size-2 rounded-full bg-pink-deep" />
               여기에 발라요
             </span>
           </div>
@@ -80,12 +80,12 @@ export function HowItWorksSlide({ index }: { index: number }) {
               }}
             />
             <div
-              className="absolute rounded-full shadow-[0_0_0_1600px_rgba(40,10,26,.3)]"
+              className="absolute rounded-full shadow-[0_0_0_1600px_rgba(11,20,48,.3)]"
               style={{ left: "75.6%", top: 194, width: "20.9%", height: 118 }}
             >
               <div className="absolute inset-0 rounded-full border-2 border-white" />
             </div>
-            <div className="absolute inset-x-[18px] bottom-[18px] flex flex-col gap-3 rounded-[20px] bg-white/95 px-5 pt-4 pb-[18px] shadow-[0_12px_32px_rgba(58,14,37,.16)]">
+            <div className="absolute inset-x-[18px] bottom-[18px] flex flex-col gap-3 rounded-[20px] bg-white/95 px-5 pt-4 pb-[18px] shadow-[0_12px_32px_rgba(11,20,48,.16)]">
               <div className="flex items-center justify-between">
                 <span className="text-[16px] font-semibold text-mute">진하기 · 레퍼런스 대비</span>
                 <span className="font-label text-[13px] font-semibold tracking-[.14em] text-plum">
@@ -95,13 +95,13 @@ export function HowItWorksSlide({ index }: { index: number }) {
               <div className="relative h-6">
                 <div className="absolute inset-x-0 top-[7px] h-2.5 overflow-hidden rounded-full bg-line">
                   <div
-                    className="absolute top-0 bottom-0 left-0 rounded-full bg-pink"
+                    className="absolute top-0 bottom-0 left-0 rounded-full bg-pink-deep"
                     style={{ animation: "mr-gdemo 5.6s cubic-bezier(.4,0,.2,1) infinite" }}
                   />
                   <div className="absolute top-0 bottom-0 left-[52%] w-[3px] bg-ink" />
                 </div>
                 <span
-                  className="absolute top-px size-[22px] rounded-full border-[3px] border-pink bg-white shadow-[0_2px_8px_rgba(58,14,37,.2)]"
+                  className="absolute top-px size-[22px] rounded-full border-[3px] border-pink-deep bg-white shadow-[0_2px_8px_rgba(11,20,48,.2)]"
                   style={{ animation: "mr-gthumb 5.6s cubic-bezier(.4,0,.2,1) infinite" }}
                 />
               </div>
@@ -116,7 +116,7 @@ export function HowItWorksSlide({ index }: { index: number }) {
               <span className="absolute bottom-0 left-0 size-10 rounded-bl-[14px] border-b-[3px] border-l-[3px] border-white" />
               <span className="absolute right-0 bottom-0 size-10 rounded-br-[14px] border-r-[3px] border-b-[3px] border-white" />
               <span className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/95 px-3.5 py-[7px] font-label text-[13px] font-semibold tracking-[.14em] whitespace-nowrap text-ink">
-                <span className="size-2 rounded-full bg-pink" />
+                <span className="size-2 rounded-full bg-pink-deep" />
                 STEP CAPTURE
               </span>
             </div>
@@ -128,7 +128,7 @@ export function HowItWorksSlide({ index }: { index: number }) {
               {THUMBS.map(([ml, mt, w], i) => (
                 <div
                   key={i}
-                  className="relative aspect-square overflow-hidden rounded-[14px] border-[3px] border-white bg-line shadow-[0_8px_20px_rgba(58,14,37,.22)]"
+                  className="relative aspect-square overflow-hidden rounded-[14px] border-[3px] border-white bg-line shadow-[0_8px_20px_rgba(11,20,48,.22)]"
                   style={{
                     animation: `mr-thumb-in 460ms ${(0.4 + i * 0.52).toFixed(2)}s cubic-bezier(.2,.8,.2,1) both`,
                   }}

@@ -55,7 +55,7 @@ export default function PreviewPage() {
       <LiveNote note={note} />
       {intro && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+100%*0)] z-[2] mx-auto mb-[380px] flex w-max items-center gap-2.5 rounded-full bg-ink py-3 pr-5 pl-3.5 text-[16px] font-bold text-white shadow-[0_10px_24px_rgba(58,14,37,.3)]"
+          className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+100%*0)] z-[2] mx-auto mb-[380px] flex w-max items-center gap-2.5 rounded-full bg-ink py-3 pr-5 pl-3.5 text-[16px] font-bold text-white shadow-[0_10px_24px_rgba(11,20,48,.3)]"
           style={{ animation: "mr-fade 400ms cubic-bezier(.34,1.56,.64,1) both" }}
         >
           <Sparkles className="size-5 text-lime" aria-hidden />
@@ -124,7 +124,7 @@ export default function PreviewPage() {
           <button
             type="button"
             onClick={() => router.push("/check")}
-            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_rgba(219,19,116,.38)] active:scale-[.98]"
+            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_color-mix(in_srgb,var(--color-pink)_38%,transparent)] active:scale-[.98]"
           >
             <span className="truncate text-[22px] font-bold">이 메이크업으로 시작하기</span>
             <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">

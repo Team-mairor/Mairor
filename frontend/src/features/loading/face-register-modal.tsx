@@ -168,13 +168,13 @@ export function FaceRegisterModal({
 
   return (
     <div
-      className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-[rgba(26,8,18,.62)] p-8"
+      className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-[rgba(8,13,34,.62)] p-8"
       role="dialog"
       aria-modal="true"
       aria-label="얼굴 등록"
     >
       {step === "intro" ? (
-        <div className="flex w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_80px_rgba(26,8,18,.35)]">
+        <div className="flex w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_80px_rgba(8,13,34,.35)]">
           <ProgressBar pct={pct} text={barText} />
           <div className="grid grid-cols-[minmax(0,.85fr)_minmax(0,1fr)] items-stretch gap-9 p-7">
             <div className="relative min-h-[440px] overflow-hidden rounded-3xl bg-cream">
@@ -210,11 +210,11 @@ export function FaceRegisterModal({
                 <button
                   type="button"
                   onClick={start}
-                  className="flex h-20 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] active:scale-[.98]"
+                  className="flex h-20 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.98]"
                 >
                   <span className="flex items-baseline gap-2.5 whitespace-nowrap">
                     <span className="text-[23px] font-bold">얼굴 등록 시작</span>
-                    <span className="text-[17px] font-semibold text-[#FFD9EA]">약 10초</span>
+                    <span className="text-[17px] font-semibold text-pink-tint">약 10초</span>
                   </span>
                   <span className="flex size-[60px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
                     <ArrowRight className="size-7" strokeWidth={2.4} aria-hidden />
@@ -233,7 +233,7 @@ export function FaceRegisterModal({
         </div>
       ) : (
         <div
-          className="relative flex w-full flex-col items-center gap-[18px] overflow-hidden rounded-[36px] bg-white px-9 pt-6 pb-8 shadow-[0_40px_100px_rgba(26,8,18,.5)]"
+          className="relative flex w-full flex-col items-center gap-[18px] overflow-hidden rounded-[36px] bg-white px-9 pt-6 pb-8 shadow-[0_40px_100px_rgba(8,13,34,.5)]"
           style={{ animation: "mr-rise 320ms cubic-bezier(.2,.8,.2,1) both" }}
         >
           <div className="flex w-full items-center justify-between gap-3">
@@ -241,7 +241,7 @@ export function FaceRegisterModal({
               FACE ID
             </span>
             <span className="flex h-8 items-center gap-2 rounded-full bg-cream px-3 text-[14px] font-semibold text-ink tabular">
-              <span className="size-1.5 rounded-full bg-pink" />
+              <span className="size-1.5 rounded-full bg-pink-deep" />
               분석 {pct}%
             </span>
           </div>
@@ -338,10 +338,10 @@ export function ProgressBar({ pct, text }: { pct: number; text: string }) {
   return (
     <div className="relative flex h-[60px] shrink-0 items-center gap-3 bg-cream px-8">
       <span
-        className="absolute bottom-0 left-0 h-[3px] bg-pink transition-[width] duration-600 ease-linear"
+        className="absolute bottom-0 left-0 h-[3px] bg-pink-deep transition-[width] duration-600 ease-linear"
         style={{ width: `${pct}%` }}
       />
-      <span className="size-2 shrink-0 rounded-full bg-pink" />
+      <span className="size-2 shrink-0 rounded-full bg-pink-deep" />
       <span className="text-[17px] font-semibold text-ink">{text}</span>
       <span className="ml-auto font-serif text-[26px] leading-none text-plum tabular">{pct}%</span>
     </div>
@@ -377,7 +377,7 @@ function FaceRing({
           key={i}
           className={cn(
             "absolute rounded-full transition-colors duration-150",
-            i < lit ? "bg-pink" : "bg-[#E4E0E2]",
+            i < lit ? "bg-pink-deep" : "bg-line-2",
           )}
           style={{
             left: RING / 2 - 4.5,
@@ -393,14 +393,14 @@ function FaceRing({
         <div
           key={alert.text}
           className={cn(
-            "absolute inset-x-0 -top-[104px] z-[3] mx-auto flex w-max items-center gap-2.5 rounded-full py-4 pr-7 pl-4 text-[21px] font-bold whitespace-nowrap text-white shadow-[0_10px_24px_rgba(58,14,37,.25)]",
+            "absolute inset-x-0 -top-[104px] z-[3] mx-auto flex w-max items-center gap-2.5 rounded-full py-4 pr-7 pl-4 text-[21px] font-bold whitespace-nowrap text-white shadow-[0_10px_24px_rgba(11,20,48,.25)]",
             alert.ok ? "bg-plum" : "bg-ink",
           )}
         >
           <span
             className={cn(
               "flex size-9 items-center justify-center rounded-full text-[20px] font-extrabold",
-              alert.ok ? "bg-white text-plum" : "bg-lime text-ink",
+              alert.ok ? "bg-white text-ink" : "bg-lime text-ink",
             )}
           >
             {alert.ok ? <Check className="size-5" strokeWidth={3} aria-hidden /> : "!"}
@@ -415,12 +415,12 @@ function FaceRing({
         )}
         {stage === "scan" && (
           <div
-            className="absolute inset-x-0 h-0.5 bg-rose shadow-[0_0_12px_2px_rgba(255,143,192,.6)]"
+            className="absolute inset-x-0 h-0.5 bg-rose shadow-[0_0_12px_2px_color-mix(in_srgb,var(--color-rose)_60%,transparent)]"
             style={{ top: `${pct}%` }}
           />
         )}
         {stage === "done" && (
-          <div className="absolute inset-0 flex animate-fade items-center justify-center bg-[rgba(153,30,90,.55)]">
+          <div className="absolute inset-0 flex animate-fade items-center justify-center bg-[rgba(27,45,99,.55)]">
             <span className="flex size-28 items-center justify-center rounded-full bg-white">
               <Check className="size-[52px] text-plum" strokeWidth={2.6} aria-hidden />
             </span>

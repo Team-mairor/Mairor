@@ -100,7 +100,7 @@ export default function MyReportsPage() {
                   <Link
                     key={r.id}
                     href={`/my/report?id=${r.id}`}
-                    className="flex min-w-0 flex-col gap-3.5 rounded-[10px] bg-white px-3 pt-3 pb-[18px] shadow-[0_14px_30px_rgba(58,14,37,.12),0_0_0_1px_#EFE4EA] transition-transform hover:translate-y-[-4px] hover:rotate-0"
+                    className="flex min-w-0 flex-col gap-3.5 rounded-[10px] bg-white px-3 pt-3 pb-[18px] shadow-[0_14px_30px_rgba(11,20,48,.12),0_0_0_1px_#E4E7EE] transition-transform hover:translate-y-[-4px] hover:rotate-0"
                     style={{ transform: `rotate(${ROT[i % 4]}deg)` }}
                   >
                     <div className="relative aspect-[4/5] overflow-hidden rounded bg-cream">

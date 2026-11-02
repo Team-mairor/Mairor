@@ -197,7 +197,8 @@ export function MakeupOverlay({
         view: viewRef.current,
         layers: hiddenRef.current ? [] : layersRef.current,
         mesh: meshRef.current,
-        drawVideo: showVideoRef.current,
+        // 미러필름 모드에서는 비친 얼굴과 겹치므로 캔버스에도 영상을 그리지 않는다 (globals.css의 .mirror video)
+        drawVideo: showVideoRef.current && !document.documentElement.classList.contains("mirror"),
         skinMask: skinRef.current?.canvas ?? null,
         skinVersion: skinRef.current?.version,
       });

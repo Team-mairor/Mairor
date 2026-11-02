@@ -36,11 +36,11 @@ import { cn } from "@/lib/utils";
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
 
 const GROUPS: { k: MatchKind; label: string; dot: string }[] = [
-  { k: "same", label: "보유", dot: "#B9C9E7" },
-  { k: "sub", label: "대체", dot: "#DBE586" },
-  { k: "none", label: "없음", dot: "#FF8FC0" },
+  { k: "same", label: "보유", dot: "var(--color-sky)" },
+  { k: "sub", label: "대체", dot: "var(--color-lime)" },
+  { k: "none", label: "없음", dot: "var(--color-rose)" },
 ];
-const TAG_BG: Record<MatchKind, string> = { same: "#B9C9E7", sub: "#DBE586", none: "#FFC2DC" };
+const TAG_BG: Record<MatchKind, string> = { same: "bg-sky", sub: "bg-lime", none: "bg-rose" };
 
 function hex(c: string) {
   return [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16));
@@ -192,7 +192,7 @@ export default function CheckPage() {
             onPointerLeave={() => setCompare(false)}
             className={cn(
               "flex h-12 shrink-0 touch-none items-center gap-2.5 rounded-full border border-white/25 py-0 pr-[18px] pl-2 text-[16px] font-bold whitespace-nowrap select-none",
-              compare ? "bg-rose text-ink-deep" : "bg-[rgba(42,10,28,.82)] text-white",
+              compare ? "bg-rose text-ink-deep" : "bg-[rgba(11,20,48,.82)] text-white",
             )}
           >
             <span
@@ -209,7 +209,7 @@ export default function CheckPage() {
         <button
           type="button"
           onClick={() => (view === "try" ? goList() : goTry())}
-          className="flex h-12 shrink-0 items-center gap-2 rounded-full bg-white py-0 pr-5 pl-3.5 text-[16px] font-extrabold whitespace-nowrap text-ink shadow-[0_6px_16px_rgba(10,2,6,.25)] hover:bg-cream-3"
+          className="flex h-12 shrink-0 items-center gap-2 rounded-full bg-white py-0 pr-5 pl-3.5 text-[16px] font-extrabold whitespace-nowrap text-ink shadow-[0_6px_16px_rgba(4,7,18,.25)] hover:bg-cream-3"
         >
           {view === "try" ? (
             <List className="size-5" strokeWidth={2.2} aria-hidden />
@@ -223,7 +223,7 @@ export default function CheckPage() {
       {view === "try" && (
         <div className="absolute inset-x-5 top-[84px] flex justify-center">
           {/* 단계 수가 영상마다 달라, 넘치면 가로로 넘겨 보고 지금 탭이 보이게 맞춘다 */}
-          <div className="flex max-w-full [scrollbar-width:none] gap-1.5 overflow-x-auto rounded-full border border-white/15 bg-[rgba(42,10,28,.78)] p-[5px]">
+          <div className="flex max-w-full [scrollbar-width:none] gap-1.5 overflow-x-auto rounded-full border border-white/15 bg-[rgba(11,20,48,.78)] p-[5px]">
             {TRY_STEPS.map((ri, k) => {
               const on = k === tryIdx;
               const pr = m(ri);
@@ -244,9 +244,9 @@ export default function CheckPage() {
                       background: pr.p?.color ?? "transparent",
                       borderColor: pr.p
                         ? on
-                          ? "#3A0E25"
+                          ? "var(--color-ink)"
                           : "rgba(255,255,255,.4)"
-                        : "rgba(255,143,192,.8)",
+                        : "var(--color-rose)",
                     }}
                   />
                   {REF_PRODUCTS[ri].cat}
@@ -315,7 +315,7 @@ export default function CheckPage() {
                   onClick={() => setGroup(g.k)}
                   className={cn(
                     "flex h-[76px] items-center gap-3 rounded-[20px] px-5 transition-[background,box-shadow]",
-                    on ? "bg-white shadow-[0_6px_16px_rgba(10,2,6,.25)]" : "",
+                    on ? "bg-white shadow-[0_6px_16px_rgba(4,7,18,.25)]" : "",
                   )}
                 >
                   <span className="size-3.5 shrink-0 rounded-full" style={{ background: g.dot }} />
@@ -330,7 +330,7 @@ export default function CheckPage() {
                   <span
                     className={cn(
                       "font-serif text-[48px] leading-none tabular",
-                      on ? "text-pink" : "text-line-2",
+                      on ? "text-pink-deep" : "text-line-2",
                     )}
                   >
                     {n}
@@ -357,7 +357,7 @@ export default function CheckPage() {
                         setFocus(i);
                         setSwapBack(false);
                       }}
-                      className="flex h-[60px] items-center rounded-full bg-cream-3 px-6 text-[19px] font-bold whitespace-nowrap text-ink hover:bg-[#EFE2E9]"
+                      className="flex h-[60px] items-center rounded-full bg-cream-3 px-6 text-[19px] font-bold whitespace-nowrap text-ink hover:bg-line"
                     >
                       바꾸기
                     </button>
@@ -378,8 +378,10 @@ export default function CheckPage() {
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                     <span className="flex min-w-0 items-center gap-2">
                       <span
-                        className="flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-[14px] font-extrabold text-ink"
-                        style={{ background: TAG_BG[pr.kind] }}
+                        className={cn(
+                          "flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-[14px] font-extrabold text-ink",
+                          TAG_BG[pr.kind],
+                        )}
                       >
                         {GROUPS.find((g) => g.k === pr.kind)?.label}
                       </span>
@@ -408,7 +410,7 @@ export default function CheckPage() {
                   <div
                     key={r.id}
                     className={cn(
-                      "flex animate-fade flex-col overflow-hidden rounded-[28px] bg-white/90 text-ink shadow-[0_6px_20px_rgba(10,2,6,.18)] backdrop-blur-md",
+                      "flex animate-fade flex-col overflow-hidden rounded-[28px] bg-white/90 text-ink shadow-[0_6px_20px_rgba(4,7,18,.18)] backdrop-blur-md",
                       outline,
                     )}
                   >
@@ -428,7 +430,7 @@ export default function CheckPage() {
                         style={{ background: pr.p?.color ?? "#fff" }}
                       />
                       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                        <span className="flex h-7 items-center self-start rounded-full bg-[#FCE4EF] px-3 text-[15px] font-extrabold whitespace-nowrap text-plum">
+                        <span className="flex h-7 items-center self-start rounded-full bg-pink-tint px-3 text-[15px] font-extrabold whitespace-nowrap text-plum">
                           대체 제품
                         </span>
                         <span className="truncate text-[24px] leading-[1.25] font-bold text-ink">
@@ -442,7 +444,7 @@ export default function CheckPage() {
                   <div
                     key={r.id}
                     className={cn(
-                      "flex min-h-[136px] animate-fade items-center gap-6 rounded-[28px] bg-white/90 px-6 py-6 pl-[26px] text-ink shadow-[0_6px_20px_rgba(10,2,6,.18)] backdrop-blur-md",
+                      "flex min-h-[136px] animate-fade items-center gap-6 rounded-[28px] bg-white/90 px-6 py-6 pl-[26px] text-ink shadow-[0_6px_20px_rgba(4,7,18,.18)] backdrop-blur-md",
                       outline,
                     )}
                   >
@@ -465,7 +467,7 @@ export default function CheckPage() {
             <button
               type="button"
               onClick={start}
-              className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_rgba(219,19,116,.38)] active:scale-[.98]"
+              className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_color-mix(in_srgb,var(--color-pink)_38%,transparent)] active:scale-[.98]"
             >
               <span className="truncate text-[22px] font-bold">이 조합으로 시작</span>
               <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
@@ -489,11 +491,15 @@ export default function CheckPage() {
                 className="flex h-[30px] shrink-0 items-center self-center rounded-full px-3 text-[14px] font-bold"
                 style={{
                   background: {
-                    same: "rgba(185,201,231,.18)",
-                    sub: "rgba(219,229,134,.18)",
-                    none: "rgba(255,143,192,.16)",
+                    same: "color-mix(in srgb, var(--color-sky) 18%, transparent)",
+                    sub: "color-mix(in srgb, var(--color-lime) 18%, transparent)",
+                    none: "color-mix(in srgb, var(--color-rose) 16%, transparent)",
                   }[cur.pr.kind],
-                  color: { same: "#B9C9E7", sub: "#DBE586", none: "#FF8FC0" }[cur.pr.kind],
+                  color: {
+                    same: "var(--color-sky)",
+                    sub: "var(--color-lime)",
+                    none: "var(--color-rose)",
+                  }[cur.pr.kind],
                 }}
               >
                 {GROUPS.find((g) => g.k === cur.pr.kind)?.label}
@@ -650,7 +656,7 @@ export default function CheckPage() {
             <button
               type="button"
               onClick={start}
-              className="flex h-[72px] min-w-0 flex-1 items-center justify-center rounded-full bg-pink px-6 text-white shadow-[0_12px_28px_rgba(219,19,116,.38)] active:scale-[.98]"
+              className="flex h-[72px] min-w-0 flex-1 items-center justify-center rounded-full bg-pink px-6 text-white shadow-[0_12px_28px_color-mix(in_srgb,var(--color-pink)_38%,transparent)] active:scale-[.98]"
             >
               <span className="truncate text-[22px] font-bold">이 조합으로 시작</span>
             </button>
@@ -661,7 +667,7 @@ export default function CheckPage() {
       {/* 파우치 확인 모달 */}
       {pouchModal && (
         <div
-          className="absolute inset-0 z-[8] flex items-center justify-center bg-[rgba(26,8,18,.62)] p-8"
+          className="absolute inset-0 z-[8] flex items-center justify-center bg-[rgba(8,13,34,.62)] p-8"
           role="dialog"
           aria-modal="true"
           aria-label="내 파우치"
@@ -669,7 +675,7 @@ export default function CheckPage() {
           <div className="flex w-full flex-col gap-[22px] rounded-[28px] bg-white p-8 text-ink">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2.5 rounded-full bg-cream px-[18px] py-2.5 text-[17px] font-semibold">
-                <span className="size-2 rounded-full bg-pink" />내 파우치 · {pouch.length}개
+                <span className="size-2 rounded-full bg-pink-deep" />내 파우치 · {pouch.length}개
               </span>
               <button
                 type="button"
@@ -713,7 +719,7 @@ export default function CheckPage() {
               <button
                 type="button"
                 onClick={() => setPouchModal(false)}
-                className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] active:scale-[.97]"
+                className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
               >
                 <span className="truncate text-[23px] font-bold">다 했어요</span>
                 <span className="flex size-[60px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
@@ -772,7 +778,7 @@ export default function CheckPage() {
           <button
             type="button"
             onClick={startTutorial}
-            className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] active:scale-[.97]"
+            className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
           >
             <span className="truncate text-[23px] font-bold">
               {noneRows.length ? "건너뛰고 시작" : "시작하기"}
@@ -794,7 +800,7 @@ function Toast({ toast }: { toast: { ok: boolean; text: string } }) {
     <div
       role="status"
       className={cn(
-        "absolute top-0 left-5 flex h-[60px] max-w-[calc(100%-40px)] -translate-y-[calc(100%+12px)] animate-fade items-center gap-3 rounded-full py-0 pr-5 pl-2.5 shadow-[0_10px_24px_rgba(20,4,12,.28)]",
+        "absolute top-0 left-5 flex h-[60px] max-w-[calc(100%-40px)] -translate-y-[calc(100%+12px)] animate-fade items-center gap-3 rounded-full py-0 pr-5 pl-2.5 shadow-[0_10px_24px_rgba(6,10,26,.28)]",
         toast.ok ? "bg-ink text-white" : "bg-white/92 text-ink",
       )}
     >
@@ -842,7 +848,7 @@ function SwapPanel({
   const tones = ["전체", ...new Set(list.map((p) => toneOf(p.color ?? "#FFFFFF")))];
   const shown = tone === "전체" ? list : list.filter((p) => toneOf(p.color ?? "#FFFFFF") === tone);
   return (
-    <div className="absolute inset-0 z-[3] flex animate-slide-in flex-col gap-5 rounded-[36px] bg-[#2E0B1F] pt-[26px] pb-5">
+    <div className="absolute inset-0 z-[3] flex animate-slide-in flex-col gap-5 rounded-[36px] bg-ink-deep pt-[26px] pb-5">
       <div className="flex items-center gap-4 px-8">
         <button
           type="button"

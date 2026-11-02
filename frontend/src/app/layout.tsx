@@ -7,6 +7,7 @@ import { Suspense } from "react";
 
 import { DevNav } from "@/components/dev-nav";
 import { SessionProvider } from "@/features/session";
+import { MIRROR_SCRIPT } from "@/lib/mirror";
 
 // Pretendard (SIL OFL 1.1, fonts/Pretendard-LICENSE.txt)
 const pretendard = localFont({
@@ -59,7 +60,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="ko"
       className={`${pretendard.variable} ${gowun.variable} ${instrumentSerif.variable} ${instrumentSans.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        {/* 저장된 미러필름 모드를 그리기 전에 붙여 깜빡임을 막는다 */}
+        <script dangerouslySetInnerHTML={{ __html: MIRROR_SCRIPT }} />
+      </head>
       <body className="flex min-h-full flex-col">
         {/* 800px 세로 화면 칸. 폭 대응 규칙은 globals.css */}
         <div
@@ -67,9 +73,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           className="relative mx-auto flex min-h-dvh w-full max-w-[800px] flex-1 flex-col bg-white"
         >
           <SessionProvider>
-            {/* useSearchParams(lib/use-query)의 Suspense 경계 */}
+            {children}
+            {/* DevNav의 useSearchParams 경계. 화면 전체를 감싸면 정적 HTML이 비므로 여기만 감싼다 */}
             <Suspense>
-              {children}
               <DevNav />
             </Suspense>
           </SessionProvider>

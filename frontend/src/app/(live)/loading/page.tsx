@@ -231,13 +231,16 @@ export default function LoadingPage() {
       <div className="flex min-h-0 flex-1 flex-col justify-between gap-6 overflow-hidden px-10 pt-7 pb-8">
         <FlowSteps step={1} ready={replay} />
 
-        {/* 영상 썸네일 위 스캔 연출 */}
-        <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-3xl bg-ink">
+        {/* 영상 썸네일 위 스캔 연출. 사진 위라 미러필름 모드에서도 흰 선·점은 흰색 그대로 둔다(data-dark) */}
+        <div
+          data-dark
+          className="relative aspect-video w-full shrink-0 overflow-hidden rounded-3xl bg-ink"
+        >
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={{ backgroundImage: `url(${videoThumb(picked.ytid)})` }}
           />
-          <div className="absolute inset-0 bg-[rgba(58,14,37,.18)]" />
+          <div className="absolute inset-0 bg-[rgba(11,20,48,.18)]" />
           <div className="absolute inset-7">
             <span className="absolute top-0 left-0 size-[34px] rounded-tl-[10px] border-t-2 border-l-2 border-white" />
             <span className="absolute top-0 right-0 size-[34px] rounded-tr-[10px] border-t-2 border-r-2 border-white" />
@@ -246,6 +249,7 @@ export default function LoadingPage() {
           </div>
           {running && (
             <div
+              data-dark
               className="absolute inset-x-7 h-[1.5px] bg-white shadow-[0_0_16px_3px_rgba(255,255,255,.55)]"
               style={{ top: `${10 + ((pct * 9) % 100) * 0.8}%` }}
             />
@@ -263,6 +267,7 @@ export default function LoadingPage() {
                 }}
               >
                 <span
+                  data-dark
                   className="size-2.5 rounded-full bg-white"
                   style={{ animation: "mr-pulse 1.6s ease-out infinite" }}
                 />
@@ -307,7 +312,7 @@ export default function LoadingPage() {
               style={{ width: `${pct}%` }}
             />
             <div
-              className="absolute -top-1 -ml-[5px] size-2.5 rounded-full bg-pink transition-[left] duration-600 ease-linear"
+              className="absolute -top-1 -ml-[5px] size-2.5 rounded-full bg-pink-deep transition-[left] duration-600 ease-linear"
               style={{ left: `${pct}%` }}
             />
           </div>
@@ -317,7 +322,7 @@ export default function LoadingPage() {
                 key={en}
                 className={cn(
                   "font-label text-[15px] font-semibold tracking-[.12em] transition-colors",
-                  fail && i === phaseIdx ? "text-pink" : i <= phaseIdx ? "text-ink" : "text-mute",
+                  fail && i === phaseIdx ? "text-error" : i <= phaseIdx ? "text-ink" : "text-mute",
                 )}
               >
                 {en}
@@ -367,7 +372,7 @@ export default function LoadingPage() {
                     style={{ animation: "mr-fade 600ms cubic-bezier(.34,1.56,.64,1) both" }}
                   >
                     <span
-                      className="size-[34px] shrink-0 rounded-full border-2 border-white shadow-[0_0_0_1px_#EFE4EA]"
+                      className="size-[34px] shrink-0 rounded-full border-2 border-white shadow-[0_0_0_1px_#E4E7EE]"
                       style={{ background: r.color }}
                     />
                     <span className="flex min-w-0 flex-col gap-0.5 overflow-hidden">
@@ -416,7 +421,9 @@ export default function LoadingPage() {
               key={label}
               className="flex h-[68px] min-w-0 items-center gap-3 rounded-[20px] border border-line px-5"
             >
-              <span className={cn("size-3 shrink-0 rounded-full", ok ? "bg-pink" : "bg-line-3")} />
+              <span
+                className={cn("size-3 shrink-0 rounded-full", ok ? "bg-pink-deep" : "bg-line-3")}
+              />
               <span className="text-[21px] font-semibold whitespace-nowrap text-ink">{label}</span>
               <span
                 className={cn(
@@ -486,19 +493,19 @@ export default function LoadingPage() {
 
       {pouchModal && (
         <div
-          className="absolute inset-0 z-[4] flex items-center justify-center bg-[rgba(26,8,18,.62)] p-8"
+          className="absolute inset-0 z-[4] flex items-center justify-center bg-[rgba(8,13,34,.62)] p-8"
           role="dialog"
           aria-modal="true"
           aria-label="내 파우치 확인"
         >
-          <div className="flex w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_80px_rgba(26,8,18,.35)]">
+          <div className="flex w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_80px_rgba(8,13,34,.35)]">
             <ProgressBar pct={pct} text={barText} />
             <div className="flex animate-step-in flex-col gap-[22px] px-8 pt-7 pb-8">
               <div className="flex w-full items-center justify-between gap-3">
                 <span className="flex items-center gap-2.5 text-[16px] font-bold text-plum">
                   <span className="flex gap-1.5">
                     <span className="h-1.5 w-[22px] rounded-full bg-pink-soft" />
-                    <span className="h-1.5 w-[22px] rounded-full bg-pink" />
+                    <span className="h-1.5 w-[22px] rounded-full bg-pink-deep" />
                   </span>
                   STEP 2 · 내 파우치
                 </span>
@@ -542,7 +549,7 @@ export default function LoadingPage() {
               <button
                 type="button"
                 onClick={() => setForm(emptyDraft())}
-                className="flex h-20 items-center justify-center gap-2.5 rounded-full bg-pink text-[22px] font-bold text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] active:scale-[.97]"
+                className="flex h-20 items-center justify-center gap-2.5 rounded-full bg-pink text-[22px] font-bold text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
               >
                 <Plus className="size-[22px]" strokeWidth={2.6} aria-hidden />새 제품 등록하기
               </button>

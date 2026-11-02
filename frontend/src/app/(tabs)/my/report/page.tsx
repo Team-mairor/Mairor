@@ -87,7 +87,7 @@ export default function ReportPage() {
         <button
           type="button"
           onClick={() => setDel("ask")}
-          className="ml-auto flex h-11 items-center rounded-full border-[1.5px] border-[#F0C9C5] px-[18px] text-[16px] font-bold text-error hover:bg-pink-pale"
+          className="ml-auto flex h-11 items-center rounded-full border-[1.5px] border-error/25 px-[18px] text-[16px] font-bold text-error hover:bg-pink-pale"
         >
           삭제
         </button>

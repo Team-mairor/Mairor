@@ -133,7 +133,7 @@ export default function DonePage() {
       {save === "saving" && (
         <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
           <span
-            className="size-2.5 shrink-0 rounded-full bg-pink"
+            className="size-2.5 shrink-0 rounded-full bg-pink-deep"
             style={{ animation: "mr-pulse 1.4s ease-out infinite" }}
           />
           <span className="text-[19px] font-semibold">기록 저장 중…</span>
@@ -141,7 +141,7 @@ export default function DonePage() {
       )}
       {save === "fail" && (
         <div
-          className="flex items-center gap-4 rounded-[18px] border-[1.5px] border-pink bg-pink-pale py-4 pr-4 pl-5"
+          className="flex items-center gap-4 rounded-[18px] border-[1.5px] border-pink-deep bg-pink-pale py-4 pr-4 pl-5"
           role="alert"
         >
           <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -180,7 +180,7 @@ export default function DonePage() {
             router.push("/home");
           }}
           aria-label="홈"
-          className="flex size-20 shrink-0 items-center justify-center rounded-full border-2 border-line hover:bg-[#FAF4F7] active:scale-[.95]"
+          className="flex size-20 shrink-0 items-center justify-center rounded-full border-2 border-line hover:bg-cream-2 active:scale-[.95]"
         >
           <Home className="size-7" strokeWidth={2} aria-hidden />
         </button>
@@ -189,13 +189,13 @@ export default function DonePage() {
           onClick={openReport}
           disabled={save !== "saved"}
           className={cn(
-            "flex h-20 min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-3 pl-[34px] text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] transition-opacity active:scale-[.98]",
+            "flex h-20 min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-3 pl-[34px] text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] transition-opacity active:scale-[.98]",
             save !== "saved" && "opacity-45",
           )}
         >
           <span className="flex min-w-0 flex-col gap-0.5 text-left">
             <span className="text-[23px] font-bold whitespace-nowrap">리포트 보기</span>
-            <span className="truncate text-[15px] font-medium text-[#FFE3F0]">
+            <span className="truncate text-[15px] font-medium text-pink-tint">
               {hasPhoto ? "스텝별 사진 · 사용한 제품" : "사용한 제품 · 사진 없음"}
             </span>
           </span>

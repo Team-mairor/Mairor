@@ -64,11 +64,11 @@ export default function OnboardingPage() {
               >
                 <span
                   className={cn(
-                    "absolute top-[18px] left-[18px] z-[2] flex items-center gap-2 rounded-full px-3.5 py-2 text-[16px] font-bold tabular shadow-[0_8px_20px_rgba(58,14,37,.12)]",
+                    "absolute top-[18px] left-[18px] z-[2] flex items-center gap-2 rounded-full px-3.5 py-2 text-[16px] font-bold tabular shadow-[0_8px_20px_rgba(11,20,48,.12)]",
                     demo ? "bg-ink text-white" : "bg-white text-ink",
                   )}
                 >
-                  <span className={cn("size-2 rounded-full", demo ? "bg-lime" : "bg-pink")} />
+                  <span className={cn("size-2 rounded-full", demo ? "bg-lime" : "bg-pink-deep")} />
                   {demo ? "예시 · 이렇게 담겨요" : `My pouch · ${mine.length}개`}
                 </span>
                 <div
@@ -80,7 +80,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={() => setForm(emptyDraft())}
-                    className="flex size-[200px] -rotate-[4deg] flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed border-pink bg-pink/5 text-pink hover:bg-pink/10"
+                    className="flex size-[200px] -rotate-[4deg] flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed border-pink-deep bg-pink/5 text-plum hover:bg-pink/10"
                   >
                     <Plus className="size-12" strokeWidth={2.2} aria-hidden />
                     <span className="text-[28px] font-bold">제품 담기</span>

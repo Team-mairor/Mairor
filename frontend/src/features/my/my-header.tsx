@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { MirrorToggle } from "@/components/mirror-toggle";
 import { Notice } from "@/components/ui/notice";
 import { displayName, useSession } from "@/features/session";
 import { api, ApiError, errorMessage } from "@/lib/api";
@@ -59,14 +60,17 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
             {name ? `${name}의 파우치와 룩` : "내 파우치와 룩"}
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={logout}
-          disabled={!!pending}
-          className="shrink-0 self-start text-[16px] text-mute underline disabled:text-ash-2"
-        >
-          {pending ? "로그아웃 중" : "로그아웃"}
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-3 self-start">
+          <MirrorToggle />
+          <button
+            type="button"
+            onClick={logout}
+            disabled={!!pending}
+            className="text-[16px] text-mute underline disabled:text-ash-2"
+          >
+            {pending ? "로그아웃 중" : "로그아웃"}
+          </button>
+        </div>
       </div>
       {logoutErr && (
         <Notice tone="error" className="mx-10 mt-4">
@@ -103,7 +107,7 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
                 <span
                   className={cn(
                     "absolute right-[24%] -bottom-px left-[24%] h-[3px] rounded-full transition-colors",
-                    on ? "bg-pink" : "bg-transparent",
+                    on ? "bg-pink-deep" : "bg-transparent",
                   )}
                 />
               </Link>

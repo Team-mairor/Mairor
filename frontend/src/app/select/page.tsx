@@ -284,7 +284,10 @@ export default function SelectPage() {
                 </button>
                 <div className="relative aspect-video bg-black">
                   {selState === "blocked" && (
-                    <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2.5 bg-[rgba(26,8,18,.82)] p-6 text-center text-white">
+                    <div
+                      data-dark
+                      className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2.5 bg-[rgba(8,13,34,.82)] p-6 text-center text-white"
+                    >
                       <span className="text-[21px] font-bold">
                         이 영상은 mairor에서 재생할 수 없어요
                       </span>
@@ -314,7 +317,10 @@ export default function SelectPage() {
                       <span className="flex size-[84px] items-center justify-center rounded-full bg-white shadow-[0_10px_30px_rgba(0,0,0,.25)]">
                         <Play className="size-[30px] fill-plum text-plum" aria-hidden />
                       </span>
-                      <span className="absolute right-3 bottom-3 rounded bg-black/80 px-2.5 py-1 text-[16px] font-semibold text-white">
+                      <span
+                        data-dark
+                        className="absolute right-3 bottom-3 rounded bg-black/80 px-2.5 py-1 text-[16px] font-semibold text-white"
+                      >
                         {sel.dur}
                       </span>
                     </button>
@@ -392,10 +398,13 @@ export default function SelectPage() {
                       className="flex flex-col gap-3 text-left"
                     >
                       <div
-                        className="relative aspect-video bg-[#F3EEF1] bg-cover bg-center"
+                        className="relative aspect-video bg-cream bg-cover bg-center"
                         style={{ backgroundImage: `url(${videoThumb(v.ytid)})` }}
                       >
-                        <span className="absolute right-2.5 bottom-2.5 rounded bg-black/80 px-[5px] py-0.5 text-[16px] font-semibold text-white tabular">
+                        <span
+                          data-dark
+                          className="absolute right-2.5 bottom-2.5 rounded bg-black/80 px-[5px] py-0.5 text-[16px] font-semibold text-white tabular"
+                        >
                           {v.dur}
                         </span>
                       </div>
@@ -458,7 +467,7 @@ export default function SelectPage() {
                     setPicker(false);
                     setQuota(false);
                   }}
-                  className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_rgba(219,19,116,.26)] active:scale-[.97]"
+                  className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
                 >
                   <span className="truncate text-[23px] font-bold tracking-[-.01em]">
                     {selState === "guide" ? "바로 따라 하기" : "이 영상으로 메이크업 분석하기"}

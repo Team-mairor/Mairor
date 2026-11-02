@@ -97,7 +97,7 @@ export default function IntroPage() {
                   top: d.y,
                   width: DOT,
                   height: DOT,
-                  background: d.on ? "#991E5A" : "#EFE4EA",
+                  background: d.on ? "var(--color-plum)" : "var(--color-line)",
                   animation: d.on
                     ? `mr-dot 420ms ${SPRING} ${d.d1}ms forwards, mr-dot-out 380ms ease-in ${d.d2}ms forwards`
                     : `mr-fade 300ms ease ${250 + d.seed * 300}ms forwards, mr-dot-out 380ms ease-in ${d.d2}ms forwards`,
@@ -151,7 +151,7 @@ export default function IntroPage() {
             }}
           />
           <div
-            className="absolute inset-x-0 top-0 h-0.5 bg-pink opacity-0 shadow-[0_0_0_1px_rgba(255,255,255,.6)]"
+            className="absolute inset-x-0 top-0 h-0.5 bg-pink-deep opacity-0 shadow-[0_0_0_1px_rgba(255,255,255,.6)]"
             style={{ animation: `mr-scan 1200ms cubic-bezier(.45,0,.55,1) ${T + 1700}ms forwards` }}
           />
         </div>
@@ -163,10 +163,10 @@ export default function IntroPage() {
             style={{ left: x, top: y, animation: `mr-fade 400ms ${EASE} ${d}ms forwards` }}
           >
             <span
-              className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-pink"
+              className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-pink-deep"
               style={{ animation: `mr-pulse 1400ms ease-out ${d}ms infinite` }}
             />
-            <span className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-pink shadow-[0_0_0_3px_#fff]" />
+            <span className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-pink-deep shadow-[0_0_0_3px_#fff]" />
             <span
               className={`absolute -top-3.5 flex h-7 items-center rounded-full bg-white px-3 font-label text-[11px] font-semibold tracking-[.12em] whitespace-nowrap text-ink ${side === "left" ? "right-4" : "left-4"}`}
             >

@@ -689,7 +689,7 @@ export default function SignupPage() {
                 <span
                   className={cn(
                     "flex size-5 shrink-0 items-center justify-center",
-                    agree[a.type] ? "text-pink" : "text-line-3",
+                    agree[a.type] ? "text-plum" : "text-line-3",
                   )}
                 >
                   <Check className="size-[18px]" strokeWidth={2.6} aria-hidden />

@@ -13,37 +13,6 @@
   --font-display: var(--font-gowun);
   --font-serif: var(--font-instrument-serif);
   --font-label: var(--font-instrument-sans);
-  /* mairor 브랜드 색. 프로토타입 v11 기준 */
-  --color-ink: #3a0e25;
-  --color-ink-deep: #2a0a1c;
-  --color-plum: #991e5a;
-  --color-pink: #db1374;
-  --color-pink-soft: #efc0da;
-  --color-pink-tint: #fce8f1;
-  --color-pink-pale: #fbeff5;
-  --color-rose: #ff8fc0;
-  --color-blush: #f4b6cf;
-  --color-coral: #ef8e8a;
-  --color-mute: #6e5a64;
-  --color-mute-2: #5c4852;
-  --color-line: #efe4ea;
-  --color-line-2: #e6d5dd;
-  --color-line-3: #d9c7d0;
-  --color-ash: #c9b5bf;
-  --color-ash-2: #c9b8c1;
-  --color-ash-3: #a8949e;
-  --color-cream: #f6f1f4;
-  --color-cream-2: #fbf6f8;
-  --color-cream-3: #f6eef2;
-  --color-lime: #dbe586;
-  --color-lime-ink: #6b7a12;
-  --color-lime-pale: #f5f8dc;
-  --color-lime-deep: #5e6a00;
-  --color-sky: #b9c9e7;
-  --color-sky-pale: #eaf0fa;
-  --color-wine: #c0105f;
-  --color-wine-2: #c0264f;
-  --color-error: #b3261e;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -82,39 +51,84 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * mairor 브랜드 색. 미드나잇·네이비·화이트 바탕에 아이스 시안이 주인공이고
+ * 연민트·연블루·연핑크 파스텔이 보조로 붙는다 (색 시안 A, 보조색은 파스텔로 조정).
+ * 토큰 이름은 프로토타입 v11(핑크 테마) 그대로 두고 값만 바꿨다. 이름이 아니라 역할로 읽는다.
+ *   ink 본문 글씨(미드나잇) / plum 로고·라벨·링크·네이비 면 / pink 주요 버튼(연아이스)
+ *   pink-deep 흰 바탕 위 점·막대·밑줄(진한 시안. 연아이스는 흰 바탕과 대비가 낮다)
+ *   pink-soft·rose 키워드 칩·'없음'·어두운 면 위 포인트(연핑크) / lime 프로필·'대체'(연민트) / sky '보유'(연블루)
+ * inline이 아니라 클래스가 변수를 참조하므로, 미러필름 모드(.mirror)에서 변수만 바꿔 색을 갈아 끼운다.
+ */
+@theme static {
+  --color-ink: #0b1430;
+  --color-ink-deep: #0b1430;
+  --color-plum: #1b2d63;
+  --color-pink: #b3f0ff;
+  --color-pink-deep: #0e7490;
+  --color-pink-soft: #ffcff2;
+  --color-pink-tint: #e3f9ff;
+  --color-pink-pale: #f2fcff;
+  --color-rose: #ffcff2;
+  --color-mute: #5f6782;
+  --color-mute-2: #4a5270;
+  --color-line: #e4e7ee;
+  --color-line-2: #d5dae4;
+  --color-line-3: #c3c9d6;
+  --color-ash: #b5bccb;
+  --color-ash-2: #b9bfcc;
+  --color-ash-3: #8c94a8;
+  --color-cream: #f3f5f9;
+  --color-cream-2: #f8f9fb;
+  --color-cream-3: #eceff5;
+  --color-lime: #a8f5dc;
+  --color-lime-ink: #0b7a63;
+  --color-lime-pale: #e3fcf4;
+  --color-sky: #c4d7ff;
+  --color-wine: #b3261e;
+  --color-wine-2: #c0392b;
+  --color-error: #b3261e;
+}
+
 :root {
   --background: #ffffff;
-  --foreground: #3a0e25;
+  --foreground: #0b1430;
   --card: #ffffff;
-  --card-foreground: #3a0e25;
+  --card-foreground: #0b1430;
   --popover: #ffffff;
-  --popover-foreground: #3a0e25;
-  --primary: #991e5a;
+  --popover-foreground: #0b1430;
+  --primary: #1b2d63;
   --primary-foreground: #ffffff;
-  --secondary: #f6f1f4;
-  --secondary-foreground: #3a0e25;
-  --muted: #f6f1f4;
-  --muted-foreground: #6e5a64;
-  --accent: #fbf6f8;
-  --accent-foreground: #3a0e25;
-  --destructive: #c0105f;
-  --border: #efe4ea;
-  --input: #e6d5dd;
-  --ring: #db1374;
-  --chart-1: #991e5a;
-  --chart-2: #db1374;
-  --chart-3: #dbe586;
-  --chart-4: #b9c9e7;
-  --chart-5: #efc0da;
+  --secondary: #f3f5f9;
+  --secondary-foreground: #0b1430;
+  --muted: #f3f5f9;
+  --muted-foreground: #5f6782;
+  --accent: #f8f9fb;
+  --accent-foreground: #0b1430;
+  --destructive: #b3261e;
+  --border: #e4e7ee;
+  --input: #d5dae4;
+  --ring: #5ce1ff;
+  --chart-1: #1b2d63;
+  --chart-2: #b3f0ff;
+  --chart-3: #a8f5dc;
+  --chart-4: #c4d7ff;
+  --chart-5: #ffcff2;
   --radius: 1rem;
-  --sidebar: #fbf6f8;
-  --sidebar-foreground: #3a0e25;
-  --sidebar-primary: #991e5a;
+  --sidebar: #f8f9fb;
+  --sidebar-foreground: #0b1430;
+  --sidebar-primary: #1b2d63;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f6f1f4;
-  --sidebar-accent-foreground: #3a0e25;
-  --sidebar-border: #efe4ea;
-  --sidebar-ring: #db1374;
+  --sidebar-accent: #f3f5f9;
+  --sidebar-accent-foreground: #0b1430;
+  --sidebar-border: #e4e7ee;
+  --sidebar-ring: #5ce1ff;
+}
+
+/* 밝은 면(아이스·민트·페리윙클·핑크 라벤더) 위에 쓴 흰 글씨는 미드나잇으로 바꿔 읽히게 한다 */
+:is(.bg-pink, .bg-lime, .bg-sky, .bg-rose, .bg-pink-soft) {
+  --color-white: var(--color-ink);
+  --color-pink-tint: var(--color-plum);
 }
 
 .dark {
@@ -149,6 +163,137 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/*
+ * 미러필름 모드. <html class="mirror">일 때만 적용 (components/mirror-toggle.tsx).
+ * 필름 위에서는 화면이 내는 빛의 밝기만 비친다. 검정은 거울이 되고 어두운 색·연한 배경은 사라진다.
+ * - 배경은 검정, 글씨는 흰색. 보조 글씨도 밝은 회색까지만 낮춘다
+ * - 색은 상대 휘도 0.4 이상인 밝은 색만 쓴다 (아이스 시안 0.63, 민트 0.68, 핑크 라벤더 0.54, 페리윙클 0.5)
+ * - 선도 휘도 0.4 이상인 밝은 회색으로 올려 카드·버튼 모양이 보이게 한다
+ */
+.mirror {
+  --color-plum: #9dbcff;
+  --color-pink: #5ce1ff;
+  --color-pink-deep: #5ce1ff;
+  --color-pink-soft: #ffa3ec;
+  --color-pink-tint: #021820;
+  --color-pink-pale: #011016;
+  --color-rose: #ffa3ec;
+  --color-mute: #ebebeb;
+  --color-mute-2: #f2f2f2;
+  --color-line: #b0b0b0;
+  --color-line-2: #c2c2c2;
+  --color-line-3: #d6d6d6;
+  --color-ash: #c8c8c8;
+  --color-ash-2: #c8c8c8;
+  --color-ash-3: #d6d6d6;
+  --color-cream: #141414;
+  --color-cream-2: #0d0d0d;
+  --color-cream-3: #1a1a1a;
+  --color-lime: #4ef0c2;
+  --color-lime-ink: #4ef0c2;
+  --color-lime-pale: #00140f;
+  --color-sky: #9dbcff;
+  --color-wine: #ffa3a3;
+  --color-wine-2: #ffa3a3;
+  --color-error: #ffa3a3;
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --popover: #000000;
+  --popover-foreground: #ffffff;
+  --primary: #5ce1ff;
+  --primary-foreground: #000000;
+  --secondary: #141414;
+  --secondary-foreground: #ffffff;
+  --muted: #141414;
+  --muted-foreground: #ebebeb;
+  --accent: #0d0d0d;
+  --accent-foreground: #ffffff;
+  --destructive: #ffa3a3;
+  --border: #b0b0b0;
+  --input: #c2c2c2;
+  --ring: #5ce1ff;
+  --chart-2: #5ce1ff;
+  --chart-3: #4ef0c2;
+  --chart-4: #79a3f1;
+  --chart-5: #ffa3ec;
+}
+
+/* 굵기를 한 단계 올려 글자가 내는 빛을 늘린다. 굵기를 따로 정한 글씨는 그대로 */
+.mirror body {
+  font-weight: 500;
+}
+
+/* 연한 배경 면은 필름 위에서 안 보이므로 테두리로 모양을 남긴다 */
+.mirror :is(.bg-cream, .bg-cream-2, .bg-cream-3, .bg-pink-tint, .bg-pink-pale, .bg-lime-pale) {
+  box-shadow: inset 0 0 0 2px var(--color-line-2);
+}
+
+/* 카메라 화면의 반투명 흰 테두리(border-white/10 등)는 거의 안 보이므로 올린다. 얼굴 근처라 밝은 선이 많지 않게 절반쯤만 */
+/* 한쪽 테두리 색을 따로 정한 요소(스피너 border-t-white)는 그 대비를 살려 둔다 */
+.mirror [class*="border-white/"]:not([class*="border-t-"]) {
+  border-color: rgb(255 255 255 / 0.45);
+}
+/* 검은 바탕 위라 흐림 효과가 보이지 않는다 */
+.mirror [class*="backdrop-blur"] {
+  backdrop-filter: none;
+}
+/* 비친 얼굴과 영상 속 얼굴이 겹치고 위치도 어긋나므로, 필름 위에서는 카메라 영상을 그리지 않는다 (추적은 그대로) */
+.mirror video {
+  visibility: hidden;
+}
+
+/*
+ * 흰·잉크는 쓰인 자리에 따라 바꾸는 방향이 다르다. 배경 클래스가 그 안쪽 글씨 색을 정한다.
+ * - 밝은 면(bg-white): 검은 면 + 흰 글씨. bg-ink 버튼은 흰 버튼 + 검은 글씨로 뒤집힌다
+ * - 원래 어두운 면(bg-ink-deep · 카메라 화면 · data-dark): 검은 면 + 흰 글씨 그대로
+ * - 밝은 색 면(아이스·민트·핑크 라벤더 등): 그 위 글씨는 모두 검정
+ * 반투명 흰 면은 밝은 면(/60 이상)만 고른다. bg-white/4~15는 어두운 카메라 화면 위의 칩이라 흰 글씨를 그대로 둔다
+ * 연한 면(cream·tint·pale)도 미러에서는 거의 검정이라 흰 면과 같이 둔다. 어두운 면 안에 놓여도 글씨가 흰색이 된다
+ */
+.mirror,
+.mirror
+  :is(
+    .bg-white,
+    .bg-cream,
+    .bg-cream-2,
+    .bg-cream-3,
+    .bg-pink-tint,
+    .bg-pink-pale,
+    .bg-lime-pale,
+    .bg-white\/60,
+    .bg-white\/70,
+    .bg-white\/75,
+    .bg-white\/80,
+    .bg-white\/85,
+    .bg-white\/90,
+    .bg-white\/92,
+    .bg-white\/95
+  ) {
+  --color-white: #000000;
+  --color-ink: #ffffff;
+  --color-ink-deep: #ffffff;
+}
+.mirror :is(.bg-ink-deep, [data-dark]) {
+  --color-white: #ffffff;
+  --color-ink: #000000;
+  --color-ink-deep: #000000;
+}
+.mirror :is(.bg-pink, .bg-plum, .bg-rose, .bg-pink-soft, .bg-lime, .bg-sky, .bg-wine, .bg-error) {
+  --color-white: #000000;
+  --color-ink: #000000;
+  --color-ink-deep: #000000;
+  --color-pink-tint: #000000;
+  --color-mute: #000000;
+  --color-mute-2: #000000;
+}
+/* plum·pink-soft는 그 자체가 면 색이기도 해서, 면 자신이 아니라 안쪽 글씨에만 검정을 준다 */
+.mirror :is(.bg-pink, .bg-plum, .bg-rose, .bg-pink-soft, .bg-lime, .bg-sky, .bg-wine, .bg-error) * {
+  --color-plum: #000000;
+  --color-pink-soft: #000000;
 }
 
 @layer base {

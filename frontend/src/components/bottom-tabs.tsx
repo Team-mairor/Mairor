@@ -30,7 +30,7 @@ export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
   return (
     <nav
       aria-label="주요 메뉴"
-      className="grid h-32 shrink-0 grid-cols-4 gap-2 border-t border-line-2 bg-white px-8 pt-3 pb-5 shadow-[0_-8px_24px_rgba(58,14,37,.06)]"
+      className="grid h-32 shrink-0 grid-cols-4 gap-2 border-t border-line-2 bg-white px-8 pt-3 pb-5 shadow-[0_-8px_24px_rgba(11,20,48,.06)]"
     >
       {TABS.map(({ href, label, Icon, match }) => {
         const on = match(pathname);
