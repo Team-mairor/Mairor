@@ -27,4 +27,5 @@
 | [얼굴 좌표 규칙 이동에 따른 후속 요청](2026-10-31-seoyun-hyeonsoo-face-rules-followup.md) | 2026-10-31 | 한서윤 → 김현수 | 요청 |
 | [기본 아이섀도 가이드에 눈 아래 안내 추가](2026-11-01-hyeonsoo-seoyun-default-eyeshadow-under-eye.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [바르는 자리가 바뀌면 단계 나누기](2026-11-01-hyeonsoo-jungyoon-split-steps-by-application.md) | 2026-11-01 | 김현수 → 김정윤 | 요청 |
+| [마스카라 단계 영역 없음 반영](2026-11-01-hyeonsoo-seoyun-mascara-no-area.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [Google 최초 로그인 추가 정보·약관 입력 흐름](2026-11-02-juyeon-seoyeon-google-signup.md) | 2026-11-02 | 최주연 → 김서연 | 요청 |

@@ -51,10 +51,11 @@ AI 영역 데이터의 부위 이름으로 아래처럼 계산할 수 있습니�
 | --- | --- | --- |
 | `extracted` | 레퍼런스에서 영역을 찾음 | `type: GUIDE`, `application.region.polygon`, `isFallback: false` |
 | `template` | 못 찾아 기본 영역을 씀 | `type: GUIDE`, `application.region.templateId`, `isFallback: true` |
-| `notApplicable` | 영역이 없는 단계 (`makeup: other`) | `type: EXCLUDED`? |
+| `notApplicable` | 영역이 없는 단계 (`makeup: other` · `mascara`) | `other`는 `type: EXCLUDED`?, `mascara`는 `type: GUIDE`, `application: null` |
 | `failed` | 못 찾았고 기본 영역도 쓰지 않음 | `type: GUIDE`, `application: null` |
 
 - [ ] `notApplicable`(스킨케어 같은 `other` 단계)이 API 명세 v2의 `EXCLUDED`(진행률에서 빠지는 단계)와 같은 뜻인지 확인해 주세요
+- [ ] (11-02 덧붙임) 마스카라(`mascara`)도 `notApplicable`로 갑니다. 마스카라는 영역만 없고 사용자가 실제로 하는 단계라 설명을 보여 주고 진행률에도 넣어야 합니다. `notApplicable`을 통째로 `EXCLUDED`로 바꾸지 말고 `makeup`으로 구분해 주세요 (자세한 내용: [마스카라 단계 영역 없음 반영 요청](2026-11-01-hyeonsoo-seoyun-mascara-no-area.md))
 
 ## 예시
 

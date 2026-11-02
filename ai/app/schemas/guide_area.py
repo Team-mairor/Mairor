@@ -7,6 +7,7 @@ from app.schemas.manifest import Makeup
 
 TRIANGLE_COUNT = 898
 BARY_TOLERANCE = 0.01
+NO_AREA_MAKEUPS: tuple[Makeup, ...] = ("other", "mascara")
 
 RegionName = Literal[
     "leftEye",
@@ -101,15 +102,23 @@ class AreaStep(CamelModel):
 
     @model_validator(mode="after")
     def check_sub_steps(self) -> "AreaStep":
+        """하위 단계 번호와, 영역이 없는 화장 종류의 상태를 본다.
+
+        makeup이 NO_AREA_MAKEUPS(other, mascara)이면 notApplicable이고, 그 밖에는 쓰지 않는다.
+        마스카라는 영역 안내 없이 설명만 하기로 해서 other처럼 영역이 없다.
+        """
         for order, sub_step in enumerate(self.sub_steps, start=1):
             if sub_step.order != order:
                 raise ValueError(f"{self.step_id}의 subSteps는 order 1부터 차례대로 넣어야 합니다")
             if sub_step.sub_step_id != f"{self.step_id}-{order}":
                 raise ValueError(f"subStepId는 {self.step_id}-{order}여야 합니다")
-            if self.makeup == "other" and sub_step.status != "notApplicable":
-                raise ValueError(f"{self.step_id}는 makeup이 other라 notApplicable이어야 합니다")
-            if self.makeup != "other" and sub_step.status == "notApplicable":
-                raise ValueError("notApplicable은 makeup이 other인 단계에만 씁니다")
+            no_area = self.makeup in NO_AREA_MAKEUPS
+            if no_area and sub_step.status != "notApplicable":
+                raise ValueError(
+                    f"{self.step_id}는 makeup이 {self.makeup}라 notApplicable이어야 합니다"
+                )
+            if not no_area and sub_step.status == "notApplicable":
+                raise ValueError("notApplicable은 makeup이 other나 mascara인 단계에만 씁니다")
         return self
 
 

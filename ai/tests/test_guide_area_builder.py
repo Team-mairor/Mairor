@@ -12,12 +12,14 @@ from app.schemas.manifest import Step
 from app.services import guide_area_builder
 from app.services.blush_area import BlushArea, cheek_range
 from app.services.brow_area import BrowArea, brow_range
+from app.services.eyeliner_area import EyelinerArea
 from app.services.eyeshadow_area import EyeshadowArea, eyeshadow_range
 from app.services.face_map import MAP_SIZE, map_points
 from app.services.guide_area_builder import ANALYSIS_ERROR, NOT_ANALYZED, build_guide_area
 from app.services.lip_area import LipArea, check_lip_area, lip_area_on_map
 from app.services.region_mask import polygon_mask
 from app.services.region_points import REGION_POINTS
+from tests.test_eyeliner_area import lash_line, with_gap
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads(
@@ -234,8 +236,84 @@ def test_brow_and_eyeshadow_not_found_use_default_guide_with_reasons(monkeypatch
     assert eyeshadow.reasons == ["noUsableFrame", "eyeshadowColorNotFound"]
 
 
-@pytest.mark.parametrize("makeup", ["mascara", "eyeliner", "contour"])
+def eyeliner_steps(*orders: int) -> list[Step]:
+    return [
+        Step(step_id=f"s{o}", order=o, start_seconds=o, end_seconds=o + 2.5, makeup="eyeliner")
+        for o in orders
+    ]
+
+
+def build_eyeliner(monkeypatch, finder, steps):
+    monkeypatch.setattr(guide_area_builder, "find_eyeliner_area", finder)
+    return build_guide_area("test_01", steps, RESULT, never)
+
+
+def test_eyeliner_step_gets_one_polygon_per_line_on_each_eye_without_exclude(monkeypatch):
+    """앞머리 아래와 눈꼬리 트임처럼 떨어져 그린 선은 덩어리마다 도형 하나씩 나가야 한다."""
+    seen = []
+
+    def found(result, step_start_ms, step_end_ms, load_photo, eye):
+        seen.append((step_start_ms, step_end_ms, eye))
+        return EyelinerArea(mask=with_gap(lash_line(eye, upper=False), 20))
+
+    area = build_eyeliner(monkeypatch, found, eyeliner_steps(8))
+    sub_step = area.steps[0].sub_steps[0]
+    assert seen == [(8000, 10500, "leftEye"), (8000, 10500, "rightEye")]
+    assert (sub_step.status, sub_step.reasons) == ("extracted", [])
+    assert [(s.region, len(s.guides), s.exclude) for s in sub_step.guide_sets] == [
+        ("leftEye", 2, []),
+        ("rightEye", 2, []),
+    ]
+    jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
+
+
+def test_next_eyeliner_step_leaves_out_lines_the_earlier_step_guided(monkeypatch):
+    area = build_eyeliner(
+        monkeypatch, lambda *args: EyelinerArea(mask=lash_line(args[-1])), eyeliner_steps(1, 2)
+    )
+    first, second = (step.sub_steps[0] for step in area.steps)
+    assert first.status == "extracted"
+    assert (second.status, second.template_id, second.reasons) == (
+        "template",
+        "eyeliner",
+        ["eyelinerColorNotFound"],
+    )
+
+
+def test_eyeliner_not_found_uses_default_eyeliner_guide_with_reasons(monkeypatch):
+    reasons = {"leftEye": "noUsableFrame", "rightEye": "eyelinerColorNotFound"}
+    area = build_eyeliner(
+        monkeypatch,
+        lambda *args: EyelinerArea(mask=None, reason=reasons[args[-1]]),
+        eyeliner_steps(1),
+    )
+    sub_step = area.steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id) == ("template", "eyeliner")
+    assert sub_step.reasons == ["noUsableFrame", "eyelinerColorNotFound"]
+
+
+def test_error_in_one_eyeliner_step_fails_only_that_step(monkeypatch, caplog):
+    def broken_first(result, step_start_ms, step_end_ms, load_photo, eye):
+        if step_start_ms == 1000:
+            raise OSError("사진 파일이 깨짐")
+        return EyelinerArea(mask=lash_line(eye))
+
+    with caplog.at_level(logging.ERROR):
+        area = build_eyeliner(monkeypatch, broken_first, eyeliner_steps(1, 2))
+    first, second = (step.sub_steps[0] for step in area.steps)
+    assert (first.status, first.reasons) == ("failed", [ANALYSIS_ERROR])
+    assert second.status == "extracted"
+    assert "s1" in caplog.text
+
+
+@pytest.mark.parametrize("makeup", ["foundation", "contour"])
 def test_makeup_without_analysis_falls_back_to_its_default_guide(monkeypatch, makeup):
     step = Step(step_id="s1", order=1, start_seconds=0, end_seconds=5, makeup=makeup)
     sub_step = build(monkeypatch, lips_found, steps=[step]).steps[0].sub_steps[0]
     assert (sub_step.status, sub_step.template_id) == ("template", makeup)
+
+
+def test_mascara_step_has_no_area(monkeypatch):
+    step = Step(step_id="s1", order=1, start_seconds=0, end_seconds=5, makeup="mascara")
+    sub_step = build(monkeypatch, lips_found, steps=[step]).steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id, sub_step.reasons) == ("notApplicable", None, [])

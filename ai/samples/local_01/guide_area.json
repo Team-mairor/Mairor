@@ -15,7 +15,7 @@
     { "stepId": "s11", "order": 11, "makeup": "eyeliner", "subSteps": [{ "subStepId": "s11-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeliner", "guideSets": [] }] },
     { "stepId": "s12", "order": 12, "makeup": "eyeliner", "subSteps": [{ "subStepId": "s12-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeliner", "guideSets": [] }] },
     { "stepId": "s13", "order": 13, "makeup": "eyeshadow", "subSteps": [{ "subStepId": "s13-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeshadow", "guideSets": [] }] },
-    { "stepId": "s14", "order": 14, "makeup": "mascara", "subSteps": [{ "subStepId": "s14-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "mascara", "guideSets": [] }] },
+    { "stepId": "s14", "order": 14, "makeup": "mascara", "subSteps": [{ "subStepId": "s14-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
     { "stepId": "s15", "order": 15, "makeup": "contour", "subSteps": [{ "subStepId": "s15-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "contour", "guideSets": [] }] },
     { "stepId": "s16", "order": 16, "makeup": "highlight", "subSteps": [{ "subStepId": "s16-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "highlight", "guideSets": [] }] },
     {

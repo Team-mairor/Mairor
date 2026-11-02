@@ -27,6 +27,27 @@ def mask_outline(mask: np.ndarray) -> list[Pixel]:
     return [(float(x), float(y)) for x, y in largest[:, 0, :]]
 
 
+def mask_outlines(mask: np.ndarray, grow_cells: int = 0) -> list[list[Pixel]]:
+    """마스크의 덩어리마다 바깥선을 칸 좌표 목록으로 돌려준다. 큰 덩어리부터 담는다.
+
+    바깥선마다 mask_outline과 같은 모양이다. grow_cells가 있으면 그만큼 굵힌 뒤 바깥선을 뽑는다.
+    바깥선은 가장자리 칸의 가운데를 지나서 칠한 칸보다 반 칸씩 안쪽에 놓이는데,
+    아이라인처럼 몇 칸 두께인 선은 이 차이로 눈에 띄게 얇아져서 1칸 굵혀 맞춘다.
+    MIN_OUTLINE_POINTS점이 안 되는 덩어리는 빼고, 칠한 칸이 없으면 빈 목록이다.
+    """
+    cells = mask.astype(np.uint8)
+    if grow_cells > 0:
+        size = 2 * grow_cells + 1
+        cells = cv2.dilate(cells, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size)))
+    contours, _ = cv2.findContours(cells, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ordered = sorted(contours, key=cv2.contourArea, reverse=True)
+    return [
+        [(float(x), float(y)) for x, y in contour[:, 0, :]]
+        for contour in ordered
+        if len(contour) >= MIN_OUTLINE_POINTS
+    ]
+
+
 def simplify_outline(outline: Sequence[Pixel], tolerance: float = OUTLINE_TOLERANCE) -> list[Pixel]:
     """한 바퀴 도는 테두리의 점을 모양을 지키며 줄인다. tolerance는 지도 칸 단위 허용 거리다.
 

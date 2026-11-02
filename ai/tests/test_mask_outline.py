@@ -5,7 +5,7 @@ from PIL import Image
 
 from app.services.face_map import MAP_SIZE
 from app.services.lip_area import check_lip_area, lip_area_on_map
-from app.services.mask_outline import mask_outline, simplify_outline
+from app.services.mask_outline import mask_outline, mask_outlines, simplify_outline
 from app.services.region_mask import polygon_mask
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "lip"
@@ -43,6 +43,30 @@ def test_largest_piece_is_kept_and_holes_are_ignored():
 def test_outline_redraws_the_same_cells():
     mask = polygon_mask([(5, 3), (40, 8), (35, 30), (8, 25)], 50, 50)
     assert np.array_equal(polygon_mask(mask_outline(mask), 50, 50), mask)
+
+
+def test_each_piece_gets_its_own_outline_largest_first():
+    mask = blank()
+    mask[2:5, 3:9] = True
+    mask[10:20, 10:20] = True
+    mask[25, 25] = True
+    outlines = mask_outlines(mask)
+    assert len(outlines) == 2
+    assert sorted(outlines[0]) == [(10.0, 10.0), (10.0, 19.0), (19.0, 10.0), (19.0, 19.0)]
+    assert sorted(outlines[1]) == [(3.0, 2.0), (3.0, 4.0), (8.0, 2.0), (8.0, 4.0)]
+
+
+def test_empty_mask_has_no_outlines():
+    assert mask_outlines(blank()) == []
+
+
+def test_grow_cells_widens_a_thin_line_before_the_outline():
+    mask = blank()
+    mask[10:13, 5:25] = True
+    grown = polygon_mask(mask_outlines(mask, grow_cells=1)[0], 30, 30)
+    assert (grown & mask).sum() == mask.sum()
+    assert grown[9, 15] and grown[13, 15]
+    assert not grown[8, 15]
 
 
 def test_points_on_straight_edges_are_dropped():

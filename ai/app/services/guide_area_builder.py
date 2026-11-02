@@ -1,6 +1,7 @@
 """단계마다 부위 분석을 불러 영상 하나의 가이드 영역(GuideArea)을 만든다.
 
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
+아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 해서, 단계 순서대로 따로 부른다.
 """
 
 import logging
@@ -10,6 +11,7 @@ import numpy as np
 
 from app.schemas.guide import GuideInputStep
 from app.schemas.guide_area import (
+    NO_AREA_MAKEUPS,
     AreaStep,
     AreaSubStep,
     GuideArea,
@@ -21,6 +23,12 @@ from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
 from app.services.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
 from app.services.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
+from app.services.eyeliner_area import (
+    OUTLINE_GROW_CELLS,
+    EyelinerArea,
+    find_eyeliner_area,
+    symmetric_eyeliner,
+)
 from app.services.eyeshadow_area import (
     EYES,
     EyeshadowArea,
@@ -29,7 +37,7 @@ from app.services.eyeshadow_area import (
 )
 from app.services.face_map import points_to_anchors
 from app.services.lip_area import PhotoLoader, find_lip_area
-from app.services.mask_outline import mask_outline, simplify_outline
+from app.services.mask_outline import mask_outline, mask_outlines, simplify_outline
 
 logger = logging.getLogger(__name__)
 
@@ -49,23 +57,28 @@ def build_guide_area(
 
     steps는 매니페스트나 가이드 입력의 단계이고 stepId·order·makeup을 그대로 옮긴다.
     result는 check_frames를 거친 얼굴 점 결과, load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
-    other는 notApplicable, AREA_FINDERS에 분석이 있으면 그 결과다.
+    other와 mascara는 notApplicable, AREA_FINDERS에 분석이 있으면 그 결과다.
+    마스카라는 영역 안내 없이 설명만 하기로 해서 영역을 보내지 않는다.
+    아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
     나머지(베이스처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로 기본 가이드(template)를 쓴다.
     """
     ordered = sorted(steps, key=lambda step: step.order)
-    return GuideArea(
-        video_id=video_id,
-        mesh_version="v1",
-        steps=[
+    drawn: np.ndarray | None = None
+    area_steps = []
+    for step in ordered:
+        if step.makeup == "eyeliner":
+            sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn)
+        else:
+            sub_step = _sub_step(step, result, load_photo)
+        area_steps.append(
             AreaStep(
                 step_id=step.step_id,
                 order=step.order,
                 makeup=step.makeup,
-                sub_steps=[_sub_step(step, result, load_photo)],
+                sub_steps=[sub_step],
             )
-            for step in ordered
-        ],
-    )
+        )
+    return GuideArea(video_id=video_id, mesh_version="v1", steps=area_steps)
 
 
 def _sub_step(
@@ -73,7 +86,7 @@ def _sub_step(
 ) -> AreaSubStep:
     """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다."""
     sub_step_id = f"{step.step_id}-1"
-    if step.makeup == "other":
+    if step.makeup in NO_AREA_MAKEUPS:
         return AreaSubStep(
             sub_step_id=sub_step_id,
             order=1,
@@ -95,14 +108,96 @@ def _sub_step(
         )
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
-        return AreaSubStep(
-            sub_step_id=sub_step_id,
-            order=1,
-            status="failed",
-            reasons=[ANALYSIS_ERROR],
-            template_id=None,
-            guide_sets=[],
-        )
+        return _failed(sub_step_id)
+
+
+def _eyeliner_step(
+    step: Step | GuideInputStep,
+    result: LandmarksResult,
+    load_photo: PhotoLoader,
+    drawn: np.ndarray | None,
+) -> tuple[AreaSubStep, np.ndarray | None]:
+    """아이라인 단계의 하위 단계와, 이 단계까지 아이라인 가이드로 안내한 칸(양쪽 눈 합)을 돌려준다.
+
+    drawn은 앞 아이라인 단계들에서 안내한 칸이고 symmetric_eyeliner에 넘겨 빼고 보게 한다.
+    이 단계가 extracted이면 이번 마스크를 더해 돌려주고, 아니면 drawn을 그대로 돌려준다.
+    분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
+    """
+    sub_step_id = f"{step.step_id}-1"
+    try:
+        areas = {
+            eye: find_eyeliner_area(
+                result,
+                round(step.start_seconds * 1000),
+                round(step.end_seconds * 1000),
+                load_photo,
+                eye,
+            )
+            for eye in EYES
+        }
+        masks = symmetric_eyeliner(areas, drawn)
+    except Exception:
+        logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
+        return _failed(sub_step_id), drawn
+    sub_step = _eyeliner_sub_step(sub_step_id, areas, masks)
+    if sub_step.status != "extracted" or masks is None:
+        return sub_step, drawn
+    guided = np.any(list(masks.values()), axis=0)
+    return sub_step, guided if drawn is None else drawn | guided
+
+
+def _eyeliner_sub_step(
+    sub_step_id: str,
+    areas: Mapping[RegionName, EyelinerArea],
+    masks: Mapping[RegionName, np.ndarray] | None,
+) -> AreaSubStep:
+    """양쪽 눈의 아이라인 마스크를 눈마다 영역 하나씩 적는다.
+
+    앞머리 아래와 눈꼬리 트임처럼 떨어진 선은 덩어리마다 polygon 하나씩이다.
+    얇은 선이 테두리로 바꿀 때 가늘어지지 않게 OUTLINE_GROW_CELLS칸 굵혀 테두리를 뽑는다.
+    두 눈 모두 못 찾았으면 눈마다의 이유를 모아 기본 아이라인 가이드(template)를 쓴다.
+    찾았지만 앞 단계에서 안내한 곳뿐이거나 테두리가 나오지 않으면 eyelinerColorNotFound다.
+    아이라인은 눈 테두리 바깥에서만 찾아 눈 구멍을 감싸지 않으므로 exclude는 비운다.
+    """
+    if masks is None:
+        reasons = [area.reason or "eyelinerColorNotFound" for area in areas.values()]
+        return _template(sub_step_id, "eyeliner", list(dict.fromkeys(reasons)))
+    guides = {
+        eye: [
+            PolygonShape(type="polygon", outline=outline)
+            for outline in (
+                points_to_anchors(simplify_outline(points))
+                for points in mask_outlines(masks[eye], OUTLINE_GROW_CELLS)
+            )
+            if outline
+        ]
+        for eye in areas
+    }
+    if not all(guides.values()):
+        return _template(sub_step_id, "eyeliner", ["eyelinerColorNotFound"])
+    return AreaSubStep(
+        sub_step_id=sub_step_id,
+        order=1,
+        status="extracted",
+        reasons=[],
+        template_id=None,
+        guide_sets=[
+            GuideSet(region=eye, source="extracted", guides=guides[eye], exclude=[])
+            for eye in areas
+        ],
+    )
+
+
+def _failed(sub_step_id: str) -> AreaSubStep:
+    """분석 중 오류가 난 하위 단계. 기본 가이드도 쓰지 않는다."""
+    return AreaSubStep(
+        sub_step_id=sub_step_id,
+        order=1,
+        status="failed",
+        reasons=[ANALYSIS_ERROR],
+        template_id=None,
+        guide_sets=[],
+    )
 
 
 def _template(sub_step_id: str, makeup: Makeup, reasons: list[str]) -> AreaSubStep:

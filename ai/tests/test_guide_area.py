@@ -64,8 +64,8 @@ def test_sample_passes_model():
     statuses = [step.sub_steps[0].status for step in area.steps]
     assert len(area.steps) == 19
     assert statuses.count("extracted") == 1
-    assert statuses.count("template") == 11
-    assert statuses.count("notApplicable") == 6
+    assert statuses.count("template") == 10
+    assert statuses.count("notApplicable") == 7
     assert statuses.count("failed") == 1
 
 

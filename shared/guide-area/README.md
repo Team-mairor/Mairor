@@ -34,7 +34,7 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
   | `notApplicable` | 빈 목록 | `null` | 빈 목록 |
   | `failed` | 빈 목록 | `null` | 1개 이상 |
 
-- `makeup`이 `other`인 단계는 `notApplicable`이고, `notApplicable`은 `other` 단계에만 쓴다
+- `makeup`이 `other`나 `mascara`인 단계는 `notApplicable`이고, `notApplicable`은 이 두 화장 종류에만 쓴다 (마스카라는 영역을 안내하지 않고 설명만 한다)
 - `subStepId`는 `<stepId>-<order>`이고, 하위 단계 `order`는 1부터 차례대로
 - 단계는 `order` 순서대로, `stepId` · `order`가 겹치지 않음
 - `bary` 세 값의 합이 1 (0.01까지 허용)
