@@ -6,6 +6,7 @@ from app.clients.llm import LlmError
 from app.schemas.guide import GuideInputStep
 from app.schemas.guide_job import (
     LlmAction,
+    LlmOmission,
     LlmSentence,
     LlmSentenceCheck,
     LlmTip,
@@ -135,12 +136,13 @@ def test_trailing_period_is_not_counted():
     assert kinds(step, said("볼 가운데부터 바깥쪽 광대 끝까지 펴서 발라요.")) == []
 
 
-def check(*verdicts: tuple[str, str, str]) -> StepCheck:
+def check(*verdicts: tuple[str, str, str], omitted: list[LlmOmission] = ()) -> StepCheck:
     return StepCheck(
         sentences=[
             LlmSentenceCheck(id=id, evidence="", verdict=verdict, reason=reason)
             for id, verdict, reason in verdicts
-        ]
+        ],
+        omitted=list(omitted),
     )
 
 
@@ -207,6 +209,61 @@ def test_verdict_for_unknown_sentence_is_ignored():
 
     assert result.passed
     assert result.problems == []
+
+
+def test_omitted_input_fails_check_with_input_id():
+    llm = FakeLlm(
+        check(("a1", "ok", ""), omitted=[LlmOmission(id="summary", text="손으로 흡토하여")])
+    )
+    step = make_step("토너를 손으로 흡토하여 흡수시켜줍니다.")
+
+    result = asyncio.run(check_explanation(llm, step, said("토너를 흡수시켜요")))
+
+    assert not result.passed
+    assert [(p.sentence_id, p.text, p.kind) for p in result.problems] == [
+        ("summary", "손으로 흡토하여", "omitted")
+    ]
+
+
+def test_omission_from_unknown_input_is_ignored():
+    llm = FakeLlm(check(omitted=[LlmOmission(id="t9", text="톡톡")]))
+
+    result = asyncio.run(check_explanation(llm, make_step("볼에 발라줍니다."), said("볼에 발라요")))
+
+    assert result.passed
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["베리 피치", "02 베리피치를", "젤리 에어 치크 02 베리피치", "하밍 젤리 에어 치크를"],
+)
+def test_omission_of_product_name_or_shade_is_ignored(text):
+    llm = FakeLlm(check(omitted=[LlmOmission(id="summary", text=text)]))
+    step = make_step("하밍 젤리 에어 치크 02 베리피치를 볼에 발라줍니다.", product=PRODUCT)
+
+    result = asyncio.run(check_explanation(llm, step, said("볼에 발라요")))
+
+    assert result.passed
+
+
+def test_omission_with_more_than_product_name_fails_check():
+    llm = FakeLlm(check(omitted=[LlmOmission(id="summary", text="02 베리피치를 볼에")]))
+    step = make_step("하밍 젤리 에어 치크 02 베리피치를 볼에 발라줍니다.", product=PRODUCT)
+
+    result = asyncio.run(check_explanation(llm, step, said("발라요")))
+
+    assert [(p.sentence_id, p.text, p.kind) for p in result.failures] == [
+        ("summary", "02 베리피치를 볼에", "omitted")
+    ]
+
+
+def test_model_gets_product_names_to_leave_out():
+    llm = FakeLlm(check())
+    step = make_step("하밍 젤리 에어 치크 02 베리피치를 볼에 발라줍니다.", product=PRODUCT)
+
+    asyncio.run(check_explanation(llm, step, said("볼에 발라요")))
+
+    assert "[제품]\n하밍 / 젤리 에어 치크 / 02 베리피치\n\n[설명]" in llm.calls[0].text
 
 
 def test_model_gets_numbered_sentences_and_no_images():

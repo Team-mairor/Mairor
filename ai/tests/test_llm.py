@@ -91,6 +91,7 @@ def test_sends_images_text_and_format_through_gms():
     assert body["system"] == "지시문"
     assert body["max_tokens"] == 16000
     assert body["output_config"]["effort"] == "high"
+    assert body["thinking"] == {"type": "adaptive", "display": "summarized"}
     output_format = body["output_config"]["format"]
     assert output_format["type"] == "json_schema"
     assert set(output_format["schema"]["properties"]) == {"text", "count"}

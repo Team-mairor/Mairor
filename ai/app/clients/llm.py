@@ -83,6 +83,8 @@ class ClaudeLlm:
     자리가 날 때까지 기다리는 시간은 llm_timeout_seconds에 들어가지 않는다.
 
     SDK 자체 기록은 끈다. 호출 기록은 core/tracing.py가 남기고, 둘 다 켜면 비용이 두 번 잡힌다.
+
+    생각은 요약으로 받아 호출 기록에서 왜 그렇게 답했는지 본다. 받지 않아도 요금은 같다.
     """
 
     def __init__(
@@ -119,6 +121,7 @@ class ClaudeLlm:
                     max_tokens=self._max_tokens,
                     system=system,
                     messages=[{"role": "user", "content": content}],
+                    thinking={"type": "adaptive", "display": "summarized"},
                     output_config={
                         "effort": self._effort,
                         "format": {

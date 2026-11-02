@@ -151,7 +151,10 @@ def test_failed_check_marks_check_step_with_reason_but_not_job(backend, provider
         id="a1", evidence="", verdict="not_in_input", reason="'톡톡'은 입력에 없음"
     )
     llm = FakeLlm(
-        explanation("톡톡 펴 발라요"), StepCheck(sentences=[verdict]), explanation("발라요"), PASSED
+        explanation("톡톡 펴 발라요"),
+        StepCheck(sentences=[verdict], omitted=[]),
+        explanation("발라요"),
+        PASSED,
     )
 
     make_client(llm).post(JOBS, json=guide_request(backend))

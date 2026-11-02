@@ -1,7 +1,8 @@
 """만든 단계 설명이 입력에 근거하는지 코드와 Claude로 확인한다.
 
 코드는 근거 번호·숫자·제품 이름·글자 수·방향을 보고,
-Claude는 문장마다 입력에 없는 말·뜻이 바뀐 말·할 일이 아닌 말·처음 하는 사람이 모를 말을 본다.
+Claude는 문장마다 입력에 없는 말·뜻이 바뀐 말·할 일이 아닌 말·처음 하는 사람이 모를 말을 보고,
+입력의 할 일 중 설명에 빠진 것을 찾는다.
 """
 
 import hashlib
@@ -33,6 +34,7 @@ ProblemKind = Literal[
     "not_action",
     "hard_word",
     "unchecked",
+    "omitted",
 ]
 NOTICE_KINDS: frozenset[ProblemKind] = frozenset({"hard_word", "unchecked"})
 
@@ -137,11 +139,16 @@ def check_by_code(step: GuideInputStep, explanation: StepExplanation) -> list[Pr
 async def check_by_model(
     llm: Llm, step: GuideInputStep, explanation: StepExplanation
 ) -> tuple[list[Problem], LlmUsage]:
-    """이미지는 보내지 않는다. Claude 답에 없는 문장은 unchecked 알림으로 남긴다."""
+    """이미지는 보내지 않는다. Claude 답에 없는 문장은 unchecked 알림으로 남긴다.
+
+    빠진 것은 문장 번호 대신 그 말이 있는 입력 번호로 남긴다.
+    제품 이름·호수는 빠져도 되는 말이라 Claude에게 따로 알려 주고,
+    그래도 빠졌다고 한 말이 제품 이름·호수뿐이면 버린다.
+    """
     inputs = step_inputs(step)
     sentences = explanation_sentences(explanation)
     lines = "\n".join(f"{s.id}: {s.text}" for s in sentences)
-    text = f"{user_message(step, inputs)}\n\n[설명]\n{lines}"
+    text = f"{user_message(step, inputs)}{_product_line(step)}\n\n[설명]\n{lines}"
     variables = {"partLabel": step.part_label} | inputs | {"explanation": lines}
     with using_prompt(PROMPT, PROMPT_VERSION, variables):
         result = await llm.generate(system=PROMPT, text=text, images=[], output=StepCheck)
@@ -156,6 +163,12 @@ async def check_by_model(
         Problem(s.id, s.text, "unchecked", "Claude 판정이 없음")
         for s in sentences
         if s.id not in judged
+    ]
+    names = _product_names(step)
+    problems += [
+        Problem(omission.id, omission.text, "omitted", "설명에 빠짐")
+        for omission in result.output.omitted
+        if omission.id in inputs and not _only_product_names(omission.text, names)
     ]
     return problems, result.usage
 
@@ -176,9 +189,30 @@ def _moves(text: str) -> list[tuple[str, str]]:
     ]
 
 
+def _product_line(step: GuideInputStep) -> str:
+    if step.product is None:
+        return ""
+    values = (step.product.brand, step.product.name, step.product.shade)
+    return "\n\n[제품]\n" + " / ".join(value for value in values if value)
+
+
 def _product_names(step: GuideInputStep) -> list[str]:
     if step.product is None:
         return []
     values = (step.product.brand, step.product.name, step.product.shade)
     names = [value.replace(" ", "") for value in values if value]
     return [name for name in names if len(name) >= 2]
+
+
+def _only_product_names(text: str, names: list[str]) -> bool:
+    """제품 이름·호수의 일부이거나, 이름들을 지우고 조사 한 글자 이하만 남으면 참이다.
+
+    Claude가 빠진 말을 입력에서 옮기며 "02 베리피치를"처럼 조사까지 붙여 오기 때문이다.
+    """
+    compact = text.replace(" ", "")
+    if any(compact in name for name in names):
+        return True
+    rest = compact
+    for name in sorted(names, key=len, reverse=True):
+        rest = rest.replace(name, "")
+    return rest != compact and len(rest) <= 1

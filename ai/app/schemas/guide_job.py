@@ -109,10 +109,17 @@ class LlmSentenceCheck(CamelModel):
     reason: str
 
 
+class LlmOmission(CamelModel):
+    id: str
+    text: str
+
+
 class StepCheck(CamelModel):
-    """Claude에게 받는 문장별 확인 결과.
+    """Claude에게 받는 문장별 확인 결과와 입력에서 설명에 빠진 할 일.
 
     evidence를 verdict보다 먼저 쓰게 해서 근거를 찾은 뒤에 판정하게 한다.
+    빠진 것은 문장 판정을 다 한 뒤에 찾게 한다.
     """
 
     sentences: list[LlmSentenceCheck]
+    omitted: list[LlmOmission]

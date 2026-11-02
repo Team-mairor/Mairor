@@ -30,7 +30,8 @@ PASSED = StepCheck(
     sentences=[
         LlmSentenceCheck(id=id, evidence="", verdict="ok", reason="")
         for id in ("a1", "a1.tip", "done")
-    ]
+    ],
+    omitted=[],
 )
 
 
@@ -270,7 +271,7 @@ def test_failed_check_is_recorded_but_explanation_is_still_sent(backend):
     )
     llm = FakeLlm(
         explanation("톡톡 펴 발라요"),
-        StepCheck(sentences=[verdict]),
+        StepCheck(sentences=[verdict], omitted=[]),
         explanation("발라요"),
         PASSED,
     )
