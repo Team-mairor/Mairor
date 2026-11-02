@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiDocsTest {
 
   /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 14;
+  private static final int ALL_OPERATIONS = 18;
 
   @Autowired private MockMvc mockMvc;
 
@@ -74,6 +74,22 @@ class OpenApiDocsTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/v1/users/email-verification'].post").exists())
         .andExpect(jsonPath("$.paths['/v1/users/email-verification/verification'].post").exists());
+  }
+
+  @Test
+  void apiDocs_includesGoogleLoginStartAsAPublicRedirect() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/users/oauth/google'].get.tags[0]").value("Google 로그인"))
+        .andExpect(jsonPath("$.paths['/v1/users/oauth/google'].get.security").doesNotExist())
+        .andExpect(jsonPath("$.paths['/v1/users/oauth/google'].get.responses['302']").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/oauth/google'].get.responses['429'].description")
+                .value(containsString("USERS_LOGIN_RATE_LIMITED")))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/oauth/google'].get.responses['503'].description")
+                .value(containsString("USERS_GOOGLE_AUTH_UNAVAILABLE")));
   }
 
   @Test

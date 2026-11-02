@@ -129,6 +129,10 @@ app:
     password-reset:
       limit: ${RATE_LIMIT_PASSWORD_RESET_LIMIT:10}
       window: ${RATE_LIMIT_PASSWORD_RESET_WINDOW:10m}
+    # Google 로그인 시작
+    google-login:
+      limit: ${RATE_LIMIT_GOOGLE_LOGIN_LIMIT:20}
+      window: ${RATE_LIMIT_GOOGLE_LOGIN_WINDOW:10m}
   session:
     # 절대 만료. 로그인 성공 시점부터 이 시간이 지나면 활동 중이어도 다시 로그인해야 한다. 일반 요청으로 연장하지 않는다.
     # 쿠키 최대 수명 <= 서버 유휴 만료 <= 절대 만료 여야 하며 어긋나면 앱이 기동하지 않는다
@@ -149,6 +153,16 @@ app:
     max-entries: ${LOGIN_MAX_ENTRIES:10000}
     # 서버 전체에서 동시에 계산하는 로그인 BCrypt 수. 넘으면 기다리지 않고 429 로 거절한다 (서버 코어 수에 맞춰 조정)
     max-concurrent-hashes: ${LOGIN_MAX_CONCURRENT_HASHES:4}
+  oauth:
+    google:
+      # GCP OAuth 클라이언트. 세 값을 모두 넣거나 모두 비운다. 비우면 Google 로그인만 503 이고, prod 에서 비어 있으면 기동하지 않는다
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      # Google 에 등록한 callback 주소. FE 주소의 /api 경로를 쓴다 (예: http://localhost:3000/api/v1/users/oauth/google/callback)
+      redirect-uri: ${GOOGLE_REDIRECT_URI:}
+      # 로그인 시작부터 callback 까지, callback 뒤 처음 온 사용자가 가입을 마치기까지 허용하는 시간
+      authorization-ttl: 10m
+      signup-ttl: 10m
   agreements:
     # 현재 약관 버전. 필수 약관은 요청의 agreements[].version 이 이 값과 같아야 인정한다 (마케팅은 제외)
     versions:

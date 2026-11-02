@@ -12,6 +12,7 @@ import com.mairor.backend.users.repository.UserAgreementRepository;
 import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.users.support.AgreementPolicy;
 import com.mairor.backend.users.support.AgreementProperties;
+import com.mairor.backend.users.support.BirthDatePolicy;
 import com.mairor.backend.users.support.EmailVerificationProperties;
 import com.mairor.backend.users.support.EmailVerificationStore;
 import com.mairor.backend.users.support.SignupProperties;
@@ -38,6 +39,7 @@ class UserSignUpServiceUnitTest {
                       SignUpRequests.CURRENT_VERSION,
                       SignUpRequests.CURRENT_VERSION,
                       SignUpRequests.CURRENT_VERSION))),
+          new BirthDatePolicy(Clock.systemUTC()),
           new SignupProperties(false),
           mock(EmailVerificationStore.class),
           new VerificationHasher(

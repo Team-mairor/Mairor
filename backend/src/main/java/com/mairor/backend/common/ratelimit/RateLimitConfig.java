@@ -38,4 +38,11 @@ public class RateLimitConfig {
     RateLimitProperties.Rule rule = properties.passwordReset();
     return new InMemoryRateLimiter(rule.limit(), rule.window());
   }
+
+  /** Google 로그인 시작(API-USERS-006). 키는 클라이언트 IP. 시작마다 인가 요청을 저장하므로 한 곳에서 저장소를 채우는 것을 막는다. */
+  @Bean
+  RateLimiter googleLoginRateLimiter(RateLimitProperties properties) {
+    RateLimitProperties.Rule rule = properties.googleLogin();
+    return new InMemoryRateLimiter(rule.limit(), rule.window());
+  }
 }

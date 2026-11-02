@@ -165,6 +165,58 @@ class UsersSchemaSqlTest {
         .hasMessageContaining(UserAgreement.USER_FK);
   }
 
+  @Test
+  void userIdentitiesColumnsAndConstraintsMatchTheEntity() {
+    List<Map<String, Object>> columns =
+        jdbc.queryForList(
+            "select column_name, is_nullable, character_maximum_length "
+                + "from information_schema.columns where table_name = 'user_identities'");
+
+    assertThat(columns)
+        .extracting(c -> c.get("column_name"))
+        .containsExactlyInAnyOrder("id", "user_id", "provider", "provider_subject", "created_at");
+    for (Map<String, Object> c : columns) {
+      assertThat(c.get("is_nullable")).as(String.valueOf(c.get("column_name"))).isEqualTo("NO");
+    }
+    assertThat(column(columns, "provider").get("character_maximum_length")).isEqualTo(10);
+    assertThat(column(columns, "provider_subject").get("character_maximum_length")).isEqualTo(255);
+
+    List<String> names =
+        jdbc.queryForList(
+            "select conname from pg_constraint where conrelid = 'user_identities'::regclass",
+            String.class);
+    assertThat(names)
+        .contains(
+            "user_identities_pkey", UserIdentity.USER_FK, UserIdentity.PROVIDER_SUBJECT_UNIQUE);
+  }
+
+  @Test
+  void sameProviderSubjectTwiceViolatesTheUniqueConstraint() {
+    jdbc.update(
+        "insert into users (id, email, provider, created_at, updated_at) values "
+            + "('00000000-0000-0000-0000-000000000001', 'a@example.com', 'GOOGLE', now(), now()), "
+            + "('00000000-0000-0000-0000-000000000002', 'b@example.com', 'GOOGLE', now(), now())");
+    String insert =
+        "insert into user_identities (id, user_id, provider, provider_subject, created_at) "
+            + "values (gen_random_uuid(), ?::uuid, 'GOOGLE', 'google-sub-1', now())";
+    jdbc.update(insert, "00000000-0000-0000-0000-000000000001");
+
+    // 다른 회원이어도 같은 Google 계정은 연결할 수 없다
+    assertThatThrownBy(() -> jdbc.update(insert, "00000000-0000-0000-0000-000000000002"))
+        .isInstanceOf(DuplicateKeyException.class)
+        .hasMessageContaining(UserIdentity.PROVIDER_SUBJECT_UNIQUE);
+  }
+
+  @Test
+  void identitiesMustReferenceAnExistingUser() {
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "insert into user_identities (id, user_id, provider, provider_subject, created_at) "
+                        + "values (gen_random_uuid(), gen_random_uuid(), 'GOOGLE', 'sub', now())"))
+        .hasMessageContaining(UserIdentity.USER_FK);
+  }
+
   private static Map<String, Object> column(List<Map<String, Object>> columns, String name) {
     return columns.stream()
         .filter(c -> name.equals(c.get("column_name")))

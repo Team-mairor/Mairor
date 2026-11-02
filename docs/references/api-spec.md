@@ -1,7 +1,7 @@
 # API 명세
 
 <callout icon="📌" color="blue_bg">
-<b>API 명세 v2 — 현행 API 44개 · 기능 45개 대응 (Git 공유용)</b><br /><br />기능 정책은 <mention url="https://app.notion.com/p/3fedce3252f680e589b0c4e5476d731f" />, 화면 순서는 <mention url="https://app.notion.com/p/406dce3252f68144abc8e28875775da0" /> 기준. API별 요청·응답·오류와 공통 모델의 단일 기준 문서이며, Notion APIs DB의 구버전 상세보다 우선한다. 명세는 구현 완료를 뜻하지 않는다.
+<b>API 명세 v2 — 현행 API 46개 · 기능 45개 대응 (Git 공유용)</b><br /><br />기능 정책은 <mention url="https://app.notion.com/p/3fedce3252f680e589b0c4e5476d731f" />, 화면 순서는 <mention url="https://app.notion.com/p/406dce3252f68144abc8e28875775da0" /> 기준. API별 요청·응답·오류와 공통 모델의 단일 기준 문서이며, Notion APIs DB의 구버전 상세보다 우선한다. 명세는 구현 완료를 뜻하지 않는다.
 </callout>
 
 ## 0. 구현 규칙 (AI·팀원 공통)
@@ -15,7 +15,7 @@
 
 ## 1. API 요약
 
-현행 API 44개는 모두 P0입니다.
+현행 API 46개는 모두 P0입니다.
 
 공통 경로 Prefix: <code>/api/v1</code> · Endpoint는 공통 Prefix를 포함한 전체 경로입니다. API ID와 기능 ID는 별도 번호 체계입니다(API-USERS-005 등 결번은 재사용 금지).
 
@@ -36,6 +36,8 @@
 | API-USERS-014 | GET /api/v1/users/me/sessions | USERS-003 로그인 기기 관리 (번호 임시) |
 | API-USERS-015 | DELETE /api/v1/users/me/sessions/\{sessionRef\} | USERS-003 로그인 기기 관리 (번호 임시) |
 | API-USERS-016 | DELETE /api/v1/users/me/sessions | USERS-003 로그인 기기 관리 (번호 임시) |
+| API-USERS-017 | GET /api/v1/users/oauth/google/signup | USERS-004 Google 최초 가입 대기 조회 (번호 임시) |
+| API-USERS-018 | POST /api/v1/users/oauth/google/signup | USERS-004 · USERS-001 Google 최초 가입 완료 (번호 임시) |
 | API-VIDEO-001 | POST /api/v1/videos | VIDEO-001 · VIDEO-005 · VIDEO-004 |
 | API-VIDEO-002 | POST /api/v1/users/me/analysis-jobs | VIDEO-002 · ANALYSIS-001\~006 |
 | API-VIDEO-003 | GET /api/v1/users/me/analysis-jobs/\{jobId\} | VIDEO-003 · ANALYSIS-006 |
@@ -143,7 +145,7 @@ API-USERS-006 · GET /api/v1/users/oauth/google
 
 - 302 Found. Location:string은 서버에 설정한 Google 인증 URL. JSON 본문 없음.
 - 서버가 일회성 state·nonce·PKCE verifier와 유효기간을 인증 트랜잭션에 저장하고 고정 callback URI로 연결한다.
-- 인증 트랜잭션 전용 임시 쿠키는 HttpOnly·Secure·SameSite=Lax·Path=/로 설정해 외부 제공자의 최상위 GET callback에서 검증한다. 본 로그인 세션 쿠키 Strict와 분리한다. 쿠키 이름·수명은 구현 시 확정한다.
+- 인증 트랜잭션 전용 임시 쿠키는 HttpOnly·Secure·SameSite=Lax·Path=/로 설정해 외부 제공자의 최상위 GET callback에서 검증한다. 본 로그인 세션 쿠키 Strict와 분리한다. 쿠키 이름 <code>__Host-googleAuth</code>, 수명 10분(설정값), 값은 서버 저장소의 열쇠이고 1회용이다(S15P31A306-208).
 - 응답 Cache-Control:no-store. Google client secret·verifier는 클라이언트에 노출하지 않는다.
 
 #### 오류
@@ -157,7 +159,7 @@ API-USERS-006 · GET /api/v1/users/oauth/google
 
 - 다음 단계는 API-USERS-007 callback. 로그인 시작만으로 회원·서비스 세션을 만들지 않는다.
 - Google 인증 취소·실패를 로그인 성공으로 표시하지 않는다. 카카오·기타 소셜 로그인은 제공하지 않는다.
-- Google 제공자 등록 정보·리디렉션 URI·토큰 검증 라이브러리·운영값은 구현 전 확정한다.
+- 구현(S15P31A306-208): Spring Security OAuth2 Client(OIDC, scope openid·email·profile, PKCE S256). 리디렉션 URI는 FE 주소의 <code>/api/v1/users/oauth/google/callback</code>이고 GCP에 환경별로 등록한다. 운영값은 BE README "Google 로그인".
 </toggle>
 
 <toggle>
@@ -178,19 +180,19 @@ API-USERS-007 · GET /api/v1/users/oauth/google/callback
 
 #### 성공 응답
 
-- 302 Found, Location은 서비스 메인 고정 경로. JSON 본문 없음.
-- 서비스 세션 쿠키를 새로 발급(HttpOnly·Secure·SameSite=Strict·Path=/), 트랜잭션은 소모·폐기한다. 메인에서 API-USERS-004를 호출해 User·csrfToken을 받는다. 응답 Cache-Control:no-store.
-- 기존 Google 회원의 로그인은 처리 가능. 최초 회원의 약관·추가 정보 수집 방식은 확인 필요 5 확정 전 구현 차단 사항이며, 동의 없이 신규 회원을 생성·로그인시키지 않는다. 확정 시 callback 분기·오류 전달 경로를 함께 갱신한다.
+- 302 Found, JSON 본문 없음, 응답 Cache-Control:no-store. 인증 트랜잭션은 결과와 상관없이 소모·폐기하고 그 쿠키를 만료시킨다. Location은 상대 경로다.
+- **연결된 Google 회원**: Location <code>/</code>. 서비스 세션 쿠키를 새로 발급(HttpOnly·Secure·SameSite=Strict·Path=/). 메인에서 API-USERS-004를 호출해 User·csrfToken을 받는다.
+- **처음 온 사용자**: Location <code>/signup/google</code>. 회원·세션을 만들지 않고 검증한 Google 계정(sub·이메일·이름)을 가입 대기로 저장하며, 가입 대기 쿠키 <code>__Host-googleSignup</code>(HttpOnly·Secure·SameSite=Lax·Path=/, 10분)를 발급한다. 추가 정보 화면이 API-USERS-017로 조회하고 API-USERS-018로 가입을 마친다. 동의 없이 신규 회원을 생성·로그인시키지 않는다.
 
 #### 실패 응답
 
-- callback 오류는 302로 고정 로그인 화면에 복귀하고 아래 허용된 서비스 오류 코드만 안내한다. 서비스 회원·세션을 만들지 않는다. 제공자 응답 원문·토큰·code를 URL·로그에 노출하지 않는다.
-- 오류 코드:string enum=USERS\_GOOGLE\_AUTH\_CANCELLED(인증 취소), USERS\_GOOGLE\_AUTH\_FAILED(교환·토큰 검증 실패), USERS\_OAUTH\_STATE\_INVALID(만료·재사용·불일치), USERS\_ACCOUNT\_LINK\_REQUIRED(동일 이메일 자체 계정 존재), USERS\_GOOGLE\_AUTH\_UNAVAILABLE(외부 장애).
-- 로그인 화면 경로·오류 전달의 구체 형식은 프론트 라우팅 확정 시 정한다. 실패 안내 후 재시도·자체 로그인을 제공한다.
+- callback 오류는 302로 로그인 화면 <code>/login?error=&lt;code&gt;</code>에 복귀하고 아래 허용된 서비스 오류 코드만 안내한다. 서비스 회원·세션을 만들지 않는다. 제공자 응답 원문·토큰·code를 URL·로그에 노출하지 않는다. FE는 목록에 없는 값이면 일반 실패로 안내한다.
+- 오류 코드:string enum=USERS\_GOOGLE\_AUTH\_CANCELLED(인증 취소), USERS\_GOOGLE\_AUTH\_FAILED(교환·토큰 검증 실패, Google이 확인하지 않은 이메일), USERS\_OAUTH\_STATE\_INVALID(트랜잭션 쿠키 없음·만료·재사용·state 불일치), USERS\_ACCOUNT\_LINK\_REQUIRED(동일 이메일의 다른 계정 존재: 자체 계정 또는 다른 Google 계정), USERS\_GOOGLE\_AUTH\_UNAVAILABLE(설정 없음·외부 장애·서버 저장소 장애).
+- 실패 안내 후 재시도·자체 로그인을 제공한다.
 
 #### 정책·비고
 
-- 서버에서 code 교환과 ID 토큰 서명·issuer·audience·만료·nonce를 검증한다. 검증된 제공자 subject로 서비스 회원 ID를 연결한다. Google 토큰을 서비스 로그인 쿠키로 사용하지 않는다.
+- 서버에서 code 교환과 ID 토큰 서명·issuer·audience·만료·nonce, email\_verified를 검증한다. 검증된 제공자 subject로 서비스 회원 ID를 연결한다(user\_identities). Google 토큰을 서비스 로그인 쿠키로 사용하지 않고 저장하지 않는다.
 - 이미 연결된 Google subject는 기존 회원으로 로그인한다. 동일 이메일의 자체 계정과는 자동 연결하지 않는다. 해당 경우 연결 정책 확정 전 USERS\_ACCOUNT\_LINK\_REQUIRED로 안내하고 임의 중복 계정을 만들지 않는 임시 계약이다.
 - 동일 이메일 계정의 추가 인증·연결·중복 허용, Google 로그아웃과 서비스 로그아웃의 처리 기준은 기능명세의 미확정 사항이다. 계정 연결 API는 정책 확정 후 정의한다.
 - 자체/Google 로그인 모두 본인 데이터 소유권·세션 만료·현재 기기 로그아웃·미완료 실행 정리에 같은 서비스 회원 ID를 사용한다.
@@ -562,6 +564,26 @@ DELETE /api/v1/users/me/sessions
 - 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 500 INTERNAL\_ERROR(일부 기기를 끊지 못함)
 - 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 세션마다 지우기 전에 종료 훅을 호출하고(이유 ALL\_DEVICES\_REVOKED) 훅이 실패한 기기는 지우지 않는다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓴다(로그인한 같은 계정의 요청이면 그 세션 포함)
 
+### API-USERS-017 · Google 가입 대기 조회
+
+GET /api/v1/users/oauth/google/signup
+
+- 관련 기능: USERS-004 Google 로그인 · 공개(가입 대기 쿠키 필요) · 번호는 팀 확정 전 임시 · S15P31A306-208
+- 요청: Cookie <code>__Host-googleSignup</code>(API-USERS-007이 처음 온 사용자에게 발급). 본문 없음
+- 성공 200: <code>{ "email": "user@gmail.com", "name": "홍길동", "expiresAt": "2026-11-02T01:10:00Z" }</code>, Cache-Control:no-store. email은 Google이 확인한 이메일(정규화 값)이라 화면에 고정으로 보여 주고 가입 이메일 인증(API-USERS-012·013)은 거치지 않는다. name은 Google 표시 이름이고 없으면 null. Google sub·토큰은 내려 주지 않는다
+- 오류: 410 USERS\_GOOGLE\_SIGNUP\_EXPIRED(쿠키 없음·가입 대기 없음·만료·이미 사용) → 로그인 화면으로 보내 "Google로 다시 시작" 안내
+- 정책: 조회는 가입 대기를 소모하지 않는다. 가입 대기 유효 시간은 10분(설정값). 서버 메모리에 있어 서버 재시작 시 사라진다
+
+### API-USERS-018 · Google 가입 완료
+
+POST /api/v1/users/oauth/google/signup
+
+- 관련 기능: USERS-004 · USERS-001 · 공개(가입 대기 쿠키 필요)·허용 Origin 검사(CSRF 토큰 불필요) · 번호는 팀 확정 전 임시 · S15P31A306-208
+- 요청 Body: API-USERS-001에서 email·password·passwordConfirm·emailVerificationToken을 뺀 나머지(nickname·name·phone·birthDate·gender 선택, agreements 필수). 필드 규칙·details[].field 이름이 API-USERS-001과 같다
+- 성공 201: <code>{ "user": User, "csrfToken": "…" }</code>(API-USERS-002 로그인 응답과 같은 형태) + 서비스 세션 쿠키 발급, 가입 대기 쿠키 만료, Cache-Control:no-store. 가입과 동시에 로그인 상태다(user.provider=GOOGLE)
+- 오류: 400 VALIDATION\_FAILED(details) · 400 USERS\_REQUIRED\_AGREEMENT\_MISSING · 403 FORBIDDEN(허용되지 않은 Origin) · 409 USERS\_ACCOUNT\_LINK\_REQUIRED(그사이 같은 이메일로 가입된 계정이 있음, 자동 연결 안 함) · 410 USERS\_GOOGLE\_SIGNUP\_EXPIRED(가입 대기 없음·만료·이미 사용) · 415 UNSUPPORTED\_MEDIA\_TYPE
+- 정책: 400은 가입 대기를 소모하지 않아 고쳐 다시 보낼 수 있다. 그 밖의 응답(201·409·410)은 가입 대기를 소모한다. 회원·Google 연결(user\_identities)·약관 동의 기록을 한 트랜잭션으로 저장하고, 비밀번호는 없다(password\_hash null). email\_verified\_at은 가입 시각. 저장 뒤 세션 발급이 실패하면 회원은 남고 사용자는 Google로 다시 로그인하면 들어온다. 약관·선택 항목을 이메일 가입과 같게 받는 것은 FE 요청안이며 기획 확인 필요 5
+
 ### API-VIDEO-006 · 분석 재시도
 
 POST /api/v1/users/me/analysis-jobs/\{jobId\}/retry
@@ -627,7 +649,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 화면 (v11) | 호출 순서·분기 |
 | --- | --- |
 | 0 인트로 | API-USERS-004 → 200 홈(csrfToken 보관) / 401 로그인(로그인 이력 플래그 있으면 만료 안내, API-USERS-004 참고) |
-| 1-1 로그인 | API-USERS-002 → 성공 시 이 기기 온보딩 기록 확인(브라우저 저장) → 온보딩 또는 홈. 401 공통 오류, 429 Retry-After 카운트다운. Google: API-USERS-006 → callback API-USERS-007 → API-USERS-004. 취소·실패·연결 필요는 callback 결과 코드로 안내 |
+| 1-1 로그인 | API-USERS-002 → 성공 시 이 기기 온보딩 기록 확인(브라우저 저장) → 온보딩 또는 홈. 401 공통 오류, 429 Retry-After 카운트다운. Google: API-USERS-006(화면 이동) → callback API-USERS-007 → 연결된 회원은 메인에서 API-USERS-004 / 처음 온 사용자는 /signup/google에서 API-USERS-017 조회 → 약관·추가 정보 → API-USERS-018(바로 로그인) → 온보딩. 취소·실패·연결 필요는 /login?error=코드로 안내, 410은 Google로 다시 시작 |
 | 1-2 비밀번호 재설정 | API-USERS-008(코드 발송) → API-USERS-009(코드 확인·resetToken) → API-USERS-010(새 비밀번호) → 로그인 화면 + 완료 안내 |
 | 1-3 회원가입 | API-USERS-011 중복 확인(이메일 변경 시 재확인) → (이메일 소유 확인 사용 시, 초안) API-USERS-012 인증번호 발송 → API-USERS-013 확인 → API-USERS-001(약관 agreements 포함) → 로그인 화면(이메일 채움) → 로그인 후 온보딩 |
 | 2 온보딩·파우치 담기 | 노출 여부는 기기 저장(API 없음). 파우치 담기 = 11 등록 시트와 동일(API-POUCH-008 → 001/002 → 004) |
@@ -829,7 +851,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 
 | 항목 | 남은 결정 |
 | --- | --- |
-| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정, Google 최초 로그인 시 약관·추가 정보 수집, 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
+| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), Google 최초 로그인 시 약관·추가 정보 수집(구현은 FE 요청안대로 이메일 가입과 같은 약관 4개·선택 항목 5개, API-USERS-017·018 번호 임시), Google 가입 시 닉네임 기본값(구현은 채우지 않음), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
 | 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
 | 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |

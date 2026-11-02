@@ -66,6 +66,10 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `RATE_LIMIT_EMAIL_AVAILABILITY_LIMIT` / `_WINDOW` | `30` / `1m` | 이메일 중복 확인의 IP 당 요청 제한 |
 | `RATE_LIMIT_EMAIL_VERIFICATION_LIMIT` / `_WINDOW` | `10` / `10m` | 인증번호 발송의 IP 당 요청 제한 |
 | `RATE_LIMIT_PASSWORD_RESET_LIMIT` / `_WINDOW` | `10` / `10m` | 비밀번호 재설정 인증번호 발송의 IP 당 요청 제한(가입 인증과 따로 센다) |
+| `GOOGLE_CLIENT_ID` | (없음) | GCP OAuth 클라이언트 ID. 아래 셋은 모두 넣거나 모두 비운다. 일부만 있으면 기동 실패. 모두 비우면 dev 는 Google 로그인만 503 이고, prod 는 기동 실패 ([Google 로그인](#google-로그인)) |
+| `GOOGLE_CLIENT_SECRET` | (없음) | GCP OAuth 클라이언트 보안 비밀. 코드·문서에 적지 않는다 |
+| `GOOGLE_REDIRECT_URI` | (없음) | GCP 에 등록한 callback 주소. **FE 주소**의 `/api` 경로다(dev `http://localhost:3000/api/v1/users/oauth/google/callback`). BE 주소(`:8080`)로 두면 쿠키가 FE 호스트에 붙지 않는다 |
+| `RATE_LIMIT_GOOGLE_LOGIN_LIMIT` / `_WINDOW` | `20` / `10m` | Google 로그인 시작의 IP 당 요청 제한 |
 | `SESSION_TIMEOUT` | `3d` | 서버 세션 유휴 만료. 마지막 인증 요청으로부터 이 시간이 지나면 다시 로그인해야 한다 |
 | `SESSION_COOKIE_MAX_AGE` | `3d` | 세션 쿠키 최대 수명. 인증 요청이 성공하면 이 값으로 갱신된다(절대 만료까지 남은 시간이 더 짧으면 그 값) |
 | `SESSION_ABSOLUTE_TIMEOUT` | `30d` | 절대 만료. 로그인 성공 시점부터 이 시간이 지나면 활동 중이어도 다시 로그인한다. 일반 요청으로 연장하지 않는다. 쿠키 최대 수명 ≤ 유휴 만료 ≤ 절대 만료 여야 하며 어긋나면 기동 실패 |
@@ -111,7 +115,7 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 
 ### 인메모리 저장소의 한계
 
-인증번호·재발송 기록·인증 토큰(`VERIFICATION_STORE=memory`, 가입 인증과 비밀번호 재설정 각각), 요청 제한(`RateLimiter`), 로그인 시도 제한(`LoginAttemptLimiter`), 비밀번호 재설정의 이메일 단위 잠금(`PasswordResetLocks`)은 서버 메모리에 있다.
+인증번호·재발송 기록·인증 토큰(`VERIFICATION_STORE=memory`, 가입 인증과 비밀번호 재설정 각각), 요청 제한(`RateLimiter`), 로그인 시도 제한(`LoginAttemptLimiter`), 비밀번호 재설정의 이메일 단위 잠금(`PasswordResetLocks`), Google 로그인의 인가 요청·가입 대기(`GoogleAuthorizationStore`, `GoogleSignupStore`)는 서버 메모리에 있다.
 
 - **서버 1대에서만 정확하다.** 여러 대면 인증번호를 발송한 서버와 확인하는 서버가 달라 인증이 실패하고, 요청 제한도 서버마다 따로 센다.
 - **재시작하면 사라진다.** 진행 중인 인증은 다시 받아야 하고 제한 횟수도 초기화된다(`EMAIL_VERIFICATION_SECRET` 이 없으면 인증번호 해시도 달라진다). 로그인 시도 제한의 잠금도 풀린다.
@@ -225,6 +229,8 @@ class AbandonUnfinishedExecutions implements SessionEndHook {
 | 지표 노출·알림 | **미정** (203). 특히 `mairor.password_reset{result=session_revoke_failed}` |
 | 운영 DB 의 `users.password_version` 컬럼 | **적용됨**(2026-11-01, 첫 배포 때 `users.sql` 전체). 이후 스키마 변경은 [DB 스키마](#db-스키마) 순서 |
 | 재설정·인증 IP 제한의 클라이언트 IP | **적용**. `X-Forwarded-For` 의 실제 IP 로 센다(위 "제약" 참고) |
+| Google 로그인 운영값 | **미적용**(208). 운영 환경변수 `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`GOOGLE_REDIRECT_URI`(prod 는 비어 있으면 기동 실패라 **머지 전에** 넣는다), GCP 에 운영 리디렉션 URI 등록, OAuth 동의 화면 "프로덕션 게시"(테스트 상태면 등록한 테스트 사용자만 로그인된다), 운영 DB 에 `user_identities` 테이블 |
+| Google 로그인과 슬롯 고정 | **확인 필요**(208). 인가 요청·가입 대기가 슬롯 메모리에 있어서 시작 → callback → 가입 완료가 같은 슬롯으로 가야 한다. ALB 고정 쿠키(`AWSALB`, SameSite 속성 없음 → 브라우저 기본 Lax)는 Google 에서 돌아오는 최상위 GET 에도 붙을 것으로 보지만 운영에서 한 번 확인한다. 어긋나면 `USERS_OAUTH_STATE_INVALID` · `USERS_GOOGLE_SIGNUP_EXPIRED` 로 끝나고 사용자는 Google 로 다시 시작한다 |
 | 배포 방식(새 프로세스와 옛 프로세스의 동시 기동) | **정함**(203). api 2개(슬롯 a · b)를 한 대씩 바꾸는 롤링. ALB 고정 세션(1시간)으로 한 브라우저는 같은 슬롯에 붙고, `EMAIL_VERIFICATION_SECRET` 은 두 슬롯이 같은 값, 만료 세션 정리는 슬롯 a 만 돈다(`SESSION_SWEEP_ENABLED=false`). 인메모리 인증 상태 · 재설정 잠금은 여전히 슬롯마다 따로라, 바뀌는 슬롯에서 진행 중이던 인증 · 재설정은 다시 해야 한다 |
 
 ## 비밀번호 재설정
@@ -252,6 +258,32 @@ class AbandonUnfinishedExecutions implements SessionEndHook {
 - **재설정과 겹친 로그인**은 세션을 만들지 못한다([로그인·로그아웃](#로그인로그아웃) 참고).
 - **메일 발송 설정**은 가입 인증과 같다(`MAIL_*`). `MAIL_ENABLED=false` 면 dev 는 인증번호를 서버 로그에만 남기고(받는 사람 주소는 가린다), prod 는 발송이 실패한다(503).
 
+## Google 로그인
+
+Google 계정으로 로그인·가입한다(S15P31A306-208). 로그인 시작과 callback 은 브라우저 화면 이동(GET)이고, 가입 대기 조회·가입 완료는 FE 의 fetch 다.
+
+| API | 경로 | 설명 |
+|---|---|---|
+| API-USERS-006 | `GET /api/v1/users/oauth/google` | 로그인 시작. Google 인증 화면으로 302 |
+| API-USERS-007 | `GET /api/v1/users/oauth/google/callback` | Google 이 돌려보내는 주소. 결과에 따라 `/`, `/signup/google`, `/login?error=<코드>` 로 302 |
+| API-USERS-017 (번호 임시) | `GET /api/v1/users/oauth/google/signup` | 가입 대기 조회. 200 `{email, name, expiresAt}` |
+| API-USERS-018 (번호 임시) | `POST /api/v1/users/oauth/google/signup` | 약관·추가 정보로 가입 완료. 201 `{user, csrfToken}`, 바로 로그인 |
+
+```
+'Google로 계속하기' ─▶ 006 ─▶ Google 계정 선택 ─▶ 007 ─┬─ 연결된 회원 ─▶ / (로그인됨)
+                                                       ├─ 처음 온 사용자 ─▶ /signup/google ─▶ 약관·추가 정보 제출 ─▶ 로그인됨
+                                                       └─ 실패 ─▶ /login?error=<코드>
+```
+
+- **회원은 동의를 받은 뒤에 만든다.** 처음 온 사용자는 callback 에서 회원·세션을 만들지 않고 가입 대기(검증한 `sub`·이메일·이름, 10분)만 저장한다. 비밀번호는 받지 않는다(`password_hash` 비어 있음). 이메일은 Google 이 확인한 값(`email_verified=true`)만 받고 가입 이메일 인증은 거치지 않는다.
+- **계정은 `sub` 로 찾는다**(`user_identities`). 이메일이 같은 다른 계정(자체 가입, 다른 Google 계정)과는 **자동으로 연결하지 않고** `USERS_ACCOUNT_LINK_REQUIRED` 로 안내한다. Google 전용 회원은 비밀번호 로그인이 401, 비밀번호 재설정은 "Google 로 로그인" 안내 메일이다.
+- **보안**: state·nonce·PKCE(S256)는 Spring 이 만들고 검증한다. 인가 요청은 세션이 아니라 서버 메모리에 두고 브라우저에는 열쇠만 `__Host-googleAuth` 쿠키(HttpOnly·Secure·**Lax**, 10분, 1회용)로 준다. 서비스 세션 쿠키는 Strict 라 Google 에서 돌아오는 요청에 붙지 않기 때문이다. 가입 대기도 같은 방식의 `__Host-googleSignup` 쿠키다. 가입 완료(POST)는 CSRF 대신 허용 Origin 검사를 받는다.
+- **ID 토큰 검증**: 서명(Google 공개키)·iss·aud·exp·nonce 와 `email_verified`. userinfo 는 부르지 않고 Google 액세스 토큰은 저장하지 않는다. Google 호출(토큰 교환·공개키)은 5초 제한이다.
+- **callback 실패 코드**(`/login?error=`): `USERS_GOOGLE_AUTH_CANCELLED`(취소), `USERS_GOOGLE_AUTH_FAILED`(검증 실패·확인 안 된 이메일), `USERS_OAUTH_STATE_INVALID`(시작 기록 없음·만료·재사용·state 불일치), `USERS_ACCOUNT_LINK_REQUIRED`(같은 이메일의 계정), `USERS_GOOGLE_AUTH_UNAVAILABLE`(설정 없음·Google 장애·DB 장애). Google 이 보낸 오류 문구·code·토큰은 URL·로그에 남기지 않는다.
+- **가입 완료**: 입력 규칙과 `details[].field` 는 이메일 가입과 같다(생년월일 규칙 `BirthDatePolicy` 공유). 입력 오류(400)는 가입 대기를 쓰지 않아 고쳐 다시 보낼 수 있고, 가입 대기가 없거나 이미 썼으면 410 `USERS_GOOGLE_SIGNUP_EXPIRED`, 그사이 같은 이메일로 가입됐으면 409. 회원을 저장한 뒤 세션 발급이 실패하면 회원은 남고, 사용자는 Google 로 다시 로그인하면 들어온다.
+- **GCP 설정**: OAuth 클라이언트(웹 애플리케이션)를 만들고 승인된 리디렉션 URI 에 `GOOGLE_REDIRECT_URI` 값을 환경마다 등록한다(dev `http://localhost:3000/api/v1/users/oauth/google/callback`). 범위는 `openid email profile`. 동의 화면이 테스트 상태면 등록한 테스트 사용자만 로그인된다. 로컬에서는 FE 개발 서버가 `/api` 를 BE 로 넘겨야 한다(FE `API_PROXY_TARGET=http://localhost:8080`).
+- **테스트**: 실제 Google 대신 `FakeGoogle`(JDK HTTP 서버 + 테스트 RSA 키)이 토큰·공개키 주소를 대신한다. 서명·nonce·aud 검증까지 실제 경로로 돈다.
+
 ## DB 스키마
 
 dev 는 `ddl-auto=update` 라 Hibernate 가 테이블을 만들지만, **운영(prod)은 `ddl-auto=validate`** 라 테이블이 먼저 있어야 앱이 기동한다. 없으면 `missing table [users]` 로 실패한다.
@@ -260,14 +292,15 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 
 | 파일 | 테이블 |
 |---|---|
-| `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록) |
+| `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
 
 - 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`
-- **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column` 으로 앱 기동을 막는다.
+- **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼·테이블이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column`·`missing table` 로 앱 기동을 막는다.
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
+| `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
 
 - 적용은 BE(정윤)가 한다(S15P31A306-203). master 머지가 곧 운영 배포라, 스키마를 바꾸는 MR 은 **머지 전에** 운영 DB 에 적용한다. 그래서 옛 버전과 함께 돌아도 깨지지 않는 변경(추가 → 코드 전환 → 삭제)만 한다. 절차는 `deploy/README.md` "DB 스키마".
 - 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).

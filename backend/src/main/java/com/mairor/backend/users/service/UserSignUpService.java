@@ -14,6 +14,7 @@ import com.mairor.backend.users.entity.UserAgreement;
 import com.mairor.backend.users.repository.UserAgreementRepository;
 import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.users.support.AgreementPolicy;
+import com.mairor.backend.users.support.BirthDatePolicy;
 import com.mairor.backend.users.support.EmailVerificationStore;
 import com.mairor.backend.users.support.EmailVerificationStoreConfig;
 import com.mairor.backend.users.support.PasswordNormalizer;
@@ -21,9 +22,6 @@ import com.mairor.backend.users.support.SignupProperties;
 import com.mairor.backend.users.support.VerificationHasher;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.Period;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import org.hibernate.exception.ConstraintViolationException;
@@ -38,8 +36,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * 자체 회원가입 (API-USERS-001). 입력 형식은 {@link SignUpRequest}가 검증하고, 여기서는 확인값 일치, 생년월일 범위, 필수 약관({@link
- * AgreementPolicy}), 이메일 인증({@link SignupProperties}), 중복을 확인한 뒤 저장한다. 세션·토큰은 발급하지 않는다.
+ * 자체 회원가입 (API-USERS-001). 입력 형식은 {@link SignUpRequest}가 검증하고, 여기서는 확인값 일치, 생년월일 범위({@link
+ * BirthDatePolicy}), 필수 약관({@link AgreementPolicy}), 이메일 인증({@link SignupProperties}), 중복을 확인한 뒤
+ * 저장한다. 세션·토큰은 발급하지 않는다.
  *
  * <p>bcrypt 해시를 계산하는 동안 DB 커넥션을 쥐지 않도록 메서드 전체에는 트랜잭션을 걸지 않고, 회원과 약관 동의 기록 저장만 {@link
  * TransactionTemplate}으로 묶는다.
@@ -53,16 +52,11 @@ public class UserSignUpService {
   private static final String EMAIL_NOT_VERIFIED_CODE = "USERS_EMAIL_NOT_VERIFIED";
   private static final String UNIQUE_VIOLATION_SQL_STATE = "23505";
 
-  /** 만 14세 기준과 "오늘"은 한국 날짜로 센다. */
-  private static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
-
-  private static final LocalDate EARLIEST_BIRTH_DATE = LocalDate.of(1900, 1, 1);
-  private static final int MIN_AGE = 14;
-
   private final UserRepository userRepository;
   private final UserAgreementRepository userAgreementRepository;
   private final PasswordEncoder passwordEncoder;
   private final AgreementPolicy agreementPolicy;
+  private final BirthDatePolicy birthDatePolicy;
   private final SignupProperties signupProperties;
   private final EmailVerificationStore verificationStore;
   private final VerificationHasher verificationHasher;
@@ -74,6 +68,7 @@ public class UserSignUpService {
       UserAgreementRepository userAgreementRepository,
       PasswordEncoder passwordEncoder,
       AgreementPolicy agreementPolicy,
+      BirthDatePolicy birthDatePolicy,
       SignupProperties signupProperties,
       @Qualifier(EmailVerificationStoreConfig.SIGNUP) EmailVerificationStore verificationStore,
       VerificationHasher verificationHasher,
@@ -83,6 +78,7 @@ public class UserSignUpService {
     this.userAgreementRepository = userAgreementRepository;
     this.passwordEncoder = passwordEncoder;
     this.agreementPolicy = agreementPolicy;
+    this.birthDatePolicy = birthDatePolicy;
     this.signupProperties = signupProperties;
     this.verificationStore = verificationStore;
     this.verificationHasher = verificationHasher;
@@ -96,7 +92,7 @@ public class UserSignUpService {
     if (!password.equals(PasswordNormalizer.normalize(request.passwordConfirm()))) {
       throw passwordMismatch();
     }
-    validateBirthDate(request.birthDate());
+    birthDatePolicy.validate(request.birthDate());
     Map<AgreementType, SignupAgreement> agreements = agreementPolicy.validate(request.agreements());
     Instant now = clock.instant();
     // 토큰은 읽기만 하고, 가입이 커밋된 뒤에 지운다
@@ -173,38 +169,17 @@ public class UserSignUpService {
     }
   }
 
-  /** 입력했을 때만 확인한다: 오늘보다 과거, 1900-01-01 이후, 만 14세 이상. */
-  private void validateBirthDate(LocalDate birthDate) {
-    if (birthDate == null) {
-      return;
-    }
-    LocalDate today = LocalDate.now(clock.withZone(SERVICE_ZONE));
-    if (!birthDate.isBefore(today)) {
-      throw birthDateInvalid("과거 날짜여야 합니다.");
-    }
-    if (birthDate.isBefore(EARLIEST_BIRTH_DATE)) {
-      throw birthDateInvalid("1900-01-01 이후여야 합니다.");
-    }
-    if (Period.between(birthDate, today).getYears() < MIN_AGE) {
-      throw birthDateInvalid("만 14세 이상만 가입할 수 있습니다.");
-    }
-  }
-
-  private static BusinessException birthDateInvalid(String reason) {
-    return new BusinessException(
-        HttpStatus.BAD_REQUEST,
-        ErrorCode.VALIDATION_FAILED.name(),
-        ErrorCode.VALIDATION_FAILED.message(),
-        List.of(new ErrorResponse.FieldError("birthDate", reason)),
-        null);
-  }
-
   /** 예외의 원인 사슬에 이메일 유니크 제약({@link User#EMAIL_UNIQUE}) 위반이 있는지 확인한다. */
   static boolean isEmailUniqueViolation(Throwable e) {
+    return isUniqueViolation(e, User.EMAIL_UNIQUE);
+  }
+
+  /** 예외의 원인 사슬에 이름이 {@code constraintName} 인 유니크 제약 위반이 있는지 확인한다. */
+  static boolean isUniqueViolation(Throwable e, String constraintName) {
     for (Throwable t = e; t != null; t = t.getCause()) {
       if (t instanceof ConstraintViolationException violation
           && UNIQUE_VIOLATION_SQL_STATE.equals(violation.getSQLState())
-          && User.EMAIL_UNIQUE.equalsIgnoreCase(violation.getConstraintName())) {
+          && constraintName.equalsIgnoreCase(violation.getConstraintName())) {
         return true;
       }
     }

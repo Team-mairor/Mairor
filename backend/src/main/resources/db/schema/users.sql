@@ -46,3 +46,18 @@ CREATE TABLE user_agreements (
     CONSTRAINT fk_user_agreements_user FOREIGN KEY (user_id) REFERENCES users (id),
     CONSTRAINT uk_user_agreements_user_type UNIQUE (user_id, type)
 );
+
+-- user_identities 테이블 (S15P31A306-208). 엔티티: users/entity/UserIdentity.java
+-- 외부 로그인 제공자 계정과 회원의 연결. 지금은 GOOGLE 만 쓰고 provider_subject 는 ID 토큰의 sub 다.
+-- 제공자 계정 하나는 회원 하나에만 연결된다 (uk_user_identities_provider_subject).
+-- 이미 users 테이블이 있는 DB 에도 이 CREATE 문만 따로 적용하면 된다.
+CREATE TABLE user_identities (
+    id               uuid                        NOT NULL,
+    user_id          uuid                        NOT NULL,
+    provider         varchar(10)                 NOT NULL,
+    provider_subject varchar(255)                NOT NULL,
+    created_at       timestamp(6) with time zone NOT NULL,
+    CONSTRAINT user_identities_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_user_identities_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT uk_user_identities_provider_subject UNIQUE (provider, provider_subject)
+);
