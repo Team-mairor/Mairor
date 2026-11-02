@@ -1,31 +1,19 @@
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.services.face_map import MAP_SIZE, flatten, map_points, median_map
+from app.services.area_preparation import PhotoLoader, rgb_to_lab, rows_to_map, usable_rows
+from app.services.face_map import MAP_SIZE, map_points
 from app.services.region_mask import polygon_mask, span
 from app.services.region_points import REGION_POINTS
 
 AFTER_WINDOW_MS = 1000
-FACE_RATIO_RANGE = (0.8, 1.2)
 MARGIN_RATIO = 0.05
 REDNESS_MIN = 6.0
 MIN_FOUND_RATIO = 0.5
 SKIN_RING_RATIOS = (0.20, 0.35)
-
-SRGB_TO_XYZ = np.array(
-    [
-        [0.412453, 0.357580, 0.180423],
-        [0.212671, 0.715160, 0.072169],
-        [0.019334, 0.119193, 0.950227],
-    ]
-)
-D65_WHITE = np.array([0.950456, 1.0, 1.088754])
-
-PhotoLoader = Callable[[FrameLandmarks], np.ndarray]
 
 LipAreaReason = Literal["noUsableFrame", "lipColorNotFound"]
 
@@ -65,7 +53,7 @@ def after_map(
     rows = after_rows(result, step_end_ms)
     if not rows:
         return None
-    return median_map([flatten(load_photo(row), row.face) for row in rows])
+    return rows_to_map(rows, load_photo)
 
 
 def lip_area_on_map(after: np.ndarray) -> np.ndarray:
@@ -74,7 +62,7 @@ def lip_area_on_map(after: np.ndarray) -> np.ndarray:
     입술 바깥 테두리를 MARGIN_RATIO만큼 넓힌 범위 안에서, 입 주변 피부보다 붉은 기(Lab a)가
     REDNESS_MIN 넘게 높은 칸을 바른 곳으로 본다.
     """
-    lab = _to_lab(after)
+    lab = rgb_to_lab(after)
     outline = map_points(REGION_POINTS["lipsOuter"])
     width = span(outline)
     area = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=round(width * MARGIN_RATIO))
@@ -101,17 +89,9 @@ def found_ratio(area: np.ndarray) -> float:
 def after_rows(result: LandmarksResult, step_end_ms: int) -> list[FrameLandmarks]:
     """바른 뒤 지도에 쓸 사진. result는 check_frames를 거친 결과다.
 
-    단계 끝 직후 AFTER_WINDOW_MS 안이고, 판정이 ok이며,
-    얼굴 크기 비율이 FACE_RATIO_RANGE 안인 사진이다.
+    단계 끝 직후 AFTER_WINDOW_MS 안에서 입술 바깥 부위로 usable_rows가 고른 사진이다.
     """
-    low, high = FACE_RATIO_RANGE
-    return [
-        row
-        for row in result.frames
-        if step_end_ms < row.timestamp_ms <= step_end_ms + AFTER_WINDOW_MS
-        and row.status == "ok"
-        and low <= row.measures.get("faceWidthRatio", 0.0) <= high
-    ]
+    return usable_rows(result, step_end_ms, step_end_ms + AFTER_WINDOW_MS, ["lipsOuter"])
 
 
 def _skin_ring(outline: list[tuple[float, float]], width: float) -> np.ndarray:
@@ -119,15 +99,3 @@ def _skin_ring(outline: list[tuple[float, float]], width: float) -> np.ndarray:
     near, far = (round(width * ratio) for ratio in SKIN_RING_RATIOS)
     outer = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=far)
     return outer & ~polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=near)
-
-
-def _to_lab(rgb: np.ndarray) -> np.ndarray:
-    """RGB 숫자 표를 Lab(L 밝기 0~100, a 초록-빨강, b 파랑-노랑)으로 바꾼다."""
-    c = rgb.astype(np.float64) / 255
-    linear = np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
-    xyz = linear @ SRGB_TO_XYZ.T / D65_WHITE
-    f = np.where(xyz > (6 / 29) ** 3, np.cbrt(xyz), xyz / (3 * (6 / 29) ** 2) + 4 / 29)
-    return np.stack(
-        [116 * f[..., 1] - 16, 500 * (f[..., 0] - f[..., 1]), 200 * (f[..., 1] - f[..., 2])],
-        axis=-1,
-    )

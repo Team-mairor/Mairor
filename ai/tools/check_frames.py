@@ -1,4 +1,4 @@
-"""샘플 폴더의 사진마다 립 분석에 쓸지 판정해 output/frames_checked.json으로 저장한다 (개발용).
+"""샘플 폴더의 사진마다 부위 분석에 쓸지 판정해 output/frames_checked.json으로 저장한다 (개발용).
 
 얼굴 점 결과(output/landmarks.json)를 읽으므로 먼저 tools/build_landmarks.py를 실행해 둔다.
 실행 (ai/ 폴더에서): uv run python tools/check_frames.py samples/local_01_lip_seq
@@ -12,8 +12,9 @@ AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.landmarks import LandmarksResult
-from app.services.frame_checker import check_frames
+from app.services.frame_checker import check_frames, outside_count_name
 from app.services.reference_input import load_reference_input, read_frame_rgb
+from app.services.region_points import REGION_POINTS
 
 LANDMARKS_FILE = Path("output") / "landmarks.json"
 OUTPUT_FILE = Path("output") / "frames_checked.json"
@@ -47,6 +48,11 @@ def main() -> None:
         values = [row.measures[name] for row in result.frames if name in row.measures]
         if values:
             print(f"{name}: {min(values)} ~ {max(values)}")
+    outside = {
+        region: sum(row.measures.get(outside_count_name(region), 0) > 0 for row in result.frames)
+        for region in REGION_POINTS
+    }
+    print("부위가 화면 밖인 사진: " + ", ".join(f"{k} {v}" for k, v in outside.items()))
     print(f"저장: {path}")
 
 

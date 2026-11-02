@@ -6,6 +6,7 @@ from PIL import Image
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
 from app.services.face_map import MAP_SIZE, map_points
+from app.services.frame_checker import outside_count_name
 from app.services.lip_area import (
     MIN_FOUND_RATIO,
     after_rows,
@@ -27,14 +28,16 @@ FACE = Face(
 )
 
 
-def make_row(timestamp_ms: int, status: str = "ok", ratio: float = 1.0) -> FrameLandmarks:
+def make_row(
+    timestamp_ms: int, status: str = "ok", ratio: float = 1.0, lips_outside: float = 0.0
+) -> FrameLandmarks:
     return FrameLandmarks(
         frame_index=timestamp_ms,
         timestamp_ms=timestamp_ms,
         step_id=None,
         image_size=ImageSize(width=10, height=10),
         status=status,
-        measures={"faceWidthRatio": ratio},
+        measures={"faceWidthRatio": ratio, outside_count_name("lipsOuter"): lips_outside},
         face_count=1,
         face=FACE,
     )
@@ -57,6 +60,7 @@ def test_after_rows_keeps_usable_photos_right_after_the_step():
         make_row(503600),
         make_row(504000, status="rejected"),
         make_row(504200, ratio=1.5),
+        make_row(504300, lips_outside=2),
         make_row(504500),
         make_row(504600),
     ]
