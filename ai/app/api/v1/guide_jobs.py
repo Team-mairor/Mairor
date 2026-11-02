@@ -111,7 +111,7 @@ async def request_guide_job(
 ) -> GuideJobAccepted:
     """형식만 보고 바로 접수한다.
 
-    이미지 검사와 설명 생성은 백그라운드에서 하고 결과는 콜백으로 보낸다.
+    설명 생성은 백그라운드에서 하고 결과는 콜백으로 보낸다.
     """
     job = store.create(body)
     background.add_task(run_job, job, llm, settings)

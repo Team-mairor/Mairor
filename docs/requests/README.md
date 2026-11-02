@@ -28,3 +28,4 @@
 | [바르는 자리가 바뀌면 단계 나누기](2026-11-01-hyeonsoo-jungyoon-split-steps-by-application.md) | 2026-11-01 | 김현수 → 김정윤 | 요청 |
 | [마스카라 단계 영역 없음 반영](2026-11-01-hyeonsoo-seoyun-mascara-no-area.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [Google 최초 로그인 추가 정보·약관 입력 흐름](2026-11-02-juyeon-seoyeon-google-signup.md) | 2026-11-02 | 최주연 → 김서연 | 요청 |
+| [가이드 입력에서 대표 장면 이미지 빼기](2026-11-02-hyeongjun-jungyoon-guide-input-images.md) | 2026-11-02 | 박형준 → 김정윤 | 요청 |

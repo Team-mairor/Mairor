@@ -75,29 +75,26 @@ uv run python tools/gemini_video_test.py sample tools/gemini_runs/<파일> sampl
 - 확인 화면은 ① 보낸 요청과 받은 응답, ② 단계마다 영상·Gemini 결과·AI 서버 입력·만든 가이드, ③ 실행끼리 단계 경계·분류·칸 채움 비교를 보여 줍니다.
 - `sample`은 결과를 가이드 입력으로 바꿔 저장합니다. 대표 장면 시각은 예시 이미지 주소가 됩니다.
 
-## 단계 설명 모델 비교
+## 단계 설명 이미지 비교
 
-가이드 입력의 단계마다 GMS로 GPT·Gemini·Claude를 불러 쉬운 설명을 만들고, 모델별 결과를 나란히 봅니다. 모델 결정(S15P31A306-249)용 개발 도구입니다. `.env`에 `GMS_API_KEY`가 있어야 합니다. 비교 결과는 [docs/experiments/STEP_EXPLANATION_MODEL_COMPARISON.md](../docs/experiments/STEP_EXPLANATION_MODEL_COMPARISON.md)에 있습니다.
-
-설명은 단계 화면 아래에 한 번에 보이는 형식(프롬프트 v2)입니다. 동작 1~4개(25자 이내), 동작에 붙은 팁(단계당 2개, 30자 이내, 요령·주의), 넘어갈 때(입력에 있을 때만)로 이루어집니다.
+샘플 단계마다 운영 지시문·확인 코드로 설명을 만들고 확인해서, 대표 장면 이미지를 넣을 때와 뺄 때를 비교합니다(S15P31A306-277). `.env`에 `GMS_API_KEY`가 있어야 합니다. 비교 결과는 [docs/experiments/STEP_EXPLANATION_IMAGE_COMPARISON.md](../docs/experiments/STEP_EXPLANATION_IMAGE_COMPARISON.md)에 있습니다.
 
 ```bash
-uv run python tools/explain_compare.py                             # 결과 → tools/explain_runs/<영상 ID>_<회차>.json
-uv run python tools/explain_compare.py --models claude --steps 1-5  # 모델·단계 골라 돌리기
-uv run streamlit run tools/explain_viewer.py                       # 결과 보기
+uv run python tools/explain_image_compare.py                     # 두 조건 각 1번 → tools/explain_image_runs/<영상 ID>_<회차>.json
+uv run python tools/explain_image_compare.py --runs 3 --steps 1-5  # 회차·단계 골라 돌리기
 ```
 
-- 모델은 `explain_compare.py`의 `MODELS`, 프롬프트는 `tools/explain_prompt.txt`입니다. 프롬프트를 고치면 `PROMPT_VERSION`을 올립니다.
-- 실행이 끝나면 모델별 GMS 사용량 추정을 출력합니다. `PRICES`(공개 요금) × 10,000이 GMS 사이트 숫자와 같은 단위입니다. GPT는 사이트 숫자가 더 크게 나와서 확인 중입니다.
-- 보내기 전에 근거 시각이 단계 구간 밖인 팁을 그 시각의 단계로 옮기고, 받은 뒤 글자 수·개수·근거 번호·숫자·제품 이름·도구·방향·말투를 코드로 검사합니다.
-- 확인 화면은 ① 단계마다 입력과 세 모델 결과, ② 모델별 검사·시간·토큰 요약, ③ 한 모델 결과를 가이드 순서대로, ④ 프롬프트와 팁 옮긴 기록을 보여 줍니다.
+- 이미지는 샘플 옆 `frames/`에서 이미지 주소의 파일 이름으로 읽습니다(`--frames`로 바꿀 수 있음). 영상 장면이라 git에 넣지 않으니, 돌리기 전에 받아서 넣습니다.
+- 이미지 없음은 운영 지시문 그대로 부릅니다. 이미지 있음은 11.02에 운영에서 뺀 이미지 줄 세 개를 다시 넣고, 샘플의 `images`를 보냅니다. 지시문이 바뀌어 넣을 자리를 못 찾으면 멈춥니다.
+- 끝나면 조건별 확인 통과 수·걸린 종류·단계당 문장 수·토큰·시간과 GMS 사용량 추정(공개 요금 × 10,000)을 출력합니다.
+- 모델 결정(S15P31A306-249)에 쓴 여러 모델 비교 도구는 [실험 기록](../docs/experiments/STEP_EXPLANATION_MODEL_COMPARISON.md#재현-방법)의 커밋에 있습니다.
 
 ## Claude 호출
 
-`app/clients/llm.py`가 GMS를 거쳐 Claude를 부릅니다. 서비스 코드는 `get_llm()`으로 받은 `Llm`에 지시문·글·이미지·응답 형식(Pydantic 모델)을 넘깁니다.
+`app/clients/llm.py`가 GMS를 거쳐 Claude를 부릅니다. 서비스 코드는 `get_llm()`으로 받은 `Llm`에 지시문·글·응답 형식(Pydantic 모델)을 넘깁니다. 이미지도 보낼 수 있지만 단계 설명에는 쓰지 않습니다.
 
 ```python
-result = await llm.generate(system=SYSTEM, text=text, images=loaded_images, output=StepExplanation)
+result = await llm.generate(system=SYSTEM, text=text, images=[], output=StepExplanation)
 result.output  # StepExplanation
 result.usage   # 입력·출력·생각 토큰
 ```
@@ -114,7 +111,7 @@ BE가 가이드 입력을 보내면 바로 202로 접수하고, 백그라운드�
 
 - 작업은 서버 메모리에만 있어서 서버가 다시 시작되면 사라집니다. 끝난 작업은 1시간 뒤 지웁니다.
 - 형식(`app/schemas/guide_job.py`)을 고치면 공유 스키마를 다시 만듭니다 (`uv run python tools/export_guide_schema.py`).
-- 지시문은 `app/prompts/step_explanation.txt`입니다. 단계 설명 모델 비교의 프롬프트 v2에 대표 장면 이미지 한 줄을 더했습니다.
+- 지시문은 `app/prompts/step_explanation.txt`입니다. 단계 글만 보내고 대표 장면 이미지는 보내지 않습니다([이미지 비교](../docs/experiments/STEP_EXPLANATION_IMAGE_COMPARISON.md)).
 - 만든 설명은 코드와 Claude로 입력에 근거하는지 한 번 더 확인합니다. 확인 기준은 [docs/EXPLANATION_CHECK.md](docs/EXPLANATION_CHECK.md)에 있습니다.
 - 근거 번호(`sources`)와 쓰지 않은 입력(`unused`)은 BE에 보내지 않고 로그에 남깁니다. 설명 원문은 `LOG_LEVEL=DEBUG`일 때만 남깁니다.
 

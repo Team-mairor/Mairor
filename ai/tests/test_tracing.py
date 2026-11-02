@@ -16,7 +16,7 @@ from opentelemetry.trace import StatusCode
 from app.clients.llm import ClaudeLlm, LlmError
 from app.core import tracing
 from app.schemas.guide import GuideInputStep
-from app.schemas.guide_job import LlmSentenceCheck, StepCheck
+from app.schemas.guide_job import LlmSentenceCheck, StepCheck, StepExplanation
 from app.services.step_explainer import PROMPT, PROMPT_VERSION, explain_step
 from tests.fakes import FakeLlm
 from tests.test_guide_jobs import (
@@ -74,7 +74,7 @@ def all_values(spans: dict[str, ReadableSpan]) -> str:
     return " ".join(str(value) for span in spans.values() for value in span.attributes.values())
 
 
-def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
+def test_job_is_one_trace_of_steps_and_callback(backend, provider):
     llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
 
     job_id = make_client(llm).post(JOBS, json=guide_request(backend)).json()["jobId"]
@@ -82,7 +82,6 @@ def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
     spans = finished(provider)
     assert set(spans) == {
         "guide_job",
-        "load_images",
         "explain_step s1",
         "check_step s1",
         "explain_step s2",
@@ -118,7 +117,7 @@ def test_job_is_one_trace_of_images_steps_and_callback(backend, provider):
     assert job.status.status_code is StatusCode.UNSET
 
 
-def test_image_and_callback_urls_are_not_recorded(backend, provider):
+def test_callback_url_is_not_recorded(backend, provider):
     llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
 
     make_client(llm).post(JOBS, json=guide_request(backend))
@@ -214,11 +213,14 @@ def instrumented(provider):
     AnthropicInstrumentor().uninstrument()
 
 
-def test_claude_call_records_tokens_and_prompt_version_without_image_or_key(instrumented):
-    reply = explanation("펴 발라요").model_dump_json(by_alias=True)
+def answering_llm(reply: str) -> ClaudeLlm:
     answer = httpx2.Response(200, json=message_json(reply))
     http = anthropic.DefaultAsyncHttpxClient(transport=httpx2.MockTransport(lambda request: answer))
-    llm = ClaudeLlm(make_settings(), http_client=http)
+    return ClaudeLlm(make_settings(), http_client=http)
+
+
+def test_claude_call_records_tokens_and_prompt_version_without_key(instrumented):
+    reply = explanation("펴 발라요").model_dump_json(by_alias=True)
     step = GuideInputStep.model_validate(
         {
             "stepId": "s1",
@@ -228,11 +230,10 @@ def test_claude_call_records_tokens_and_prompt_version_without_image_or_key(inst
             "makeup": "foundation",
             "partLabel": "파운데이션",
             "summary": "파운데이션을 얼굴 중앙부터 펴 바릅니다.",
-            "images": [{"url": "https://images.example.com/s1.jpg", "at": 5}],
         }
     )
 
-    asyncio.run(explain_step(llm, step, [Image("image/png", PNG)]))
+    asyncio.run(explain_step(answering_llm(reply), step))
 
     (call,) = finished(instrumented).values()
     assert call.attributes["llm.model_name"] == "claude-haiku-5-5"
@@ -246,6 +247,19 @@ def test_claude_call_records_tokens_and_prompt_version_without_image_or_key(inst
         "summary": "파운데이션을 얼굴 중앙부터 펴 바릅니다.",
     }
     assert json.loads(call.attributes["output.value"])["content"][0]["text"] == reply
-    values = all_values({"call": call})
-    assert base64.standard_b64encode(PNG).decode("ascii") not in values
-    assert KEY not in values
+    assert KEY not in all_values({"call": call})
+
+
+def test_claude_call_with_image_does_not_record_image(instrumented):
+    """단계 설명은 이미지를 보내지 않지만 Llm은 받을 수 있어서, 보내면 기록에 남지 않아야 한다."""
+    reply = explanation("펴 발라요").model_dump_json(by_alias=True)
+    image = Image("image/png", PNG)
+
+    asyncio.run(
+        answering_llm(reply).generate(
+            system=PROMPT, text="단계 이름: 파운데이션", images=[image], output=StepExplanation
+        )
+    )
+
+    (call,) = finished(instrumented).values()
+    assert base64.standard_b64encode(PNG).decode("ascii") not in all_values({"call": call})

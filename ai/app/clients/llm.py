@@ -39,7 +39,7 @@ class LlmError(Exception):
 
 
 class LlmImage(Protocol):
-    """guide_input.LoadedImage처럼 받아서 검사를 마친 이미지."""
+    """보낼 이미지. 단계 설명에는 쓰지 않고, 비교 도구(tools/explain_image_compare.py)가 쓴다."""
 
     @property
     def mime_type(self) -> str: ...
@@ -52,7 +52,7 @@ class LlmImage(Protocol):
 class LlmUsage:
     """토큰 수. output_tokens는 생각 토큰을 뺀 답 토큰이다.
 
-    출력 요금은 output_tokens + thinking_tokens에 붙는다 (tools/explain_compare.py와 같은 뜻).
+    출력 요금은 output_tokens + thinking_tokens에 붙는다 (tools/explain_image_compare.py와 같은 뜻).
     """
 
     input_tokens: int

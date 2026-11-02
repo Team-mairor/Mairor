@@ -17,11 +17,10 @@ BE가 AI 서버에 넘기는 가이드 입력(`GuideInput`)의 JSON Schema다. B
 JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 서버만 검사하고, 어기면 `VALIDATION_FAILED`로 거절한다.
 
 - `endSeconds`가 `startSeconds`보다 큼
-- `images[].at`이 단계 구간 안
 - `endSeconds`가 `durationSeconds` 이하
 - `stepId` · `order`가 겹치지 않음
 
-이미지 검사(받아지는지, 이미지로 열리는지, 5MB 이하, JPEG · PNG · WEBP)도 AI 서버가 주소로 받아 본 뒤에 한다. 어기면 `STEP_IMAGE_UNUSABLE`이다.
+스키마에 없는 칸은 막지 않고 AI 서버도 버린다. 11.02에 뺀 `steps[].images`를 BE가 보내도 통과한다.
 
 ## 형식을 바꿀 때
 

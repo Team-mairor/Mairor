@@ -31,7 +31,6 @@ def make_step(summary: str, tips: list[str] = (), product: dict | None = None) -
             "makeup": "blush",
             "partLabel": "블러셔",
             "summary": summary,
-            "images": [{"url": "https://images.example.com/s1.jpg", "at": 5}],
             "product": product,
             "facts": {"tips": [{"value": tip, "source": "voice"} for tip in tips]},
         }

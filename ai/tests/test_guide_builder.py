@@ -27,7 +27,6 @@ def make_step(order: int, makeup: str = "lip", facts: dict | None = None) -> dic
         "makeup": makeup,
         "partLabel": "립",
         "summary": "틴트를 바른다.",
-        "images": [{"url": f"https://storage.example.com/s{order}.jpg", "at": order * 10.0 + 1}],
         "facts": facts,
     }
 

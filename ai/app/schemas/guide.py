@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field, HttpUrl, ValidationInfo, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from app.schemas.common import CamelModel
 from app.schemas.manifest import Makeup
@@ -8,8 +8,6 @@ from app.schemas.manifest import Makeup
 FactSource = Literal["voice", "onscreenText", "scene", "estimated"]
 
 FieldStatus = Literal["used", "estimated", "missing", "empty"]
-
-MAX_IMAGES_PER_STEP = 3
 
 
 class Fact(CamelModel):
@@ -37,14 +35,9 @@ class StepProduct(CamelModel):
     shade: str | None = None
 
 
-class StepImage(CamelModel):
-    """BE가 대표 장면을 캡처해 저장소에 올린 이미지."""
-
-    url: HttpUrl
-    at: float = Field(ge=0)
-
-
 class GuideInputStep(CamelModel):
+    """설명에는 이미지를 쓰지 않는다 (11.02 ADR). 예전 입력의 images 칸은 모르는 칸이라 버린다."""
+
     step_id: str = Field(min_length=1)
     order: int = Field(ge=1)
     start_seconds: float = Field(ge=0)
@@ -52,7 +45,6 @@ class GuideInputStep(CamelModel):
     makeup: Makeup
     part_label: str = Field(min_length=1)
     summary: str = Field(min_length=1)
-    images: list[StepImage] = Field(min_length=1, max_length=MAX_IMAGES_PER_STEP)
     product: StepProduct | None = None
     facts: StepFacts | None = None
 
@@ -60,12 +52,6 @@ class GuideInputStep(CamelModel):
     def check_range(self) -> "GuideInputStep":
         if self.end_seconds <= self.start_seconds:
             raise ValueError("endSeconds는 startSeconds보다 커야 합니다")
-        for i, image in enumerate(self.images):
-            if not self.start_seconds <= image.at <= self.end_seconds:
-                raise ValueError(
-                    f"images.{i}.at {image.at:g}초가 단계 구간"
-                    f"({self.start_seconds:g}~{self.end_seconds:g}초) 밖입니다"
-                )
         return self
 
 

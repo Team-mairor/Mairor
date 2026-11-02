@@ -3,7 +3,6 @@
 import asyncio
 import logging
 
-from app.clients.image_store import fetch_image
 from app.clients.llm import Llm, LlmError
 from app.core.errors import AppError
 from app.core.tracing import set_failed, set_output, traced
@@ -11,7 +10,7 @@ from app.schemas.common import ErrorDetail
 from app.schemas.guide import GuideInput, GuideInputStep
 from app.schemas.guide_job import ExplainedGuide, ExplainedStep
 from app.services.explanation_checker import Problem, check_explanation
-from app.services.guide_input import Fetch, load_step_images, move_misplaced_facts
+from app.services.guide_input import move_misplaced_facts
 from app.services.step_explainer import PROMPT_VERSION, explain_step, to_explained_step
 
 logger = logging.getLogger(__name__)
@@ -24,24 +23,19 @@ def check_view(problems: list[Problem]) -> list[dict[str, str]]:
     ]
 
 
-async def build_explained_guide(
-    guide_input: GuideInput, llm: Llm, fetch: Fetch = fetch_image
-) -> ExplainedGuide:
-    """이미지를 받아 검사하고, 단계마다 Claude로 설명을 만든 뒤 입력에 근거하는지 확인한다.
+async def build_explained_guide(guide_input: GuideInput, llm: Llm) -> ExplainedGuide:
+    """단계마다 Claude로 설명을 만든 뒤 입력에 근거하는지 확인한다.
 
     단계는 한꺼번에 보내고 동시 호출 수는 llm이 맞춘다.
     한 단계라도 설명을 못 받으면 GENERATION_FAILED로 거절하고 details에 그 단계를 모두 적는다.
     확인에서 걸리거나 확인 호출이 실패해도 지금은 기록만 남기고 설명은 그대로 보낸다.
     """
-    image_count = sum(len(step.images) for step in guide_input.steps)
-    with traced("load_images", {"images": image_count}):
-        images = await asyncio.to_thread(load_step_images, guide_input, fetch)
     steps = move_misplaced_facts(guide_input).steps
 
     async def explain(step: GuideInputStep) -> ExplainedStep:
         inputs = {"stepId": step.step_id, "partLabel": step.part_label}
         with traced(f"explain_step {step.step_id}", inputs, step_id=step.step_id) as span:
-            result = await explain_step(llm, step, images[step.step_id])
+            result = await explain_step(llm, step)
             usage = result.usage
             logger.info(
                 "%s 설명: 토큰 입력 %d·답 %d·생각 %d, 안 쓴 입력 %s",

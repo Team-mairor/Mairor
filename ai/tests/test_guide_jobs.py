@@ -1,11 +1,9 @@
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
 
 from app.api.v1.guide_jobs import GuideJobStore, get_job_store
 from app.clients.llm import LlmError, get_llm
@@ -35,17 +33,10 @@ PASSED = StepCheck(
 )
 
 
-def jpeg() -> bytes:
-    buffer = BytesIO()
-    Image.new("RGB", (8, 6), (200, 160, 150)).save(buffer, format="JPEG")
-    return buffer.getvalue()
-
-
 class FakeBackend:
-    """이미지 저장소와 BE 콜백 주소 역할을 하는 로컬 서버.
+    """BE 콜백 주소 역할을 하는 로컬 서버.
 
-    /images/ 아래는 JPEG를 주고 나머지 GET은 404. POST는 본문을 callbacks에 모으고
-    callback_statuses 순서대로 응답한다 (다 쓰면 200).
+    POST는 본문을 callbacks에 모으고 callback_statuses 순서대로 응답한다 (다 쓰면 200).
     """
 
     def __init__(self) -> None:
@@ -54,17 +45,6 @@ class FakeBackend:
         backend = self
 
         class Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:
-                if not self.path.startswith("/images/"):
-                    self.send_response(404)
-                    self.end_headers()
-                    return
-                body = jpeg()
-                self.send_response(200)
-                self.send_header("Content-Length", str(len(body)))
-                self.end_headers()
-                self.wfile.write(body)
-
             def do_POST(self) -> None:
                 length = int(self.headers["Content-Length"])
                 backend.callbacks.append(json.loads(self.rfile.read(length)))
@@ -99,7 +79,7 @@ def make_client(llm: FakeLlm, **settings) -> TestClient:
     return TestClient(app)
 
 
-def guide_request(backend: FakeBackend, first_image: str = "/images/s1-1.jpg") -> dict:
+def guide_request(backend: FakeBackend) -> dict:
     return {
         "callbackUrl": f"{backend.url}/callback",
         "guideInput": {
@@ -114,7 +94,6 @@ def guide_request(backend: FakeBackend, first_image: str = "/images/s1-1.jpg") -
                     "makeup": "foundation",
                     "partLabel": "파운데이션",
                     "summary": "파운데이션을 얼굴 중앙부터 펴 바릅니다.",
-                    "images": [{"url": backend.url + first_image, "at": 5}],
                     "facts": {
                         "tool": {"value": "퍼프", "source": "scene", "at": 4},
                         "tips": [
@@ -130,10 +109,6 @@ def guide_request(backend: FakeBackend, first_image: str = "/images/s1-1.jpg") -
                     "makeup": "lip",
                     "partLabel": "립",
                     "summary": "틴트를 입술 안쪽부터 바릅니다.",
-                    "images": [
-                        {"url": f"{backend.url}/images/s2-1.jpg", "at": 25},
-                        {"url": f"{backend.url}/images/s2-2.jpg", "at": 30},
-                    ],
                 },
             ],
         },
@@ -219,10 +194,13 @@ def test_sentence_end_periods_are_removed(backend):
     assert first["doneWhen"] == "고르게 펴지면 넘어가요"
 
 
-def test_each_step_is_sent_with_its_inputs_and_images(backend):
+def test_each_step_is_sent_with_its_inputs_without_images(backend):
+    """BE가 예전처럼 images를 보내도 받지 않고 글만 보낸다."""
     llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
+    body = guide_request(backend)
+    body["guideInput"]["steps"][0]["images"] = [{"url": f"{backend.url}/missing.jpg", "at": 5}]
 
-    make_client(llm).post(JOBS, json=guide_request(backend))
+    make_client(llm).post(JOBS, json=body)
 
     first, _, second, _ = llm.calls
     assert first.system == PROMPT
@@ -233,11 +211,8 @@ def test_each_step_is_sent_with_its_inputs_and_images(backend):
         "tool: 퍼프\n"
         "t1: 얇게 여러 번 바르면 뭉치지 않습니다."
     )
-    assert [image.mime_type for image in first.images] == ["image/jpeg"]
-    assert [image.url for image in second.images] == [
-        f"{backend.url}/images/s2-1.jpg",
-        f"{backend.url}/images/s2-2.jpg",
-    ]
+    assert (first.images, second.images) == ([], [])
+    assert backend.callbacks[0]["status"] == "COMPLETED"
 
 
 def test_each_explanation_is_checked_against_inputs_without_images(backend):
@@ -310,33 +285,6 @@ def test_invalid_request_is_rejected_without_job(backend):
     assert res.json()["code"] == "VALIDATION_FAILED"
     assert [d["field"] for d in res.json()["details"]] == ["callbackUrl"]
     assert backend.callbacks == []
-    assert llm.calls == []
-
-
-def test_unusable_image_fails_job(backend):
-    llm = FakeLlm()
-    client = make_client(llm)
-
-    res = client.post(JOBS, json=guide_request(backend, first_image="/missing.jpg"))
-
-    assert backend.callbacks == [
-        {
-            "jobId": res.json()["jobId"],
-            "videoId": "test_01",
-            "status": "FAILED",
-            "guide": None,
-            "error": {
-                "code": "STEP_IMAGE_UNUSABLE",
-                "message": "단계 이미지를 쓸 수 없습니다.",
-                "details": [
-                    {
-                        "field": "steps.0.images.0.url",
-                        "reason": "이미지를 받지 못했습니다 (HTTP 404)",
-                    }
-                ],
-            },
-        }
-    ]
     assert llm.calls == []
 
 

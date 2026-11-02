@@ -1,15 +1,15 @@
-"""단계 하나의 글과 대표 장면으로 Claude에게 쉬운 설명을 받는다.
+"""단계 하나의 글로 Claude에게 쉬운 설명을 받는다.
 
 입력 칸마다 번호(summary, tool, t1, c1 ...)를 붙여 보내고, 모델은 문장마다 근거 번호를 단다.
+이미지는 보내지 않는다. 넣어도 확인 통과율이 같고 비용·시간만 늘었다 (S15P31A306-277).
 """
 
 import hashlib
-from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic.alias_generators import to_camel
 
-from app.clients.llm import Llm, LlmImage, LlmResult
+from app.clients.llm import Llm, LlmResult
 from app.core.tracing import using_prompt
 from app.schemas.guide import GuideInputStep, StepFacts
 from app.schemas.guide_job import ExplainedStep, StepAction, StepExplanation, StepTip
@@ -40,14 +40,12 @@ def user_message(step: GuideInputStep, inputs: dict[str, str]) -> str:
     return f"단계 이름: {step.part_label}\n\n[입력]\n{lines}"
 
 
-async def explain_step(
-    llm: Llm, step: GuideInputStep, images: Sequence[LlmImage]
-) -> LlmResult[StepExplanation]:
+async def explain_step(llm: Llm, step: GuideInputStep) -> LlmResult[StepExplanation]:
     """지시문 파일 내용이 바뀌면 PROMPT_VERSION도 바뀌어 기록에서 지시문별로 나눠 볼 수 있다."""
     inputs = step_inputs(step)
     text = user_message(step, inputs)
     with using_prompt(PROMPT, PROMPT_VERSION, {"partLabel": step.part_label} | inputs):
-        return await llm.generate(system=PROMPT, text=text, images=images, output=StepExplanation)
+        return await llm.generate(system=PROMPT, text=text, images=[], output=StepExplanation)
 
 
 def sentence(text: str) -> str:

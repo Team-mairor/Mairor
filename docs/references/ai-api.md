@@ -28,14 +28,14 @@ BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본�
 | 칸 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `callbackUrl` | string (http · https URL) | Y | 결과를 받을 BE 주소 |
-| `guideInput` | GuideInput | Y | 단계 목록 · 대표 장면 이미지 · 사실 칸. 칸 설명은 [ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md) |
+| `guideInput` | GuideInput | Y | 단계 목록 · 사실 칸. 칸 설명은 [ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md) |
 
 | 응답 | 경우 |
 | --- | --- |
 | `202 {jobId, status: "QUEUED"}` | 접수 |
 | `400 VALIDATION_FAILED` | 형식이 틀림. 작업을 만들지 않는다. 스키마로 못 하는 검사는 [shared/guide-input/README.md](../../shared/guide-input/README.md#스키마에-없는-검사) |
 
-이미지는 접수 뒤에 받아 본다. 못 쓰는 이미지는 202 다음 실패 콜백(`STEP_IMAGE_UNUSABLE`)으로 알린다.
+대표 장면 이미지(`steps[].images`)는 11.02부터 받지 않는다. 보내도 버린다 (Notion ADR ver2 「2026-11-02 쉬운 설명 입력에서 이미지 제거 (ADR-010)」).
 
 ### 콜백
 
@@ -72,11 +72,10 @@ BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본�
 
 | `error.code` | 뜻 | `error.details` |
 | --- | --- | --- |
-| `STEP_IMAGE_UNUSABLE` | 단계 이미지를 받지 못했거나 쓸 수 없음 (5MB 초과, JPEG · PNG · WEBP가 아님 등) | 이미지마다 `steps.{i}.images.{j}.url`과 이유 |
 | `GENERATION_FAILED` | 설명을 받지 못한 단계가 있음 | 단계마다 `steps.{i}`와 이유 |
 | `INTERNAL_ERROR` | 예기치 않은 오류 | 없음 (`null`) |
 
-`i`, `j`는 `guideInput.steps`, `images` 안의 위치(0부터)다.
+`i`는 `guideInput.steps` 안의 위치(0부터)다.
 
 ### 콜백 재시도
 

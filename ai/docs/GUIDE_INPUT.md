@@ -1,11 +1,10 @@
 # 가이드 입력 형식
 
-BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini)로 영상에서 단계 목록과 단계 세부 내용을 뽑고, 대표 장면을 캡처해 저장소에 올린 뒤 이 형식으로 넘긴다. AI 서버는 이걸로 쉬운 설명을 만든다.
+BE가 AI 서버에 넘기는 단계별 설명 재료다. BE는 GMS(Gemini)로 영상에서 단계 목록과 단계 세부 내용을 뽑아 이 형식으로 넘긴다. AI 서버는 이걸로 쉬운 설명을 만든다.
 
 - 모델: `app/schemas/guide.py`의 `GuideInput`
 - 공유 스키마: `shared/guide-input/guide_input.v1.schema.json`. BE도 이 파일로 검사한다 ([README](../../shared/guide-input/README.md))
-- 이미지 검사: `app/services/guide_input.py`의 `load_step_images`
-- 전체 예시: `samples/local_01/guide_input.json` (Gemini 시험 4회차 결과를 바꾼 것, 이미지 주소는 예시). 아래 예시는 그중 5단계
+- 전체 예시: `samples/local_01/guide_input.json` (Gemini 시험 4회차 결과를 바꾼 것). 아래 예시는 그중 5단계. 이 파일의 `images`는 이미지 비교 도구(`tools/explain_image_compare.py`)용으로 남긴 예전 칸이다
 
 ## 칸
 
@@ -22,9 +21,10 @@ BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini
 | `steps[].makeup` | ✓ | 부위 분류: `foundation` · `eyeshadow` · `eyeliner` · `blush` · `lip` · `brow` · `mascara` · `contour` · `highlight` · `other` |
 | `steps[].partLabel` | ✓ | 한국어 부위 이름 (예: 스킨케어 패드, 컨실러). `other`인 단계가 무엇인지 알려 준다 |
 | `steps[].summary` | ✓ | 이 단계에서 하는 일 한 문장 |
-| `steps[].images` | ✓ | 대표 장면 1~3장. `url`(저장소 주소, http·https)과 `at`(캡처 시각, 단계 구간 안) |
 | `steps[].product` | | 영상에 나온 제품. `brand` · `name` · `shade` 모두 선택 |
 | `steps[].facts` | | 단계 세부 사실. 칸 모두 선택 |
+
+대표 장면 이미지(`steps[].images`)는 11.02부터 받지 않는다. 넣어도 설명 품질이 같고 비용·시간만 늘어서다(S15P31A306-277, Notion ADR ver2 「2026-11-02 쉬운 설명 입력에서 이미지 제거 (ADR-010)」). BE가 칸을 빼기 전까지 보내도 버리고 검사하지 않는다.
 
 `facts` 칸은 `tool`(도구) · `amount`(양) · `strength`(세기) · `finishCue`(끝내는 기준) · `tips`(팁 목록) · `cautions`(주의점 목록)이다. 칸 하나는 `{value, source, at}`이다.
 
@@ -44,10 +44,6 @@ BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini
       "makeup": "foundation",
       "partLabel": "파운데이션",
       "summary": "바닐라코 커버리셔스 파워 핏 파운데이션 19 라이트를 스패출러로 얹고 퍼프로 톡톡 두드려 발라줍니다.",
-      "images": [
-        { "url": "https://storage.example.com/guides/eFzG30avtOI/s5-1.jpg", "at": 206 },
-        { "url": "https://storage.example.com/guides/eFzG30avtOI/s5-2.jpg", "at": 213 }
-      ],
       "product": { "brand": "바닐라코", "name": "커버리셔스 파워 핏 파운데이션", "shade": "19 라이트" },
       "facts": {
         "tool": { "value": "스패출러", "source": "scene", "at": 205 },
@@ -58,11 +54,6 @@ BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini
 }
 ```
 
-## 이미지 조건
-
-- 단계당 1~3장, 한 장 5MB 이하, JPEG · PNG · WEBP
-- AI 서버가 `url`로 직접 받는다. 받지 못하거나, 이미지로 열리지 않거나, 상한을 넘으면 거절한다
-
 ## 오류
 
 공통 오류 형식(`{code, message, details}`)을 따른다.
@@ -70,12 +61,10 @@ BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini
 | 경우 | code | details |
 |---|---|---|
 | 칸이 빠졌거나 형식·구간이 틀림 | `VALIDATION_FAILED` | 칸 이름과 이유 |
-| 이미지를 쓸 수 없음 | `STEP_IMAGE_UNUSABLE` | `steps.{i}.images.{j}.url`과 이유. 문제 있는 이미지를 모두 담는다 |
 
 ## BE가 할 일
 
 - **Gemini에서는 시각을 `"MM:SS"` 문자열로 받아 초로 바꿔 넘긴다.** 초 숫자로 달라고 하면 Gemini가 322(=3분 22초)처럼 분초 숫자로 답한다. 이걸 초로 그대로 받으면 마지막 단계가 835초가 되어 525초짜리 영상 밖으로 나간다.
-- Gemini는 장면 이미지를 주지 않고 시각만 준다. 캡처 방법은 BE가 정한다. Gemini가 준 대표 장면 시각을 캡처 시각으로 쓰면 된다.
 
 ## Gemini 시험 결과 (10.26)
 
@@ -86,7 +75,7 @@ BE가 AI 서버에 넘기는 단계별 이미지·설명이다. BE는 GMS(Gemini
 | 단계 구간 | 18~19단계. 실행마다 거의 같고, 사람이 나눈 구간과 ±2초 | 필수 |
 | 부위 분류 | 18단계 중 7개가 `other`, 실행마다 바뀜 (컨실러가 `eyeshadow`가 되기도 함) | 필수로 두고 `partLabel`로 보완 |
 | 부위 이름 · 요약 | 모든 단계에서 나옴 | 필수 |
-| 대표 장면 시각 | 단계마다 2~3개, 모두 단계 구간 안 | 이미지 1~3장 |
+| 대표 장면 시각 | 단계마다 2~3개, 모두 단계 구간 안 | 쓰지 않음 (11.02 이미지 제거) |
 | 도구 · 팁 | 18단계 중 12~18개 | 선택 |
 | 양 · 세기 · 끝내는 기준 · 주의점 | 18단계 중 0~4개 | 선택 |
 | 근거 시각 | 실행마다 3~4개가 단계 구간 밖, 같은 팁이 이웃 단계에 복사되기도 함 | 구간 검사 안 함 |

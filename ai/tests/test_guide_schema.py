@@ -82,9 +82,9 @@ def test_request_with_sample_passes_shared_schema():
             video_id="v1",
             status="FAILED",
             error=ErrorResponse(
-                code="STEP_IMAGE_UNUSABLE",
-                message="단계 이미지를 쓸 수 없습니다.",
-                details=[ErrorDetail(field="steps.0.images.0.url", reason="HTTP 404")],
+                code="GENERATION_FAILED",
+                message="단계 설명을 만들지 못했습니다.",
+                details=[ErrorDetail(field="steps.0", reason="Claude 응답 시간이 초과됐습니다")],
             ),
         ),
     ],

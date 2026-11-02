@@ -12,7 +12,7 @@ ai/
 │  │  ├─ health.py      GET /health
 │  │  └─ v1/            /api/v1/... 기능 API
 │  ├─ services/         비즈니스 로직                     (기능 추가 시 생성)
-│  ├─ clients/          외부 호출: 이미지 받기, Claude(GMS), 네이버 검색
+│  ├─ clients/          외부 호출: Claude(GMS), BE 콜백, 네이버 검색
 │  ├─ schemas/          요청·응답 모델
 │  │  └─ common.py      CamelModel, ErrorResponse
 │  ├─ prompts/          LLM 지시문 (txt)

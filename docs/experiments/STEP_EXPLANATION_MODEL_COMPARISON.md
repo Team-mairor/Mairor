@@ -173,12 +173,13 @@ GMS 사용량 = 공개 요금(달러) × 10,000이고, 사이트 숫자와 같�
 
 ## 재현 방법
 
-`ai/` 폴더에서 실행한다. `.env`에 `GMS_API_KEY`가 있어야 한다.
+시험 도구(`ai/tools/explain_compare.py`·`explain_prompt.txt`·`explain_viewer.py`)와 결과(`ai/tools/explain_runs/`)는 커밋 `8fea6e7`에 있다. 운영 지시문과 달라 지금 레포에서는 지웠다(S15P31A306-277). 그 커밋으로 옮겨 `ai/` 폴더에서 실행하고, `.env`에 `GMS_API_KEY`가 있어야 한다.
 
 ```bash
+git switch --detach 8fea6e7
 uv run python tools/explain_compare.py              # 결과 → tools/explain_runs/<영상 ID>_<회차>.json
 uv run python tools/explain_compare.py --steps 10-14  # 눈 단계만
 uv run streamlit run tools/explain_viewer.py        # 결과 보기
 ```
 
-이 문서의 숫자는 `ai/tools/explain_runs/`의 `eFzG30avtOI_2.json`(19단계)과 `eFzG30avtOI_2~4.json`의 눈 단계(반복 실행)에서 나왔다.
+이 문서의 숫자는 `explain_runs/`의 `eFzG30avtOI_2.json`(19단계)과 `eFzG30avtOI_2~4.json`의 눈 단계(반복 실행)에서 나왔다.

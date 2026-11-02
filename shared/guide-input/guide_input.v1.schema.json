@@ -40,6 +40,7 @@
       "type": "object"
     },
     "GuideInputStep": {
+      "description": "설명에는 이미지를 쓰지 않는다 (11.02 ADR). 예전 입력의 images 칸은 모르는 칸이라 버린다.",
       "properties": {
         "stepId": {
           "minLength": 1,
@@ -87,15 +88,6 @@
           "title": "Summary",
           "type": "string"
         },
-        "images": {
-          "items": {
-            "$ref": "#/$defs/StepImage"
-          },
-          "maxItems": 3,
-          "minItems": 1,
-          "title": "Images",
-          "type": "array"
-        },
         "product": {
           "anyOf": [
             {
@@ -126,8 +118,7 @@
         "endSeconds",
         "makeup",
         "partLabel",
-        "summary",
-        "images"
+        "summary"
       ],
       "title": "GuideInputStep",
       "type": "object"
@@ -195,29 +186,6 @@
         }
       },
       "title": "StepFacts",
-      "type": "object"
-    },
-    "StepImage": {
-      "description": "BE가 대표 장면을 캡처해 저장소에 올린 이미지.",
-      "properties": {
-        "url": {
-          "format": "uri",
-          "maxLength": 2083,
-          "minLength": 1,
-          "title": "Url",
-          "type": "string"
-        },
-        "at": {
-          "minimum": 0,
-          "title": "At",
-          "type": "number"
-        }
-      },
-      "required": [
-        "url",
-        "at"
-      ],
-      "title": "StepImage",
       "type": "object"
     },
     "StepProduct": {
