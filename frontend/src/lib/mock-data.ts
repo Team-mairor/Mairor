@@ -402,9 +402,6 @@ export const DEFAULT_REPORTS: ReportSummary[] = [
   { id: "rp4", title: "음영 섀도 연습", date: "10월 3일", steps: 4, subs: 1 },
 ];
 
-/** 샘플 계정 (로그인·중복 확인 데모) */
-export const EXISTING_EMAILS = ["hello.jooyeon@gmail.com", "member@example.com"];
-
 /** 분석 진행 단계 (API progressStage) */
 export const ANALYSIS_PHASES: [en: string, label: string, from: number][] = [
   ["QUEUED", "대기", 0],

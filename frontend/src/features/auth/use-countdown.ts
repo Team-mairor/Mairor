@@ -20,3 +20,8 @@ export function useCountdown(until: number | null) {
   }, [until]);
   return left;
 }
+
+/** 남은 초를 09:59 형태로 */
+export function mmss(sec: number) {
+  return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+}

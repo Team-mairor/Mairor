@@ -1,5 +1,5 @@
 import { MOCK_SCENARIOS, mockFetch, type MockScenario } from "./mock";
-import type { ApiErrorBody, FieldError } from "./types";
+import type { ApiErrorBody, FieldError, LoginResponse } from "./types";
 
 // 프론트와 API는 같은 Origin에 배포하고 리버스 프록시가 /api를 BE로 넘긴다 (BE context-path가 /api).
 // 세션 쿠키가 같은 Origin에만 실리므로 다른 도메인 주소는 지원하지 않는다. 빈 값이면 기본값을 쓴다.
@@ -28,12 +28,40 @@ export class ApiError extends Error {
   }
 }
 
+// README "오류 코드별 화면 처리" 표의 코드. 이 코드의 message만 사용자에게 그대로 보여 준다 (USERS_*는 모두 해당).
+const SHOWN_CODES = new Set([
+  "VALIDATION_FAILED",
+  "UNAUTHORIZED",
+  "CSRF_INVALID",
+  "FORBIDDEN",
+  "NOT_FOUND",
+  "CONFLICT",
+  "TOO_MANY_REQUESTS",
+  "SERVICE_UNAVAILABLE",
+  NETWORK_ERROR,
+  TIMEOUT,
+]);
+
+/** 화면에 보여 줄 오류 문구. 표에 없는 코드(INTERNAL_ERROR·UNEXPECTED_RESPONSE 등)는 message 대신 공통 문구를 쓴다. */
+export function errorMessage(e: unknown) {
+  return e instanceof ApiError && (e.code.startsWith("USERS_") || SHOWN_CODES.has(e.code))
+    ? e.message
+    : "잠시 후 다시 시도해 주세요.";
+}
+
+/** 화면에 보여 줄 실패 문구. 입력 오류면 첫 칸의 사유를 쓴다 (입력 칸이 하나인 요청용) */
+export function failText(e: unknown) {
+  return e instanceof ApiError && e.code === "VALIDATION_FAILED" && e.details[0]
+    ? e.details[0].reason
+    : errorMessage(e);
+}
+
 let csrfToken: string | null = null;
 
 /**
  * CSRF 토큰을 넣어 두면 변경 요청에 X-CSRF-TOKEN(스프링 시큐리티 기본 헤더)으로 붙인다. 로그아웃하면 null.
  * 로그인·내 계정 조회 응답의 csrfToken을 고치지 않고 그대로 넣는다 (서버가 마스킹한 값이라 그 값으로 검사한다).
- * 토큰이 없거나 맞지 않는 변경 요청은 403 CSRF_INVALID이고, 내 계정 조회로 토큰을 다시 받는다.
+ * 토큰이 없거나 맞지 않는 변경 요청은 403 CSRF_INVALID이고, request()가 내 계정 조회로 토큰을 다시 받아 한 번만 다시 보낸다.
  * 회원가입·로그인은 세션이 없어 토큰 대신 허용 Origin으로 검사한다 (허용되지 않으면 403 FORBIDDEN).
  */
 export function setCsrfToken(token: string | null) {
@@ -151,11 +179,17 @@ async function toApiError(response: Response, signal?: AbortSignal): Promise<Api
  * BE API를 호출한다. 성공하면 본문을 그대로(본문이 없으면 undefined), 실패하면 ApiError를 던진다.
  * path는 /api 뒤의 경로다. 예: request("POST", "/v1/users/signup", { body })
  */
-export async function request<T>(
+export function request<T>(method: string, path: string, options: RequestOptions = {}) {
+  return send<T>(method, path, options, false);
+}
+
+async function send<T>(
   method: string,
   path: string,
-  { query, body, signal, mock = DEFAULT_MOCK }: RequestOptions = {},
+  options: RequestOptions,
+  csrfRetried: boolean,
 ): Promise<T> {
+  const { query, body, signal, mock = DEFAULT_MOCK } = options;
   // 브라우저는 PATCH를 대문자로 바꿔 주지 않아, 소문자로 넘기면 서버가 405로 막는다.
   const verb = method.toUpperCase();
   const route = path.startsWith("/") ? path : `/${path}`;
@@ -185,7 +219,16 @@ export async function request<T>(
     throw toFailure(e, signal);
   }
 
-  if (!response.ok) throw await toApiError(response, signal);
+  if (!response.ok) {
+    const error = await toApiError(response, signal);
+    // 토큰이 없거나 바뀌었으면 내 계정 조회로 다시 받아 한 번만 다시 보낸다. 조회가 401이면 UNAUTHORIZED를 던진다.
+    if (error.code === "CSRF_INVALID" && UNSAFE_METHODS.has(verb) && !csrfRetried) {
+      const me = await send<LoginResponse>("GET", "/v1/users/me", { signal, mock }, true);
+      setCsrfToken(me.csrfToken);
+      return send<T>(method, path, options, true);
+    }
+    throw error;
+  }
   // 204나 본문 없는 200은 undefined. 프록시가 index.html을 200으로 돌려주는 경우 등은 ApiError로 바꾼다.
   const text = await readText(response, signal);
   if (text === "") return undefined as T;

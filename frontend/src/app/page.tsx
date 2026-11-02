@@ -69,7 +69,8 @@ export default function IntroPage() {
   // 저장된 세션을 읽기 전에는 loggedIn이 기본값(false)이라 탭해도 기다린다
   const next = () => {
     if (!hydrated) return;
-    router.replace(state.loggedIn ? "/home" : "/login");
+    if (state.loggedIn) router.replace("/home");
+    else router.replace(state.sessionExpired ? "/login?expired=basic" : "/login");
   };
 
   useEffect(() => {

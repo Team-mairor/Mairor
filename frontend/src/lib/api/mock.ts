@@ -1,4 +1,13 @@
-import type { ApiErrorBody, Health, User } from "./types";
+import type {
+  ApiErrorBody,
+  CodeSent,
+  EmailAvailability,
+  EmailVerified,
+  Health,
+  LoginResponse,
+  PasswordResetVerified,
+  User,
+} from "./types";
 
 /** 모의 응답 시나리오. BE 없이 화면을 만들 때 성공·오류 흐름을 골라 확인한다. */
 export type MockScenario = "success" | "error";
@@ -20,7 +29,18 @@ const DELAY_MS = 400;
 
 const error = (status: number, body: ApiErrorBody): MockResult => ({ status, body });
 
-// 상태·코드·메시지는 BE GlobalExceptionHandler·SecurityConfig·회원가입 서비스가 실제로 돌려주는 값이다.
+const USER: User = {
+  userId: "usr_mock_01",
+  email: "mock@example.com",
+  nickname: null,
+  provider: "LOCAL",
+  createdAt: "2026-10-27T00:00:00Z",
+};
+const LOGGED_IN: LoginResponse = { user: USER, csrfToken: "mock-csrf-token" };
+const CODE_SENT: CodeSent = { expiresInSeconds: 600, resendAvailableInSeconds: 60 };
+const TOKEN_EXPIRES_AT = "2099-01-01T00:00:00Z";
+
+// 상태·코드·메시지는 BE GlobalExceptionHandler·SecurityConfig·회원 서비스가 실제로 돌려주는 값이다.
 // 모의 응답은 요청 본문을 보지 않고 시나리오대로만 답한다.
 const ROUTES: MockRoute[] = [
   {
@@ -36,19 +56,92 @@ const ROUTES: MockRoute[] = [
     path: /^\/v1\/users\/signup$/,
     success: () => ({
       status: 201,
-      body: {
-        userId: "usr_mock_01",
-        email: "mock@example.com",
-        nickname: null,
-        provider: "LOCAL",
-        createdAt: "2026-10-27T00:00:00Z",
-      } satisfies User,
+      body: USER,
     }),
     error: () =>
       error(400, {
         code: "VALIDATION_FAILED",
         message: "입력값이 올바르지 않습니다.",
         details: [{ field: "passwordConfirm", reason: "비밀번호와 일치하지 않습니다." }],
+      }),
+  },
+  {
+    method: "POST",
+    path: /^\/v1\/users\/login$/,
+    success: () => ({ status: 200, body: LOGGED_IN }),
+    error: () =>
+      error(401, {
+        code: "USERS_INVALID_CREDENTIALS",
+        message: "이메일 또는 비밀번호를 확인해 주세요.",
+      }),
+  },
+  {
+    method: "GET",
+    path: /^\/v1\/users\/me$/,
+    success: () => ({ status: 200, body: LOGGED_IN }),
+    error: () => error(401, { code: "UNAUTHORIZED", message: "로그인이 필요합니다." }),
+  },
+  {
+    method: "POST",
+    path: /^\/v1\/users\/email-availability$/,
+    success: () => ({
+      status: 200,
+      body: { email: USER.email, available: true } satisfies EmailAvailability,
+    }),
+    error: () =>
+      error(429, { code: "USERS_EMAIL_CHECK_RATE_LIMITED", message: "요청 한도를 초과했습니다." }),
+  },
+  {
+    method: "POST",
+    path: /^\/v1\/users\/email-verification$/,
+    success: () => ({ status: 202, body: CODE_SENT }),
+    error: () =>
+      error(409, { code: "USERS_EMAIL_DUPLICATE", message: "이미 가입된 이메일입니다." }),
+  },
+  {
+    method: "POST",
+    path: /^\/v1\/users\/email-verification\/verification$/,
+    success: () => ({
+      status: 200,
+      body: {
+        verificationToken: "mock-verification-token",
+        expiresAt: TOKEN_EXPIRES_AT,
+      } satisfies EmailVerified,
+    }),
+    error: () =>
+      error(400, { code: "USERS_EMAIL_CODE_INVALID", message: "인증번호가 일치하지 않습니다." }),
+  },
+  {
+    method: "POST",
+    path: /^\/v1\/users\/password-reset$/,
+    success: () => ({ status: 202, body: CODE_SENT }),
+    error: () =>
+      error(503, {
+        code: "USERS_RESET_SEND_FAILED",
+        message: "비밀번호 재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      }),
+  },
+  {
+    method: "POST",
+    path: /^\/v1\/users\/password-reset\/verification$/,
+    success: () => ({
+      status: 200,
+      body: {
+        resetToken: "mock-reset-token",
+        expiresAt: TOKEN_EXPIRES_AT,
+      } satisfies PasswordResetVerified,
+    }),
+    error: () =>
+      error(400, { code: "USERS_RESET_CODE_INVALID", message: "인증번호가 일치하지 않습니다." }),
+  },
+  {
+    method: "PUT",
+    path: /^\/v1\/users\/password-reset\/password$/,
+    success: () => ({ status: 204 }),
+    error: () =>
+      error(410, {
+        code: "USERS_RESET_TOKEN_EXPIRED",
+        message: "재설정 시간이 지났거나 이미 사용한 요청입니다. 인증번호를 다시 받아 주세요.",
       }),
   },
   {

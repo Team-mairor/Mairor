@@ -13,11 +13,11 @@ import {
   type SignupAgreement,
   type User,
 } from "@/lib/api";
+import { AGREEMENT_VERSION } from "@/lib/validation";
 
 const PASSWORD = "debug-Pass1!";
-// 필수 약관은 서버의 현재 버전(application.yml의 agreement 기본값)으로 동의해야 가입된다.
 const AGREEMENTS: SignupAgreement[] = (["TERMS", "PRIVACY", "AGE_OVER_14"] as const).map(
-  (type) => ({ type, version: "2026-10-26", agreed: true }),
+  (type) => ({ type, version: AGREEMENT_VERSION, agreed: true }),
 );
 
 // BE에 실제로 있는 요청으로 성공·오류·취소 흐름을 확인한다. 실제 기능은 각 화면에서 만든다.
@@ -62,7 +62,8 @@ const SAMPLES = {
       }),
   },
   csrf: {
-    label: "로그아웃 (POST /v1/users/logout, CSRF 토큰 없음 → 403)",
+    label:
+      "로그아웃 (POST /v1/users/logout, CSRF 403이면 토큰을 다시 받아 재시도, 로그인 전이면 401)",
     run: (options: SampleOptions) => api.post("/v1/users/logout", options),
   },
 } as const;

@@ -1,6 +1,8 @@
 export {
   api,
   ApiError,
+  errorMessage,
+  failText,
   isAbortError,
   NETWORK_ERROR,
   request,

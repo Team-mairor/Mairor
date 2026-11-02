@@ -68,3 +68,39 @@ export interface User {
   provider: "LOCAL" | "GOOGLE";
   createdAt: string;
 }
+
+/** POST /v1/users/login 요청. 실패 원인(미가입·비밀번호 오류·Google 전용 계정)은 모두 401 USERS_INVALID_CREDENTIALS */
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+/** 로그인·내 계정 조회(GET /v1/users/me) 응답 (LoginResponse). csrfToken은 고치지 않고 setCsrfToken()에 넣는다 */
+export interface LoginResponse {
+  user: User;
+  csrfToken: string;
+}
+
+/** POST /v1/users/email-availability 응답 */
+export interface EmailAvailability {
+  email: string;
+  available: boolean;
+}
+
+/** 인증번호 발송 응답. 가입 이메일 인증(POST /v1/users/email-verification)·비밀번호 재설정(POST /v1/users/password-reset) 공통 */
+export interface CodeSent {
+  expiresInSeconds: number;
+  resendAvailableInSeconds: number;
+}
+
+/** POST /v1/users/email-verification/verification 응답. 토큰은 가입 요청의 emailVerificationToken으로 보낸다 */
+export interface EmailVerified {
+  verificationToken: string;
+  expiresAt: string;
+}
+
+/** POST /v1/users/password-reset/verification 응답. 토큰은 새 비밀번호 저장(PUT /v1/users/password-reset/password)에 보낸다 */
+export interface PasswordResetVerified {
+  resetToken: string;
+  expiresAt: string;
+}

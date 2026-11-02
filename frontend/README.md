@@ -179,7 +179,7 @@ src/
 │  ├─ done/                   # 11 완성
 │  └─ debug/                  # 확인 화면 (face·overlay·api·preview·tutorial). 앱 스타일 영향 없이 원래대로 보인다
 ├─ components/                # 하단 탭 · 흐름 단계 · ui/ (버튼·입력·안내·모달)
-├─ features/session/          # 로그인·파우치·리포트·실행 상태 (브라우저 저장)
+├─ features/session/          # 로그인·파우치·리포트·실행 상태 (브라우저 저장, 로그인 상태는 서버 기준)
 ├─ features/pouch/            # 파우치 보드 · 제품 등록 시트 · 일러스트
 ├─ features/auth/ · loading/ · live/ · my/ · tutorial/   # 화면별 조각
 ├─ features/face/             # 카메라·얼굴 추적 ('use client')
@@ -197,7 +197,7 @@ public/
 
 - 얼굴 등록(로딩 화면 모달)은 실시간으로 조명(얼굴 가운데 밝기)·거리(얼굴 폭 비율과 가운데 위치)·정면(yaw·pitch·roll)·가림(핵심 부위와 얼굴 윤곽이 화면 안에 정면으로 보임)을 판정하고, 4개를 1.5초 유지하면 정면 1장을 찍는다. 찍는 순간 눈을 감았으면 버리고 다시 잰다. 표정은 판정하지 않고 안내 문구로만 요청한다. 기준값은 `features/loading/face-register.ts`에 있다. 밝기·좌우·기울기는 갤럭시탭 S6 Lite에서 재서 정했고, 거리·가운데·위아래는 원 표시 방식과 하프미러 보정이 정해지면 확정한다. 손 가림은 아직 판정하지 못하고, 사진은 업로드 API 전까지 메모리에만 둔다
 - 등록에 쓴 카메라는 미리보기에서 그대로 이어 쓴다. 등록 전에 '나중에'를 누르면 카메라를 끈다
-- API 연동 전이라 데이터는 `lib/mock-data.ts`의 샘플이고, 로그인·분석·저장은 타이머로 흉내 낸다. 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `lib/mock-guide.ts`에서 만들고, 가이드 대상이 아닌 단계(스킨케어 등)는 뺀다. 단계 수가 영상마다 다르므로 화면은 이 목록 길이대로 돈다.
+- 회원(로그인·가입·비밀번호 재설정·로그아웃)만 BE API를 쓰고, 나머지는 API 연동 전이라 데이터는 `lib/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `lib/mock-guide.ts`에서 만들고, 가이드 대상이 아닌 단계(스킨케어 등)는 뺀다. 단계 수가 영상마다 다르므로 화면은 이 목록 길이대로 돈다.
 - 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`, `/my/pouch?demo=shade-fail`
 
 ## MediaPipe 파일
@@ -238,7 +238,7 @@ try {
 }
 ```
 
-- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. 노션 API 명세와 다르면 코드를 따른다. 타입은 `GET /health`와 회원가입(`POST /v1/users/signup`)만 있고, 나머지 회원 API(로그인·이메일 인증·비밀번호 재설정·로그인 기기)는 화면을 만들 때 BE `users.dto`를 보고 추가한다.
+- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. 노션 API 명세와 다르면 코드를 따른다. 타입은 `GET /health`와 화면에서 쓰는 회원 API(가입·이메일 인증·로그인·내 계정·로그아웃·비밀번호 재설정)만 있고, 로그인 기기 API는 화면을 만들 때 BE `users.dto`를 보고 추가한다.
 - 경로는 `/api` 뒤부터 적는다 (`/v1/...`, `/health`). 주소 앞부분은 `NEXT_PUBLIC_API_BASE_URL` (기본 `/api`).
 - `NEXT_PUBLIC_API_BASE_URL`은 같은 Origin의 상대 경로(`/api`)만 지원한다. 다른 도메인이면 세션 쿠키가 실리지 않고, BE에도 CORS 설정이 없다.
 - 세션 쿠키(`__Host-sessionId`)는 Secure라서 `http://<PC IP>:3000`으로 접속하면 브라우저가 버린다. 로그인이 필요한 요청을 폰에서 확인할 때는 USB 연결(`localhost`)이나 `npm run dev:https`로 접속한다.
@@ -247,7 +247,10 @@ try {
 - 성공하면 본문을 돌려주고, 본문이 없으면(204 등) `undefined`다.
 - 실패하면 `ApiError`를 던진다. 서버에 닿지 못하면 `code`가 `NETWORK_ERROR`, `AbortSignal.timeout()`으로 끊기면 `TIMEOUT`, 응답이 공통 형식이 아니면(JSON이 아닌 성공 응답 포함) `UNEXPECTED_RESPONSE`다. 직접 취소하면 `abort()`에 넣은 이유와 상관없이 `AbortError`를 던진다.
 - `setCsrfToken()`으로 토큰을 넣어 두면 POST·PUT·PATCH·DELETE에 `X-CSRF-TOKEN`이 붙는다. 로그인·내 계정 조회 응답의 `csrfToken`을 고치지 않고 그대로 넣는다.
-- 토큰이 없거나 맞지 않는 변경 요청은 403 `CSRF_INVALID`이고, 내 계정 조회로 토큰을 다시 받는다. 회원가입·로그인은 세션이 없어 토큰 대신 허용 Origin으로 검사한다(허용되지 않으면 403 `FORBIDDEN`). 개발 서버 Origin `http://localhost:3000`은 BE 개발 설정에서 허용돼 있다.
+- 토큰이 없거나 맞지 않는 변경 요청은 403 `CSRF_INVALID`이고, `api`가 내 계정 조회로 토큰을 다시 받아 한 번만 다시 보낸다. 조회가 401이면 `UNAUTHORIZED`를 던진다. 회원가입·로그인은 세션이 없어 토큰 대신 허용 Origin으로 검사한다(허용되지 않으면 403 `FORBIDDEN`). 개발 서버 Origin `http://localhost:3000`은 BE 개발 설정에서 허용돼 있다.
+- 앱을 열면 `SessionProvider`가 내 계정 조회로 로그인 상태를 서버 기준으로 맞추고 토큰을 넣는다. 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하거나 5초 안에 답이 없으면 저장된 상태로 시작한다. 저장된 상태가 로그인인데 401이면 세션 만료로 보고 인트로가 `/login?expired=basic`으로 보낸다(로그인하면 풀린다). 첫 조회가 끝나기 전에는 로그인 버튼이 막힌다.
+- 오류 문구는 `errorMessage(e)`로 고른다. 아래 표에 있는 코드면 `message`, 아니면 "잠시 후 다시 시도해 주세요."다.
+- 가입 전 이메일 인증은 `NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION`으로 정한다(빌드 시점 값, 기본 켜짐). BE의 `SIGNUP_REQUIRE_EMAIL_VERIFICATION`과 같게 둔다. BE가 메일을 보내지 않는 환경(`MAIL_ENABLED=false`)에서는 인증번호를 받을 수 없으므로 `false`로 빌드해야 가입할 수 있다. 끄면 이메일 중복 확인만 거치고 인증 토큰은 보내지 않는다.
 - BE 없이 개발할 때는 `NEXT_PUBLIC_API_MOCK=success|error`로 모의 응답을 쓴다. 운영 빌드(`npm run build`)에서는 이 값을 무시한다. 요청마다 `mock` 옵션으로 바꿀 수도 있지만 운영 빌드에도 적용되므로 `/debug` 확인 화면에서만 쓴다.
 - BE를 로컬에서 띄웠다면 `API_PROXY_TARGET=http://localhost:8080`으로 개발 서버가 `/api`를 넘긴다. 배포에서는 리버스 프록시가 맡는다.
 - `/debug/api`에서 요청별로 성공·오류·취소·시간 초과 흐름을 확인할 수 있다. 모의 응답은 요청 본문을 보지 않으므로 입력값에 따른 결과는 "실제 서버"로 확인한다.
@@ -258,27 +261,27 @@ try {
 
 처리 방식은 `status`가 아니라 `code`로 고른다. 401은 `UNAUTHORIZED`와 `USERS_INVALID_CREDENTIALS`, 403은 `CSRF_INVALID`와 `FORBIDDEN`으로 나뉘므로, 로그인 화면 이동은 `UNAUTHORIZED`일 때만 한다.
 
-| 코드                                                | 상태 | 화면 처리                                                                                                                                                                          |
-| --------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VALIDATION_FAILED`                                 | 400  | `details`의 `field`별 `reason`을 그 입력 칸 아래에 보여 준다. `body`·`agreements[0].version`처럼 짝이 되는 칸이 없으면 폼 위에 `message`를 보여 준다                               |
-| `UNAUTHORIZED`                                      | 401  | 로그인 화면으로 보낸다 (`/login?expired=…`)                                                                                                                                        |
-| `CSRF_INVALID`                                      | 403  | 내 계정 조회(`GET /v1/users/me`)로 토큰을 다시 받아 `setCsrfToken()` 후 한 번 다시 보낸다. 조회가 401이면 `UNAUTHORIZED`처럼 처리하고, 다시 보낸 요청이 또 403이면 반복하지 않는다 |
-| `FORBIDDEN`                                         | 403  | `message`를 안내로 보여 준다                                                                                                                                                       |
-| `NOT_FOUND`                                         | 404  | `message`를 안내로 보여 주고 이전 화면으로 돌아갈 수 있게 한다                                                                                                                     |
-| `CONFLICT`, `USERS_EMAIL_DUPLICATE`                 | 409  | `message`를 해당 입력 칸 아래에 보여 준다                                                                                                                                          |
-| `USERS_INVALID_CREDENTIALS`                         | 401  | 로그인 폼 아래에 `message`를 보여 준다 (어느 칸이 틀렸는지 구분하지 않는다)                                                                                                        |
-| `USERS_REQUIRED_AGREEMENT_MISSING`                  | 400  | `details`의 `field`(`agreements.TERMS` 등)별 `reason`을 보여 준다. 동의 누락과 약관 버전 불일치가 모두 이 코드로 온다                                                              |
-| `USERS_EMAIL_NOT_VERIFIED`                          | 400  | 이메일 인증 단계로 돌려보낸다                                                                                                                                                      |
-| `USERS_*_CODE_INVALID`                              | 400  | 인증번호 칸 아래에 `message`를 보여 준다                                                                                                                                           |
-| `USERS_*_CODE_EXPIRED`, `USERS_RESET_TOKEN_EXPIRED` | 410  | `message`와 함께 인증번호 다시 받기를 보여 준다                                                                                                                                    |
-| `USERS_*_ATTEMPTS_EXCEEDED`                         | 429  | `message`와 함께 인증번호 다시 받기를 보여 준다. `Retry-After`가 없고 다시 받기 전까지는 맞는 인증번호도 거절된다                                                                  |
-| `TOO_MANY_REQUESTS`, `USERS_*_RATE_LIMITED`         | 429  | `message`를 보여 주고, `retryAfterSeconds`가 있으면 그동안 버튼을 막는다                                                                                                           |
-| `USERS_*_SEND_FAILED`, `SERVICE_UNAVAILABLE`        | 503  | `message`를 보여 주고 다시 시도 버튼을 둔다                                                                                                                                        |
-| `METHOD_NOT_ALLOWED`                                | 405  | FE 호출 오류라 `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                    |
-| `INTERNAL_ERROR`                                    | 500  | "잠시 후 다시 시도해 주세요" 안내와 다시 시도 버튼                                                                                                                                 |
-| `NETWORK_ERROR`, `TIMEOUT`                          | -    | FE에서 만드는 코드. 연결을 확인하라는 안내와 다시 시도 버튼                                                                                                                        |
-| `UNEXPECTED_RESPONSE`                               | -    | FE에서 만드는 코드. `INTERNAL_ERROR`와 같이 처리한다                                                                                                                               |
-| 그 밖의 코드                                        | -    | `message`를 쓰지 않고 `INTERNAL_ERROR`와 같이 처리한다                                                                                                                             |
+| 코드                                                | 상태 | 화면 처리                                                                                                                                                                              |
+| --------------------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VALIDATION_FAILED`                                 | 400  | `details`의 `field`별 `reason`을 그 입력 칸 아래에 보여 준다. `body`·`agreements[0].version`처럼 짝이 되는 칸이 없으면 폼 위에 `message`를 보여 준다                                   |
+| `UNAUTHORIZED`                                      | 401  | 로그인 화면으로 보낸다 (`/login?expired=…`)                                                                                                                                            |
+| `CSRF_INVALID`                                      | 403  | `api`가 내 계정 조회(`GET /v1/users/me`)로 토큰을 다시 받아 `setCsrfToken()` 후 한 번 다시 보낸다. 조회가 401이면 `UNAUTHORIZED`를 던지고, 다시 보낸 요청이 또 403이면 반복하지 않는다 |
+| `FORBIDDEN`                                         | 403  | `message`를 안내로 보여 준다                                                                                                                                                           |
+| `NOT_FOUND`                                         | 404  | `message`를 안내로 보여 주고 이전 화면으로 돌아갈 수 있게 한다                                                                                                                         |
+| `CONFLICT`, `USERS_EMAIL_DUPLICATE`                 | 409  | `message`를 해당 입력 칸 아래에 보여 준다                                                                                                                                              |
+| `USERS_INVALID_CREDENTIALS`                         | 401  | 로그인 폼 아래에 `message`를 보여 준다 (어느 칸이 틀렸는지 구분하지 않는다)                                                                                                            |
+| `USERS_REQUIRED_AGREEMENT_MISSING`                  | 400  | `details`의 `field`(`agreements.TERMS` 등)별 `reason`을 보여 준다. 동의 누락과 약관 버전 불일치가 모두 이 코드로 온다                                                                  |
+| `USERS_EMAIL_NOT_VERIFIED`                          | 400  | 이메일 인증 단계로 돌려보낸다                                                                                                                                                          |
+| `USERS_*_CODE_INVALID`                              | 400  | 인증번호 칸 아래에 `message`를 보여 준다                                                                                                                                               |
+| `USERS_*_CODE_EXPIRED`, `USERS_RESET_TOKEN_EXPIRED` | 410  | `message`와 함께 인증번호 다시 받기를 보여 준다                                                                                                                                        |
+| `USERS_*_ATTEMPTS_EXCEEDED`                         | 429  | `message`와 함께 인증번호 다시 받기를 보여 준다. `Retry-After`가 없고 다시 받기 전까지는 맞는 인증번호도 거절된다                                                                      |
+| `TOO_MANY_REQUESTS`, `USERS_*_RATE_LIMITED`         | 429  | `message`를 보여 주고, `retryAfterSeconds`가 있으면 그동안 버튼을 막는다                                                                                                               |
+| `USERS_*_SEND_FAILED`, `SERVICE_UNAVAILABLE`        | 503  | `message`를 보여 주고 다시 시도 버튼을 둔다                                                                                                                                            |
+| `METHOD_NOT_ALLOWED`                                | 405  | FE 호출 오류라 `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                        |
+| `INTERNAL_ERROR`                                    | 500  | "잠시 후 다시 시도해 주세요" 안내와 다시 시도 버튼                                                                                                                                     |
+| `NETWORK_ERROR`, `TIMEOUT`                          | -    | FE에서 만드는 코드. 연결을 확인하라는 안내와 다시 시도 버튼                                                                                                                            |
+| `UNEXPECTED_RESPONSE`                               | -    | FE에서 만드는 코드. `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                   |
+| 그 밖의 코드                                        | -    | `message`를 쓰지 않고 `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                 |
 
 - 공통 코드는 `backend/src/main/java/com/mairor/backend/common/error/ErrorCode.java`, 회원 코드는 같은 `backend` 패키지 아래 `users/service`와 `users/support/AgreementPolicy.java`에 있다. 코드가 추가되면 이 표에 같이 적는다
 

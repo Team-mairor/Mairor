@@ -1,4 +1,5 @@
 export {
+  displayName,
   EMPTY_RUN,
   SessionProvider,
   useSession,

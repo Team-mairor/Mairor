@@ -3,7 +3,7 @@
 import { Mail } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { FieldError, Notice } from "@/components/ui/notice";
@@ -13,83 +13,107 @@ import { GoogleSheet, type GoogleResult } from "@/features/auth/google-sheet";
 import { PasswordReset } from "@/features/auth/password-reset";
 import { useCountdown } from "@/features/auth/use-countdown";
 import { useSession } from "@/features/session";
+import {
+  api,
+  ApiError,
+  errorMessage,
+  type LoginRequest,
+  type LoginResponse,
+  type User,
+} from "@/lib/api";
 import { useQuery } from "@/lib/use-query";
-import { isValidEmail } from "@/lib/validation";
+import { useRequest } from "@/lib/use-request";
+import { normalizeEmail } from "@/lib/validation";
 
 type Mode = "pick" | "email" | "reset";
-
-// ponytail: 시도 제한은 프로토타입 시연값(3회 · 30초). 실제 값은 서버 429의 Retry-After를 쓴다.
-const LOCK_AFTER = 3;
-const LOCK_SEC = 30;
 
 /** 01 로그인 (USERS-002·003·004·005). ?expired=basic|tut, ?signup=done&email= 로 안내를 띄운다 */
 export default function LoginPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, update } = useSession();
+  const { state, hydrated, signIn } = useSession();
 
   const [mode, setMode] = useState<Mode>("pick");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [credErr, setCredErr] = useState(false);
-  const [fails, setFails] = useState(0);
-  const [lockUntil, setLockUntil] = useState<number | null>(null);
+  /** 로그인 실패 안내. 서버가 준 문구 */
+  const [credErr, setCredErr] = useState<string | null>(null);
+  /** 서버 잠금은 이메일마다라, 잠긴 이메일과 풀리는 시각을 함께 둔다 */
+  const [lock, setLock] = useState<{ email: string; until: number } | null>(null);
+  /** 서버 혼잡(TOO_MANY_REQUESTS)이 풀리는 시각. 이메일과 상관없이 서버 전체에 걸린다 */
+  const [crowdUntil, setCrowdUntil] = useState<number | null>(null);
   const [expired, setExpired] = useState<"basic" | "tut" | null>(null);
   const [signupDone, setSignupDone] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const [google, setGoogle] = useState(false);
   const [gNotice, setGNotice] = useState<Exclude<GoogleResult, "ok"> | null>(null);
   const [linkedEmail, setLinkedEmail] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { pending, run } = useRequest<"login">();
+  const busy = pending !== null;
 
-  const lockLeft = useCountdown(lockUntil);
-  const canLogin = !!email.trim() && !!pw && !busy && lockLeft === 0;
+  // 다른 이메일로 바꾸면 그 이메일은 잠기지 않았으니 바로 시도할 수 있다
+  const lockLeft = useCountdown(lock?.email === normalizeEmail(email) ? lock.until : null);
+  const crowdLeft = useCountdown(crowdUntil);
+  const waitLeft = Math.max(lockLeft, crowdLeft);
+  // 첫 내 계정 조회가 끝나기 전에 로그인하면 늦게 온 401이 로그인 결과를 덮고, 온보딩 기록도 아직 못 읽었다
+  const canLogin = hydrated && !!email.trim() && !!pw && !busy && waitLeft === 0;
 
   useEffect(() => {
     if (!query) return;
     const ex = query.get("expired");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 안내를 한 번 반영한다
     if (ex === "basic" || ex === "tut") setExpired(ex);
-    if (query.get("signup") === "done") {
-      setSignupDone(true);
+    if (query.get("signup") === "done") setSignupDone(true);
+    if (query.get("signup") === "done" || query.get("mode") === "email") {
       setEmail(query.get("email") ?? "");
       setMode("email");
     }
-    if (query.get("mode") === "email") setMode("email");
   }, [query]);
 
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
-
   /** 로그인 성공. 이 기기에서 온보딩을 안 봤으면 온보딩으로 (POUCH-001) */
-  const finish = (who: string) => {
-    update({ loggedIn: true, email: who });
+  const finish = (user: Pick<User, "email" | "nickname">, csrfToken?: string) => {
+    signIn(user, csrfToken);
     router.replace(state.onboarded ? "/home" : "/onboarding");
   };
 
-  // ponytail: API-USERS-002 대신 형식·길이만 본다. 실패 횟수 초과 시 잠금.
+  /** API-USERS-002. 반복해서 틀리면 서버가 잠그고(429), 그동안은 Retry-After 초만큼 버튼을 막는다 */
   const submit = () => {
     if (!canLogin) return;
-    setBusy(true);
-    setCredErr(false);
-    timer.current = setTimeout(() => {
-      const ok = isValidEmail(email) && pw.length >= 8;
-      setBusy(false);
-      if (ok) return finish(email.trim().toLowerCase());
-      const f = fails + 1;
-      if (f >= LOCK_AFTER) {
-        setFails(0);
-        setLockUntil(Date.now() + LOCK_SEC * 1000);
-      } else {
-        setFails(f);
-        setCredErr(true);
-      }
-    }, 700);
+    setCredErr(null);
+    return run(
+      "login",
+      async (signal) => {
+        const { user, csrfToken } = await api.post<LoginResponse>("/v1/users/login", {
+          body: { email, password: pw } satisfies LoginRequest,
+          signal,
+        });
+        finish(user, csrfToken);
+      },
+      (e) => {
+        if (!(e instanceof ApiError)) return setCredErr(errorMessage(e));
+        // 잠금 안내는 이메일 잠금(USERS_LOGIN_RATE_LIMITED)만. 서버 혼잡(TOO_MANY_REQUESTS)은 시도 횟수와 무관하다
+        if (e.code === "USERS_LOGIN_RATE_LIMITED" && e.retryAfterSeconds) {
+          return setLock({
+            email: normalizeEmail(email),
+            until: Date.now() + e.retryAfterSeconds * 1000,
+          });
+        }
+        if (e.code === "TOO_MANY_REQUESTS" && e.retryAfterSeconds) {
+          setCrowdUntil(Date.now() + e.retryAfterSeconds * 1000);
+        }
+        setCredErr(
+          e.code === "TOO_MANY_REQUESTS"
+            ? "요청이 몰려 처리하지 못했어요. 잠시 후 다시 시도해 주세요."
+            : errorMessage(e),
+        );
+      },
+    );
   };
 
   const onGoogle = (r: GoogleResult, who?: string) => {
     setGoogle(false);
-    if (r === "ok") return finish(who ?? "");
+    // Google은 BE가 없어 흉내만 낸다. 토큰은 받지 않는다
+    if (r === "ok") return finish({ email: who ?? "", nickname: null });
     if (r === "linked") setLinkedEmail(who ?? "");
     setGNotice(r);
   };
@@ -146,9 +170,7 @@ export default function LoginPage() {
             onDone={(who) => {
               setEmail(who);
               setPw("");
-              setCredErr(false);
-              setFails(0);
-              setLockUntil(null);
+              setCredErr(null);
               setResetDone(true);
               setMode("email");
             }}
@@ -187,7 +209,7 @@ export default function LoginPage() {
                     onClick={() => {
                       setEmail(linkedEmail);
                       setPw("");
-                      setCredErr(false);
+                      setCredErr(null);
                       openEmail();
                     }}
                   >
@@ -234,9 +256,10 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
-                    setCredErr(false);
+                    setCredErr(null);
                   }}
                   autoComplete="email"
+                  maxLength={254}
                 />
                 <TextField
                   type="password"
@@ -244,13 +267,12 @@ export default function LoginPage() {
                   value={pw}
                   onChange={(e) => {
                     setPw(e.target.value);
-                    setCredErr(false);
+                    setCredErr(null);
                   }}
                   autoComplete="current-password"
+                  maxLength={256}
                 />
-                {credErr && lockLeft === 0 && (
-                  <FieldError>이메일 또는 비밀번호를 확인해 주세요.</FieldError>
-                )}
+                {credErr && lockLeft === 0 && <FieldError>{credErr}</FieldError>}
                 {lockLeft > 0 && (
                   <Notice tone="locked">
                     <span>
@@ -266,7 +288,7 @@ export default function LoginPage() {
                     setMode("reset");
                     setSignupDone(false);
                     setResetDone(false);
-                    setCredErr(false);
+                    setCredErr(null);
                   }}
                 >
                   비밀번호를 잊었어요
@@ -279,7 +301,7 @@ export default function LoginPage() {
                     aria-label="다른 방법으로 로그인"
                   />
                   <PillButton type="submit" className="flex-1" busy={busy} disabled={!canLogin}>
-                    {busy ? "확인 중" : lockLeft > 0 ? `${lockLeft}초 후 다시 시도` : "로그인"}
+                    {busy ? "확인 중" : waitLeft > 0 ? `${waitLeft}초 후 다시 시도` : "로그인"}
                   </PillButton>
                 </div>
               </form>

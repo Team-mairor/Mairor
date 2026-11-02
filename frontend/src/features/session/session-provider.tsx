@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/lib/api";
 import {
   DEFAULT_POUCH,
   DEFAULT_REPORTS,
@@ -50,6 +51,10 @@ export interface RunState {
 export interface SessionState {
   loggedIn: boolean;
   email: string;
+  /** 서버의 닉네임. 없으면 "" */
+  nickname: string;
+  /** 로그아웃하지 않았는데 세션이 끝남. 다음 로그인 전까지 인트로가 만료 안내로 보낸다 (API-USERS-004) */
+  sessionExpired: boolean;
   /** 이 기기에서 온보딩을 본 적 있음 */
   onboarded: boolean;
   /** 이 기기에서 튜토리얼 안내를 본 적 있음 */
@@ -74,6 +79,8 @@ export const EMPTY_RUN: RunState = {
 const DEFAULT_STATE: SessionState = {
   loggedIn: false,
   email: "",
+  nickname: "",
+  sessionExpired: false,
   onboarded: false,
   tutSeen: false,
   pouch: DEFAULT_POUCH,
@@ -87,9 +94,13 @@ const STORAGE_KEY = "mairor-session-v2";
 
 interface SessionContextValue {
   state: SessionState;
-  /** 저장된 값을 읽기 전에는 false. 로그인 분기는 이 값이 true일 때 결정한다 */
+  /** 저장된 값과 서버의 로그인 상태를 읽기 전에는 false. 로그인 분기는 이 값이 true일 때 결정한다 */
   hydrated: boolean;
   update: (patch: Partial<SessionState> | ((prev: SessionState) => Partial<SessionState>)) => void;
+  /** 로그인 성공·세션 확인. 로그인 상태는 이것과 signOut으로만 바꾼다. csrfToken이 없으면(Google 흉내) 토큰은 그대로 */
+  signIn: (user: Pick<User, "email" | "nickname">, csrfToken?: string) => void;
+  /** 로그아웃. 토큰을 지우고 로그인 이력도 지운다(만료 안내 없음) */
+  signOut: () => void;
   updateRun: (patch: Partial<RunState> | ((prev: RunState) => Partial<RunState>)) => void;
   /** 새 실행 시작. 이전 실행의 진행 데이터는 버린다 (GUIDE-011) */
   startRun: (run: Partial<RunState>) => void;
@@ -98,10 +109,35 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-// ponytail: 브라우저 저장소 하나에 통째로 저장. 서버 세션·토큰이 붙으면 loggedIn·email만 서버 기준으로 바꾼다.
+// 내 계정 조회가 늦으면 저장된 로그인 상태로 시작한다
+const ME_TIMEOUT_MS = 5000;
+
+// ponytail: 브라우저 저장소 하나에 통째로 저장. loggedIn·email만 서버 세션(내 계정 조회) 기준으로 맞춘다.
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>(DEFAULT_STATE);
   const [hydrated, setHydrated] = useState(false);
+
+  const signIn = useCallback<SessionContextValue["signIn"]>((user, csrfToken) => {
+    if (csrfToken !== undefined) setCsrfToken(csrfToken);
+    setState((prev) => ({
+      ...prev,
+      loggedIn: true,
+      email: user.email,
+      nickname: user.nickname ?? "",
+      sessionExpired: false,
+    }));
+  }, []);
+
+  const signOut = useCallback(() => {
+    setCsrfToken(null);
+    setState((prev) => ({
+      ...prev,
+      loggedIn: false,
+      email: "",
+      nickname: "",
+      sessionExpired: false,
+    }));
+  }, []);
 
   useEffect(() => {
     try {
@@ -113,8 +149,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       // 깨진 저장값은 기본값으로 시작한다
     }
-    setHydrated(true);
-  }, []);
+
+    // 앱을 다시 열면 세션 쿠키로 로그인 상태를 확인하고 CSRF 토큰을 받는다 (USERS-004).
+    // 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하는 등 그 밖의 실패는 저장된 상태를 그대로 쓴다.
+    // 저장된 loggedIn이 로그인 이력 플래그다(로그인 성공 때 켜고 로그아웃 때 끈다). 켜진 채 401이면 만료로 본다.
+    // AbortSignal.any는 Safari 17.4 미만에 없어 시간 제한도 같은 컨트롤러로 끊는다
+    let unmounted = false;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ME_TIMEOUT_MS);
+    api
+      .get<LoginResponse>("/v1/users/me", { signal: controller.signal })
+      .then(({ user, csrfToken }) => signIn(user, csrfToken))
+      .catch((e) => {
+        if (e instanceof ApiError && e.code === "UNAUTHORIZED") {
+          setState((prev) => ({
+            ...prev,
+            loggedIn: false,
+            email: "",
+            nickname: "",
+            sessionExpired: prev.loggedIn || prev.sessionExpired,
+          }));
+        }
+      })
+      .finally(() => {
+        clearTimeout(timer);
+        if (!unmounted) setHydrated(true);
+      });
+    return () => {
+      unmounted = true;
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [signIn]);
 
   // hydrated는 저장값을 state에 넣은 다음 렌더부터 true라, 기본값으로 저장값을 덮어쓰지 않는다
   useEffect(() => {
@@ -144,11 +210,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => setState(DEFAULT_STATE), []);
 
   const value = useMemo(
-    () => ({ state, hydrated, update, updateRun, startRun, reset }),
-    [state, hydrated, update, updateRun, startRun, reset],
+    () => ({ state, hydrated, update, signIn, signOut, updateRun, startRun, reset }),
+    [state, hydrated, update, signIn, signOut, updateRun, startRun, reset],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+}
+
+/** 화면에서 부르는 이름. 닉네임이 없으면 이메일 앞부분 */
+export function displayName({ nickname, email }: Pick<SessionState, "nickname" | "email">) {
+  return nickname || email.split("@")[0];
 }
 
 export function useSession() {

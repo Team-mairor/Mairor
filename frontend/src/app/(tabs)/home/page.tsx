@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { PillButton } from "@/components/ui/pill-button";
 import { PouchBoard } from "@/features/pouch";
-import { useSession } from "@/features/session";
+import { displayName, useSession } from "@/features/session";
 import { videoThumb, VIDEOS } from "@/lib/mock-data";
 import { useQuery } from "@/lib/use-query";
 
@@ -68,7 +68,7 @@ export default function HomePage() {
           className="ml-auto flex size-11 items-center justify-center rounded-full bg-lime font-serif text-[22px] text-ink italic"
           aria-label="마이페이지"
         >
-          {(state.email.trim()[0] ?? "m").toUpperCase()}
+          {(displayName(state).trim()[0] ?? "m").toUpperCase()}
         </Link>
       </header>
 
