@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
-import { useCamera } from "@/features/face";
+import { useCamera, useHiddenVideo } from "@/features/face";
 import { facePhoto } from "@/features/loading/face-register";
 import { FaceRegisterModal, ProgressBar } from "@/features/loading/face-register-modal";
 import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
@@ -100,11 +100,7 @@ export default function LoadingPage() {
   // 등록 중이 아니면 추적을 쉬게 한다. 카메라는 켜 둬서 미리보기에서 바로 다시 돌린다
   // 등록 모달이 닫히면 프레임을 받는 곳이 없어 추적은 쉬고, 카메라는 미리보기에서 이어 쓴다.
   // 영상은 등록 모달의 원 안에만 보여 주므로 뒤에 깔린 전체 화면 영상은 숨긴다
-  const { setShowVideo } = camera;
-  useEffect(() => {
-    setShowVideo(false);
-    return () => setShowVideo(true);
-  }, [setShowVideo]);
+  useHiddenVideo();
 
   const done = pct >= 100;
   const phaseIdx = done ? 6 : ANALYSIS_PHASES.filter((p) => pct >= p[2]).length - 1;

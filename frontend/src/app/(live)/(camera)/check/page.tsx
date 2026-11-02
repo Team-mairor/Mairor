@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
+import { useHiddenVideo } from "@/features/face";
 import {
   GlassPanel,
   LiveNote,
@@ -170,11 +171,15 @@ export default function CheckPage() {
   const layersUrl = query ? (query.get("layers") ?? DEFAULT_LAYERS) : null;
   // 카메라 오류·얼굴 없음이면 안내를 띄우고 메이크업은 숨긴다 (CAMERA-004)
   const { note, canRender } = useLiveState();
+  useHiddenVideo();
 
   return (
     <main className="relative flex flex-1 flex-col">
       {/* 누르고 있으면 영상 메이크업(원본), 아니면 내가 고른 제품 색. ponytail: 레이어는 같은 파일을 쓰고 전환만 한다 */}
-      <MakeupOverlay layersUrl={layersUrl} hidden={!canRender} />
+      {/* 화장은 상단 탭과 하단 패널 사이 빈 칸에만 그린다 */}
+      <div className="relative mt-[150px] flex-1">
+        <MakeupOverlay layersUrl={layersUrl} hidden={!canRender} fit />
+      </div>
 
       <LiveNote note={note} />
       <div className="absolute inset-x-5 top-5 flex items-center justify-between gap-3">
@@ -258,7 +263,10 @@ export default function CheckPage() {
       )}
 
       {view === "list" ? (
-        <GlassPanel className="top-[84px] gap-[22px] px-0 pt-[30px] pb-5" coversFace={false}>
+        <GlassPanel
+          className="inset-x-0 top-[84px] bottom-0 gap-[22px] rounded-t-[36px] rounded-b-none border-x-0 border-b-0 px-0 pt-[30px] pb-5"
+          coversFace={false}
+        >
           {swapFor != null && (
             <SwapPanel
               r={REF_PRODUCTS[swapFor]}
@@ -388,11 +396,6 @@ export default function CheckPage() {
                       <span className="truncate text-[18px] font-semibold text-mute">
                         {r.cat} · {r.brand}
                       </span>
-                      {r.refState && (
-                        <span className="flex h-[26px] shrink-0 items-center rounded-full border-[1.5px] border-dashed border-plum px-2.5 text-[14px] font-bold whitespace-nowrap text-plum">
-                          {REF_STATE_LABEL[r.refState]}
-                        </span>
-                      )}
                     </span>
                     <span className="truncate text-[28px] leading-[1.25] font-bold text-ink">
                       {r.name}
@@ -477,7 +480,10 @@ export default function CheckPage() {
           </div>
         </GlassPanel>
       ) : (
-        <GlassPanel className="gap-4 px-0 pt-[22px] pb-[18px]">
+        <GlassPanel
+          className="relative inset-x-0 bottom-0 gap-4 rounded-t-[36px] rounded-b-none border-x-0 border-b-0 px-0 pt-[22px] pb-[18px]"
+          coversFace={false}
+        >
           {toast && <Toast toast={toast} />}
           <div className="flex flex-col gap-1 px-7">
             <div className="flex min-w-0 items-baseline gap-3">

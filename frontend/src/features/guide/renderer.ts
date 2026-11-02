@@ -22,18 +22,32 @@ export interface Projection {
   unit: number;
 }
 
-// 하프미러(검은 배경) 위에 흰 선만 떠 있게 그린다. 화면이 밝은 곳은 거울에 비친 얼굴이 흐려지므로
+// 어두운 배경 위에 선만 떠 있게 그린다. 화면이 밝은 곳은 거울에 비친 얼굴이 흐려지므로
 // 영역을 채우거나 띠를 깔지 않는다. 크기는 IOD 기준이고, 멀어져도 최소 픽셀은 지킨다.
+// 어디에 바를지(영역)와 어떻게 움직일지(경로·화살표·시작점·붓 자국)를 두 가지 색으로 나눠 한눈에 구분되게 한다.
 /** 가이드 색 (R, G, B). 하프미러에 올려 보고 바꿀 때는 이 값만 고친다 */
-const INK = "255, 255, 255";
+const AREA_INK = "255, 72, 164";
+const MOTION_INK = "214, 247, 77";
+/** 영상 대신 깔아 두는 얼굴 윤곽 색 */
+const FACE_INK = "255, 255, 255";
+const FACE_PARTS: RegionName[] = [
+  "faceOval",
+  "rightBrow",
+  "leftBrow",
+  "rightEye",
+  "leftEye",
+  "lipsOuter",
+];
 
 const STYLE = {
-  color: `rgba(${INK}, 0.98)`,
-  // 선 둘레의 옅은 흰 빛. 흐림 필터는 저사양 기기에서 무거워 넓고 옅은 선 두 겹으로 퍼지게 한다
+  alpha: 0.98,
+  // 선 둘레의 옅은 빛. 흐림 필터는 저사양 기기에서 무거워 넓고 옅은 선 두 겹으로 퍼지게 한다
   glow: [
-    { color: `rgba(${INK}, 0.08)`, extra: 10 },
-    { color: `rgba(${INK}, 0.16)`, extra: 4 },
+    { alpha: 0.1, extra: 12 },
+    { alpha: 0.22, extra: 5 },
   ],
+  /** 얼굴 윤곽 선의 진하기와 두께 */
+  face: { alpha: 0.2, size: 0.012, min: 1.5 },
   /** 점선의 점 지름, 점 사이 간격(점 지름 대비) */
   dot: { size: 0.032, min: 3, gap: 0.8 },
   /** 실선(화살표) 두께 */
@@ -104,8 +118,10 @@ export class GuideRenderer {
     projection: Projection | null;
     /** 점선 흐름에 쓰는 시각 (ms) */
     now: number;
+    /** 영상 대신 옅은 얼굴 윤곽을 깐다 */
+    face?: boolean;
   }) {
-    const { frame, step, mesh, projection, now } = options;
+    const { frame, step, mesh, projection, now, face = false } = options;
     this.clear();
     // 단계가 바뀌면 이전 단계의 판정으로 새 단계 가이드를 그리지 않는다.
     if ((step?.stepId ?? null) !== this.stepId) {
@@ -113,12 +129,16 @@ export class GuideRenderer {
       this.visibility.reset();
     }
     const visible = !!step && this.visibility.update(frame, () => isStepVisible(step, frame));
-    if (!frame || !step || !mesh || !projection || !visible) return;
+    if (!frame || !projection) return;
 
     const ctx = this.ctx;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
+    // 윤곽은 단계에 가이드가 없어도(영역 실패 등) 그려 가운데가 비지 않게 한다. 숨길지는 부르는 쪽이 face로 정한다
+    if (face && isGuideVisible(frame)) this.drawFace(frame, projection);
+    if (!step || !mesh || !visible) return;
+
     const at = (anchor: Parameters<typeof resolveAnchor>[0]) =>
       projection.toPx(resolveAnchor(anchor, mesh, frame.landmarks));
     const dot = sized(projection.unit, STYLE.dot);
@@ -156,6 +176,24 @@ export class GuideRenderer {
       draw();
     }
     ctx.globalAlpha = 1;
+  }
+
+  /** 얼굴 윤곽·눈·눈썹·입술 테두리를 옅게 그어, 가이드가 얼굴 어디에 있는지 알 수 있게 한다 */
+  private drawFace(frame: FaceFrame, projection: Projection) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    for (const part of FACE_PARTS) {
+      traceSmooth(
+        ctx,
+        REGIONS[part].indices.map((k) => projection.toPx(frame.landmarks[k])),
+        true,
+        false,
+      );
+    }
+    ctx.setLineDash([]);
+    ctx.strokeStyle = `rgba(${FACE_INK}, ${STYLE.face.alpha})`;
+    ctx.lineWidth = sized(projection.unit, STYLE.face);
+    ctx.stroke();
   }
 
   /** 얼굴 가운데 선(top → bottom)으로 나눠 반쪽마다 고개 각도에 맞는 진하기로 그린다 */
@@ -197,7 +235,7 @@ export class GuideRenderer {
     holes = holes.filter((hole) => Math.abs(polygonArea(hole)) >= minHole);
     if (!holes.length) {
       traceSmooth(ctx, points, true);
-      this.dotted(dot, 0);
+      this.dotted(dot, 0, AREA_INK);
       return;
     }
     const { width, height } = this.canvas;
@@ -210,7 +248,7 @@ export class GuideRenderer {
       ctx.clip("evenodd");
     }
     traceSmooth(ctx, points, true);
-    this.dotted(dot, 0);
+    this.dotted(dot, 0, AREA_INK);
     ctx.restore();
     // 구멍 테두리: 영역 안에서만, 한 경로로 모아 한 번에 긋는다
     ctx.save();
@@ -218,7 +256,7 @@ export class GuideRenderer {
     ctx.clip();
     ctx.beginPath();
     for (const hole of holes) traceSmooth(ctx, hole, true, false);
-    this.dotted(dot, 0);
+    this.dotted(dot, 0, AREA_INK);
     ctx.restore();
   }
 
@@ -236,7 +274,7 @@ export class GuideRenderer {
         const points = guide.outline.map(at);
         if (points.length < 3) return;
         traceSmooth(ctx, points, true);
-        this.dotted(dot, 0);
+        this.dotted(dot, 0, AREA_INK);
         return;
       }
       case "polyline": {
@@ -248,7 +286,7 @@ export class GuideRenderer {
         }
         // 그릴 선: 점선이 진행 방향으로 천천히 흐름
         traceSmooth(ctx, points, false);
-        this.dotted(Math.max(dot, guide.width * unit), dashOffset);
+        this.dotted(Math.max(dot, guide.width * unit), dashOffset, MOTION_INK);
         return;
       }
       case "arrow": {
@@ -257,11 +295,11 @@ export class GuideRenderer {
         const to = at(guide.to);
         const width = sized(unit, STYLE.line);
         tracePath(ctx, [from, to], false);
-        this.solid(width);
+        this.solid(width, MOTION_INK);
         const head = arrowHead(from, to, Math.max(width * 3, STYLE.arrowHead * unit));
         if (!head) return;
         tracePath(ctx, head, false);
-        this.solid(width);
+        this.solid(width, MOTION_INK);
         return;
       }
       case "point": {
@@ -269,43 +307,43 @@ export class GuideRenderer {
         const p = at(guide.at);
         ctx.beginPath();
         ctx.arc(p.x, p.y, sized(unit, STYLE.point), 0, Math.PI * 2);
-        this.halo(0);
-        ctx.fillStyle = STYLE.color;
+        this.halo(0, MOTION_INK);
+        ctx.fillStyle = `rgba(${MOTION_INK}, ${STYLE.alpha})`;
         ctx.fill();
         return;
       }
     }
   }
 
-  /** 지금 경로를 둥근 점이 이어진 점선으로 긋는다 (흰 빛 + 흰 점). */
-  private dotted(dot: number, dashOffset: number) {
+  /** 지금 경로를 둥근 점이 이어진 점선으로 긋는다 (같은 색 빛 + 점). ink는 R, G, B */
+  private dotted(dot: number, dashOffset: number, ink: string) {
     const ctx = this.ctx;
     // 길이 0인 대시에 둥근 끝을 붙이면 점이 된다.
     ctx.setLineDash([0, dot * (1 + STYLE.dot.gap)]);
     ctx.lineDashOffset = dashOffset;
-    this.halo(dot);
-    ctx.strokeStyle = STYLE.color;
+    this.halo(dot, ink);
+    ctx.strokeStyle = `rgba(${ink}, ${STYLE.alpha})`;
     ctx.lineWidth = dot;
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;
   }
 
-  /** 지금 경로를 실선으로 긋는다 (흰 빛 + 흰 선). */
-  private solid(width: number) {
+  /** 지금 경로를 실선으로 긋는다 (같은 색 빛 + 선). */
+  private solid(width: number, ink: string) {
     const ctx = this.ctx;
     ctx.setLineDash([]);
-    this.halo(width);
-    ctx.strokeStyle = STYLE.color;
+    this.halo(width, ink);
+    ctx.strokeStyle = `rgba(${ink}, ${STYLE.alpha})`;
     ctx.lineWidth = width;
     ctx.stroke();
   }
 
-  /** 지금 경로 둘레에 옅은 흰 빛을 깐다. width는 그 위에 그릴 선 두께 */
-  private halo(width: number) {
+  /** 지금 경로 둘레에 옅은 빛을 깐다. width는 그 위에 그릴 선 두께 */
+  private halo(width: number, ink: string) {
     const ctx = this.ctx;
     for (const g of STYLE.glow) {
-      ctx.strokeStyle = g.color;
+      ctx.strokeStyle = `rgba(${ink}, ${g.alpha})`;
       ctx.lineWidth = width + g.extra;
       ctx.stroke();
     }
@@ -330,8 +368,8 @@ export class GuideRenderer {
       right.push({ x: p.x - nx, y: p.y - ny });
     }
     tracePath(ctx, [...left, ...right.reverse()], true);
-    // 가는 결이 빛에 번져 뭉개지지 않게 붓 자국은 흰색만 칠한다
-    ctx.fillStyle = STYLE.color;
+    // 가는 결이 빛에 번져 뭉개지지 않게 붓 자국은 빛 없이 칠한다
+    ctx.fillStyle = `rgba(${MOTION_INK}, ${STYLE.alpha})`;
     ctx.fill();
   }
 }

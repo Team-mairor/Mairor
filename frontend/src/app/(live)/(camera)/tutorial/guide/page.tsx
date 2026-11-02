@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useHiddenVideo } from "@/features/face";
 import { CameraErrorNote } from "@/features/live/live-chrome";
 import { useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial/how-it-works";
@@ -29,6 +30,7 @@ export default function TutorialGuidePage() {
   const [slide, setSlide] = useState(0); // 0~2 안내, 3 동의
   const showSlides = review || query?.get("force") === "1" || !state.tutSeen;
   const phase = showSlides ? slide : 3;
+  useHiddenVideo();
 
   const endSlides = () => {
     if (review) return router.push("/tutorial");

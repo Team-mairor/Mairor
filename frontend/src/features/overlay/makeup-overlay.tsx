@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { formatTiming, landmarkerInfo, useCamera, useFaceFrame } from "@/features/face";
+import {
+  containTransform,
+  formatTiming,
+  landmarkerInfo,
+  useCamera,
+  useFaceFrame,
+} from "@/features/face";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 import { loadLayerSet, type PreparedLayer } from "./layers";
@@ -42,15 +48,20 @@ interface Perf {
   layers: number;
 }
 
-/** CameraProvider 안에서 카메라 영상 위에 화장 레이어를 그린다. */
+/**
+ * CameraProvider 안에서 카메라 영상 위에 화장 레이어를 그린다.
+ * fit이면 카메라 화면 대신 이 캔버스 안에 영상 전체를 맞춰 그린다 (영상을 숨기고 화장만 띄우는 화면용).
+ */
 export function MakeupOverlay({
   layersUrl,
+  fit = false,
   hidden = false,
   enabled = true,
   showStats = false,
   occlusion = true,
 }: {
   layersUrl: string | null;
+  fit?: boolean;
   /** true면 레이어는 그대로 두고 화장만 그리지 않는다. 다시 보일 때 레이어를 새로 불러오지 않는다 */
   hidden?: boolean;
   /** false면 그리지 않는다 (추적만 할 때와 성능 비교용) */
@@ -194,7 +205,14 @@ export function MakeupOverlay({
       rendererRef.current?.render({
         video,
         frame,
-        view: viewRef.current,
+        view:
+          fit && frame && canvasRef.current
+            ? containTransform(
+                frame.imageSize,
+                { width: canvasRef.current.clientWidth, height: canvasRef.current.clientHeight },
+                true,
+              )
+            : viewRef.current,
         layers: hiddenRef.current ? [] : layersRef.current,
         mesh: meshRef.current,
         // 미러필름 모드에서는 비친 얼굴과 겹치므로 캔버스에도 영상을 그리지 않는다 (globals.css의 .mirror video)

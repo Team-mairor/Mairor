@@ -17,6 +17,8 @@ export interface RefProduct {
   brand: string;
   name: string;
   color: string;
+  /** 호수·컬러명. 영상에서 확인하지 못했으면 null */
+  shade: string | null;
   /** 샘플: 내 파우치에 같은 제품이 있는지 */
   have: boolean;
   /** 영상 구간 */
@@ -39,7 +41,10 @@ export interface GuideStepInfo {
   en: string;
   short: string;
   title: string;
-  acts: string[];
+  /** 동작과 그 동작의 팁·주의 */
+  acts: MockGuideStep["actions"];
+  /** 끝내는 기준. 영상에서 확인하지 못했으면 null */
+  doneWhen: string | null;
   guide: string;
   area: string;
   /** 프로토타입 가이드 영역 (x, y, w, h · 얼굴 기준 %) */
@@ -77,7 +82,8 @@ export const GUIDE_STEPS: GuideStepInfo[] = PLAY_STEPS.map((s) => {
     en: m.en,
     short: s.part,
     title: s.part,
-    acts: s.actions.map((x) => x.text),
+    acts: s.actions,
+    doneWhen: s.doneWhen,
     guide: s.actions.map((x) => x.text).join(" "),
     area: m.area,
     a: m.a,
@@ -119,6 +125,7 @@ export const REF_PRODUCTS: RefProduct[] = PLAY_STEPS.map((s) => ({
   // 파우치는 이름과 호수를 따로 두고 이름으로 같은 제품을 찾으므로 호수는 붙이지 않는다
   name: s.product?.name ?? "",
   color: BY_MAKEUP[s.makeup].color,
+  shade: s.product?.shade ?? null,
   have: HAVE.has(s.stepId),
   time: mmss(s.videoRange.startSeconds),
   sub: SUBS[s.stepId] ?? null,

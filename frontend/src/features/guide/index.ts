@@ -1,4 +1,4 @@
-export { resolveSubStep } from "./area";
+export { resolveStep, resolveSubStep } from "./area";
 export {
   GuideOverlay,
   loadDefaultGuideSet,

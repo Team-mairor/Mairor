@@ -1,32 +1,28 @@
 "use client";
 
-import { ArrowRight, Check, X } from "lucide-react";
+import { ArrowRight, Volume2, VolumeX, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
+import { useHiddenVideo } from "@/features/face";
 import {
   GuideOverlay,
   loadDefaultGuideSet,
   loadGuideArea,
-  resolveSubStep,
+  resolveStep,
   useStepInView,
   type AreaSubStep,
   type GuideArea,
   type GuideSet,
 } from "@/features/guide";
-import {
-  GlassPanel,
-  LiveNote,
-  RoundBack,
-  parseAlert,
-  useLiveState,
-  type LiveReason,
-} from "@/features/live/live-chrome";
+import { LiveNote, RoundBack, parseAlert, useLiveState } from "@/features/live/live-chrome";
 import { matchFor, useSession } from "@/features/session";
+import { ActCard, PrepCard } from "@/features/tutorial/step-cards";
 import { MOCK_GUIDE_AREA_URL } from "@/lib/mock-guide";
 import { GUIDE_STEPS, REF_PRODUCTS, type GuideStepInfo } from "@/lib/mock-data";
 import { useQuery } from "@/lib/use-query";
+import { useSpeech } from "@/lib/use-speech";
 import { cn } from "@/lib/utils";
 
 /** 영역 데이터에 없는 단계는 화장 종류의 기본 가이드로 그린다 */
@@ -41,48 +37,28 @@ function templateOf(info: GuideStepInfo): AreaSubStep {
   };
 }
 
-/** 측정 불가 이유 (게이지 아래 한 줄) */
-const BLOCK_WHY: Record<LiveReason, string> = {
-  lost: "얼굴이 화면을 벗어났어요",
-  turn: "고개를 정면으로 돌려 주세요",
-  cover: "손이나 도구를 잠깐 내려 주세요",
-  far: "조금 더 가까이 와 주세요",
-  turned: "고개를 정면으로 돌려 주세요",
-  "out-of-frame": "얼굴 전체가 보이게 해 주세요",
-  light: "조명이 바뀌었어요",
-  error: "카메라를 켤 수 없어요",
-  starting: "카메라를 켜는 중이에요",
-};
-const SHEET_OK = {
-  fail: false,
-  title: "이 단계 사진을 저장했어요",
-  desc: "리포트에 이 단계의 얼굴이 남아요.",
-};
-const SHEET_FAIL = {
-  fail: true,
-  title: "사진을 저장하지 못했어요",
-  desc: "다시 찍거나, 사진 없이 다음 단계로 넘어갈 수 있어요.",
-};
-
 /**
  * 10 튜토리얼 (GUIDE-003 · 006 · 007 · 008 · 011 · 013).
- * ?alert=cover 등은 측정 불가 상태 확인용, ?photofail=1 은 촬영 실패 상태 확인용.
+ * ?alert=cover 등은 측정 불가 상태 확인용.
+ * 사진 저장에 동의했으면 단계를 넘길 때 확인 창 없이 사진을 남긴다 (동의는 튜토리얼 안내에서 받는다).
  * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. GUIDE-013 측정이 생기면 gauge를 측정값으로 바꾼다.
  */
 export default function TutorialPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, updateRun, startRun } = useSession();
+  const { state, update, updateRun, startRun } = useSession();
   const run = state.run;
   const alert = parseAlert(query?.get("alert"));
 
   const [defaults, setDefaults] = useState<GuideSet | null>(null);
   const [area, setArea] = useState<GuideArea | null>(null);
   const [step, setStep] = useState(0);
-  const [subIdx, setSubIdx] = useState(0);
+  // 지금 하는 동작. '했어요'로 하나씩 넘긴다
+  const [act, setAct] = useState(0);
+  // false면 단계 준비 카드(제품·할 일·끝내는 기준)를 띄운다. 앞으로 갈 때만 띄우고, 이전 단계로 돌아갈 때는 띄우지 않는다
+  const [ready, setReady] = useState(false);
   const [gauge, setGauge] = useState(10);
   const [busy, setBusy] = useState(false);
-  const [sheet, setSheet] = useState<typeof SHEET_OK | null>(null);
   const [exitAsk, setExitAsk] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -98,6 +74,9 @@ export default function TutorialPage() {
   }, [query]);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
+  // 카메라는 추적에만 쓰고 영상은 보여 주지 않는다. 얼굴 자리에는 가이드만 뜬다
+  useHiddenVideo();
+
   const info = GUIDE_STEPS[step];
   const ref = REF_PRODUCTS[step];
   const pr = matchFor(step, run, state.pouch);
@@ -109,23 +88,19 @@ export default function TutorialPage() {
     () => area?.steps.find((s) => s.stepId === info.stepId)?.subSteps ?? [templateOf(info)],
     [area, info],
   );
-  // 한 단계 안에서 영역이 바뀌면 하위 단계를 차례로 보여 준다. 게이지와 단계 사진은 단계마다 한 번이다
-  const sub = subs[Math.min(subIdx, subs.length - 1)];
-  const lastSub = subIdx >= subs.length - 1;
-  const guideStep = useMemo(() => resolveSubStep(sub, defaults), [sub, defaults]);
-  // 기본 가이드를 쓰는 하위 단계만 기본 가이드를 불러올 때까지 기다린다
-  const descOnly = guideStep == null && (sub.status !== "template" || defaults != null);
+  // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
+  const guideStep = useMemo(
+    () => resolveStep(info.stepId, subs, defaults),
+    [info.stepId, subs, defaults],
+  );
   // 가까이 다가가 지금 단계 부위만 잘려도 화면 밖으로 잘린 것으로 안내하고 측정을 멈춘다
   const stepInView = useStepInView(guideStep);
-  const { note, canRender, canMeasure, reason } = useLiveState(
-    alert,
-    stepInView ? null : "out-of-frame",
-  );
+  const { note, canRender, canMeasure } = useLiveState(alert, stepInView ? null : "out-of-frame");
   // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가 (CAMERA-004 · GUIDE-013)
   const blocked = !canMeasure;
 
   useEffect(() => {
-    if (sheet || blocked || busy || exitAsk || !hasProduct) return;
+    if (!ready || blocked || busy || exitAsk || !hasProduct) return;
     const t = setInterval(() => {
       setGauge((g) => {
         if (g >= info.target) return g;
@@ -136,9 +111,10 @@ export default function TutorialPage() {
       });
     }, 160);
     return () => clearInterval(t);
-  }, [sheet, blocked, busy, exitAsk, hasProduct, info.target]);
+  }, [ready, blocked, busy, exitAsk, hasProduct, info.target]);
 
   const gv = Math.round(gauge);
+  // 변수 이름을 그대로 적어야 Tailwind가 테마 변수를 CSS에 넣는다
   const meterColor = blocked
     ? "var(--color-ash)"
     : gv > 62
@@ -146,21 +122,13 @@ export default function TutorialPage() {
       : gv < 45
         ? "var(--color-sky)"
         : "var(--color-lime)";
-  const gaugeLabel = blocked
-    ? "지금은 잴 수 없어요"
-    : gv > 62
-      ? "레퍼런스보다 진해요"
-      : gv < 45
-        ? "레퍼런스보다 연해요"
-        : "레퍼런스와 비슷해요";
-  const meterHint = blocked
-    ? BLOCK_WHY[reason ?? "lost"]
-    : gv > 62
-      ? "경계를 블렌딩해 주세요"
-      : gv < 45
-        ? "한 번 더 얹어 주세요"
-        : "지금 딱 좋아요";
-  const actIdx = !hasProduct ? -1 : gv >= 45 ? 1 : 0;
+  // 잴 수 없을 때는 이유를 위쪽 알림이 알려 주므로 판정 문구를 띄우지 않는다
+  const gaugeLabel =
+    gv > 62 ? "레퍼런스보다 진해요" : gv < 45 ? "레퍼런스보다 연해요" : "레퍼런스와 비슷해요";
+  // 제품 없는 단계는 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다 (GUIDE-003)
+  const lastAct = !hasProduct || act >= info.acts.length - 1;
+  // 화면에 띄우고 읽어 줄 동작. AI 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
+  const shownActs = hasProduct ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
 
   // 진행바·이전 버튼으로 옮기면 촬영 대기 타이머는 버린다. 예전 step으로 advance가 실행되지 않게
   const cancelTimer = () => {
@@ -168,32 +136,32 @@ export default function TutorialPage() {
     timer.current = null;
     setBusy(false);
   };
-  const goStep = (i: number) => {
+  const goStep = (i: number, prep = true) => {
     cancelTimer();
     setStep(i);
-    setSubIdx(0);
+    setAct(0);
+    setReady(!prep);
     setGauge(10);
-    setSheet(null);
   };
-  const advance = (noPhoto: boolean) => {
-    const skip = noPhoto || !!sheet?.fail;
-    const captures = skip || run.captures.includes(step) ? run.captures : [...run.captures, step];
-    updateRun({ captures });
-    setSheet(null);
+  // 사진 저장에 동의했고 제품을 쓴 단계면 넘길 때 사진을 남긴다
+  const photo = run.photoOk && hasProduct && !run.captures.includes(step);
+  const advance = () => {
+    if (photo) updateRun({ captures: [...run.captures, step] });
     if (last) router.push("/done");
     else goStep(step + 1);
   };
   const next = () => {
-    if (busy || sheet) return;
-    if (!lastSub) {
-      setSubIdx((k) => k + 1);
+    if (busy) return;
+    if (!lastAct) {
+      setAct((a) => a + 1);
       return;
     }
+    // 남길 사진이 없으면 '저장 중…' 없이 바로 넘긴다
+    if (!photo) return advance();
     setBusy(true);
     timer.current = setTimeout(() => {
       setBusy(false);
-      if (!run.photoOk || !hasProduct) advance(true);
-      else setSheet(query?.get("photofail") === "1" ? SHEET_FAIL : SHEET_OK);
+      advance();
     }, 600);
   };
   const quit = () => {
@@ -202,12 +170,28 @@ export default function TutorialPage() {
     router.push("/home");
   };
 
+  // 바르는 동안 화면을 읽기 어려우니, 켜 두면 준비 카드와 지금 할 동작을 읽어 준다
+  const mine = pr.p;
+  const speech = !ready
+    ? [
+        `${step + 1}단계, ${info.title}.`,
+        mine ? `준비할 제품은 ${mine.brand} ${mine.name}.` : "내 파우치에 맞는 제품이 없어요.",
+        `할 일은 ${info.acts.length}가지예요.`,
+      ].join(" ")
+    : shownActs
+        .map((i) => {
+          const a = info.acts[i];
+          const tip = a.tip ? ` ${a.tip.kind === "caution" ? "주의" : "팁"}, ${a.tip.text}.` : "";
+          const done = i === info.acts.length - 1 && info.doneWhen ? ` ${info.doneWhen}.` : "";
+          return `${i + 1}. ${a.text}.${tip}${done}`;
+        })
+        .join(" ");
+  useSpeech(state.voice ? speech : null);
+
   const nextLabel = busy
-    ? run.photoOk && hasProduct
-      ? "사진 찍는 중…"
-      : "저장 중…"
-    : !lastSub
-      ? `다음 영역 · ${subIdx + 2}/${subs.length}`
+    ? "저장 중…"
+    : !lastAct
+      ? "했어요 · 다음 할 일"
       : last
         ? "완성하기"
         : hasProduct
@@ -216,18 +200,43 @@ export default function TutorialPage() {
 
   return (
     <main className="relative flex flex-1 flex-col">
-      <GuideOverlay step={canRender ? guideStep : null} />
+      {/* 가이드는 상단 바·제품 칩과 하단 안내 사이 빈 칸에만 그린다 */}
+      <div className="relative mt-[140px] flex-1">
+        {/* 이 단계에 그릴 가이드가 없어도 윤곽은 띄운다. 알림으로 가이드를 숨기는 동안은 윤곽도 숨긴다 */}
+        <GuideOverlay step={canRender ? guideStep : null} fit face={canRender} />
+      </div>
 
-      <div className="absolute inset-x-5 top-5 z-[2] flex items-center gap-3.5">
+      {/* 준비 카드(z-[4])가 떠 있어도 나가기·음성 끄기를 누를 수 있게 그 위에 둔다 */}
+      <div className="absolute inset-x-5 top-5 z-[5] flex items-center gap-3.5">
         <button
           type="button"
-          onClick={() => setExitAsk(true)}
-          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-[rgba(11,20,48,.82)] py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-[rgba(11,20,48,.95)]"
+          onClick={() => {
+            // 저장 대기 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 버린다
+            cancelTimer();
+            setExitAsk(true);
+          }}
+          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-ink-deep/82 py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-ink-deep/95"
         >
           <X className="size-[18px]" strokeWidth={2.4} aria-hidden />
           나가기
         </button>
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-[rgba(11,20,48,.82)] px-[18px]">
+        <button
+          type="button"
+          onClick={() => update({ voice: !state.voice })}
+          aria-pressed={state.voice}
+          aria-label={state.voice ? "음성 안내 끄기" : "음성 안내 켜기"}
+          className={cn(
+            "flex size-12 shrink-0 items-center justify-center rounded-full border border-white/15",
+            state.voice ? "bg-white text-plum" : "bg-ink-deep/82 text-white",
+          )}
+        >
+          {state.voice ? (
+            <Volume2 className="size-[20px]" strokeWidth={2.2} aria-hidden />
+          ) : (
+            <VolumeX className="size-[20px]" strokeWidth={2.2} aria-hidden />
+          )}
+        </button>
+        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-ink-deep/82 px-[18px]">
           <div
             className="flex min-w-0 flex-1 gap-1"
             role="progressbar"
@@ -238,7 +247,7 @@ export default function TutorialPage() {
               <button
                 key={s.stepId}
                 type="button"
-                onClick={() => goStep(i)}
+                onClick={() => goStep(i, i > step)}
                 aria-label={`${i + 1}단계 ${s.short}`}
                 className={cn(
                   "h-1.5 flex-1 rounded-full transition-colors",
@@ -252,156 +261,99 @@ export default function TutorialPage() {
           </span>
         </div>
       </div>
-      <LiveNote note={note} />
-
-      <GlassPanel>
-        <div className="absolute top-0 left-5 flex h-[60px] max-w-[calc(100%-40px)] -translate-y-[calc(100%+12px)] items-center gap-3 rounded-full bg-white/92 py-0 pr-5 pl-2.5 text-ink shadow-[0_10px_24px_rgba(6,10,26,.28)] backdrop-blur-md">
+      {/* 영상 속 제품 → 내 제품. 자세한 건 준비 카드에 있어 한 줄로 줄인다. 같은 자리에 알림이 뜨면 숨긴다 */}
+      {!note && (
+        <div className="absolute top-[84px] left-5 z-[2] flex h-11 max-w-[calc(100%-40px)] items-center gap-2 rounded-full bg-white/92 py-0 pr-4 pl-2 text-[14px] font-bold text-ink backdrop-blur-md">
           <span
-            className="size-10 shrink-0 rounded-full border-[3px] border-white shadow-[0_0_0_1px_#E4E7EE]"
+            className="size-7 shrink-0 rounded-full border-2 border-white ring-1 ring-line"
             style={{ background: ref.color }}
+            aria-label="영상 속 제품 색"
           />
-          <span className="flex min-w-0 flex-col">
-            <span className="text-[12px] font-semibold whitespace-nowrap text-mute">
-              영상 속 제품
-            </span>
-            <span className="max-w-[220px] truncate text-[15px] font-bold">
-              {ref.brand} {ref.name}
-            </span>
-          </span>
-          <ArrowRight className="size-[18px] shrink-0 text-plum" strokeWidth={2.4} aria-hidden />
+          <span className="max-w-[200px] truncate text-mute">{ref.name}</span>
+          <ArrowRight className="size-4 shrink-0 text-plum" strokeWidth={2.4} aria-hidden />
           {hasProduct ? (
             <>
               <span
-                className="size-10 shrink-0 rounded-full border-[3px] border-white shadow-[0_0_0_1px_#E4E7EE]"
+                className="size-7 shrink-0 rounded-full border-2 border-white ring-1 ring-line"
                 style={{ background: pr.p?.color ?? "#fff" }}
+                aria-label="내 제품 색"
               />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-[12px] font-semibold whitespace-nowrap text-plum">
-                  {pr.kind === "same" ? "내 파우치 · 같은 제품" : "내 파우치 · 대체 제품"}
-                </span>
-                <span className="max-w-[220px] truncate text-[15px] font-bold">
-                  {pr.p?.brand} {pr.p?.name}
-                </span>
-              </span>
+              <span className="max-w-[200px] truncate">{pr.p?.name}</span>
             </>
           ) : (
-            <>
-              <span className="size-10 shrink-0 rounded-full border-[2.5px] border-dashed border-ash" />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-[12px] font-semibold whitespace-nowrap text-mute">
-                  내 파우치
-                </span>
-                <span className="text-[15px] font-bold whitespace-nowrap text-plum">
-                  해당 제품 없음
-                </span>
-              </span>
-            </>
+            <span className="whitespace-nowrap text-plum">내 파우치에 없음</span>
           )}
         </div>
+      )}
+      <LiveNote note={note} />
 
+      {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
+      <div className="relative flex flex-col gap-3.5 px-7 pt-2 pb-[18px]">
+        <div className="flex items-end gap-3">
+          <span className="shrink-0 font-serif text-[34px] leading-[.9] text-rose italic tabular">
+            {String(step + 1).padStart(2, "0")}
+          </span>
+          <h1 className="font-display text-[26px] leading-[1.15] text-white">{info.title}</h1>
+          {hasProduct && info.acts.length > 1 && (
+            <span className="shrink-0 text-[15px] text-line-2 tabular">
+              할 일 {act + 1}/{info.acts.length}
+            </span>
+          )}
+          {hasProduct && !blocked && (
+            <span
+              className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
+              style={{ color: meterColor }}
+            >
+              {gaugeLabel}
+            </span>
+          )}
+        </div>
+        {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. 제품 없는 단계는 동작 전부 */}
         <div className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-3.5">
-            <span className="shrink-0 font-serif text-[44px] leading-[.9] text-rose italic tabular">
-              {String(step + 1).padStart(2, "0")}
+          {shownActs.map((i) => (
+            <ActCard
+              key={info.acts[i].text}
+              n={i + 1}
+              act={info.acts[i]}
+              doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
+            />
+          ))}
+          {hasProduct && act < info.acts.length - 1 && (
+            <span className="truncate px-2 text-[16px] text-ash">
+              다음 {act + 2}. {info.acts[act + 1].text}
             </span>
-            <h1 className="font-display text-[30px] leading-[1.15] text-white">{info.title}</h1>
-            {subs.length > 1 && (
-              <span className="ml-auto shrink-0 text-[17px] text-line-2 tabular">
-                영역 {subIdx + 1}/{subs.length}
-              </span>
-            )}
-          </div>
-          {descOnly ? (
-            <span className="text-[17px] leading-[1.5] text-line-2">
-              {sub.status === "failed"
-                ? "영상에서 바를 곳을 찾지 못해 설명으로만 진행해요"
-                : "이 단계는 얼굴 위 가이드 없이 설명으로만 진행해요"}
-            </span>
-          ) : (
-            guideStep?.source === "template" && (
-              <span className="text-[17px] leading-[1.5] text-rose">
-                영상에서 위치를 찾지 못해 기본 위치로 보여 드려요
-              </span>
-            )
           )}
-        </div>
-
-        <div className="-mt-1 flex flex-col gap-2.5">
-          {info.acts.map((t, i) => {
-            const on = actIdx < 0 || i === actIdx;
-            const done = actIdx >= 0 && i < actIdx;
-            return (
-              <div
-                key={t}
-                className={cn(
-                  "flex min-h-[52px] items-center gap-3.5 rounded-[18px] py-0 pr-[18px] pl-2.5 transition-colors",
-                  on && actIdx >= 0 && "bg-white/10",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex size-[34px] shrink-0 items-center justify-center rounded-full text-[17px] font-extrabold tabular",
-                    on
-                      ? "bg-pink text-white"
-                      : done
-                        ? "bg-white/90 text-plum"
-                        : "bg-white/14 text-line-2",
-                  )}
-                >
-                  {i + 1}
-                </span>
-                <span
-                  className={cn(
-                    "text-[23px] leading-[1.3] font-bold tracking-[-.01em]",
-                    on ? "text-white" : "text-ash",
-                  )}
-                >
-                  {t}
-                </span>
-              </div>
-            );
-          })}
         </div>
 
         {hasProduct && (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-baseline justify-between gap-4">
-              <span
-                className="text-[28px] font-extrabold whitespace-nowrap transition-colors"
-                style={{ color: meterColor }}
-              >
-                {gaugeLabel}
-              </span>
-              <span className="text-[17px] whitespace-nowrap text-line-2">{meterHint}</span>
-            </div>
-            <div className="relative h-[18px]">
+          <div className="flex items-center gap-3 text-[13px] font-semibold text-line-2">
+            <span>연하게</span>
+            <div className="relative h-2.5 flex-1">
               <div className="absolute inset-0 rounded-full bg-white/10" />
               <span
                 className="absolute top-0 bottom-0 left-0 rounded-full transition-[width,background] duration-400"
                 style={{ width: blocked ? "0%" : `${gv}%`, background: meterColor }}
               />
-              <span className="absolute -top-1.5 -bottom-1.5 left-[53.5%] -ml-[1.5px] w-[3px] rounded-sm bg-white" />
+              {/* 레퍼런스 위치선. 어두운 게이지 위라 미러필름 모드에서도 흰색 그대로 둔다(data-dark) */}
+              <span
+                data-dark
+                className="absolute -top-1.5 -bottom-1.5 left-[53.5%] -ml-[1.5px] w-[3px] rounded-sm bg-white"
+              />
             </div>
-            <div className="relative h-[18px] text-[14px] font-semibold text-line-2">
-              <span className="absolute left-0">연하게</span>
-              <span className="absolute left-[53.5%] -translate-x-1/2 whitespace-nowrap text-white">
-                레퍼런스
-              </span>
-              <span className="absolute right-0">진하게</span>
-            </div>
+            <span>진하게</span>
           </div>
         )}
 
         <div className="flex items-center gap-3">
           <RoundBack
             onClick={() => {
-              if (subIdx === 0) return step > 0 && goStep(step - 1);
-              cancelTimer();
-              setSheet(null);
-              setSubIdx((k) => k - 1);
+              // 저장 중에는 막는다. 대기 중인 advance가 바뀐 화면 위에서 이전 단계를 넘기지 않게
+              if (busy) return;
+              if (act > 0) return setAct((a) => a - 1);
+              if (step > 0) goStep(step - 1, false);
             }}
-            label={subIdx > 0 ? "이전 영역" : "이전 단계"}
-            className={cn(step === 0 && subIdx === 0 && "opacity-35")}
+            label={act > 0 ? "이전 할 일" : "이전 단계"}
+            className={cn((busy || (step === 0 && act === 0)) && "opacity-35")}
           />
           <button
             type="button"
@@ -415,67 +367,16 @@ export default function TutorialPage() {
             </span>
           </button>
         </div>
-      </GlassPanel>
+      </div>
 
-      {/* 사진 확인 (GUIDE-008) */}
-      {sheet && (
-        <div
-          className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-[rgba(11,20,48,.58)] px-[60px] py-8 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="flex w-full max-w-[560px] flex-col gap-6 rounded-[36px] bg-white px-4 pt-4 pb-6 text-ink shadow-[0_40px_80px_rgba(6,10,26,.4)]">
-            <div className="relative h-[300px] overflow-hidden rounded-3xl bg-ink-deep">
-              {/* TODO(GUIDE-008): 실제 촬영 결과 */}
-              {/* eslint-disable-next-line @next/next/no-img-element -- 샘플 */}
-              <img
-                src="/images/sample-face.png"
-                alt=""
-                className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
-                style={{ marginTop: "-112%" }}
-              />
-              <span className="absolute top-3.5 left-3.5 flex h-8 items-center gap-1.5 rounded-full bg-[rgba(11,20,48,.82)] px-3.5 text-[14px] font-bold text-white">
-                <Check className="size-3.5" strokeWidth={3} aria-hidden />
-                {sheet.fail ? "저장 실패" : "사진 저장됨"}
-              </span>
-            </div>
-            <div className="flex flex-col items-center gap-2 px-4 text-center">
-              <span className="font-label text-[14px] font-semibold tracking-[.14em] text-mute">
-                STEP {String(step + 1).padStart(2, "0")} 사진
-              </span>
-              <h2
-                className={cn(
-                  "font-display text-[34px] leading-[1.2]",
-                  sheet.fail ? "text-plum" : "text-ink",
-                )}
-              >
-                {sheet.title}
-              </h2>
-              <p className="text-[18px] leading-[1.5] text-pretty">{sheet.desc}</p>
-            </div>
-            <div className="flex gap-2.5 px-2">
-              <button
-                type="button"
-                onClick={() => setSheet(SHEET_OK)}
-                className="flex h-20 shrink-0 items-center justify-center rounded-full border-2 border-line px-[30px] text-[21px] font-bold whitespace-nowrap active:scale-[.96]"
-              >
-                다시 찍기
-              </button>
-              <button
-                type="button"
-                onClick={() => advance(false)}
-                className="flex h-20 min-w-0 flex-1 items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
-              >
-                <span className="truncate text-[23px] font-bold">
-                  {sheet.fail ? "사진 없이 진행" : last ? "완성하기" : "다음 스텝"}
-                </span>
-                <span className="flex size-[60px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-                  <ArrowRight className="size-7" strokeWidth={2.4} aria-hidden />
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {!ready && (
+        <PrepCard
+          step={step}
+          info={info}
+          refProduct={ref}
+          match={pr}
+          onStart={() => setReady(true)}
+        />
       )}
 
       <Modal

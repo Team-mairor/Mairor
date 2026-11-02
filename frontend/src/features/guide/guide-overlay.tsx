@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  faceFitTransform,
   MIN_IN_FRAME_RATIO,
+  rescaleAround,
   RECOVER_IN_FRAME_MARGIN,
   regionNamesError,
   REGIONS,
@@ -12,6 +14,7 @@ import {
   useFaceFrame,
   type GuideShape,
   type MeshAnchor,
+  type ViewTransform,
 } from "@/features/face";
 import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
@@ -155,20 +158,45 @@ export function useStepInView(step: GuideStep | null): boolean {
   return inView;
 }
 
-/** CameraProvider 안에서 지금 단계의 가이드를 얼굴 위에 그린다. */
-export function GuideOverlay({ step }: { step: GuideStep | null }) {
+/** fit일 때 얼굴이 캔버스를 채우는 비율, 확대가 따라가는 빠르기(프레임마다 남은 차이의 몇 배) */
+const FACE_FILL = 0.85;
+const FIT_FOLLOW = 0.2;
+/**
+ * 목표 배율이 이 비율보다 적게 달라지면 배율을 그대로 둔다. 하단 안내 높이가 바뀌거나 고개를 조금 움직여도
+ * 얼굴 크기가 출렁이지 않게 한다. FACE_FILL 0.85에서 15% 커져도 0.98이라 얼굴이 캔버스를 넘지 않는다.
+ */
+const FIT_HOLD = 0.15;
+
+/**
+ * CameraProvider 안에서 지금 단계의 가이드를 얼굴 위에 그린다.
+ * fit이면 카메라 화면 대신 얼굴을 이 캔버스에 크게 맞춰 그리고, 옅은 얼굴 윤곽을 함께 그린다
+ * (영상을 숨기고 가이드만 띄우는 화면용). face로 윤곽만 따로 숨길 수 있다 (화면이 가이드를 숨긴 동안).
+ */
+export function GuideOverlay({
+  step,
+  fit = false,
+  face = fit,
+}: {
+  step: GuideStep | null;
+  fit?: boolean;
+  face?: boolean;
+}) {
   const { viewTransform } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<GuideRenderer | null>(null);
   const meshRef = useRef<FaceMesh | null>(null);
   const stepRef = useRef(step);
+  const faceRef = useRef(face);
   const viewRef = useRef(viewTransform);
+  const fitRef = useRef<ViewTransform | null>(null);
+  const fitScaleRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     stepRef.current = step;
+    faceRef.current = face;
     viewRef.current = viewTransform;
-  }, [step, viewTransform]);
+  }, [step, face, viewTransform]);
 
   useEffect(() => {
     loadFaceMesh()
@@ -191,11 +219,36 @@ export function GuideOverlay({ step }: { step: GuideStep | null }) {
   }, []);
 
   useFaceFrame((frame) => {
-    const view = viewRef.current;
+    const canvas = canvasRef.current;
+    let view = viewRef.current;
+    if (fit && frame && canvas) {
+      const size = { width: canvas.clientWidth, height: canvas.clientHeight };
+      const target = faceFitTransform(
+        REGIONS.faceOval.indices.map((i) => frame.landmarks[i]),
+        frame.imageSize,
+        size,
+        FACE_FILL,
+      );
+      const held = fitScaleRef.current;
+      if (!held || Math.abs(target.scale / held - 1) > FIT_HOLD) fitScaleRef.current = target.scale;
+      // 얼굴 가운데는 계속 따라가고, 배율만 붙잡아 둔 값을 쓴다
+      const goal = rescaleAround(target, fitScaleRef.current, size);
+      const prev = fitRef.current;
+      const follow = (a: number, b: number) => a + (b - a) * FIT_FOLLOW;
+      view = fitRef.current = prev
+        ? {
+            scale: follow(prev.scale, goal.scale),
+            offsetX: follow(prev.offsetX, goal.offsetX),
+            offsetY: follow(prev.offsetY, goal.offsetY),
+            mirrored: true,
+          }
+        : goal;
+    }
     rendererRef.current?.render({
       frame,
       step: stepRef.current,
       mesh: meshRef.current,
+      face: faceRef.current,
       // 지금은 카메라 화면 기준. 하프미러는 거울에 비친 상 위치로 바꿔 넘긴다.
       projection:
         frame && view

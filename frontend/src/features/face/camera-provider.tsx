@@ -339,6 +339,15 @@ export function useCamera() {
   return context;
 }
 
+/** 이 화면에 있는 동안 카메라 영상을 숨긴다. 카메라와 추적은 그대로 돈다 */
+export function useHiddenVideo() {
+  const { setShowVideo } = useCamera();
+  useEffect(() => {
+    setShowVideo(false);
+    return () => setShowVideo(true);
+  }, [setShowVideo]);
+}
+
 /** 그려지면 카메라를 켠다. 이미 켜져 있으면 그대로 쓴다. */
 export function StartCamera() {
   const { start } = useCamera();

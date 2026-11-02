@@ -24,6 +24,42 @@ export function containTransform(video: Size, container: Size, mirrored: boolean
   };
 }
 
+/**
+ * 얼굴 점들이 컨테이너의 fill 비율을 채우도록 확대해 가운데 둘 때의 변환 (거울 방향).
+ * 영상을 숨기고 가이드만 띄우는 화면에서 얼굴을 크게 보여 줄 때 쓴다.
+ */
+export function faceFitTransform(
+  points: readonly Point[],
+  image: Size,
+  container: Size,
+  fill: number,
+): ViewTransform {
+  const xs = points.map((p) => (1 - p.x) * image.width);
+  const ys = points.map((p) => p.y * image.height);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const scale =
+    fill *
+    Math.min(container.width / Math.max(1, x1 - x0), container.height / Math.max(1, y1 - y0));
+  return {
+    scale,
+    offsetX: container.width / 2 - ((x0 + x1) / 2) * scale,
+    offsetY: container.height / 2 - ((y0 + y1) / 2) * scale,
+    mirrored: true,
+  };
+}
+
+/** 컨테이너 가운데에 오는 점은 그대로 두고 배율만 scale로 바꾼 변환 */
+export function rescaleAround(view: ViewTransform, scale: number, container: Size): ViewTransform {
+  const k = scale / view.scale;
+  const [cx, cy] = [container.width / 2, container.height / 2];
+  return {
+    scale,
+    offsetX: cx - (cx - view.offsetX) * k,
+    offsetY: cy - (cy - view.offsetY) * k,
+    mirrored: view.mirrored,
+  };
+}
+
 /** 화면(container)에 실제로 보이는 원본 프레임 영역. cover면 잘린 부분이 빠지고, contain이면 프레임 전체다. */
 export function visibleRect(image: Size, container: Size, view: ViewTransform): NormalizedRect {
   const clamp = (v: number) => Math.max(0, Math.min(1, v));

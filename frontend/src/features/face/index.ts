@@ -5,6 +5,7 @@ export {
   StartCamera,
   useCamera,
   useFaceFrame,
+  useHiddenVideo,
   type CameraStatus,
 } from "./camera-provider";
 export {
@@ -41,5 +42,12 @@ export {
   useTrackingIssue,
   type TrackingIssue,
 } from "./tracking-issue";
-export { containTransform, coverTransform, toScreen, visibleRect } from "./view-transform";
+export {
+  containTransform,
+  coverTransform,
+  faceFitTransform,
+  rescaleAround,
+  toScreen,
+  visibleRect,
+} from "./view-transform";
 export type * from "./types";
