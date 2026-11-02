@@ -6,7 +6,7 @@ from app.schemas.common import CamelModel
 from app.schemas.manifest import Makeup
 
 TRIANGLE_COUNT = 898
-BARY_TOLERANCE = 0.01
+BARY_TOLERANCE = 0.001
 NO_AREA_MAKEUPS: tuple[Makeup, ...] = ("other", "mascara")
 
 RegionName = Literal[

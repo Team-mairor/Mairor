@@ -43,6 +43,7 @@ BROKEN: dict[str, Callable[[dict], None]] = {
     "없는 부위 이름": lambda s: sub_step(s, LIP)["guideSets"][0].update(region="nose"),
     "없는 삼각형 번호": lambda s: lip_polygon(s)["outline"][0].update(triangle=898),
     "비율 합이 0.9": lambda s: lip_polygon(s)["outline"][0].update(bary=[0.2, 0.4, 0.3]),
+    "비율 합이 0.998": lambda s: lip_polygon(s)["outline"][0].update(bary=[0.2, 0.4, 0.398]),
     "립 단계가 notApplicable": lambda s: sub_step(s, LIP_TEMPLATE).update(
         status="notApplicable", reasons=[], templateId=None
     ),

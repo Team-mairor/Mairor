@@ -36,7 +36,7 @@ x' = mirrored ? 1 − x : x
 ```
 
 - 삼각형 번호는 `triangles.v1.json`의 배열 위치, 꼭짓점은 지금 프레임의 랜드마크다
-- `bary` 합은 1이어야 한다. 허용 오차는 FE(`overlay/mesh.ts`) 0.001, AI(`schemas/guide_area.py`) 0.01로 다르다
+- `bary` 합은 1이어야 한다. 허용 오차는 FE(`overlay/mesh.ts`)·AI(`schemas/guide_area.py`) 모두 0.001이다
 - 아이라인 꼬리·오버립처럼 삼각형 밖에 걸치는 점은 가장 가까운 삼각형 기준으로 계산하고 음수를 허용한다
 - 데이터에는 어느 번호표 기준인지 `meshVersion`으로 적는다
 
