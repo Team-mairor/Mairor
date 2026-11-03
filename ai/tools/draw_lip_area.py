@@ -16,8 +16,10 @@ AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.landmarks import LandmarksResult
-from app.services.face_map import map_points
-from app.services.lip_area import (
+from app.tasks.area.common.face_map import map_points
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.parts.lip_area import (
     MIN_FOUND_RATIO,
     after_map,
     after_rows,
@@ -25,8 +27,6 @@ from app.services.lip_area import (
     found_ratio,
     lip_area_on_map,
 )
-from app.services.reference_input import load_reference_input, read_frame_rgb
-from app.services.region_points import REGION_POINTS
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 TINT = np.array([0, 190, 255])

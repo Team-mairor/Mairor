@@ -1,7 +1,7 @@
 import numpy as np
 
 from app.schemas.landmarks import Face, ImageSize, Point, Pose
-from app.services.region_mask import (
+from app.tasks.area.common.region_mask import (
     fill_holes,
     largest_piece,
     open_close,

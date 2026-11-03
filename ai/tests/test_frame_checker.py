@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
-from app.services.frame_checker import LIPS_OUTER, check_frames, outside_count_name
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.frame_checker import LIPS_OUTER, check_frames, outside_count_name
 
 WIDTH, HEIGHT = 1000, 800
 PHOTO = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)

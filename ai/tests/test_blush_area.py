@@ -4,7 +4,10 @@ import numpy as np
 from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.services.blush_area import (
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts.blush_area import (
     CHEEKS,
     MIN_FOUND_RATIO,
     BlushArea,
@@ -16,9 +19,6 @@ from app.services.blush_area import (
     light_exclude,
     symmetric_blush,
 )
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.region_mask import polygon_mask
-from app.services.region_points import REGION_POINTS
 from tests.test_area_preparation import HAND, make_row
 from tests.test_lip_area import iou
 

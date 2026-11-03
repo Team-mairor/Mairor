@@ -8,18 +8,16 @@ Claude는 문장마다 입력에 없는 말·뜻이 바뀐 말·할 일이 아�
 import hashlib
 import re
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 from app.clients.llm import Llm, LlmUsage
+from app.core.paths import PROMPTS_DIR
 from app.core.tracing import using_prompt
 from app.schemas.guide import GuideInputStep
 from app.schemas.guide_job import StepCheck, StepExplanation
-from app.services.step_explainer import sentence, step_inputs, user_message
+from app.tasks.explanation.step_explainer import sentence, step_inputs, user_message
 
-PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "explanation_check.txt").read_text(
-    encoding="utf-8"
-)
+PROMPT = (PROMPTS_DIR / "explanation_check.txt").read_text(encoding="utf-8")
 PROMPT_VERSION = f"explanation_check@{hashlib.sha256(PROMPT.encode()).hexdigest()[:8]}"
 
 ProblemKind = Literal[

@@ -5,9 +5,11 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from app.schemas.common import ErrorDetail, ErrorResponse
+from app.schemas.guide_area import GuideArea
 from app.schemas.guide_job import (
     ExplainedGuide,
     ExplainedStep,
+    GuideJobRequest,
     GuideJobResult,
     StepAction,
     StepTip,
@@ -21,6 +23,7 @@ from tools.export_guide_schema import (
 )
 
 SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "guide_input.json"
+AREA_SAMPLE = SAMPLE.with_name("guide_area.json")
 
 
 def load_validator(path: Path) -> Draft202012Validator:
@@ -63,6 +66,53 @@ def test_request_with_sample_passes_shared_schema():
     request = {"callbackUrl": "https://be.example.com/callback", "guideInput": load_sample()}
 
     load_validator(GUIDE_JOB_REQUEST_PATH).validate(request)
+
+
+def test_request_with_frames_and_progress_passes_shared_schema():
+    guide_input = load_sample()
+    step_id = guide_input["steps"][0]["stepId"]
+    request = {
+        "callbackUrl": "https://be.example.com/callback",
+        "progressUrl": "https://be.example.com/progress",
+        "guideInput": guide_input,
+        "frames": {
+            "source": {"width": 1920, "height": 1080, "fps": 30},
+            "items": [
+                {
+                    "frameIndex": 0,
+                    "timestampMs": 0,
+                    "stepId": None,
+                    "url": "https://storage.example.com/frames/000000.jpg",
+                    "width": 1920,
+                    "height": 1080,
+                },
+                {
+                    "frameIndex": 9180,
+                    "timestampMs": 306000,
+                    "stepId": step_id,
+                    "url": "https://storage.example.com/frames/009180.jpg",
+                    "width": 1920,
+                    "height": 1080,
+                },
+            ],
+        },
+    }
+
+    load_validator(GUIDE_JOB_REQUEST_PATH).validate(request)
+    GuideJobRequest.model_validate(request)
+
+
+def test_callback_with_area_passes_shared_schema():
+    area = json.loads(AREA_SAMPLE.read_text(encoding="utf-8"))
+    result = GuideJobResult(
+        job_id="j1",
+        video_id=area["videoId"],
+        status="COMPLETED",
+        guide=ExplainedGuide(steps=[]),
+        area=GuideArea.model_validate(area),
+    )
+
+    load_validator(GUIDE_JOB_CALLBACK_PATH).validate(result.model_dump(mode="json", by_alias=True))
 
 
 @pytest.mark.parametrize(

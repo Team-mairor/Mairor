@@ -5,18 +5,16 @@
 """
 
 import hashlib
-from pathlib import Path
 
 from pydantic.alias_generators import to_camel
 
 from app.clients.llm import Llm, LlmResult
+from app.core.paths import PROMPTS_DIR
 from app.core.tracing import using_prompt
 from app.schemas.guide import GuideInputStep
 from app.schemas.guide_job import ExplainedStep, StepAction, StepExplanation, StepTip
 
-PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "step_explanation.txt").read_text(
-    encoding="utf-8"
-)
+PROMPT = (PROMPTS_DIR / "step_explanation.txt").read_text(encoding="utf-8")
 PROMPT_VERSION = f"step_explanation@{hashlib.sha256(PROMPT.encode()).hexdigest()[:8]}"
 FACT_FIELDS = ("tool", "amount", "strength", "finish_cue")
 LIST_PREFIXES = (("t", "tips"), ("c", "cautions"))

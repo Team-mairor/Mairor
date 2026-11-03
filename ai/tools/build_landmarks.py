@@ -11,8 +11,8 @@ AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.landmarks import LandmarksResult
-from app.services.landmarks_builder import build_landmarks
-from app.services.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.landmarks.landmarks_builder import build_landmarks
+from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 
 OUTPUT_FILE = Path("output") / "landmarks.json"
 

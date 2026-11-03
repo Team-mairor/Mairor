@@ -21,23 +21,23 @@ from app.schemas.guide_area import (
 )
 from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
-from app.services.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
-from app.services.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
-from app.services.eyeliner_area import (
+from app.tasks.area.common.face_map import points_to_anchors
+from app.tasks.area.common.mask_outline import mask_outline, mask_outlines, simplify_outline
+from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
+from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
+from app.tasks.area.parts.eyeliner_area import (
     OUTLINE_GROW_CELLS,
     EyelinerArea,
     find_eyeliner_area,
     symmetric_eyeliner,
 )
-from app.services.eyeshadow_area import (
+from app.tasks.area.parts.eyeshadow_area import (
     EYES,
     EyeshadowArea,
     find_eyeshadow_area,
     symmetric_eyeshadow,
 )
-from app.services.face_map import points_to_anchors
-from app.services.lip_area import PhotoLoader, find_lip_area
-from app.services.mask_outline import mask_outline, mask_outlines, simplify_outline
+from app.tasks.area.parts.lip_area import PhotoLoader, find_lip_area
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ def build_guide_area(
     steps: Sequence[Step | GuideInputStep],
     result: LandmarksResult,
     load_photo: PhotoLoader,
+    on_step: Callable[[], None] | None = None,
 ) -> GuideArea:
     """단계마다 하위 단계 하나를 채워 영상 하나의 가이드 영역을 돌려준다.
 
@@ -61,6 +62,7 @@ def build_guide_area(
     마스카라는 영역 안내 없이 설명만 하기로 해서 영역을 보내지 않는다.
     아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
     나머지(베이스처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로 기본 가이드(template)를 쓴다.
+    on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
     """
     ordered = sorted(steps, key=lambda step: step.order)
     drawn: np.ndarray | None = None
@@ -78,6 +80,26 @@ def build_guide_area(
                 sub_steps=[sub_step],
             )
         )
+        if on_step is not None:
+            on_step()
+    return GuideArea(video_id=video_id, mesh_version="v1", steps=area_steps)
+
+
+def failed_guide_area(video_id: str, steps: Sequence[Step | GuideInputStep]) -> GuideArea:
+    """영역 분석이 통째로 실패했을 때의 가이드 영역. 분석하는 단계만 failed(analysisError)로 채운다.
+
+    분석과 상관없이 정해지는 단계(_fixed_sub_step)는 평소 결과 그대로라
+    FE가 기본 가이드를 그릴 수 있다.
+    """
+    area_steps = []
+    for step in sorted(steps, key=lambda step: step.order):
+        sub_step_id = f"{step.step_id}-1"
+        sub_step = _fixed_sub_step(step.makeup, sub_step_id) or _failed(sub_step_id)
+        area_steps.append(
+            AreaStep(
+                step_id=step.step_id, order=step.order, makeup=step.makeup, sub_steps=[sub_step]
+            )
+        )
     return GuideArea(video_id=video_id, mesh_version="v1", steps=area_steps)
 
 
@@ -86,18 +108,10 @@ def _sub_step(
 ) -> AreaSubStep:
     """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다."""
     sub_step_id = f"{step.step_id}-1"
-    if step.makeup in NO_AREA_MAKEUPS:
-        return AreaSubStep(
-            sub_step_id=sub_step_id,
-            order=1,
-            status="notApplicable",
-            reasons=[],
-            template_id=None,
-            guide_sets=[],
-        )
-    finder = AREA_FINDERS.get(step.makeup)
-    if finder is None:
-        return _template(sub_step_id, step.makeup, [NOT_ANALYZED])
+    fixed = _fixed_sub_step(step.makeup, sub_step_id)
+    if fixed is not None:
+        return fixed
+    finder = AREA_FINDERS[step.makeup]
     try:
         return finder(
             result,
@@ -185,6 +199,30 @@ def _eyeliner_sub_step(
             GuideSet(region=eye, source="extracted", guides=guides[eye], exclude=[])
             for eye in areas
         ],
+    )
+
+
+def _fixed_sub_step(makeup: Makeup, sub_step_id: str) -> AreaSubStep | None:
+    """분석과 상관없이 정해지는 하위 단계. 분석하는 부위(AREA_FINDERS와 아이라인)면 None이다.
+
+    other와 mascara는 notApplicable이다.
+    베이스처럼 분석하지 않는 부위는 notAnalyzed 이유로 기본 가이드(template)다.
+    """
+    if makeup in NO_AREA_MAKEUPS:
+        return _not_applicable(sub_step_id)
+    if makeup == "eyeliner" or makeup in AREA_FINDERS:
+        return None
+    return _template(sub_step_id, makeup, [NOT_ANALYZED])
+
+
+def _not_applicable(sub_step_id: str) -> AreaSubStep:
+    return AreaSubStep(
+        sub_step_id=sub_step_id,
+        order=1,
+        status="notApplicable",
+        reasons=[],
+        template_id=None,
+        guide_sets=[],
     )
 
 

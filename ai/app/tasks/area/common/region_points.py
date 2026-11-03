@@ -4,12 +4,12 @@ FE와 같이 쓰는 shared/face-mesh/regions.v1.json의 indices를 읽는다. �
 """
 
 import json
-from pathlib import Path
 from typing import get_args
 
+from app.core.paths import FACE_MESH_DIR
 from app.schemas.guide_area import RegionName
 
-REGIONS_PATH = Path(__file__).resolve().parents[3] / "shared" / "face-mesh" / "regions.v1.json"
+REGIONS_PATH = FACE_MESH_DIR / "regions.v1.json"
 
 _REGIONS = json.loads(REGIONS_PATH.read_text(encoding="utf-8"))["regions"]
 

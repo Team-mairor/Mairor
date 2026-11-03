@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from app.schemas.landmarks import Face
-from app.services.face_finder import find_faces
+from app.tasks.area.landmarks.face_finder import find_faces
 
 REPO = Path(__file__).resolve().parents[2]
 FRONT_PHOTO = REPO / "ai" / "samples" / "local_01_seq" / "frames" / "015150.png"

@@ -3,7 +3,7 @@ from PIL import Image
 
 from app.schemas.guide_area import AreaStep, AreaSubStep, GuideArea, MeshAnchor
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.region_points import REGION_POINTS
 from tools import build_guide_area, draw_guide_area
 
 

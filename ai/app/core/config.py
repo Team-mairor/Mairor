@@ -5,7 +5,9 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+from app.core.paths import AI_DIR
+
+ENV_FILE = AI_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -27,6 +29,15 @@ class Settings(BaseSettings):
     callback_timeout_seconds: float = Field(default=10, gt=0)
     callback_max_retries: int = Field(default=3, ge=0)
     callback_retry_delay_seconds: float = Field(default=1, ge=0)
+
+    progress_interval_seconds: float = Field(default=1, gt=0)
+    progress_timeout_seconds: float = Field(default=3, gt=0)
+
+    frame_download_concurrency: int = Field(default=16, gt=0)
+    frame_download_timeout_seconds: float = Field(default=30, gt=0)
+    frame_download_max_retries: int = Field(default=1, ge=0)
+    area_max_concurrency: int = Field(default=1, gt=0)
+    area_work_dir: Path | None = None
 
     tracing_endpoint: str | None = None
     tracing_project: str = "ai-guide"

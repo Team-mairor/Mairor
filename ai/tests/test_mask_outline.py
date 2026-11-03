@@ -3,10 +3,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from app.services.face_map import MAP_SIZE
-from app.services.lip_area import check_lip_area, lip_area_on_map
-from app.services.mask_outline import mask_outline, mask_outlines, simplify_outline
-from app.services.region_mask import polygon_mask
+from app.tasks.area.common.face_map import MAP_SIZE
+from app.tasks.area.common.mask_outline import mask_outline, mask_outlines, simplify_outline
+from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.parts.lip_area import check_lip_area, lip_area_on_map
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "lip"
 MAX_CHANGED_RATIO_ON_SAMPLE = 0.01

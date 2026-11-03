@@ -9,16 +9,21 @@ from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
 from app.schemas.manifest import Step
-from app.services import guide_area_builder
-from app.services.blush_area import BlushArea, cheek_range
-from app.services.brow_area import BrowArea, brow_range
-from app.services.eyeliner_area import EyelinerArea
-from app.services.eyeshadow_area import EyeshadowArea, eyeshadow_range
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.guide_area_builder import ANALYSIS_ERROR, NOT_ANALYZED, build_guide_area
-from app.services.lip_area import LipArea, check_lip_area, lip_area_on_map
-from app.services.region_mask import polygon_mask
-from app.services.region_points import REGION_POINTS
+from app.tasks.area import guide_area_builder
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.guide_area_builder import (
+    ANALYSIS_ERROR,
+    NOT_ANALYZED,
+    build_guide_area,
+    failed_guide_area,
+)
+from app.tasks.area.parts.blush_area import BlushArea, cheek_range
+from app.tasks.area.parts.brow_area import BrowArea, brow_range
+from app.tasks.area.parts.eyeliner_area import EyelinerArea
+from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, eyeshadow_range
+from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_map
 from tests.test_eyeliner_area import lash_line, with_gap
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -107,6 +112,22 @@ def test_error_in_one_step_fails_only_that_step(monkeypatch, caplog):
     assert area.steps[0].sub_steps[0].status == "notApplicable"
     assert area.steps[1].sub_steps[0].status == "template"
     assert "s3" in caplog.text
+
+
+def test_failed_area_fails_only_analyzed_steps():
+    eyeliner = Step(step_id="s4", order=4, start_seconds=10.5, end_seconds=12, makeup="eyeliner")
+    area = failed_guide_area("test_01", [STEPS[2], eyeliner, STEPS[0], STEPS[1]])
+
+    assert [
+        (s.step_id, s.sub_steps[0].status, s.sub_steps[0].reasons, s.sub_steps[0].template_id)
+        for s in area.steps
+    ] == [
+        ("s1", "notApplicable", [], None),
+        ("s2", "template", [NOT_ANALYZED], "foundation"),
+        ("s3", "failed", [ANALYSIS_ERROR], None),
+        ("s4", "failed", [ANALYSIS_ERROR], None),
+    ]
+    jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
 
 
 def test_sample_lip_becomes_a_valid_guide_area(monkeypatch):

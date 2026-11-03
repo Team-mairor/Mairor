@@ -13,7 +13,7 @@ from app.schemas.guide_job import (
     StepCheck,
     StepExplanation,
 )
-from app.services.explanation_checker import (
+from app.tasks.explanation.explanation_checker import (
     PROMPT,
     check_by_code,
     check_explanation,

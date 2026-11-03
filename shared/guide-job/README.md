@@ -5,10 +5,10 @@ API 명세는 [docs/references/ai-api.md](../../docs/references/ai-api.md)에 �
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
-| `guide_job_request.v2.schema.json` | 요청 본문. `guideInput`은 [guide-input](../guide-input/README.md) v2 그대로 | `ai/app/schemas/guide_job.py`의 `GuideJobRequest` |
-| `guide_job_callback.v1.schema.json` | 콜백 본문 | 같은 파일의 `GuideJobResult` |
+| `guide_job_request.v2.schema.json` | 요청 본문. `guideInput`은 [guide-input](../guide-input/README.md) v2 그대로, `frames`는 레퍼런스 사진 목록 | `ai/app/schemas/guide_job.py`의 `GuideJobRequest` |
+| `guide_job_callback.v1.schema.json` | 콜백 본문. `area`는 [guide-area](../guide-area/README.md) v1 그대로 | 같은 파일의 `GuideJobResult` |
 
-두 파일 모두 `ai/tools/export_guide_schema.py`가 모델에서 만든다.
+두 파일 모두 `ai/tools/export_guide_schema.py`가 모델에서 만든다. 진행 알림 본문(`GuideJobProgress`)은 스키마 파일이 없고 [ai-api.md](../../docs/references/ai-api.md#진행-알림)에 있다.
 
 ## 사용 위치
 

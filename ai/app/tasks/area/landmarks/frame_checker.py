@@ -9,8 +9,8 @@ from PIL import Image
 from app.core.errors import AppError
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import Face, FrameLandmarks, FrameStatus, LandmarksResult
-from app.services.landmarks_builder import face_width_px
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.landmarks_builder import face_width_px
 
 MIN_FACE_WIDTH_PX = 256
 MAX_TURN_DEG = 20

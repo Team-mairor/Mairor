@@ -4,10 +4,10 @@ from typing import Literal
 import numpy as np
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.services.area_preparation import PhotoLoader, rgb_to_lab, rows_to_map, usable_rows
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.region_mask import polygon_mask, span
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import polygon_mask, span
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts.area_preparation import PhotoLoader, rgb_to_lab, rows_to_map, usable_rows
 
 AFTER_WINDOW_MS = 1000
 MARGIN_RATIO = 0.05

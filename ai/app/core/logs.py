@@ -19,6 +19,7 @@ LogFormat = Literal["text", "json"]
 TEXT_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 LEVELS = {"WARNING": "WARN", "CRITICAL": "ERROR"}
 UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+URL_LOGGERS = ("httpx", "httpx2")
 
 
 class ContextFilter(logging.Filter):
@@ -56,8 +57,14 @@ def build_handler(log_format: LogFormat) -> logging.Handler:
 
 
 def setup_logging(settings: Settings) -> None:
-    """json이면 uvicorn 로거가 따로 찍지 않고 같은 handler로 보내게 한다."""
+    """json이면 uvicorn 로거가 따로 찍지 않고 같은 handler로 보내게 한다.
+
+    HTTP 라이브러리는 요청마다 주소를 INFO로 찍는다. 사진 · 콜백 주소에는 서명이 붙어 올 수 있고
+    사진은 영상 하나에 2,000장 안팎이라, 이 로거들은 WARNING부터 남긴다.
+    """
     logging.basicConfig(level=settings.log_level, handlers=[build_handler(settings.log_format)])
+    for name in URL_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
     if settings.log_format == "json":
         for name in UVICORN_LOGGERS:
             uvicorn_logger = logging.getLogger(name)

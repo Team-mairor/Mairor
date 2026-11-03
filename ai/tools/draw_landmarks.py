@@ -15,7 +15,11 @@ from PIL import Image, ImageDraw, ImageFont
 from app.core.errors import AppError
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Frame
-from app.services.reference_input import ReferenceInput, load_reference_input, read_frame_rgb
+from app.tasks.area.landmarks.reference_input import (
+    ReferenceInput,
+    load_reference_input,
+    read_frame_rgb,
+)
 from tools.build_landmarks import OUTPUT_FILE
 
 PHOTO_WIDTH = 960

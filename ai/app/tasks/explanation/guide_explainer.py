@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
 
 from app.clients.llm import Llm, LlmError
 from app.core.errors import AppError
@@ -9,9 +10,9 @@ from app.core.tracing import set_failed, set_output, traced
 from app.schemas.common import ErrorDetail
 from app.schemas.guide import GuideInput, GuideInputStep
 from app.schemas.guide_job import ExplainedGuide, ExplainedStep
-from app.services.explanation_checker import Problem, check_explanation
-from app.services.guide_input import move_misplaced_facts
-from app.services.step_explainer import PROMPT_VERSION, explain_step, to_explained_step
+from app.tasks.explanation.explanation_checker import Problem, check_explanation
+from app.tasks.explanation.guide_input import move_misplaced_facts
+from app.tasks.explanation.step_explainer import PROMPT_VERSION, explain_step, to_explained_step
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +24,15 @@ def check_view(problems: list[Problem]) -> list[dict[str, str]]:
     ]
 
 
-async def build_explained_guide(guide_input: GuideInput, llm: Llm) -> ExplainedGuide:
+async def build_explained_guide(
+    guide_input: GuideInput, llm: Llm, on_step: Callable[[], None] | None = None
+) -> ExplainedGuide:
     """단계마다 Claude로 설명을 만든 뒤 입력에 근거하는지 확인한다.
 
     단계는 한꺼번에 보내고 동시 호출 수는 llm이 맞춘다.
     한 단계라도 설명을 못 받으면 GENERATION_FAILED로 거절하고 details에 그 단계를 모두 적는다.
     확인에서 걸리거나 확인 호출이 실패해도 지금은 기록만 남기고 설명은 그대로 보낸다.
+    on_step은 단계 하나를 끝낼 때마다(실패해도) 부른다. 작업 진행 숫자를 세는 자리다.
     """
     steps = move_misplaced_facts(guide_input).steps
 
@@ -79,7 +83,16 @@ async def build_explained_guide(guide_input: GuideInput, llm: Llm) -> ExplainedG
                 set_failed(span, "; ".join(reasons))
         return explained
 
-    results = await asyncio.gather(*(explain(step) for step in steps), return_exceptions=True)
+    async def explain_and_count(step: GuideInputStep) -> ExplainedStep:
+        try:
+            return await explain(step)
+        finally:
+            if on_step is not None:
+                on_step()
+
+    results = await asyncio.gather(
+        *(explain_and_count(step) for step in steps), return_exceptions=True
+    )
     explained: list[ExplainedStep] = []
     details: list[ErrorDetail] = []
     for i, result in enumerate(results):

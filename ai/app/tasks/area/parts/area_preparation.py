@@ -13,8 +13,8 @@ import numpy as np
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.services.face_map import flatten, median_map
-from app.services.frame_checker import outside_count_name
+from app.tasks.area.common.face_map import flatten, median_map
+from app.tasks.area.landmarks.frame_checker import outside_count_name
 
 FACE_RATIO_RANGE = (0.8, 1.2)
 LIGHT_BLUR_SIGMA = 40

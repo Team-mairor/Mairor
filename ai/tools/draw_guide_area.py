@@ -24,10 +24,10 @@ sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import GuideArea, MeshAnchor, RegionName
 from app.schemas.landmarks import Face, FrameLandmarks, LandmarksResult
-from app.services.area_preparation import usable_rows
-from app.services.face_map import MESH_DIR
-from app.services.reference_input import load_reference_input, read_frame_rgb
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.face_map import MESH_DIR
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.parts.area_preparation import usable_rows
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 GUIDE_AREA_FILE = Path("output") / "guide_area.json"

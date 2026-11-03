@@ -1,10 +1,15 @@
 import numpy as np
 
 from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
-from app.services.area_preparation import remove_lighting, rgb_to_lab, rows_to_map, usable_rows
-from app.services.face_map import MAP_SIZE
-from app.services.frame_checker import outside_count_name
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.face_map import MAP_SIZE
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.frame_checker import outside_count_name
+from app.tasks.area.parts.area_preparation import (
+    remove_lighting,
+    rgb_to_lab,
+    rows_to_map,
+    usable_rows,
+)
 from tests.test_face_map import UV, face_on_map
 
 SKIN = (232, 192, 172)

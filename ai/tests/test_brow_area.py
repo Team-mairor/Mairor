@@ -5,9 +5,12 @@ import numpy as np
 from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.services import brow_area
-from app.services.area_preparation import rgb_to_lab
-from app.services.brow_area import (
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import largest_piece, polygon_mask
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts import brow_area
+from app.tasks.area.parts.area_preparation import rgb_to_lab
+from app.tasks.area.parts.brow_area import (
     BROWS,
     FOUND_MEDIAN_MIN,
     BrowArea,
@@ -18,9 +21,6 @@ from app.services.brow_area import (
     find_brow_area,
     symmetric_brows,
 )
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.region_mask import largest_piece, polygon_mask
-from app.services.region_points import REGION_POINTS
 from tests.test_area_preparation import DARK_SKIN, make_row
 from tests.test_lip_area import iou
 

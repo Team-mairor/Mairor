@@ -21,7 +21,7 @@ from gemini_video_test import RUNS_DIR, parse_time, to_guide_input, video_id_of
 from pydantic import ValidationError
 
 from app.schemas.guide import GuideInput
-from app.services.guide_builder import build_guide
+from app.tasks.template_guide.guide_builder import build_guide
 
 # 유튜브 페이지의 실제 길이. 사람이 나눈 구간이 있는 영상은 samples 폴더를 같이 쓴다
 VIDEO_LENGTHS = {"eFzG30avtOI": 525}

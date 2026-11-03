@@ -39,6 +39,33 @@
       "title": "Fact",
       "type": "object"
     },
+    "FrameSource": {
+      "description": "사진을 캡처한 원본 영상의 크기와 fps. 영상 길이는 가이드 입력의 durationSeconds를 쓴다.",
+      "properties": {
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "fps": {
+          "exclusiveMinimum": 0,
+          "title": "Fps",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "fps"
+      ],
+      "title": "FrameSource",
+      "type": "object"
+    },
     "GuideInput": {
       "description": "BE가 넘기는 가이드 생성 입력. 형식과 예시는 ai/docs/GUIDE_INPUT.md.",
       "properties": {
@@ -157,6 +184,81 @@
         "color"
       ],
       "title": "Palette",
+      "type": "object"
+    },
+    "ReferenceFrame": {
+      "description": "레퍼런스 영상에서 캡처한 사진 1장. AI가 url에서 내려받는다.",
+      "properties": {
+        "frameIndex": {
+          "minimum": 0,
+          "title": "Frameindex",
+          "type": "integer"
+        },
+        "timestampMs": {
+          "minimum": 0,
+          "title": "Timestampms",
+          "type": "integer"
+        },
+        "stepId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Stepid"
+        },
+        "url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "frameIndex",
+        "timestampMs",
+        "stepId",
+        "url",
+        "width",
+        "height"
+      ],
+      "title": "ReferenceFrame",
+      "type": "object"
+    },
+    "ReferenceFrames": {
+      "description": "가이드 영역을 찾을 레퍼런스 사진 목록. stepId는 맨얼굴·단계 사이면 null이다.",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/FrameSource"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ReferenceFrame"
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "items"
+      ],
+      "title": "ReferenceFrames",
       "type": "object"
     },
     "StepFacts": {
@@ -287,7 +389,7 @@
       "type": "object"
     }
   },
-  "description": "BE의 가이드 생성 요청. 결과는 callback_url로 보낸다.",
+  "description": "BE의 가이드 생성 요청. 결과는 callback_url로, 진행 숫자는 progress_url로 보낸다.\n\nframes가 없으면 가이드 영역은 만들지 않고 쉬운 설명만 만든다.",
   "properties": {
     "callbackUrl": {
       "format": "uri",
@@ -296,8 +398,34 @@
       "title": "Callbackurl",
       "type": "string"
     },
+    "progressUrl": {
+      "anyOf": [
+        {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progressurl"
+    },
     "guideInput": {
       "$ref": "#/$defs/GuideInput"
+    },
+    "frames": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReferenceFrames"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

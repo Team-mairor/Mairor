@@ -10,7 +10,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.trace import NoOpTracer, format_span_id, format_trace_id, get_current_span
 
 from app.core import tracing
-from app.core.logs import LogFormat, build_handler
+from app.core.config import Settings
+from app.core.logs import LogFormat, build_handler, setup_logging
 
 
 class Captured:
@@ -115,3 +116,11 @@ def test_text_format_stays_one_readable_line():
         captured.logger.removeHandler(captured.handler)
 
     assert captured.stream.getvalue().rstrip().endswith("INFO [test.logs.text] 설명")
+
+
+def test_http_request_urls_are_not_logged():
+    setup_logging(Settings(_env_file=None))
+
+    for name in ("httpx", "httpx2"):
+        assert not logging.getLogger(name).isEnabledFor(logging.INFO)
+        assert logging.getLogger(name).isEnabledFor(logging.WARNING)

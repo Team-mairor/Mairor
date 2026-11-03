@@ -5,17 +5,17 @@ import numpy as np
 from PIL import Image
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.frame_checker import outside_count_name
-from app.services.lip_area import (
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.frame_checker import outside_count_name
+from app.tasks.area.parts.lip_area import (
     MIN_FOUND_RATIO,
     after_rows,
     check_lip_area,
     find_lip_area,
     lip_area_on_map,
 )
-from app.services.region_mask import polygon_mask
-from app.services.region_points import REGION_POINTS
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "lip"
 STEP_END_MS = 503500

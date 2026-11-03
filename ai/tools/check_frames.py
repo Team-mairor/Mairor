@@ -12,9 +12,9 @@ AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.landmarks import LandmarksResult
-from app.services.frame_checker import check_frames, outside_count_name
-from app.services.reference_input import load_reference_input, read_frame_rgb
-from app.services.region_points import REGION_POINTS
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.frame_checker import check_frames, outside_count_name
+from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 
 LANDMARKS_FILE = Path("output") / "landmarks.json"
 OUTPUT_FILE = Path("output") / "frames_checked.json"

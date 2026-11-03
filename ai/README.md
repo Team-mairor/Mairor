@@ -53,7 +53,7 @@ uv run streamlit run tools/guide_viewer.py    # http://localhost:8501
 - 오른쪽 **결과**: 만든 가이드. 저장된 케이스면 기대값과 같은지 표시합니다.
 - **이 결과를 기대값으로 저장**을 누르면 `tests/golden/guide/<이름>.json`에 입력과 결과가 저장되고, `uv run pytest`가 이 케이스로 결과를 비교합니다.
 
-문장은 `app/services/guide_templates.py`만 고치면 바뀝니다. 고친 뒤 화면에서 결과를 확인하고, 의도한 변경이면 케이스를 다시 저장합니다.
+문장은 `app/tasks/template_guide/guide_templates.py`만 고치면 바뀝니다. 고친 뒤 화면에서 결과를 확인하고, 의도한 변경이면 케이스를 다시 저장합니다.
 
 입력 형식(`app/schemas/guide.py`의 `GuideInput`)을 고치면 BE와 함께 쓰는 스키마도 다시 만듭니다. 방법과 규칙은 [shared/guide-input/README.md](../shared/guide-input/README.md)에 있습니다.
 

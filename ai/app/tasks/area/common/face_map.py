@@ -1,15 +1,15 @@
 import json
 from collections.abc import Sequence
 from functools import lru_cache
-from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
 
+from app.core.paths import FACE_MESH_DIR
 from app.schemas.guide_area import MeshAnchor
 from app.schemas.landmarks import Face
 
-MESH_DIR = Path(__file__).resolve().parents[3] / "shared" / "face-mesh"
+MESH_DIR = FACE_MESH_DIR
 MAP_SIZE = 1024
 VERTEX_COUNT = 468
 BARY_DIGITS = 4

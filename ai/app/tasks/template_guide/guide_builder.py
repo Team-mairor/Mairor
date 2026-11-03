@@ -17,7 +17,7 @@ from app.schemas.guide import (
     GuideStep,
     StepTrace,
 )
-from app.services import guide_templates as templates
+from app.tasks.template_guide import guide_templates as templates
 
 LIST_FIELDS = ("tips", "cautions")
 

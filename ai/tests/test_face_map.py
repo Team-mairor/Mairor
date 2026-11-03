@@ -5,7 +5,7 @@ import pytest
 
 from app.schemas.guide_area import MeshAnchor
 from app.schemas.landmarks import Face, Point, Pose
-from app.services.face_map import (
+from app.tasks.area.common.face_map import (
     BARY_DIGITS,
     MAP_SIZE,
     MESH_DIR,

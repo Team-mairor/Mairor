@@ -12,8 +12,8 @@ sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import GuideArea
 from app.schemas.landmarks import LandmarksResult
-from app.services.guide_area_builder import build_guide_area
-from app.services.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.guide_area_builder import build_guide_area
+from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = Path("output") / "guide_area.json"

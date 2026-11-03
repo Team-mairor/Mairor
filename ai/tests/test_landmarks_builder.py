@@ -3,7 +3,7 @@ import numpy as np
 from app.core.errors import AppError
 from app.schemas.landmarks import Face, Point, Pose
 from app.schemas.manifest import Frame, Manifest
-from app.services.landmarks_builder import build_landmarks
+from app.tasks.area.landmarks.landmarks_builder import build_landmarks
 
 BLANK = np.zeros((2, 4, 3), dtype=np.uint8)
 

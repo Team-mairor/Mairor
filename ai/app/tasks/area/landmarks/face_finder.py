@@ -1,14 +1,14 @@
 from functools import lru_cache
 from math import asin, atan2, hypot
-from pathlib import Path
 
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import BaseOptions, vision
 
+from app.core.paths import FACE_MESH_DIR
 from app.schemas.landmarks import Face, Point, Pose
 
-MODEL_PATH = Path(__file__).resolve().parents[3] / "shared" / "face-mesh" / "face_landmarker.task"
+MODEL_PATH = FACE_MESH_DIR / "face_landmarker.task"
 MAX_FACES = 5
 MIN_CONFIDENCE = 0.5
 RIGHT_IRIS_CENTER = 468

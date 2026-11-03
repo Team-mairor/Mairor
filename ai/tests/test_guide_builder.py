@@ -6,8 +6,8 @@ import pytest
 
 from app.schemas.guide import GuideInput
 from app.schemas.manifest import Makeup
-from app.services.guide_builder import build_guide
-from app.services.guide_templates import STEP_TITLES, attach_josa
+from app.tasks.template_guide.guide_builder import build_guide
+from app.tasks.template_guide.guide_templates import STEP_TITLES, attach_josa
 
 CASES_DIR = Path(__file__).resolve().parent / "golden" / "guide"
 

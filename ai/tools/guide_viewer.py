@@ -15,7 +15,7 @@ import streamlit as st
 from pydantic import ValidationError
 
 from app.schemas.guide import FieldTrace, GuideBuild, GuideInput
-from app.services.guide_builder import build_guide
+from app.tasks.template_guide.guide_builder import build_guide
 
 SAMPLES_DIR = AI_ROOT / "samples"
 CASES_DIR = AI_ROOT / "tests" / "golden" / "guide"

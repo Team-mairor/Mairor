@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.guide import GuideInput
-from app.services.guide_input import move_misplaced_facts
+from app.tasks.explanation.guide_input import move_misplaced_facts
 
 SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "guide_input.json"
 AREA = {"value": "입술 안쪽", "source": "voice"}

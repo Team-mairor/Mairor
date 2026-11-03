@@ -3,7 +3,7 @@ from collections.abc import Sequence
 import cv2
 import numpy as np
 
-from app.services.region_mask import Pixel
+from app.tasks.area.common.region_mask import Pixel
 
 MIN_OUTLINE_POINTS = 3
 OUTLINE_TOLERANCE = 1.0

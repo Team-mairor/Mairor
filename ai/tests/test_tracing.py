@@ -17,15 +17,17 @@ from app.clients.llm import ClaudeLlm, LlmError
 from app.core import tracing
 from app.schemas.guide import GuideInputStep
 from app.schemas.guide_job import LlmSentenceCheck, StepCheck, StepExplanation
-from app.services.step_explainer import PROMPT, PROMPT_VERSION, explain_step
+from app.tasks.explanation.step_explainer import PROMPT, PROMPT_VERSION, explain_step
 from tests.fakes import FakeLlm
 from tests.test_guide_jobs import (
     JOBS,
     PASSED,
     FakeBackend,
     explanation,
+    frames_request,
     guide_request,
     make_client,
+    passing_llm,
 )
 from tests.test_llm import KEY, PNG, Image, make_settings, message_json
 
@@ -98,6 +100,7 @@ def test_job_is_one_trace_of_steps_and_callback(backend, provider):
         "jobId": job_id,
         "videoId": "test_01",
         "steps": 2,
+        "frames": 0,
     }
     assert metadata(job) == {"job_id": job_id, "video_id": "test_01"}
     assert metadata(spans["explain_step s2"]) == {
@@ -115,6 +118,26 @@ def test_job_is_one_trace_of_steps_and_callback(backend, provider):
     assert output(spans["explain_step s1"])["actions"] == [{"text": "펴 발라요", "tip": None}]
     assert output(spans["callback"]) == {"attempts": 1, "delivered": True, "lastError": None}
     assert job.status.status_code is StatusCode.UNSET
+
+
+def test_area_stages_are_recorded_in_job_trace(backend, provider):
+    make_client(passing_llm()).post(JOBS, json=frames_request(backend))
+
+    spans = finished(provider)
+    job, area = spans["guide_job"], spans["guide_area"]
+    assert json.loads(job.attributes["input.value"])["frames"] == 3
+    assert area.parent.span_id == job.context.span_id
+    for name in ("download_frames", "face_landmarks", "check_frames", "build_guide_area"):
+        assert spans[name].parent.span_id == area.context.span_id
+        assert spans[name].context.trace_id == job.context.trace_id
+    assert output(spans["download_frames"]) == {"missing": 0}
+    assert output(spans["face_landmarks"]) == {"noFace": 3}
+
+
+def test_frame_and_progress_urls_are_not_recorded(backend, provider):
+    make_client(passing_llm()).post(JOBS, json=frames_request(backend))
+
+    assert backend.url not in all_values(finished(provider))
 
 
 def test_callback_url_is_not_recorded(backend, provider):

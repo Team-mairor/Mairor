@@ -21,7 +21,7 @@ Loki에서 칸별로 거르려면 BE · AI가 같은 칸 이름의 JSON으로 �
 
 ```json
 {"message": "s6 설명: 토큰 입력 3704·답 155·생각 0, 안 쓴 입력 []", "level": "INFO",
- "logger_name": "app.services.guide_explainer", "job_id": "a3e13a94…", "video_id": "eFzG30avtOI",
+ "logger_name": "app.tasks.explanation.guide_explainer", "job_id": "a3e13a94…", "video_id": "eFzG30avtOI",
  "step_id": "s6", "traceId": "3a06c5bb…", "spanId": "09c73881…", "@timestamp": "2026-10-29T05:54:07.712286+00:00"}
 ```
 

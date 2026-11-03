@@ -27,7 +27,7 @@ AI는 9개 부위의 영역을 각각 분석하므로 단계가 어느 부위인
 | --- | --- |
 | `ai/app/schemas/manifest.py`의 `Makeup` | 값 목록 6개 → 10개 |
 | `shared/guide-input/guide_input.v1.schema.json` | 위 목록에서 다시 만듦. `makeup`의 `enum`에 4개 추가 |
-| `ai/app/services/guide_templates.py`의 `STEP_TITLES` | 새 값의 단계 제목 (눈썹 · 마스카라 · 쉐딩 · 하이라이트) |
+| `ai/app/tasks/template_guide/guide_templates.py`의 `STEP_TITLES` | 새 값의 단계 제목 (눈썹 · 마스카라 · 쉐딩 · 하이라이트) |
 | `ai/docs/GUIDE_INPUT.md` | 칸 설명의 값 목록 |
 | `ai/tools/gemini_video_test.py` | Gemini 시험 도구의 응답 형식 `enum` |
 

@@ -7,7 +7,11 @@ from PIL import ExifTags, Image
 
 from app.core.errors import AppError
 from app.schemas.manifest import Frame
-from app.services.reference_input import load_reference_input, photo_to_rgb, read_frame_rgb
+from app.tasks.area.landmarks.reference_input import (
+    load_reference_input,
+    photo_to_rgb,
+    read_frame_rgb,
+)
 
 LOCAL_01 = Path(__file__).resolve().parents[1] / "samples" / "local_01"
 

@@ -5,9 +5,12 @@ import numpy as np
 from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.services import eyeliner_area
-from app.services.area_preparation import remove_lighting, rgb_to_lab
-from app.services.eyeliner_area import (
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts import eyeliner_area
+from app.tasks.area.parts.area_preparation import remove_lighting, rgb_to_lab
+from app.tasks.area.parts.eyeliner_area import (
     EYES,
     FOUND_MIN_CELLS,
     MIN_PIECE_CELLS,
@@ -20,9 +23,6 @@ from app.services.eyeliner_area import (
     find_eyeliner_area,
     symmetric_eyeliner,
 )
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.region_mask import polygon_mask
-from app.services.region_points import REGION_POINTS
 from tests.test_area_preparation import DARK_SKIN, make_row
 from tests.test_lip_area import iou
 

@@ -29,13 +29,13 @@ from app.clients.llm import ClaudeLlm, Llm, LlmError, LlmImage, LlmUsage
 from app.core.config import get_settings
 from app.schemas.guide import GuideInput, GuideInputStep
 from app.schemas.guide_job import StepExplanation
-from app.services.explanation_checker import (
+from app.tasks.explanation.explanation_checker import (
     NOTICE_KINDS,
     check_explanation,
     explanation_sentences,
 )
-from app.services.guide_input import move_misplaced_facts
-from app.services.step_explainer import PROMPT, step_inputs, user_message
+from app.tasks.explanation.guide_input import move_misplaced_facts
+from app.tasks.explanation.step_explainer import PROMPT, step_inputs, user_message
 
 TOOLS_DIR = Path(__file__).resolve().parent
 RUNS_DIR = TOOLS_DIR / "explain_image_runs"

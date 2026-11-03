@@ -5,7 +5,7 @@ import numpy as np
 from app.core.errors import AppError
 from app.schemas.landmarks import Face, FrameLandmarks, FrameStatus, ImageSize, LandmarksResult
 from app.schemas.manifest import Frame, Manifest
-from app.services.face_finder import find_faces
+from app.tasks.area.landmarks.face_finder import find_faces
 
 FaceFinder = Callable[[np.ndarray], list[Face]]
 PhotoLoader = Callable[[Frame], np.ndarray]

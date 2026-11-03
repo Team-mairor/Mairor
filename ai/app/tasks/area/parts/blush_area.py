@@ -15,16 +15,16 @@ import numpy as np
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import LandmarksResult
-from app.services.area_preparation import (
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
+from app.tasks.area.common.region_mask import polygon_mask, span
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     remove_lighting,
     rgb_to_lab,
     rows_to_map,
     usable_rows,
 )
-from app.services.face_map import MAP_SIZE, map_points
-from app.services.region_mask import polygon_mask, span
-from app.services.region_points import REGION_POINTS
 
 BEFORE_WINDOW_MS = 1000
 AFTER_WINDOW_MS = 1000

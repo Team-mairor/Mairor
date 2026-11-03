@@ -1,6 +1,6 @@
 # 설명 확인 기준
 
-Claude가 만든 단계 설명이 입력에 근거하는지 단계마다 확인한다. 코드는 `app/services/explanation_checker.py`, 지시문은 `app/prompts/explanation_check.txt`다.
+Claude가 만든 단계 설명이 입력에 근거하는지 단계마다 확인한다. 코드는 `app/tasks/explanation/explanation_checker.py`, 지시문은 `app/prompts/explanation_check.txt`다.
 
 ## 코드 검사
 
