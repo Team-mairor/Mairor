@@ -95,6 +95,7 @@ def guide_request(backend: FakeBackend) -> dict:
                     "partLabel": "파운데이션",
                     "summary": "파운데이션을 얼굴 중앙부터 펴 바릅니다.",
                     "facts": {
+                        "area": {"value": "얼굴 전체", "source": "scene"},
                         "tool": {"value": "퍼프", "source": "scene", "at": 4},
                         "tips": [
                             {"value": "얇게 여러 번 바르면 뭉치지 않습니다.", "source": "voice"}
@@ -109,6 +110,7 @@ def guide_request(backend: FakeBackend) -> dict:
                     "makeup": "lip",
                     "partLabel": "립",
                     "summary": "틴트를 입술 안쪽부터 바릅니다.",
+                    "facts": {"area": {"value": "입술 안쪽", "source": "voice"}},
                 },
             ],
         },
@@ -120,7 +122,7 @@ def explanation(text: str, tip: str | None = None, done_when: str | None = None)
         actions=[
             LlmAction(
                 text=text,
-                sources=["summary"],
+                sources=["summary", "area"],
                 tip=LlmTip(text=tip, kind="tip", sources=["t1"]) if tip else None,
             )
         ],
@@ -208,6 +210,7 @@ def test_each_step_is_sent_with_its_inputs_without_images(backend):
     assert first.text == (
         "단계 이름: 파운데이션\n\n[입력]\n"
         "summary: 파운데이션을 얼굴 중앙부터 펴 바릅니다.\n"
+        "area: 얼굴 전체\n"
         "tool: 퍼프\n"
         "t1: 얇게 여러 번 바르면 뭉치지 않습니다."
     )
@@ -232,6 +235,7 @@ def test_each_explanation_is_checked_against_inputs_without_images(backend):
     assert check.text == (
         "단계 이름: 파운데이션\n\n[입력]\n"
         "summary: 파운데이션을 얼굴 중앙부터 펴 바릅니다.\n"
+        "area: 얼굴 전체\n"
         "tool: 퍼프\n"
         "t1: 얇게 여러 번 바르면 뭉치지 않습니다.\n\n[설명]\n"
         "a1: 펴 발라요\n"
@@ -271,6 +275,34 @@ def test_failed_check_call_does_not_fail_job(backend):
     (callback,) = backend.callbacks
     assert callback["status"] == "COMPLETED"
     assert callback["guide"]["steps"][0]["actions"] == [{"text": "펴 발라요", "tip": None}]
+
+
+def test_palette_color_is_sent_as_color_input(backend):
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
+    body = guide_request(backend)
+    body["guideInput"]["steps"][0]["product"] = {
+        "name": "아이팔레트",
+        "shade": "03 선셋블러링",
+        "palette": {"color": {"value": "가장 진한 브라운", "source": "voice"}},
+    }
+
+    make_client(llm).post(JOBS, json=body)
+
+    assert "area: 얼굴 전체\ncolor: 가장 진한 브라운\ntool: 퍼프" in llm.calls[0].text
+
+
+def test_step_without_area_is_rejected_before_calling_claude(backend):
+    llm = FakeLlm()
+    body = guide_request(backend)
+    del body["guideInput"]["steps"][1]["facts"]["area"]
+
+    res = make_client(llm).post(JOBS, json=body)
+
+    assert res.status_code == 400
+    assert res.json()["code"] == "VALIDATION_FAILED"
+    assert [d["field"] for d in res.json()["details"]] == ["guideInput.steps.1.facts.area"]
+    assert backend.callbacks == []
+    assert llm.calls == []
 
 
 def test_invalid_request_is_rejected_without_job(backend):

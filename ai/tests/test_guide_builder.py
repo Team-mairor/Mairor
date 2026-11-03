@@ -27,7 +27,7 @@ def make_step(order: int, makeup: str = "lip", facts: dict | None = None) -> dic
         "makeup": makeup,
         "partLabel": "립",
         "summary": "틴트를 바른다.",
-        "facts": facts,
+        "facts": {"area": {"value": "입술", "source": "voice"}} | (facts or {}),
     }
 
 
@@ -72,7 +72,7 @@ def test_estimated_fact_is_used_and_marked() -> None:
     assert (tool_trace.status, tool_trace.template_id) == ("estimated", "default.tool")
 
 
-def test_step_without_facts_gets_fallback_sentence() -> None:
+def test_step_with_only_area_gets_fallback_sentence() -> None:
     step = build_guide(make_input(make_step(1, makeup="blush"))).guide.steps[0]
 
     assert step.title == "블러셔"

@@ -21,7 +21,9 @@ from app.services.explanation_checker import (
 from tests.fakes import FakeLlm
 
 
-def make_step(summary: str, tips: list[str] = (), product: dict | None = None) -> GuideInputStep:
+def make_step(
+    summary: str, tips: list[str] = (), product: dict | None = None, area: str = "볼"
+) -> GuideInputStep:
     return GuideInputStep.model_validate(
         {
             "stepId": "s1",
@@ -32,12 +34,17 @@ def make_step(summary: str, tips: list[str] = (), product: dict | None = None) -
             "partLabel": "블러셔",
             "summary": summary,
             "product": product,
-            "facts": {"tips": [{"value": tip, "source": "voice"} for tip in tips]},
+            "facts": {
+                "area": {"value": area, "source": "voice"},
+                "tips": [{"value": tip, "source": "voice"} for tip in tips],
+            },
         }
     )
 
 
-def said(text: str, sources: list[str] = ("summary",), tip: str | None = None) -> StepExplanation:
+def said(
+    text: str, sources: list[str] = ("summary", "area"), tip: str | None = None
+) -> StepExplanation:
     return StepExplanation(
         actions=[
             LlmAction(
@@ -55,23 +62,33 @@ def kinds(step: GuideInputStep, explanation: StepExplanation) -> list[str]:
     return [problem.kind for problem in check_by_code(step, explanation)]
 
 
-PRODUCT = {"brand": "하밍", "name": "젤리 에어 치크", "shade": "02 베리피치"}
+PRODUCT = {"brand": "하밍", "name": "젤리 에어 치크", "shade": "02 베리피치", "palette": None}
+PALETTE = {
+    "brand": "웨이크메이크",
+    "name": "소프트 블러링 아이팔레트",
+    "shade": "03 선셋블러링",
+    "palette": {"color": {"value": "가장 진한 브라운", "source": "voice"}},
+}
+SHADE_PALETTE = {
+    "brand": "삐아",
+    "name": "라스트 블러셔",
+    "shade": "핑크뮬리",
+    "palette": {"color": {"value": "핑크뮬리, 플랫피치", "source": "voice"}},
+}
 
 
-@pytest.mark.parametrize(
-    "text",
-    ["하밍 블러셔를 발라요", "젤리에어치크를 볼에 발라요", "02 베리피치 색을 발라요"],
-)
-def test_product_brand_or_shade_in_sentence_is_caught(text):
+@pytest.mark.parametrize("text", ["하밍 블러셔를 발라요", "젤리에어치크를 볼에 발라요"])
+def test_product_brand_or_name_in_sentence_is_caught(text):
     step = make_step("하밍 젤리 에어 치크 02 베리피치를 볼에 발라줍니다.", product=PRODUCT)
 
     assert kinds(step, said(text)) == ["product_name"]
 
 
-def test_sentence_without_product_name_passes():
+@pytest.mark.parametrize("text", ["볼에 발라요", "02 베리피치 색을 볼에 발라요"])
+def test_sentence_without_product_name_passes(text):
     step = make_step("하밍 젤리 에어 치크 02 베리피치를 볼에 발라줍니다.", product=PRODUCT)
 
-    assert kinds(step, said("볼에 발라요")) == []
+    assert kinds(step, said(text)) == []
 
 
 @pytest.mark.parametrize(
@@ -103,13 +120,51 @@ def test_either_direction_passes_when_input_has_both(text):
 
 
 @pytest.mark.parametrize(
-    ("sources", "kind"),
-    [([], "no_source"), (["c1"], "unknown_source"), (["summary", "t9"], "unknown_source")],
+    ("sources", "found"),
+    [
+        ([], ["no_source", "required_unused"]),
+        (["area", "c1"], ["unknown_source"]),
+        (["summary", "area", "t9"], ["unknown_source"]),
+    ],
 )
-def test_sentence_without_real_source_is_caught(sources, kind):
+def test_sentence_without_real_source_is_caught(sources, found):
     step = make_step("볼에 발라줍니다.", tips=["과감하게 발라도 됩니다."])
 
-    assert kinds(step, said("볼에 발라요", sources=sources)) == [kind]
+    assert kinds(step, said("볼에 발라요", sources=sources)) == found
+
+
+def test_area_without_sentence_citing_it_fails():
+    step = make_step("중앙 위주로 발라줍니다.", area="볼 중앙")
+
+    (problem,) = check_by_code(step, said("중앙 위주로 발라요", sources=["summary"]))
+
+    assert (problem.sentence_id, problem.text, problem.kind, problem.reason) == (
+        "area",
+        "볼 중앙",
+        "required_unused",
+        "바르는 곳을 근거로 단 문장이 없음",
+    )
+
+
+def test_palette_color_must_be_cited():
+    step = make_step("가장 진한 브라운으로 언더 라인을 그립니다.", product=PALETTE, area="눈 아래")
+
+    (problem,) = check_by_code(step, said("눈 아래에 그려요"))
+    cited = said("가장 진한 브라운으로 눈 아래에 그려요", sources=["summary", "area", "color"])
+
+    assert (problem.sentence_id, problem.text, problem.kind) == (
+        "color",
+        "가장 진한 브라운",
+        "required_unused",
+    )
+    assert kinds(step, cited) == []
+
+
+def test_palette_color_named_after_shade_passes():
+    step = make_step("핑크 블러셔를 섞어 앞볼에 바릅니다.", product=SHADE_PALETTE, area="앞볼")
+    explanation = said("핑크뮬리와 플랫피치를 섞어 앞볼에 발라요", ["summary", "area", "color"])
+
+    assert kinds(step, explanation) == []
 
 
 def test_number_must_come_from_input():
@@ -179,7 +234,9 @@ def test_code_and_model_problems_are_both_kept():
     llm = FakeLlm(check(("a1", "not_in_input", "'톡톡'은 입력에 없음")))
 
     result = asyncio.run(
-        check_explanation(llm, make_step("볼에 발라줍니다."), said("톡톡 발라요", sources=["c1"]))
+        check_explanation(
+            llm, make_step("볼에 발라줍니다."), said("톡톡 발라요", sources=["area", "c1"])
+        )
     )
 
     assert [p.kind for p in result.problems] == ["unknown_source", "not_in_input"]
@@ -253,6 +310,18 @@ def test_omission_with_more_than_product_name_fails_check():
 
     assert [(p.sentence_id, p.text, p.kind) for p in result.failures] == [
         ("summary", "02 베리피치를 볼에", "omitted")
+    ]
+
+
+def test_omission_of_palette_color_named_after_shade_fails_check():
+    llm = FakeLlm(check(omitted=[LlmOmission(id="color", text="핑크뮬리")]))
+    step = make_step("핑크 블러셔를 섞어 앞볼에 바릅니다.", product=SHADE_PALETTE, area="앞볼")
+    explanation = said("두 색을 섞어 앞볼에 발라요", ["summary", "area", "color"])
+
+    result = asyncio.run(check_explanation(llm, step, explanation))
+
+    assert [(p.sentence_id, p.text, p.kind) for p in result.failures] == [
+        ("color", "핑크뮬리", "omitted")
     ]
 
 

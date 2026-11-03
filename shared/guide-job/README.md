@@ -5,7 +5,7 @@ API 명세는 [docs/references/ai-api.md](../../docs/references/ai-api.md)에 �
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
-| `guide_job_request.v1.schema.json` | 요청 본문. `guideInput`은 [guide-input](../guide-input/README.md) v1 그대로 | `ai/app/schemas/guide_job.py`의 `GuideJobRequest` |
+| `guide_job_request.v2.schema.json` | 요청 본문. `guideInput`은 [guide-input](../guide-input/README.md) v2 그대로 | `ai/app/schemas/guide_job.py`의 `GuideJobRequest` |
 | `guide_job_callback.v1.schema.json` | 콜백 본문 | 같은 파일의 `GuideJobResult` |
 
 두 파일 모두 `ai/tools/export_guide_schema.py`가 모델에서 만든다.

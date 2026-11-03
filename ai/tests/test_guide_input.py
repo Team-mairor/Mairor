@@ -8,6 +8,7 @@ from app.schemas.guide import GuideInput
 from app.services.guide_input import move_misplaced_facts
 
 SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "guide_input.json"
+AREA = {"value": "입술 안쪽", "source": "voice"}
 
 VALID = {
     "videoId": "test_01",
@@ -21,6 +22,7 @@ VALID = {
             "makeup": "lip",
             "partLabel": "립",
             "summary": "틴트를 입술 안쪽부터 바른다.",
+            "facts": {"area": AREA},
         }
     ],
 }
@@ -43,10 +45,54 @@ def test_valid_input_and_gemini_sample_pass():
     assert len(sample.steps) == 19
 
 
-def test_facts_and_product_are_optional():
+def test_product_and_facts_other_than_area_are_optional():
     step = GuideInput.model_validate(VALID).steps[0]
 
-    assert (step.facts, step.product) == (None, None)
+    assert step.product is None
+    assert (step.facts.area.value, step.facts.tool, step.facts.tips) == ("입술 안쪽", None, [])
+
+
+@pytest.mark.parametrize(
+    ("change", "location"),
+    [
+        (lambda step: step.pop("facts"), "steps.0.facts"),
+        (lambda step: step["facts"].pop("area"), "steps.0.facts.area"),
+        (
+            lambda step: step["facts"].update(area={"value": "", "source": "voice"}),
+            "steps.0.facts.area.value",
+        ),
+    ],
+    ids=["facts 없음", "area 없음", "area 빈 값"],
+)
+def test_step_without_area_is_rejected_with_location(change, location):
+    data = make_input()
+    change(data["steps"][0])
+
+    with pytest.raises(ValidationError) as e:
+        GuideInput.model_validate(data)
+
+    assert [".".join(map(str, err["loc"])) for err in e.value.errors()] == [location]
+
+
+def test_palette_color_is_required():
+    product = {"name": "아이팔레트", "palette": {}}
+
+    with pytest.raises(ValidationError) as e:
+        GuideInput.model_validate(make_input(product=product))
+
+    assert [".".join(map(str, err["loc"])) for err in e.value.errors()] == [
+        "steps.0.product.palette.color"
+    ]
+
+
+def test_product_must_say_whether_it_is_palette():
+    """팔레트 칸을 빠뜨리면 팔레트 단계가 한 가지 색 제품으로 넘어가서 색 없이 설명이 나간다."""
+    with pytest.raises(ValidationError) as e:
+        GuideInput.model_validate(make_input(product={"name": "틴트"}))
+
+    assert [".".join(map(str, err["loc"])) for err in e.value.errors()] == [
+        "steps.0.product.palette"
+    ]
 
 
 def test_images_from_old_input_are_ignored():
@@ -104,7 +150,7 @@ def test_tips_outside_step_move_to_the_step_at_that_time():
         "order": 2,
         "startSeconds": 30.0,
         "endSeconds": 40.0,
-        "facts": {"tips": [{"value": "겹친 팁", "source": "voice", "at": 35.0}]},
+        "facts": {"area": AREA, "tips": [{"value": "겹친 팁", "source": "voice", "at": 35.0}]},
     }
     tips = [
         {"value": "구간 안", "source": "voice", "at": 15.0},
@@ -114,7 +160,7 @@ def test_tips_outside_step_move_to_the_step_at_that_time():
         {"value": "겹친 팁", "source": "voice", "at": 36.0},
     ]
     cautions = [{"value": "옆 단계 주의", "source": "voice", "at": 38.0}]
-    data = make_input(facts={"tips": tips, "cautions": cautions})
+    data = make_input(facts={"area": AREA, "tips": tips, "cautions": cautions})
     data["steps"].append(second)
     original = GuideInput.model_validate(data)
 

@@ -1,6 +1,6 @@
 """단계 하나의 글로 Claude에게 쉬운 설명을 받는다.
 
-입력 칸마다 번호(summary, tool, t1, c1 ...)를 붙여 보내고, 모델은 문장마다 근거 번호를 단다.
+입력 칸마다 번호(summary, area, color, t1 ...)를 붙여 보내고, 모델은 문장마다 근거 번호를 단다.
 이미지는 보내지 않는다. 넣어도 확인 통과율이 같고 비용·시간만 늘었다 (S15P31A306-277).
 """
 
@@ -11,7 +11,7 @@ from pydantic.alias_generators import to_camel
 
 from app.clients.llm import Llm, LlmResult
 from app.core.tracing import using_prompt
-from app.schemas.guide import GuideInputStep, StepFacts
+from app.schemas.guide import GuideInputStep
 from app.schemas.guide_job import ExplainedStep, StepAction, StepExplanation, StepTip
 
 PROMPT = (Path(__file__).resolve().parents[1] / "prompts" / "step_explanation.txt").read_text(
@@ -23,8 +23,11 @@ LIST_PREFIXES = (("t", "tips"), ("c", "cautions"))
 
 
 def step_inputs(step: GuideInputStep) -> dict[str, str]:
-    facts = step.facts or StepFacts()
-    inputs = {"summary": step.summary}
+    """팔레트에서 고른 색은 color로 보낸다. 한 가지 색 제품의 호수는 화면에 보여서 안 보낸다."""
+    facts = step.facts
+    inputs = {"summary": step.summary, "area": facts.area.value}
+    if step.product is not None and step.product.palette is not None:
+        inputs["color"] = step.product.palette.color.value
     for field in FACT_FIELDS:
         fact = getattr(facts, field)
         if fact is not None:

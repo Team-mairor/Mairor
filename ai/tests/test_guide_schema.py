@@ -41,13 +41,22 @@ def test_sample_passes_shared_schema():
     load_validator(GUIDE_INPUT_PATH).validate(load_sample())
 
 
-def test_shared_schema_rejects_missing_field():
+@pytest.mark.parametrize(
+    ("remove", "message"),
+    [
+        (lambda step: step.pop("partLabel"), "'partLabel' is a required property"),
+        (lambda step: step["facts"].pop("area"), "'area' is a required property"),
+        (lambda step: step["product"].pop("palette"), "'palette' is a required property"),
+    ],
+    ids=["partLabel", "facts.area", "product.palette"],
+)
+def test_shared_schema_rejects_missing_field(remove, message):
     sample = load_sample()
-    del sample["steps"][0]["partLabel"]
+    remove(sample["steps"][0])
 
-    errors = list(load_validator(GUIDE_INPUT_PATH).iter_errors(sample))
+    (error,) = load_validator(GUIDE_INPUT_PATH).iter_errors(sample)
 
-    assert ["'partLabel' is a required property"] == [e.message for e in errors]
+    assert message in [e.message for e in error.context or [error]]
 
 
 def test_request_with_sample_passes_shared_schema():

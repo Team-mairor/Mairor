@@ -22,8 +22,8 @@ SHARED = AI_ROOT.parent / "shared"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 # 파일 이름의 버전: BE가 보내던(받던) JSON이 거절되는 변경이면 올린다 (shared/guide-input/README.md)
-GUIDE_INPUT_PATH = SHARED / "guide-input" / "guide_input.v1.schema.json"
-GUIDE_JOB_REQUEST_PATH = SHARED / "guide-job" / "guide_job_request.v1.schema.json"
+GUIDE_INPUT_PATH = SHARED / "guide-input" / "guide_input.v2.schema.json"
+GUIDE_JOB_REQUEST_PATH = SHARED / "guide-job" / "guide_job_request.v2.schema.json"
 GUIDE_JOB_CALLBACK_PATH = SHARED / "guide-job" / "guide_job_callback.v1.schema.json"
 
 SCHEMAS: dict[Path, tuple[type[BaseModel], str]] = {

@@ -230,6 +230,7 @@ def test_claude_call_records_tokens_and_prompt_version_without_key(instrumented)
             "makeup": "foundation",
             "partLabel": "파운데이션",
             "summary": "파운데이션을 얼굴 중앙부터 펴 바릅니다.",
+            "facts": {"area": {"value": "얼굴 전체", "source": "scene"}},
         }
     )
 
@@ -245,6 +246,7 @@ def test_claude_call_records_tokens_and_prompt_version_without_key(instrumented)
     assert json.loads(call.attributes["llm.prompt_template.variables"]) == {
         "partLabel": "파운데이션",
         "summary": "파운데이션을 얼굴 중앙부터 펴 바릅니다.",
+        "area": "얼굴 전체",
     }
     assert json.loads(call.attributes["output.value"])["content"][0]["text"] == reply
     assert KEY not in all_values({"call": call})

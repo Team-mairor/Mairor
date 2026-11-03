@@ -1,0 +1,1351 @@
+{
+  "model": "gemini-2.5-flash",
+  "videoUrl": "https://www.youtube.com/watch?v=OubRDaaWGPc",
+  "elapsedSeconds": 100.0,
+  "finishReason": "STOP",
+  "usage": {
+    "promptTokenCount": 461171,
+    "candidatesTokenCount": 8630,
+    "totalTokenCount": 477766,
+    "cachedContentTokenCount": 458817,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 686
+      },
+      {
+        "modality": "VIDEO",
+        "tokenCount": 410543
+      },
+      {
+        "modality": "AUDIO",
+        "tokenCount": 49942
+      }
+    ],
+    "cacheTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 682
+      },
+      {
+        "modality": "VIDEO",
+        "tokenCount": 408448
+      },
+      {
+        "modality": "AUDIO",
+        "tokenCount": 49687
+      }
+    ],
+    "thoughtsTokenCount": 7965,
+    "serviceTier": "standard"
+  },
+  "prompt": "이 메이크업 영상을 처음부터 끝까지 보고, 시청자가 따라 할 수 있도록 메이크업 단계를 순서대로 나눠라.\n\n규칙\n- 단계 = 얼굴에 무언가를 바르거나 정리하는 동작 하나의 묶음. 인사·잡담·제품 소개만 하는 구간은 단계로 만들지 않는다.\n- 스킨케어처럼 정해진 부위 분류에 없는 단계는 makeup을 \"other\"로 두고 partLabel에 한국어로 무엇인지 쓴다 (예: \"스킨케어\", \"눈썹\", \"쉐딩\"). 분류가 있는 단계도 partLabel을 한국어로 쓴다.\n- duration·startTime·endTime·at·keyframeTimes는 모두 영상 시작부터의 시각을 \"MM:SS\" 형식 문자열로 쓴다 (예: 3분 22초 → \"03:22\").\n- summary: 이 단계에서 하는 일을 영상 내용 그대로 한 문장으로. 꾸미거나 영상에 없는 말을 더하지 않는다.\n- facts의 각 칸은 영상에 실제로 나온 것만 쓴다.\n  - area: 바른 얼굴 부위와 그 안의 자리. 모든 단계에 쓴다. \"중앙\"·\"전체\"처럼 부위 없이 쓰지 않는다 (예: \"볼 중앙\", \"눈두덩이 전체\", \"눈 점막 아래\"). 말이나 자막이 없으면 화면에서 바르는 곳을 보고 쓰고 source를 \"scene\"으로 둔다.\n  - color: 한 제품에 여러 색이 들어 있고(아이섀도 팔레트, 멀티 섀도우 등) 그중 골라 쓴 색. 영상에서 부른 그대로 쓴다 (예: \"가장 진한 브라운\", \"베이스 색상\"). 한 가지 색인 제품이면 null.\n  - tool: 바를 때 쓴 도구 (손가락, 브러시 종류, 퍼프 등)\n  - amount: 바르는 양\n  - strength: 바르는 힘·두드리는 세기\n  - tips: 크리에이터가 알려 준 요령\n  - cautions: 하지 말라고 한 것, 주의하라고 한 것\n  - finishCue: 언제 그 단계를 끝내면 되는지 알려 준 신호\n- 각 사실의 source: 말로 했으면 \"voice\", 화면 자막이면 \"onscreenText\", 말·자막 없이 화면에서 보이기만 하면 \"scene\". 영상에 근거가 없으면 칸을 null로 두고, 추측해서 채우지 않는다. \"estimated\"는 쓰지 않는다.\n- at: 그 사실의 근거가 나온 시각.\n- product: 브랜드·제품 이름·색상이 말이나 자막, 화면의 제품 글자로 확인될 때만 쓴다. brand에는 브랜드만, name에는 브랜드를 뺀 제품 이름만 쓴다. 확인 안 되는 칸은 null. palette는 한 제품에 여러 색이 들어 있어 그중 골라 쓰면 true, 한 가지 색인 제품이면 false.\n- keyframeTimes: 이 단계를 가장 잘 보여 주는 장면 시각 1~3개. 얼굴과 바르는 동작이 잘 보이는 순간으로 고르고, 반드시 그 단계 구간 안이어야 한다.\n",
+  "schema": {
+    "type": "OBJECT",
+    "properties": {
+      "duration": {
+        "type": "STRING"
+      },
+      "steps": {
+        "type": "ARRAY",
+        "items": {
+          "type": "OBJECT",
+          "properties": {
+            "order": {
+              "type": "INTEGER"
+            },
+            "makeup": {
+              "type": "STRING",
+              "enum": [
+                "foundation",
+                "eyeshadow",
+                "eyeliner",
+                "blush",
+                "lip",
+                "brow",
+                "mascara",
+                "contour",
+                "highlight",
+                "other"
+              ]
+            },
+            "partLabel": {
+              "type": "STRING"
+            },
+            "startTime": {
+              "type": "STRING"
+            },
+            "endTime": {
+              "type": "STRING"
+            },
+            "summary": {
+              "type": "STRING"
+            },
+            "product": {
+              "type": "OBJECT",
+              "nullable": true,
+              "properties": {
+                "brand": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "name": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "shade": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "palette": {
+                  "type": "BOOLEAN"
+                },
+                "source": {
+                  "type": "STRING",
+                  "enum": [
+                    "voice",
+                    "onscreenText",
+                    "scene",
+                    "estimated"
+                  ]
+                }
+              },
+              "required": [
+                "palette"
+              ]
+            },
+            "facts": {
+              "type": "OBJECT",
+              "properties": {
+                "area": {
+                  "type": "OBJECT",
+                  "nullable": false,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "color": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "tool": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "amount": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "strength": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "tips": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "nullable": true,
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "STRING",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "cautions": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "nullable": true,
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "STRING",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "finishCue": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                }
+              },
+              "required": [
+                "area"
+              ]
+            },
+            "keyframeTimes": {
+              "type": "ARRAY",
+              "items": {
+                "type": "STRING"
+              }
+            }
+          },
+          "required": [
+            "order",
+            "makeup",
+            "partLabel",
+            "startTime",
+            "endTime",
+            "summary",
+            "facts",
+            "keyframeTimes"
+          ]
+        }
+      }
+    },
+    "required": [
+      "duration",
+      "steps"
+    ]
+  },
+  "output": {
+    "duration": "25:50",
+    "steps": [
+      {
+        "order": 1,
+        "makeup": "other",
+        "partLabel": "얼굴 전체",
+        "startTime": "01:35",
+        "endTime": "02:26",
+        "summary": "얼굴에 쿨링 패드를 붙여 열감을 빼준다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "얼굴의 열감을 조금 빼주고 갈게요",
+              "source": "voice",
+              "at": "01:41"
+            }
+          ],
+          "tool": {
+            "value": "쿨링 패드",
+            "source": "voice",
+            "at": "01:38"
+          }
+        },
+        "keyframeTimes": [
+          "01:37",
+          "01:43"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "셀퓨전씨",
+          "name": "포스트 알파 쿨링 패드",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 2,
+        "makeup": "other",
+        "partLabel": "얼굴 전체",
+        "startTime": "02:26",
+        "endTime": "03:55",
+        "summary": "촉촉하고 텁텁하지 않은 피부 표현을 위해 에스네이처 아쿠아 스쿠알란 세럼을 얼굴 전체에 얇게 펴 바른다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": {
+            "value": "얇게",
+            "source": "voice",
+            "at": "03:41"
+          },
+          "tips": [
+            {
+              "value": "촉촉하고 텁텁하지 않은 피부 표현이 중요!",
+              "source": "onscreenText",
+              "at": "02:33"
+            },
+            {
+              "value": "모공을 수분으로 쫀쫀하게 잡아주는 느낌",
+              "source": "onscreenText",
+              "at": "03:33"
+            },
+            {
+              "value": "수부지가 베이스 전에 바르기에도 좋음",
+              "source": "onscreenText",
+              "at": "03:17"
+            }
+          ],
+          "tool": null
+        },
+        "keyframeTimes": [
+          "02:31",
+          "03:15",
+          "03:40"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "에스네이처",
+          "name": "아쿠아 스쿠알란 세럼",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 3,
+        "makeup": "other",
+        "partLabel": "얼굴 전체",
+        "startTime": "03:55",
+        "endTime": "05:16",
+        "summary": "에스네이처 아쿠아 스쿠알란 수분크림을 얼굴 전체에 발라 유수분 밸런스를 맞춰준다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": {
+            "value": "유수분 밸런스를 너무 잘 맞춰줘서 사계절 내내 쓰기가 좋아요",
+            "source": "voice",
+            "at": "04:16"
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "수분크림의 정석같은 느낌",
+              "source": "onscreenText",
+              "at": "04:19"
+            },
+            {
+              "value": "겉보속촉 마무리감",
+              "source": "onscreenText",
+              "at": "04:34"
+            },
+            {
+              "value": "수부지라면 완전 만족템",
+              "source": "onscreenText",
+              "at": "04:45"
+            }
+          ],
+          "tool": null
+        },
+        "keyframeTimes": [
+          "04:05",
+          "04:18",
+          "04:31"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "에스네이처",
+          "name": "아쿠아 스쿠알란 수분크림",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 4,
+        "makeup": "other",
+        "partLabel": "얼굴 전체",
+        "startTime": "05:16",
+        "endTime": "09:06",
+        "summary": "에스네이처 퍼펙트 아쿠아 메이크업 베이스 프렙을 얼굴 전체에 얇게 펴 발라 피부에 자연스러운 수분광을 표현하고 베이스 밀착력을 높여준다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": {
+            "value": "가볍게",
+            "source": "voice",
+            "at": "06:41"
+          },
+          "tips": [
+            {
+              "value": "파운데이션 짝꿍템",
+              "source": "onscreenText",
+              "at": "06:02"
+            },
+            {
+              "value": "베이스가 두껍지 않고 얇게 밀착되는 이 느낌!",
+              "source": "onscreenText",
+              "at": "06:12"
+            },
+            {
+              "value": "피부에서 올라오는 광 느낌을 위해 오히려 이렇게 베이스프렙으로 밑바탕을 좀 깔아주는 게 중요해요",
+              "source": "voice",
+              "at": "06:17"
+            },
+            {
+              "value": "매트는 푸석거림 없이 쫀쫀하게 달라붙게 해주고",
+              "source": "onscreenText",
+              "at": "07:00"
+            },
+            {
+              "value": "글로우는 촉촉한 광표현을 오래 유지",
+              "source": "onscreenText",
+              "at": "07:03"
+            },
+            {
+              "value": "베이스계의 비서 역할",
+              "source": "onscreenText",
+              "at": "07:13"
+            },
+            {
+              "value": "수분천재에서 베이스 천재까지 등극할 판",
+              "source": "onscreenText",
+              "at": "07:17"
+            },
+            {
+              "value": "베이스 수분 유지력이 미쳤음",
+              "source": "onscreenText",
+              "at": "08:05"
+            },
+            {
+              "value": "퀄리티가 달라짐",
+              "source": "onscreenText",
+              "at": "08:36"
+            }
+          ],
+          "tool": null
+        },
+        "keyframeTimes": [
+          "05:51",
+          "06:23",
+          "06:45",
+          "07:34"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "에스네이처",
+          "name": "퍼펙트 아쿠아 메이크업 베이스 프렙",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 5,
+        "makeup": "foundation",
+        "partLabel": "얼굴 전체",
+        "startTime": "09:35",
+        "endTime": "10:52",
+        "summary": "클리오 킬 커버 메쉬 글로우 에센셜 쿠션 리넨 컬러를 얼굴 전체에 얇게 펴 발라 피부 톤을 자연스럽게 톤업시킨다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [
+            {
+              "value": "두껍게 쌓지 않도록 주의",
+              "source": "onscreenText",
+              "at": "09:58"
+            }
+          ],
+          "color": {
+            "value": "리넨",
+            "source": "voice",
+            "at": "09:40"
+          },
+          "finishCue": {
+            "value": "절대 두꺼워 보이지 않는 게 포인트예요",
+            "source": "voice",
+            "at": "09:59"
+          },
+          "strength": {
+            "value": "가볍게 얇게",
+            "source": "voice",
+            "at": "09:50"
+          },
+          "tips": [
+            {
+              "value": "스킨케어를 꼼꼼하게 해주는 게 중요!",
+              "source": "onscreenText",
+              "at": "10:22"
+            },
+            {
+              "value": "전체적으로는 자연스러운 톤 연출, 부분적으로 밝게 톤업!",
+              "source": "onscreenText",
+              "at": "10:49"
+            }
+          ],
+          "tool": null
+        },
+        "keyframeTimes": [
+          "09:43",
+          "09:50",
+          "10:27",
+          "10:45"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "클리오",
+          "name": "킬 커버 메쉬 글로우 에센셜 쿠션",
+          "shade": "리넨",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 6,
+        "makeup": "other",
+        "partLabel": "얼굴 잡티",
+        "startTime": "10:52",
+        "endTime": "11:49",
+        "summary": "로라메르시에 카뮤플라지 컨실러와 헤라 크리미 커버 컨실러 베이지 컬러를 섞어 잡티 부분에 얇게 펴 발라 커버한다.",
+        "facts": {
+          "area": {
+            "value": "잡티 부분",
+            "source": "voice",
+            "at": "10:58"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": {
+            "value": "얇게",
+            "source": "voice",
+            "at": "11:26"
+          },
+          "tips": [],
+          "tool": {
+            "value": "브러시",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "11:14",
+          "11:20",
+          "11:31"
+        ],
+        "product": {
+          "palette": true,
+          "brand": "로라메르시에",
+          "name": "카뮤플라지",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 7,
+        "makeup": "other",
+        "partLabel": "눈썹",
+        "startTime": "11:49",
+        "endTime": "12:05",
+        "summary": "라네즈 네오 톤업 피니시 파우더를 눈썹에 발라 유분감을 잡아준다.",
+        "facts": {
+          "area": {
+            "value": "눈썹",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "하이라이터 브러시",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "11:52",
+          "11:59"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "라네즈",
+          "name": "네오 톤업 피니시 파우더",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 8,
+        "makeup": "brow",
+        "partLabel": "눈썹",
+        "startTime": "12:05",
+        "endTime": "13:17",
+        "summary": "클리오 킬 브로우 오토 하드 브로우 펜슬 4호로 눈썹 모양을 잡고, 맥 아이섀도우 소바 컬러로 눈썹 빈 부분을 자연스럽게 채워준다.",
+        "facts": {
+          "area": {
+            "value": "눈썹",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": {
+            "value": "너무 많이 채우지 않고",
+            "source": "voice",
+            "at": "12:16"
+          },
+          "tips": [
+            {
+              "value": "눈썹이 정말 자연스럽게 채워져 있어요",
+              "source": "voice",
+              "at": "12:20"
+            }
+          ],
+          "tool": {
+            "value": "스크루 브러시",
+            "source": "voice",
+            "at": "12:31"
+          }
+        },
+        "keyframeTimes": [
+          "12:09",
+          "12:25",
+          "12:50",
+          "13:05"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "클리오",
+          "name": "킬 브로우 오토 하드 브로우 펜슬",
+          "shade": "4호",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 9,
+        "makeup": "eyeshadow",
+        "partLabel": "눈두덩이, 언더 삼각존",
+        "startTime": "13:17",
+        "endTime": "15:37",
+        "summary": "삐아 라스트 아이 팔레트 4호의 베이스 컬러로 눈두덩이와 언더 삼각존에 음영을 주고, 더 진한 컬러로 눈꼬리 부분에 음영을 더해준다.",
+        "facts": {
+          "area": {
+            "value": "눈두덩이, 언더 삼각존",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [
+            {
+              "value": "진해지지 않도록 주의",
+              "source": "onscreenText",
+              "at": "15:34"
+            }
+          ],
+          "color": {
+            "value": "베이스 컬러",
+            "source": "voice",
+            "at": "13:42"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "눈 화장이 너무 많이 들어가지 않는 게 포인트",
+              "source": "voice",
+              "at": "13:33"
+            },
+            {
+              "value": "섬세한 포인트 포인트를 넣어주는 게 꾸안꾸에선 제일 중요!",
+              "source": "onscreenText",
+              "at": "15:00"
+            }
+          ],
+          "tool": {
+            "value": "인시 eve 303",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "13:55",
+          "14:12",
+          "14:31",
+          "14:56",
+          "15:02"
+        ],
+        "product": {
+          "palette": true,
+          "brand": "삐아",
+          "name": "라스트 아이 팔레트",
+          "shade": "4호",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 10,
+        "makeup": "eyeliner",
+        "partLabel": "눈꼬리, 속눈썹 안쪽",
+        "startTime": "15:37",
+        "endTime": "16:49",
+        "summary": "머지 렛츠 픽싱 슬림 젤 아이라이너 브라운 쿼츠 컬러로 눈꼬리를 길지 않게 빼고 속눈썹 안쪽을 꼼꼼하게 채워준다.",
+        "facts": {
+          "area": {
+            "value": "눈꼬리, 속눈썹 안쪽",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [
+            {
+              "value": "아이라인 심이 잘 부러지니 주의",
+              "source": "voice",
+              "at": "16:27"
+            }
+          ],
+          "color": {
+            "value": "브라운 쿼츠",
+            "source": "voice",
+            "at": "15:52"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "길이감이 너무 길지 않게",
+              "source": "voice",
+              "at": "16:13"
+            },
+            {
+              "value": "심을 살짝만 빼서 그려주면 잘 안 부러짐",
+              "source": "voice",
+              "at": "16:42"
+            }
+          ],
+          "tool": null
+        },
+        "keyframeTimes": [
+          "15:54",
+          "16:02",
+          "16:17"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "머지",
+          "name": "렛츠 픽싱 슬림 젤 아이라이너",
+          "shade": "브라운 쿼츠",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 11,
+        "makeup": "other",
+        "partLabel": "속눈썹",
+        "startTime": "16:49",
+        "endTime": "18:21",
+        "summary": "속눈썹을 뷰러로 집어 올린 후, 깜빡 속눈썹 10mm를 중앙에 붙여준다.",
+        "facts": {
+          "area": {
+            "value": "속눈썹 중앙",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": {
+            "value": "촘촘하게",
+            "source": "voice",
+            "at": "17:24"
+          },
+          "tips": [
+            {
+              "value": "풀이 살짝 굳는다 싶을 때 붙이면 잘 붙음",
+              "source": "voice",
+              "at": "17:45"
+            },
+            {
+              "value": "연습을 많이 해보는 게 가장 중요",
+              "source": "voice",
+              "at": "18:05"
+            }
+          ],
+          "tool": {
+            "value": "뷰러",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "17:19",
+          "17:31",
+          "17:45",
+          "18:08"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "깜빡속눈썹",
+          "name": "가닥 인조 속눈썹",
+          "shade": "10mm",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 12,
+        "makeup": "mascara",
+        "partLabel": "속눈썹",
+        "startTime": "18:21",
+        "endTime": "19:35",
+        "summary": "쏘내추럴 슈퍼 픽스 슬림 마스카라 다크 브라운 컬러로 속눈썹을 한올 한올 올려주고, 면봉으로 속눈썹 끝부분을 히팅하여 컬링감을 정돈한다.",
+        "facts": {
+          "area": {
+            "value": "속눈썹",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "다크 브라운",
+            "source": "voice",
+            "at": "18:40"
+          },
+          "finishCue": {
+            "value": "마스카라 존재감은 좀 주는데 그냥 인조 속눈썹과 내 속눈썹을 한 번 쫙 잡아줄 수 있는 정렬해 줄 수 있는 그 정도의 꾸덕함을 가지고 있는 마스카라라 정말 초보자도 쓰기도 괜찮고요",
+            "source": "voice",
+            "at": "18:50"
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "마스카라의 힘이 강하지 않게",
+              "source": "voice",
+              "at": "18:28"
+            },
+            {
+              "value": "한올 한올 올려주기",
+              "source": "voice",
+              "at": "18:48"
+            },
+            {
+              "value": "속눈썹 끝쪽 위주로 히팅해주기",
+              "source": "onscreenText",
+              "at": "19:30"
+            }
+          ],
+          "tool": {
+            "value": "마스카라 솔",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "18:50",
+          "19:01",
+          "19:20"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "쏘내추럴",
+          "name": "슈퍼 픽스 슬림 마스카라",
+          "shade": "다크 브라운",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 13,
+        "makeup": "highlight",
+        "partLabel": "앞볼, 눈 밑 고랑",
+        "startTime": "19:35",
+        "endTime": "20:33",
+        "summary": "삐아 오 스테이 컨실러 17호 페어 컬러를 앞볼과 눈 밑 고랑 부분에 발라 밝혀주고 동안 효과를 연출한다.",
+        "facts": {
+          "area": {
+            "value": "앞볼, 눈 밑 고랑",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "17호 페어",
+            "source": "voice",
+            "at": "19:47"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "동안 효과까지 낼 수 있음",
+              "source": "onscreenText",
+              "at": "20:14"
+            }
+          ],
+          "tool": {
+            "value": "쿠션 퍼프",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "19:48",
+          "19:55",
+          "20:09"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "삐아",
+          "name": "오 스테이 컨실러",
+          "shade": "17호",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 14,
+        "makeup": "eyeshadow",
+        "partLabel": "눈 언더",
+        "startTime": "20:33",
+        "endTime": "21:04",
+        "summary": "삐아 라스트 아이 팔레트 4호의 베이스 컬러로 눈 언더에 색을 올려주고, 살짝 그림자를 넣어준다.",
+        "facts": {
+          "area": {
+            "value": "눈 언더",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "베이스 컬러",
+            "source": "voice",
+            "at": "20:35"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "인시 eve 304",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "20:37",
+          "20:42",
+          "20:47"
+        ],
+        "product": {
+          "palette": true,
+          "brand": "삐아",
+          "name": "라스트 아이 팔레트",
+          "shade": "4호",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 15,
+        "makeup": "highlight",
+        "partLabel": "이마, 콧대, 모공 도드라지는 부분",
+        "startTime": "21:04",
+        "endTime": "21:37",
+        "summary": "라네즈 네오 톤업 피니시 파우더를 유분이 많이 올라오는 이마, 콧대, 모공이 도드라지는 부분에 발라 불필요한 광을 잡아준다.",
+        "facts": {
+          "area": {
+            "value": "이마, 콧대, 모공 도드라지는 부분",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "유분이 많이 올라오는 곳 위주로만 파우더 올려주기",
+              "source": "onscreenText",
+              "at": "21:12"
+            }
+          ],
+          "tool": {
+            "value": "비오브 하이라이터 브러시",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "21:11",
+          "21:24",
+          "21:33"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "라네즈",
+          "name": "네오 톤업 피니시 파우더",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 16,
+        "makeup": "other",
+        "partLabel": "자잘한 잡티",
+        "startTime": "21:37",
+        "endTime": "22:10",
+        "summary": "개인적으로 좋아하는 컨실러들을 섞어 자잘한 잡티들을 커버해준다.",
+        "facts": {
+          "area": {
+            "value": "자잘한 잡티",
+            "source": "voice",
+            "at": "21:48"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": null,
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "필리밀리 컨실러 브러시",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "21:49",
+          "21:57"
+        ],
+        "product": {
+          "palette": true,
+          "brand": null,
+          "name": "컨실러 소분 팔레트",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 17,
+        "makeup": "blush",
+        "partLabel": "앞볼",
+        "startTime": "22:10",
+        "endTime": "22:58",
+        "summary": "삐아 라스트 블러셔 핑크 뮬리 컬러와 헤라 블러셔 플랫 피치 컬러를 섞어 앞볼에 발그레한 혈색을 올려준다.",
+        "facts": {
+          "area": {
+            "value": "앞볼",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "핑크 뮬리",
+            "source": "voice",
+            "at": "22:16"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "블러셔가 너무 강조되는 느낌이 아니라 약간 혈색이 올라오는 느낌",
+              "source": "voice",
+              "at": "22:31"
+            }
+          ],
+          "tool": {
+            "value": "비오브 블러셔 브러시",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "22:22",
+          "22:30",
+          "22:40",
+          "22:49"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "삐아",
+          "name": "라스트 블러셔",
+          "shade": "핑크 뮬리",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 18,
+        "makeup": "lip",
+        "partLabel": "입술 가장자리",
+        "startTime": "22:58",
+        "endTime": "23:25",
+        "summary": "맥 프로 롱웨어 페인트 팟 아트 테라피치 컬러를 입술 가장자리에 살살 올려준다.",
+        "facts": {
+          "area": {
+            "value": "입술 가장자리",
+            "source": "voice",
+            "at": "23:15"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "아트 테라피치",
+            "source": "voice",
+            "at": "23:03"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "바비브라운 립 브러시",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "23:14",
+          "23:19"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "맥",
+          "name": "프로 롱웨어 페인트 팟",
+          "shade": "아트 테라피치",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 19,
+        "makeup": "lip",
+        "partLabel": "입술 안쪽",
+        "startTime": "23:25",
+        "endTime": "24:09",
+        "summary": "비오브 커버업 립 베이스 프롬 로즈 컬러를 입술에 톡톡 눌러 밀착시키고, 페리페라 잉크 무드 글로이 틴트 핑토당토 컬러를 입술 안쪽에 한 번 더 넣어준다.",
+        "facts": {
+          "area": {
+            "value": "입술",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "프롬 로즈",
+            "source": "voice",
+            "at": "23:28"
+          },
+          "finishCue": null,
+          "strength": {
+            "value": "톡톡",
+            "source": "voice",
+            "at": "23:34"
+          },
+          "tips": [
+            {
+              "value": "밀착돼서 보송하게 픽싱이 되면 싹 블러리하게 바뀌어요",
+              "source": "voice",
+              "at": "23:40"
+            }
+          ],
+          "tool": null
+        },
+        "keyframeTimes": [
+          "23:30",
+          "23:58",
+          "24:04"
+        ],
+        "product": {
+          "palette": false,
+          "brand": "비오브",
+          "name": "커버업 립 베이스",
+          "shade": "프롬 로즈",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 20,
+        "makeup": "contour",
+        "partLabel": "콧대, 코 끝 부분, 코 안쪽",
+        "startTime": "24:09",
+        "endTime": "24:42",
+        "summary": "에뛰드 그림자 쉐딩 재조명 컬러의 그레이 빛 컬러를 콧대, 코 끝 부분, 코 안쪽에 발라 음영을 넣어준다.",
+        "facts": {
+          "area": {
+            "value": "콧대, 코 끝 부분, 코 안쪽",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "color": {
+            "value": "그레이 빛 컬러",
+            "source": "voice",
+            "at": "24:16"
+          },
+          "finishCue": null,
+          "strength": null,
+          "tips": [],
+          "tool": {
+            "value": "비오브 파우더 브러시",
+            "source": "onscreenText"
+          }
+        },
+        "keyframeTimes": [
+          "24:18",
+          "24:23",
+          "24:31"
+        ],
+        "product": {
+          "palette": true,
+          "brand": "에뛰드",
+          "name": "그림자쉐딩",
+          "shade": "재조명",
+          "source": "onscreenText"
+        }
+      }
+    ]
+  }
+}

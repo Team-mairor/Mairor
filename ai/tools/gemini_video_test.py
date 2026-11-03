@@ -44,6 +44,7 @@ FACT = {
     },
     "required": ["value", "source"],
 }
+REQUIRED_FACT = {**FACT, "nullable": False}
 
 # Gemini가 이 모양의 JSON으로만 답하게 강제한다
 SCHEMA = {
@@ -82,15 +83,23 @@ SCHEMA = {
                             "brand": {"type": "STRING", "nullable": True},
                             "name": {"type": "STRING", "nullable": True},
                             "shade": {"type": "STRING", "nullable": True},
+                            "palette": {
+                                "type": "OBJECT",
+                                "nullable": True,
+                                "properties": {"color": REQUIRED_FACT},
+                                "required": ["color"],
+                            },
                             "source": {
                                 "type": "STRING",
                                 "enum": ["voice", "onscreenText", "scene", "estimated"],
                             },
                         },
+                        "required": ["palette"],
                     },
                     "facts": {
                         "type": "OBJECT",
                         "properties": {
+                            "area": REQUIRED_FACT,
                             "tool": FACT,
                             "amount": FACT,
                             "strength": FACT,
@@ -98,6 +107,7 @@ SCHEMA = {
                             "cautions": {"type": "ARRAY", "items": FACT},
                             "finishCue": FACT,
                         },
+                        "required": ["area"],
                     },
                     "keyframeTimes": {"type": "ARRAY", "items": {"type": "STRING"}},
                 },
@@ -178,6 +188,8 @@ def to_guide_input(run: dict, duration: float | None = None) -> dict:
             elif value is not None:
                 facts[key] = to_fact(value)
         product = raw.get("product")
+        palette = product and product.get("palette")
+        palette = palette if isinstance(palette, dict) else None
         steps.append(
             {
                 "stepId": step_id,
@@ -193,6 +205,7 @@ def to_guide_input(run: dict, duration: float | None = None) -> dict:
                 ],
                 "product": (
                     {key: product.get(key) for key in ("brand", "name", "shade")}
+                    | {"palette": {"color": to_fact(palette["color"])} if palette else None}
                     if product
                     else None
                 ),

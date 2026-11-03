@@ -1,6 +1,6 @@
 """만든 단계 설명이 입력에 근거하는지 코드와 Claude로 확인한다.
 
-코드는 근거 번호·숫자·제품 이름·글자 수·방향을 보고,
+코드는 근거 번호·숫자·제품 이름·글자 수·방향과 꼭 써야 할 입력(바르는 곳·팔레트 색)을 보고,
 Claude는 문장마다 입력에 없는 말·뜻이 바뀐 말·할 일이 아닌 말·처음 하는 사람이 모를 말을 보고,
 입력의 할 일 중 설명에 빠진 것을 찾는다.
 """
@@ -35,8 +35,10 @@ ProblemKind = Literal[
     "hard_word",
     "unchecked",
     "omitted",
+    "required_unused",
 ]
 NOTICE_KINDS: frozenset[ProblemKind] = frozenset({"hard_word", "unchecked"})
+REQUIRED_INPUTS = {"area": "바르는 곳", "color": "팔레트에서 고를 색"}
 
 ACTION_LIMIT = 25
 NOTE_LIMIT = 30
@@ -107,7 +109,12 @@ def explanation_sentences(explanation: StepExplanation) -> list[Sentence]:
 
 
 def check_by_code(step: GuideInputStep, explanation: StepExplanation) -> list[Problem]:
-    """입력 글에 없는 숫자, 제품·브랜드·호수 이름, 입력과 반대인 방향("A에서 B로")을 찾는다."""
+    """입력 글에 없는 숫자, 제품·브랜드 이름, 입력과 반대인 방향("A에서 B로")을 찾는다.
+
+    호수는 써도 된다. 팔레트에서 고른 색이 호수 이름일 때가 있다.
+    바르는 곳(area)·팔레트 색(color)을 근거로 단 문장이 없으면 문장 번호 대신 입력 번호로 남긴다.
+    근거 번호만 보고, 문장에 실제로 들어갔는지는 Claude의 빠짐 찾기가 본다.
+    """
     inputs = step_inputs(step)
     input_text = " ".join(inputs.values())
     input_numbers = set(NUMBER.findall(input_text))
@@ -133,6 +140,12 @@ def check_by_code(step: GuideInputStep, explanation: StepExplanation) -> list[Pr
             if (end, start) in input_moves and (start, end) not in input_moves:
                 found.append(("direction", f"'{start}에서 {end}' 방향이 입력과 반대"))
         problems.extend(Problem(s.id, s.text, kind, reason) for kind, reason in found)
+    cited = {source for s in explanation_sentences(explanation) for source in s.sources}
+    problems.extend(
+        Problem(key, inputs[key], "required_unused", f"{label}을 근거로 단 문장이 없음")
+        for key, label in REQUIRED_INPUTS.items()
+        if key in inputs and key not in cited
+    )
     return problems
 
 
@@ -144,6 +157,7 @@ async def check_by_model(
     빠진 것은 문장 번호 대신 그 말이 있는 입력 번호로 남긴다.
     제품 이름·호수는 빠져도 되는 말이라 Claude에게 따로 알려 주고,
     그래도 빠졌다고 한 말이 제품 이름·호수뿐이면 버린다.
+    바르는 곳·팔레트 색이 빠진 것은 호수 이름이어도 버리지 않는다.
     """
     inputs = step_inputs(step)
     sentences = explanation_sentences(explanation)
@@ -164,11 +178,12 @@ async def check_by_model(
         for s in sentences
         if s.id not in judged
     ]
-    names = _product_names(step)
+    names = _product_names(step, with_shade=True)
     problems += [
         Problem(omission.id, omission.text, "omitted", "설명에 빠짐")
         for omission in result.output.omitted
-        if omission.id in inputs and not _only_product_names(omission.text, names)
+        if omission.id in inputs
+        and (omission.id in REQUIRED_INPUTS or not _only_product_names(omission.text, names))
     ]
     return problems, result.usage
 
@@ -196,10 +211,11 @@ def _product_line(step: GuideInputStep) -> str:
     return "\n\n[제품]\n" + " / ".join(value for value in values if value)
 
 
-def _product_names(step: GuideInputStep) -> list[str]:
-    if step.product is None:
+def _product_names(step: GuideInputStep, with_shade: bool = False) -> list[str]:
+    product = step.product
+    if product is None:
         return []
-    values = (step.product.brand, step.product.name, step.product.shade)
+    values = [product.brand, product.name] + ([product.shade] if with_shade else [])
     names = [value.replace(" ", "") for value in values if value]
     return [name for name in names if len(name) >= 2]
 

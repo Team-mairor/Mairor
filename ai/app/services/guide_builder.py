@@ -15,7 +15,6 @@ from app.schemas.guide import (
     GuideInput,
     GuideInputStep,
     GuideStep,
-    StepFacts,
     StepTrace,
 )
 from app.services import guide_templates as templates
@@ -33,7 +32,7 @@ def build_guide(guide_input: GuideInput) -> GuideBuild:
 
 
 def _build_step(step: GuideInputStep) -> tuple[GuideStep, StepTrace]:
-    facts = step.facts or StepFacts()
+    facts = step.facts
     title = templates.STEP_TITLES[step.makeup]
     traces: list[FieldTrace] = []
     instructions: list[str] = []

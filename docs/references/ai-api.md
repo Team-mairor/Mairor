@@ -23,12 +23,12 @@ BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본�
 
 ### 요청
 
-`POST /api/v1/guide-jobs` · 스키마 `shared/guide-job/guide_job_request.v1.schema.json`
+`POST /api/v1/guide-jobs` · 스키마 `shared/guide-job/guide_job_request.v2.schema.json`
 
 | 칸 | 타입 | 필수 | 설명 |
 | --- | --- | --- | --- |
 | `callbackUrl` | string (http · https URL) | Y | 결과를 받을 BE 주소 |
-| `guideInput` | GuideInput | Y | 단계 목록 · 사실 칸. 칸 설명은 [ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md) |
+| `guideInput` | GuideInput | Y | 단계 목록 · 사실 칸. 단계마다 바르는 곳(`facts.area`), 팔레트 제품이면 고른 색(`product.palette.color`)이 필수다. 칸 설명은 [ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md) |
 
 | 응답 | 경우 |
 | --- | --- |

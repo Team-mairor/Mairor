@@ -39,36 +39,6 @@
       "title": "Fact",
       "type": "object"
     },
-    "GuideInput": {
-      "description": "BE가 넘기는 가이드 생성 입력. 형식과 예시는 ai/docs/GUIDE_INPUT.md.",
-      "properties": {
-        "videoId": {
-          "minLength": 1,
-          "title": "Videoid",
-          "type": "string"
-        },
-        "durationSeconds": {
-          "exclusiveMinimum": 0,
-          "title": "Durationseconds",
-          "type": "number"
-        },
-        "steps": {
-          "items": {
-            "$ref": "#/$defs/GuideInputStep"
-          },
-          "minItems": 1,
-          "title": "Steps",
-          "type": "array"
-        }
-      },
-      "required": [
-        "videoId",
-        "durationSeconds",
-        "steps"
-      ],
-      "title": "GuideInput",
-      "type": "object"
-    },
     "GuideInputStep": {
       "description": "설명에는 이미지를 쓰지 않는다 (11.02 ADR). 예전 입력의 images 칸은 모르는 칸이라 버린다.",
       "properties": {
@@ -130,15 +100,7 @@
           "default": null
         },
         "facts": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/StepFacts"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
+          "$ref": "#/$defs/StepFacts"
         }
       },
       "required": [
@@ -148,14 +110,31 @@
         "endSeconds",
         "makeup",
         "partLabel",
-        "summary"
+        "summary",
+        "facts"
       ],
       "title": "GuideInputStep",
       "type": "object"
     },
-    "StepFacts": {
-      "description": "BE가 Gemini로 뽑은 단계 세부 사실 (ADR-008 facts 칸). 잘 안 나오는 칸이 많아 모두 선택.",
+    "Palette": {
+      "description": "여러 색이 든 제품에서 이 단계에 고른 색. 어느 칸을 쓸지 모르면 따라 할 수 없어 필수다.\n\nGemini 시험에서 팔레트 여부와 색을 따로 받으면 색이 자주 빠져서, 팔레트일 때만 생기는 묶음에\n색을 넣었다 (docs/experiments/GEMINI_REQUIRED_FACTS.md).",
       "properties": {
+        "color": {
+          "$ref": "#/$defs/Fact"
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "title": "Palette",
+      "type": "object"
+    },
+    "StepFacts": {
+      "description": "BE가 Gemini로 뽑은 단계 세부 사실 (ADR-008 facts 칸).\n\n바르는 곳(area)은 없으면 거울 앞에서 따라 할 수 없어 필수다 (S15P31A306-278).\n나머지는 영상에 안 나올 때가 많아 선택이다.",
+      "properties": {
+        "area": {
+          "$ref": "#/$defs/Fact"
+        },
         "tool": {
           "anyOf": [
             {
@@ -215,11 +194,14 @@
           "default": null
         }
       },
+      "required": [
+        "area"
+      ],
       "title": "StepFacts",
       "type": "object"
     },
     "StepProduct": {
-      "description": "영상에 나온 제품. 실행마다 표기가 달라서(웰라쥬·엘라쥬) DB에서는 비슷한 이름으로 찾는다.",
+      "description": "영상에 나온 제품. 실행마다 표기가 달라서(웰라쥬·엘라쥬) DB에서는 비슷한 이름으로 찾는다.\n\npalette는 한 가지 색 제품이면 null이다. 빠뜨리지 않게 칸은 필수로 둔다.",
       "properties": {
         "brand": {
           "anyOf": [
@@ -256,29 +238,51 @@
           ],
           "default": null,
           "title": "Shade"
+        },
+        "palette": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Palette"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
+      "required": [
+        "palette"
+      ],
       "title": "StepProduct",
       "type": "object"
     }
   },
-  "description": "BE의 가이드 생성 요청. 결과는 callback_url로 보낸다.",
+  "description": "BE가 넘기는 가이드 생성 입력. 형식과 예시는 ai/docs/GUIDE_INPUT.md.",
   "properties": {
-    "callbackUrl": {
-      "format": "uri",
-      "maxLength": 2083,
+    "videoId": {
       "minLength": 1,
-      "title": "Callbackurl",
+      "title": "Videoid",
       "type": "string"
     },
-    "guideInput": {
-      "$ref": "#/$defs/GuideInput"
+    "durationSeconds": {
+      "exclusiveMinimum": 0,
+      "title": "Durationseconds",
+      "type": "number"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/GuideInputStep"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
     }
   },
   "required": [
-    "callbackUrl",
-    "guideInput"
+    "videoId",
+    "durationSeconds",
+    "steps"
   ],
-  "title": "GuideJobRequest",
+  "title": "GuideInput",
   "type": "object"
 }

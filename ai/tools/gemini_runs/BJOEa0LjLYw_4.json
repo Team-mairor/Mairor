@@ -1,0 +1,838 @@
+{
+  "model": "gemini-2.5-flash",
+  "videoUrl": "https://www.youtube.com/watch?v=BJOEa0LjLYw",
+  "elapsedSeconds": 178.0,
+  "finishReason": "STOP",
+  "usage": {
+    "promptTokenCount": 235883,
+    "candidatesTokenCount": 4316,
+    "totalTokenCount": 244886,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 780
+      },
+      {
+        "modality": "VIDEO",
+        "tokenCount": 209611
+      },
+      {
+        "modality": "AUDIO",
+        "tokenCount": 25492
+      }
+    ],
+    "thoughtsTokenCount": 4687,
+    "serviceTier": "standard"
+  },
+  "prompt": "이 메이크업 영상을 처음부터 끝까지 보고, 시청자가 따라 할 수 있도록 메이크업 단계를 순서대로 나눠라.\n\n규칙\n- 단계 = 얼굴에 무언가를 바르거나 정리하는 동작 하나의 묶음. 인사·잡담·제품 소개만 하는 구간은 단계로 만들지 않는다.\n- 스킨케어처럼 정해진 부위 분류에 없는 단계는 makeup을 \"other\"로 두고 partLabel에 한국어로 무엇인지 쓴다 (예: \"스킨케어\", \"눈썹\", \"쉐딩\"). 분류가 있는 단계도 partLabel을 한국어로 쓴다.\n- duration·startTime·endTime·at·keyframeTimes는 모두 영상 시작부터의 시각을 \"MM:SS\" 형식 문자열로 쓴다 (예: 3분 22초 → \"03:22\").\n- summary: 이 단계에서 하는 일을 영상 내용 그대로 한 문장으로. 꾸미거나 영상에 없는 말을 더하지 않는다.\n- facts의 각 칸은 영상에 실제로 나온 것만 쓴다.\n  - area: 바른 얼굴 부위와 그 안의 자리. 모든 단계에 쓴다. \"중앙\"·\"전체\"처럼 부위 없이 쓰지 않는다 (예: \"볼 중앙\", \"눈두덩이 전체\", \"눈 점막 아래\"). 말이나 자막이 없으면 화면에서 바르는 곳을 보고 쓰고 source를 \"scene\"으로 둔다.\n  - tool: 바를 때 쓴 도구 (손가락, 브러시 종류, 퍼프 등)\n  - amount: 바르는 양\n  - strength: 바르는 힘·두드리는 세기\n  - tips: 크리에이터가 알려 준 요령\n  - cautions: 하지 말라고 한 것, 주의하라고 한 것\n  - finishCue: 언제 그 단계를 끝내면 되는지 알려 준 신호\n- 각 사실의 source: 말로 했으면 \"voice\", 화면 자막이면 \"onscreenText\", 말·자막 없이 화면에서 보이기만 하면 \"scene\". 영상에 근거가 없으면 칸을 null로 두고, 추측해서 채우지 않는다. \"estimated\"는 쓰지 않는다.\n- at: 그 사실의 근거가 나온 시각.\n- product: 브랜드·제품 이름·색상이 말이나 자막, 화면의 제품 글자로 확인될 때만 쓴다. brand에는 브랜드만, name에는 브랜드를 뺀 제품 이름만 쓴다. 확인 안 되는 칸은 null.\n- product.palette: 한 제품에 여러 색이 들어 있고(아이섀도 팔레트, 멀티 섀도우, 컨실러 팔레트 등) 그중 골라 쓰면 채우고, 한 가지 색인 제품이면 null.\n  - color: 이 단계에서 고른 색. 사용자가 같은 팔레트에서 같은 칸을 찾을 수 있게 쓴다. 영상에서 부른 이름이 있으면 그대로 쓴다 (예: \"가장 진한 브라운\", \"베이스 색상\"). 말로 부르지 않았으면 화면에서 고른 칸을 보고 쓰고 source를 \"scene\"으로 둔다 (예: \"가장 진한 갈색\", \"맨 아래 줄 연한 핑크\"). 여러 색을 섞어 쓰면 섞은 색을 모두 쓴다 (예: \"초록색과 노란색을 섞음\").\n- keyframeTimes: 이 단계를 가장 잘 보여 주는 장면 시각 1~3개. 얼굴과 바르는 동작이 잘 보이는 순간으로 고르고, 반드시 그 단계 구간 안이어야 한다.\n",
+  "schema": {
+    "type": "OBJECT",
+    "properties": {
+      "duration": {
+        "type": "STRING"
+      },
+      "steps": {
+        "type": "ARRAY",
+        "items": {
+          "type": "OBJECT",
+          "properties": {
+            "order": {
+              "type": "INTEGER"
+            },
+            "makeup": {
+              "type": "STRING",
+              "enum": [
+                "foundation",
+                "eyeshadow",
+                "eyeliner",
+                "blush",
+                "lip",
+                "brow",
+                "mascara",
+                "contour",
+                "highlight",
+                "other"
+              ]
+            },
+            "partLabel": {
+              "type": "STRING"
+            },
+            "startTime": {
+              "type": "STRING"
+            },
+            "endTime": {
+              "type": "STRING"
+            },
+            "summary": {
+              "type": "STRING"
+            },
+            "product": {
+              "type": "OBJECT",
+              "nullable": true,
+              "properties": {
+                "brand": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "name": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "shade": {
+                  "type": "STRING",
+                  "nullable": true
+                },
+                "palette": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "color": {
+                      "type": "OBJECT",
+                      "nullable": false,
+                      "properties": {
+                        "value": {
+                          "type": "STRING"
+                        },
+                        "source": {
+                          "type": "STRING",
+                          "enum": [
+                            "voice",
+                            "onscreenText",
+                            "scene",
+                            "estimated"
+                          ]
+                        },
+                        "at": {
+                          "type": "STRING",
+                          "nullable": true
+                        }
+                      },
+                      "required": [
+                        "value",
+                        "source"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "color"
+                  ]
+                },
+                "source": {
+                  "type": "STRING",
+                  "enum": [
+                    "voice",
+                    "onscreenText",
+                    "scene",
+                    "estimated"
+                  ]
+                }
+              },
+              "required": [
+                "palette"
+              ]
+            },
+            "facts": {
+              "type": "OBJECT",
+              "properties": {
+                "area": {
+                  "type": "OBJECT",
+                  "nullable": false,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "tool": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "amount": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "strength": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                },
+                "tips": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "nullable": true,
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "STRING",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "cautions": {
+                  "type": "ARRAY",
+                  "items": {
+                    "type": "OBJECT",
+                    "nullable": true,
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "STRING",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "finishCue": {
+                  "type": "OBJECT",
+                  "nullable": true,
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                }
+              },
+              "required": [
+                "area"
+              ]
+            },
+            "keyframeTimes": {
+              "type": "ARRAY",
+              "items": {
+                "type": "STRING"
+              }
+            }
+          },
+          "required": [
+            "order",
+            "makeup",
+            "partLabel",
+            "startTime",
+            "endTime",
+            "summary",
+            "facts",
+            "keyframeTimes"
+          ]
+        }
+      }
+    },
+    "required": [
+      "duration",
+      "steps"
+    ]
+  },
+  "output": {
+    "duration": "13:16",
+    "steps": [
+      {
+        "order": 1,
+        "makeup": "other",
+        "partLabel": "스킨케어",
+        "startTime": "00:44",
+        "endTime": "01:26",
+        "summary": "크리에이터는 메이크업 전 피부에 수분을 공급하기 위해 앰플을 얼굴 전체에 바릅니다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "피부에 수분감이 있어야 기름도 덜 나오고 화장이 잘 먹는다.",
+              "source": "voice",
+              "at": "00:47"
+            },
+            {
+              "value": "건조한 느낌이 없어야 한다.",
+              "source": "voice",
+              "at": "01:02"
+            },
+            {
+              "value": "자연스럽게 연출하는 것이 중요하다.",
+              "source": "voice",
+              "at": "01:06"
+            }
+          ],
+          "tool": {
+            "value": "손가락",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "00:55",
+          "01:10"
+        ],
+        "product": {
+          "palette": null,
+          "brand": "AMPLE:N",
+          "name": "세라마이드샷 보습 앰플",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 2,
+        "makeup": "foundation",
+        "partLabel": "피부 메이크업",
+        "startTime": "01:27",
+        "endTime": "04:38",
+        "summary": "크리에이터는 파운데이션과 CC 크림을 섞어 촉촉한 쿠션 퍼프로 얼굴 전체에 발라 자연스러운 피부 메이크업을 연출합니다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": {
+            "value": "콩알 만큼",
+            "source": "voice",
+            "at": "02:18"
+          },
+          "cautions": [
+            {
+              "value": "파운데이션을 너무 많이 바르면 부자연스러워진다.",
+              "source": "voice",
+              "at": "03:00"
+            }
+          ],
+          "finishCue": {
+            "value": "내 아래 피부가 좀 보인다 싶은 느낌으로 발라준다.",
+            "source": "voice",
+            "at": "02:55"
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "쿠션에 물을 먹여 촉촉한 상태로 사용하면 파운데이션이 자연스럽게 발린다.",
+              "source": "voice",
+              "at": "02:00"
+            },
+            {
+              "value": "파운데이션과 CC 크림을 섞어 바르면 붉은 기 커버와 베이스 지속력에 좋다.",
+              "source": "voice",
+              "at": "02:28"
+            },
+            {
+              "value": "코 옆과 입 부분은 꼼꼼하게 커버해야 인상이 깔끔해진다.",
+              "source": "voice",
+              "at": "03:10"
+            },
+            {
+              "value": "목과 얼굴 색깔 차이가 신경 쓰인다면 선크림과 섞어 목에도 발라준다.",
+              "source": "voice",
+              "at": "04:19"
+            },
+            {
+              "value": "파운데이션 호수는 올리브영 같은 곳에서 직접 테스트해보고 고르는 것이 가장 좋다.",
+              "source": "voice",
+              "at": "04:25"
+            }
+          ],
+          "tool": {
+            "value": "쿠션 퍼프",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "02:04",
+          "02:50",
+          "03:07",
+          "03:35",
+          "04:05",
+          "04:17"
+        ],
+        "product": {
+          "palette": null,
+          "brand": "B.READY",
+          "name": "비레디 블루 파운데이션",
+          "shade": "1호",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 3,
+        "makeup": "brow",
+        "partLabel": "눈썹",
+        "startTime": "04:39",
+        "endTime": "05:40",
+        "summary": "크리에이터는 아이브로우 펜슬로 눈썹의 빈 부분을 채우고 꼬리를 살짝 빼서 자연스러운 눈썹을 그립니다.",
+        "facts": {
+          "area": {
+            "value": "눈썹",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [
+            {
+              "value": "너무 진하게 그리지 않는다.",
+              "source": "voice",
+              "at": "05:15"
+            }
+          ],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "눈썹 문신이나 눈썹 왁싱을 받아 눈썹 모양을 예쁘게 잡아둔 후 따라 그리면 쉽다.",
+              "source": "voice",
+              "at": "05:00"
+            },
+            {
+              "value": "빈 부분을 채워준다는 느낌으로 그린다.",
+              "source": "voice",
+              "at": "05:11"
+            },
+            {
+              "value": "있는 눈썹을 따라서 결을 살려 그린다.",
+              "source": "voice",
+              "at": "05:17"
+            },
+            {
+              "value": "눈썹 머리 부분에 숱이 적다면 그 부분을 미리 파악해두면 좋다.",
+              "source": "voice",
+              "at": "05:29"
+            }
+          ],
+          "tool": {
+            "value": "아이브로우 펜슬",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "05:08",
+          "05:18",
+          "05:28"
+        ],
+        "product": {
+          "palette": null,
+          "brand": "WAKEMAKE",
+          "name": "내추럴 하드 브로우 펜슬",
+          "shade": "01 다크브라운",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 4,
+        "makeup": "other",
+        "partLabel": "컨실러 (잡티 커버)",
+        "startTime": "05:41",
+        "endTime": "07:02",
+        "summary": "크리에이터는 세 가지 색상의 컨실러 팔레트로 잡티와 다크서클을 커버하고, 리퀴드 컨실러로 콧대를 살짝 밝혀줍니다.",
+        "facts": {
+          "area": {
+            "value": "여드름 흉터, 다크서클, 콧대",
+            "source": "voice"
+          },
+          "amount": {
+            "value": "조금씩",
+            "source": "voice",
+            "at": "06:52"
+          },
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "다크서클은 붉은 기 도는 색으로, 여드름 흉터는 초록색으로 가린다.",
+              "source": "voice",
+              "at": "06:07"
+            },
+            {
+              "value": "컨실러를 톡 찍어서 올린 후 손으로 자연스럽게 블렌딩한다.",
+              "source": "voice",
+              "at": "06:25"
+            },
+            {
+              "value": "콧대에 밝은 컨실러를 살짝 올려주면 입체감이 생긴다.",
+              "source": "voice",
+              "at": "07:16"
+            }
+          ],
+          "tool": {
+            "value": "컨실러 브러시, 손가락",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "05:43",
+          "06:06",
+          "06:25",
+          "06:52"
+        ],
+        "product": {
+          "palette": {
+            "color": {
+              "value": "초록색과 노란색을 섞음",
+              "source": "voice",
+              "at": "06:19"
+            }
+          },
+          "brand": "the SAEM",
+          "name": "커버 퍼펙션 트리플 팟 컨실러",
+          "shade": "01 코렉트베이지",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 5,
+        "makeup": "contour",
+        "partLabel": "쉐딩",
+        "startTime": "07:03",
+        "endTime": "09:54",
+        "summary": "크리에이터는 쉐딩 제품을 사용하여 콧대와 턱 라인에 음영을 주어 얼굴에 입체감을 더합니다.",
+        "facts": {
+          "area": {
+            "value": "콧대, 코 아래쪽, 코끝, 턱 라인",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [
+            {
+              "value": "쉐딩을 너무 진하게 하면 부자연스러워진다.",
+              "source": "voice",
+              "at": "09:08"
+            }
+          ],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "쉐딩은 얼굴에 입체감을 주기 위해 필요하다.",
+              "source": "voice",
+              "at": "07:12"
+            },
+            {
+              "value": "콧대에 쉐딩을 할 때는 정면을 보고 바른 후, 측면으로 돌려서 음영을 맞춰 블렌딩하면 자연스럽게 연출할 수 있다.",
+              "source": "voice",
+              "at": "08:23"
+            },
+            {
+              "value": "코끝을 날렵하게 보이게 하려면 코끝에도 쉐딩을 한다.",
+              "source": "voice",
+              "at": "08:45"
+            },
+            {
+              "value": "턱 라인 쉐딩은 턱이 들어간 부분을 위주로 자연스럽게 블렌딩한다.",
+              "source": "voice",
+              "at": "09:18"
+            }
+          ],
+          "tool": {
+            "value": "쉐딩 브러시",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "07:37",
+          "08:19",
+          "08:35",
+          "09:09"
+        ],
+        "product": {
+          "palette": {
+            "color": {
+              "value": "가장 짙은 색과 연한 색을 섞음",
+              "source": "voice",
+              "at": "08:14"
+            }
+          },
+          "brand": "too cool for school",
+          "name": "아트클래스 바이 로댕 쉐딩",
+          "shade": "02 모던",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 6,
+        "makeup": "eyeshadow",
+        "partLabel": "아이 메이크업 (선택)",
+        "startTime": "09:55",
+        "endTime": "11:00",
+        "summary": "크리에이터는 눈 끝 아래 삼각존에 어두운 아이섀도를 바르고 연한 핑크색 섀도로 블렌딩하여 눈이 위로 향해 보이도록 연출합니다.",
+        "facts": {
+          "area": {
+            "value": "눈 끝 아래 삼각존",
+            "source": "voice",
+            "at": "10:17"
+          },
+          "amount": null,
+          "cautions": [
+            {
+              "value": "눈 화장은 잘못하면 부자연스러워지므로 자신 있는 사람만 한다.",
+              "source": "voice",
+              "at": "10:57"
+            }
+          ],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "눈 끝 아래 삼각존에 어두운 섀도를 일자로 쭉 빼듯이 그려 눈이 위로 향해 보이도록 한다.",
+              "source": "voice",
+              "at": "10:24"
+            },
+            {
+              "value": "어두운 섀도를 바른 후 연한 핑크색 섀도로 풀어주어 자연스럽게 블렌딩한다.",
+              "source": "voice",
+              "at": "10:49"
+            }
+          ],
+          "tool": {
+            "value": "얇은 붓",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "10:21",
+          "10:49"
+        ],
+        "product": {
+          "palette": {
+            "color": {
+              "value": "가장 진한 색",
+              "source": "voice",
+              "at": "10:42"
+            }
+          },
+          "brand": "dasique",
+          "name": "섀도우 팔레트",
+          "shade": "13 쿨 블렌딩",
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 7,
+        "makeup": "other",
+        "partLabel": "파우더",
+        "startTime": "11:00",
+        "endTime": "11:43",
+        "summary": "크리에이터는 파우더를 얼굴 전체에 발라 땀과 유분을 조절하고 자연스러운 마무리를 합니다.",
+        "facts": {
+          "area": {
+            "value": "얼굴 전체",
+            "source": "scene"
+          },
+          "amount": {
+            "value": "적당히 조금만",
+            "source": "voice",
+            "at": "11:40"
+          },
+          "cautions": [
+            {
+              "value": "파우더를 바를 때 숨 쉬지 않는다.",
+              "source": "voice",
+              "at": "11:25"
+            },
+            {
+              "value": "과하게 하거나 드라마틱한 효과를 노리지 않는다.",
+              "source": "voice",
+              "at": "11:37"
+            }
+          ],
+          "finishCue": {
+            "value": "티 안 날 정도로만 한다.",
+            "source": "voice",
+            "at": "11:41"
+          },
+          "strength": null,
+          "tips": [
+            {
+              "value": "여름에는 땀 때문에 파우더를 하는 것이 좋다.",
+              "source": "voice",
+              "at": "11:05"
+            }
+          ],
+          "tool": {
+            "value": "파우더 퍼프",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "11:22",
+          "11:27"
+        ],
+        "product": {
+          "palette": null,
+          "brand": "BANILA CO",
+          "name": "프라임 프라이머 피니쉬 파우더 스누피 에디션",
+          "shade": null,
+          "source": "onscreenText"
+        }
+      },
+      {
+        "order": 8,
+        "makeup": "lip",
+        "partLabel": "립밤",
+        "startTime": "11:44",
+        "endTime": "12:19",
+        "summary": "크리에이터는 틴티드 립밤을 입술에 발라 보습과 자연스러운 색감을 더합니다.",
+        "facts": {
+          "area": {
+            "value": "입술",
+            "source": "scene"
+          },
+          "amount": null,
+          "cautions": [],
+          "finishCue": null,
+          "strength": null,
+          "tips": [
+            {
+              "value": "보습이 잘 되고 발색이 과하지 않으며 각질 케어가 되는 립밤을 사용한다.",
+              "source": "voice",
+              "at": "11:47"
+            }
+          ],
+          "tool": {
+            "value": "립밤 스틱",
+            "source": "scene"
+          }
+        },
+        "keyframeTimes": [
+          "11:56",
+          "11:59"
+        ],
+        "product": {
+          "palette": null,
+          "brand": "BOBBI BROWN",
+          "name": "엑스트라 립 틴트",
+          "shade": "베어멜론",
+          "source": "onscreenText"
+        }
+      }
+    ]
+  }
+}

@@ -17,8 +17,13 @@ class Fact(CamelModel):
 
 
 class StepFacts(CamelModel):
-    """BE가 Gemini로 뽑은 단계 세부 사실 (ADR-008 facts 칸). 잘 안 나오는 칸이 많아 모두 선택."""
+    """BE가 Gemini로 뽑은 단계 세부 사실 (ADR-008 facts 칸).
 
+    바르는 곳(area)은 없으면 거울 앞에서 따라 할 수 없어 필수다 (S15P31A306-278).
+    나머지는 영상에 안 나올 때가 많아 선택이다.
+    """
+
+    area: Fact
     tool: Fact | None = None
     amount: Fact | None = None
     strength: Fact | None = None
@@ -27,12 +32,26 @@ class StepFacts(CamelModel):
     finish_cue: Fact | None = None
 
 
+class Palette(CamelModel):
+    """여러 색이 든 제품에서 이 단계에 고른 색. 어느 칸을 쓸지 모르면 따라 할 수 없어 필수다.
+
+    Gemini 시험에서 팔레트 여부와 색을 따로 받으면 색이 자주 빠져서, 팔레트일 때만 생기는 묶음에
+    색을 넣었다 (docs/experiments/GEMINI_REQUIRED_FACTS.md).
+    """
+
+    color: Fact
+
+
 class StepProduct(CamelModel):
-    """영상에 나온 제품. 실행마다 표기가 달라서(웰라쥬·엘라쥬) DB에서는 비슷한 이름으로 찾는다."""
+    """영상에 나온 제품. 실행마다 표기가 달라서(웰라쥬·엘라쥬) DB에서는 비슷한 이름으로 찾는다.
+
+    palette는 한 가지 색 제품이면 null이다. 빠뜨리지 않게 칸은 필수로 둔다.
+    """
 
     brand: str | None = None
     name: str | None = None
     shade: str | None = None
+    palette: Palette | None
 
 
 class GuideInputStep(CamelModel):
@@ -46,7 +65,7 @@ class GuideInputStep(CamelModel):
     part_label: str = Field(min_length=1)
     summary: str = Field(min_length=1)
     product: StepProduct | None = None
-    facts: StepFacts | None = None
+    facts: StepFacts
 
     @model_validator(mode="after")
     def check_range(self) -> "GuideInputStep":

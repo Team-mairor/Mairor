@@ -27,8 +27,9 @@ from app.services.guide_builder import build_guide
 VIDEO_LENGTHS = {"eFzG30avtOI": 525}
 HUMAN_SAMPLES = {"eFzG30avtOI": "local_01"}
 
-FACT_FIELDS = ["tool", "amount", "strength", "finishCue", "tips", "cautions"]
+FACT_FIELDS = ["area", "tool", "amount", "strength", "finishCue", "tips", "cautions"]
 FIELD_LABELS = {
+    "area": "바르는 곳",
     "tool": "도구",
     "amount": "양",
     "strength": "세기",
@@ -158,7 +159,9 @@ def product_text(product: dict | None) -> str:
     brand = f"[{product['brand']}] " if product.get("brand") else ""
     shade = f" / {product['shade']}" if product.get("shade") else ""
     source = SOURCE_LABELS.get(product.get("source"), product.get("source") or "")
-    return f"{brand}{product['name']}{shade} ({source})"
+    palette = product.get("palette")
+    color = f" · 고른 색: {palette['color']['value']}" if isinstance(palette, dict) else ""
+    return f"{brand}{product['name']}{shade} ({source}){color}"
 
 
 def set_seek(key: str, sec: float) -> None:
@@ -313,7 +316,9 @@ with by_step:
         selection_mode="single-row",
         key=f"steps:{choice}",
         column_config={
-            "채운 칸": st.column_config.ProgressColumn(min_value=0, max_value=6, format="%d/6")
+            "채운 칸": st.column_config.ProgressColumn(
+                min_value=0, max_value=len(FACT_FIELDS), format=f"%d/{len(FACT_FIELDS)}"
+            )
         },
     )
     rows = event.selection.rows

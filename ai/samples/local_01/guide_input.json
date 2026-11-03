@@ -27,9 +27,14 @@
       "product": {
         "brand": "스킨1004",
         "name": "마다가스카르 센텔라 퀵 카밍패드",
-        "shade": null
+        "shade": null,
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "voice"
+        },
         "tool": {
           "value": "손",
           "source": "scene",
@@ -75,9 +80,14 @@
       "product": {
         "brand": "헤브블루",
         "name": "살몬 케어링 센텔라 토너",
-        "shade": null
+        "shade": null,
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "voice"
+        },
         "tool": {
           "value": "손",
           "source": "scene",
@@ -131,9 +141,14 @@
       "product": {
         "brand": "엘라쥬",
         "name": "리얼 히알루로닉 블루 100 앰플",
-        "shade": null
+        "shade": null,
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "voice"
+        },
         "tool": {
           "value": "손",
           "source": "scene",
@@ -181,9 +196,14 @@
       "product": {
         "brand": "프롬리",
         "name": "비건 이지 에프 시카 워터 선앰플",
-        "shade": null
+        "shade": null,
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "voice"
+        },
         "tool": {
           "value": "손",
           "source": "scene",
@@ -233,9 +253,14 @@
       "product": {
         "brand": "바닐라코",
         "name": "커버리셔스 파워 핏 파운데이션",
-        "shade": "19 라이트"
+        "shade": "19 라이트",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
         "tool": {
           "value": "스패출러",
           "source": "scene",
@@ -269,9 +294,14 @@
       "product": {
         "brand": "마루빌츠",
         "name": "캐머플라지 크림 컨실러",
-        "shade": "19호"
+        "shade": "19호",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "눈가",
+          "source": "voice"
+        },
         "tool": {
           "value": "퍼프",
           "source": "scene",
@@ -311,9 +341,14 @@
       "product": {
         "brand": "하밍",
         "name": "젤리 에어 치크",
-        "shade": "02 베리피치"
+        "shade": "02 베리피치",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "볼 중앙",
+          "source": "scene"
+        },
         "tool": {
           "value": "퍼프",
           "source": "scene",
@@ -349,9 +384,14 @@
       "product": {
         "brand": "루나",
         "name": "프로 포토 피니셔",
-        "shade": "02"
+        "shade": "02",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "voice"
+        },
         "tool": {
           "value": "퍼프",
           "source": "scene",
@@ -391,9 +431,14 @@
       "product": {
         "brand": "컬러그램",
         "name": "틴토리 솜 블러셔",
-        "shade": "04 베리베일"
+        "shade": "04 베리베일",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "크림 블러셔를 바른 볼",
+          "source": "scene"
+        },
         "tool": {
           "value": "블러셔 브러시",
           "source": "scene",
@@ -437,9 +482,19 @@
       "product": {
         "brand": "웨이크메이크",
         "name": "소프트 블러링 아이팔레트",
-        "shade": "03 선셋블러링"
+        "shade": "03 선셋블러링",
+        "palette": {
+          "color": {
+            "value": "베이스 색상",
+            "source": "voice"
+          }
+        }
       },
       "facts": {
+        "area": {
+          "value": "눈두덩이와 애교살",
+          "source": "voice"
+        },
         "tool": {
           "value": "아이섀도우 브러시",
           "source": "scene",
@@ -477,9 +532,19 @@
       "product": {
         "brand": "웨이크메이크",
         "name": "소프트 블러링 아이팔레트",
-        "shade": "03 선셋블러링"
+        "shade": "03 선셋블러링",
+        "palette": {
+          "color": {
+            "value": "가장 진한 브라운",
+            "source": "voice"
+          }
+        }
       },
       "facts": {
+        "area": {
+          "value": "눈 점막에서 살짝 띄운 눈 아래",
+          "source": "voice"
+        },
         "tool": {
           "value": "아이섀도우 브러시",
           "source": "scene",
@@ -524,9 +589,14 @@
       "product": {
         "brand": "캔메이크",
         "name": "크리미 터치 라이너",
-        "shade": "15 카푸치노 핑크"
+        "shade": "15 카푸치노 핑크",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "눈 점막",
+          "source": "voice"
+        },
         "tool": {
           "value": "아이라이너 펜슬",
           "source": "scene",
@@ -571,9 +641,14 @@
       "product": {
         "brand": "투쿨포스쿨",
         "name": "워터프루프 슬림 라이너",
-        "shade": "도화살몬 밀크"
+        "shade": "도화살몬 밀크",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "눈 점막 바로 밑 애교살",
+          "source": "voice"
+        },
         "tool": {
           "value": "아이라이너 펜슬",
           "source": "scene",
@@ -618,9 +693,14 @@
       "product": {
         "brand": "롬앤",
         "name": "한올 픽스 마스카라 롱 헤이즐",
-        "shade": null
+        "shade": null,
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "속눈썹",
+          "source": "voice"
+        },
         "tool": {
           "value": "마스카라 브러시",
           "source": "scene",
@@ -658,9 +738,14 @@
       "product": {
         "brand": "페리페라",
         "name": "브이 쉐딩",
-        "shade": "03 그레이쉬 쿨"
+        "shade": "03 그레이쉬 쿨",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "코",
+          "source": "voice"
+        },
         "tool": {
           "value": "쉐딩 브러시",
           "source": "scene",
@@ -704,9 +789,19 @@
       "product": {
         "brand": "데이지크",
         "name": "멀티 섀도우",
-        "shade": "01 코튼키스"
+        "shade": "01 코튼키스",
+        "palette": {
+          "color": {
+            "value": "하이라이터 색상",
+            "source": "voice"
+          }
+        }
       },
       "facts": {
+        "area": {
+          "value": "코끝, 콧대, 눈 앞머리",
+          "source": "voice"
+        },
         "tool": {
           "value": "손가락",
           "source": "scene",
@@ -740,9 +835,14 @@
       "product": {
         "brand": "투쿨포스쿨",
         "name": "워터프루프 슬림 라이너",
-        "shade": "도화살몬 밀크"
+        "shade": "도화살몬 밀크",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "입술 라인",
+          "source": "voice"
+        },
         "tool": {
           "value": "립 라이너 펜슬",
           "source": "scene",
@@ -782,9 +882,14 @@
       "product": {
         "brand": "잉가",
         "name": "벨벳 쥬 틴트",
-        "shade": "애프리콧 슈"
+        "shade": "애프리콧 슈",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "입술 전체",
+          "source": "scene"
+        },
         "tool": {
           "value": "어플리케이터",
           "source": "scene",
@@ -824,9 +929,14 @@
       "product": {
         "brand": "웸",
         "name": "3D 볼류밍 글로스",
-        "shade": "스카치 70%"
+        "shade": "스카치 70%",
+        "palette": null
       },
       "facts": {
+        "area": {
+          "value": "입술 전체",
+          "source": "scene"
+        },
         "tool": {
           "value": "어플리케이터",
           "source": "scene",

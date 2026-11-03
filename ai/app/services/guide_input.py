@@ -6,7 +6,7 @@
 
 import logging
 
-from app.schemas.guide import Fact, GuideInput, GuideInputStep, StepFacts
+from app.schemas.guide import Fact, GuideInput, GuideInputStep
 
 MARGIN_SECONDS = 5
 LIST_FIELDS = ("tips", "cautions")
@@ -22,8 +22,6 @@ def move_misplaced_facts(guide_input: GuideInput) -> GuideInput:
     """
     moved = guide_input.model_copy(deep=True)
     for step in moved.steps:
-        if step.facts is None:
-            continue
         start = step.start_seconds - MARGIN_SECONDS
         end = step.end_seconds + MARGIN_SECONDS
         for field in LIST_FIELDS:
@@ -35,8 +33,6 @@ def move_misplaced_facts(guide_input: GuideInput) -> GuideInput:
                 if target is None:
                     keep.append(item)
                     continue
-                if target.facts is None:
-                    target.facts = StepFacts()
                 existing: list[Fact] = getattr(target.facts, field)
                 duplicate = any(other.value == item.value for other in existing)
                 if not duplicate:

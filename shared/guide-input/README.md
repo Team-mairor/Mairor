@@ -5,7 +5,7 @@ BE가 AI 서버에 넘기는 가이드 입력(`GuideInput`)의 JSON Schema다. B
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
-| `guide_input.v1.schema.json` | JSON Schema (draft 2020-12) | `ai/app/schemas/guide.py`의 `GuideInput`에서 생성 (`ai/tools/export_guide_schema.py`) |
+| `guide_input.v2.schema.json` | JSON Schema (draft 2020-12) | `ai/app/schemas/guide.py`의 `GuideInput`에서 생성 (`ai/tools/export_guide_schema.py`) |
 
 ## 사용 위치
 
@@ -29,3 +29,7 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 서버만 검사�
 3. MR 리뷰어에 BE 담당을 넣는다.
 
 BE가 보내던 JSON이 거절되는 변경(칸 삭제·이름 변경, 필수 칸 추가, 범위 좁히기)이면 `export_guide_schema.py`에서 파일 이름의 버전을 올려 새 파일로 만들고, BE가 옮긴 뒤 이전 파일을 지운다.
+
+| 버전 | 날짜 | 바뀐 것 |
+| --- | --- | --- |
+| v2 | 11.03 | `facts`·`facts.area` 필수, 제품이 있으면 `product.palette`(팔레트면 `{color}`, 아니면 `null`) 필수 (S15P31A306-278). v1은 BE가 쓰기 전이라 바로 지웠다 |
