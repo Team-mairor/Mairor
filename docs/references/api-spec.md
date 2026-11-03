@@ -338,6 +338,9 @@ API-POUCH-008 · GET /api/v1/product-categories
 - 9개 카테고리와 types·matchable·shadeSelectable·compatibleParts 포함. BASE/EYE/BROW/CHEEK/LIP만 matchable=true. SKINCARE/FRAGRANCE/TOOL은 shadeSelectable=false, NAIL은 true.
 - FE는 code를 저장하고 label을 표시한다. 세부 type 코드·compatibleParts 값은 데이터 계약 확정 필요. 미정 코드를 예시에서 추측해 하드코딩하지 않는다.
 - <b>임시 제안 (로컬 수정 -209)</b>: 현재 type 코드 38개는 기능명세 POUCH-004 라벨을 옮긴 임시 제안이며 확정 전 바뀔 수 있다(기준: `backend/src/main/resources/db/seed/product-categories.sql`). FE는 코드를 하드코딩하지 말고 이 API 응답을 쓴다. 향수는 하위 종류가 없어 `PERFUME` 하나를 임시로 둔다. compatibleParts는 값 확정 전까지 모든 카테고리에서 \[\]. 확인 필요 2
+- <b>구현 (로컬 수정 -298)</b>: 카테고리는 sort\_order, 같으면 code 순. types는 카테고리 안에서 sort\_order, 같으면 code 순. 종류가 없는 카테고리도 types=\[\]로 포함한다(null 아님). compatibleParts는 DB 값을 문자열 순으로 정렬해 반환하며, 현재 시드에 값이 없어 \[\]다. 401 외 업무 오류 없음.
+- <b>코드 유지 원칙 (로컬 수정 -298)</b>: 카테고리·종류 코드는 확정 후 바꾸지 않고 label·순서만 바꾼다. 꼭 바꿔야 하면 모든 참조(product\_types·product\_category\_parts·products의 카테고리·종류 복합 FK, 이후 pouch\_items 등)와 FK 순서를 고려한 별도 이관 SQL로 처리한다. 시드는 행을 지우지 않으므로 코드만 바꾸면 구·신 코드가 함께 노출된다.
+- <b>확인 필요 (로컬 수정 -298)</b>: NAIL은 shadeSelectable=true지만 NAIL\_FILE에는 호수가 없어 PouchWrite의 CATALOG shadeId 필수 규칙과 충돌한다. API-POUCH-004(S15P31A306-211)에서 처리 방식을 정한다.
 </toggle>
 
 <toggle>

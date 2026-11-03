@@ -13,9 +13,9 @@ import org.springframework.http.MediaType;
 
 /**
  * 로그인·기기 관리 API 문서의 요청·응답 예시. 애너테이션 값으로 쓰려고 상수로 둔다. 여러 API 에 같은 모양으로 붙는 응답(401·CSRF 403·404)은 메타
- * 애너테이션으로 묶었다.
+ * 애너테이션으로 묶었다. 401 메타 애너테이션({@link Unauthorized})은 다른 도메인의 로그인 필요 API 도 쓴다.
  */
-final class AuthApiDocs {
+public final class AuthApiDocs {
 
   private AuthApiDocs() {}
 
@@ -30,7 +30,7 @@ final class AuthApiDocs {
               mediaType = MediaType.APPLICATION_JSON_VALUE,
               schema = @Schema(implementation = ErrorResponse.class),
               examples = @ExampleObject(name = "UNAUTHORIZED", value = AuthApiDocs.UNAUTHORIZED)))
-  @interface Unauthorized {}
+  public @interface Unauthorized {}
 
   /** 변경 요청의 CSRF 토큰 거절 403. 세션이 없는 변경 요청도 인가보다 CSRF 검사가 먼저라 이 응답이 된다. */
   @Retention(RetentionPolicy.RUNTIME)

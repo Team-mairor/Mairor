@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiDocsTest {
 
   /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 18;
+  private static final int ALL_OPERATIONS = 19;
 
   @Autowired private MockMvc mockMvc;
 
@@ -292,6 +292,45 @@ class OpenApiDocsTest {
         .andExpect(
             jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.parameters[0].name")
                 .value("sessionRef"));
+  }
+
+  /** 카테고리·종류 목록은 로그인이 필요한 조회라 세션 쿠키만 요구하고, 401 과 성공 예시·필드 예시를 문서에 싣는다. */
+  @Test
+  void apiDocs_includesProductCategoriesAsAMemberOnlyRead() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.paths['/v1/product-categories'].get.tags[0]").value("화장품 카탈로그"))
+        .andExpect(jsonPath("$.paths['/v1/product-categories'].get.security.length()").value(1))
+        .andExpect(
+            jsonPath("$.paths['/v1/product-categories'].get.security[0].sessionCookie").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/product-categories'].get.security[0].csrfToken").doesNotExist())
+        .andExpect(jsonPath("$.paths['/v1/product-categories'].get.parameters").doesNotExist())
+        .andExpect(jsonPath("$.paths['/v1/product-categories'].get.responses['401']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/product-categories'].get.responses['200'].content['application/json'].examples")
+                .isNotEmpty())
+        .andExpect(
+            jsonPath("$.components.schemas.ProductCategoryResponse.properties.code.example")
+                .value("BASE"))
+        .andExpect(
+            jsonPath("$.components.schemas.ProductTypeResponse.properties.code.example")
+                .value("CUSHION"))
+        // 호환 부위 코드는 정해지지 않았으므로 예시에 임의의 코드를 싣지 않는다
+        .andExpect(
+            jsonPath(
+                    "$.components.schemas.ProductCategoryResponse.properties.compatibleParts.example")
+                .isArray())
+        .andExpect(
+            jsonPath(
+                    "$.components.schemas.ProductCategoryResponse.properties.compatibleParts.example.length()")
+                .value(0))
+        .andExpect(
+            jsonPath(
+                    "$.components.schemas.ProductCategoryResponse.properties.compatibleParts.items.example")
+                .doesNotExist());
   }
 
   /** Swagger UI 의 그룹 이름이 한국어로 통일돼 있어야 한다(기본값 user-controller 같은 영문 이름이 남으면 안 된다). */
