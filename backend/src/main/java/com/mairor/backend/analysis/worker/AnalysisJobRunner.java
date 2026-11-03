@@ -71,6 +71,7 @@ public class AnalysisJobRunner {
     long started = System.nanoTime();
     log.info("분석 시작 jobId={} youtubeVideoId={}", context.jobId(), context.youtubeVideoId());
     ProgressStage current = ProgressStage.QUEUED;
+    boolean finishesLater = false;
     try {
       Files.createDirectories(context.workDir());
       for (ProgressStage stage : STAGE_ORDER) {
@@ -83,14 +84,23 @@ public class AnalysisJobRunner {
         store.advance(context.jobId(), stage);
         long stageStarted = System.nanoTime();
         handler.run(context);
+        finishesLater = handler.finishesLater();
         log.info(
             "분석 단계 완료 jobId={} stage={} elapsedMs={}",
             context.jobId(),
             stage,
             millisSince(stageStarted));
       }
-      store.complete(context.jobId());
-      log.info("분석 완료 jobId={} elapsedMs={}", context.jobId(), millisSince(started));
+      if (finishesLater) {
+        log.info(
+            "AI 결과 대기 jobId={} stage={} elapsedMs={}",
+            context.jobId(),
+            current,
+            millisSince(started));
+      } else {
+        store.complete(context.jobId());
+        log.info("분석 완료 jobId={} elapsedMs={}", context.jobId(), millisSince(started));
+      }
     } catch (AnalysisStepException e) {
       log.warn(
           "분석 실패 jobId={} stage={} code={} message={}",

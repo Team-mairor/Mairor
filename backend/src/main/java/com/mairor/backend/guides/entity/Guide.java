@@ -157,6 +157,50 @@ public class Guide {
   }
 
   /** 같은 작업을 다시 돌려(멈춘 뒤 대기열로 되돌림) 단계를 새로 뽑았을 때 입력을 바꾼다. 설명·영역은 아직 없다. */
+  /**
+   * AI 콜백의 쉬운 설명·가이드 영역을 저장하고 검수를 기다린다(NOT_READY → PENDING).
+   *
+   * @param explanation 콜백 {@code guide} JSON
+   * @param area 콜백 {@code area} JSON. 프레임 없이 맡긴 작업이면 null
+   * @param meshVersion {@code area.meshVersion}. 영역이 없으면 null
+   */
+  public void recordAiResult(String explanation, String area, String meshVersion) {
+    this.explanation = Objects.requireNonNull(explanation, "explanation");
+    this.area = area;
+    this.meshVersion = meshVersion;
+    this.reviewStatus = ReviewStatus.PENDING;
+  }
+
+  /** 검수 승인. PENDING 일 때만. 같은 영상의 이전 공개 판은 호출하는 쪽이 먼저 내린다(공개 하나). */
+  public void approve(Instant now) {
+    requirePending("승인");
+    this.reviewStatus = ReviewStatus.APPROVED;
+    this.reviewedAt = Objects.requireNonNull(now, "now");
+  }
+
+  /** 검수 반려. PENDING 일 때만. */
+  public void reject(Instant now) {
+    requirePending("반려");
+    this.reviewStatus = ReviewStatus.REJECTED;
+    this.reviewedAt = Objects.requireNonNull(now, "now");
+  }
+
+  /** 새 판이 승인되어 공개에서 내려간다(APPROVED → REJECTED). */
+  public void supersede(Instant now) {
+    if (reviewStatus != ReviewStatus.APPROVED) {
+      throw new IllegalStateException("공개 가이드만 내릴 수 있습니다: " + id + " " + reviewStatus);
+    }
+    this.reviewStatus = ReviewStatus.REJECTED;
+    this.reviewedAt = Objects.requireNonNull(now, "now");
+  }
+
+  private void requirePending(String action) {
+    if (reviewStatus != ReviewStatus.PENDING) {
+      throw new IllegalStateException(
+          "가이드 " + id + " 은 " + reviewStatus + " 상태라 " + action + " 할 수 없습니다.");
+    }
+  }
+
   /** 프레임 목록({@code frames.json})의 저장소 키. */
   public void useFramesManifest(String key) {
     this.framesManifestKey = Objects.requireNonNull(key, "key");

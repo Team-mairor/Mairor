@@ -19,6 +19,14 @@ public enum AnalysisFailureCode {
   LLM_INVALID_RESPONSE(true, "영상 분석 모델의 답을 쓸 수 없습니다."),
   /** ffmpeg 로 프레임을 뽑지 못했다(실행 실패·시간 초과·장수 불일치). 같은 파일이면 같은 결과다. */
   FRAME_EXTRACTION_FAILED(false, "영상에서 프레임을 뽑지 못했습니다."),
+  /** AI 서버에 가이드 생성을 맡기지 못했다(연결 실패, 5xx, 형식 거절). */
+  AI_UNAVAILABLE(true, "가이드 생성 서버에 요청하지 못했습니다."),
+  /** AI 서버가 쉬운 설명을 만들지 못했다(콜백 {@code GENERATION_FAILED}). */
+  AI_GENERATION_FAILED(true, "가이드 설명을 만들지 못했습니다."),
+  /** AI 서버의 예기치 않은 오류(콜백 {@code INTERNAL_ERROR}). */
+  AI_INTERNAL_ERROR(true, "가이드 생성 중 예기치 않은 오류가 발생했습니다."),
+  /** AI 콜백이 오지 않았다(AI 재시작으로 작업이 사라졌거나 너무 오래 걸림). */
+  ANALYSIS_TIMEOUT(true, "분석 시간이 초과되었습니다."),
   /** 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모든 단계가 틀림). API 명세 VIDEO-002. */
   NO_VALID_STEPS(false, "영상에서 따라 할 수 있는 메이크업 단계를 찾지 못했습니다."),
   /** 예기치 않은 오류. */

@@ -21,13 +21,15 @@ public record AnalysisJobView(
     Instant createdAt,
     Instant startedAt,
     Instant finishedAt,
-    Source source) {
+    Source source,
+    String aiJobId,
+    UUID guideId) {
 
   /** 분석에 쓴 영상 파일. ffprobe 전에는 키만 있다. */
   public record Source(
       String objectKey, Integer width, Integer height, Double fps, Double durationSeconds) {}
 
-  static AnalysisJobView of(AnalysisJob job) {
+  static AnalysisJobView of(AnalysisJob job, UUID guideId) {
     Video video = job.getVideo();
     return new AnalysisJobView(
         job.getId(),
@@ -47,6 +49,8 @@ public record AnalysisJobView(
             video.getSourceWidth(),
             video.getSourceHeight(),
             video.getSourceFps(),
-            video.getSourceDurationSeconds()));
+            video.getSourceDurationSeconds()),
+        job.getAiJobId(),
+        guideId);
   }
 }

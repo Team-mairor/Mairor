@@ -30,3 +30,7 @@ app:
   analysis:
     worker:
       work-dir: ${ANALYSIS_WORK_DIR:/tmp/mairor-analysis}
+  ai:
+    # 운영 compose: ai·api·worker 가 core 네트워크. api 는 api-a·api-b 둘 다 별칭 api
+    base-url: ${AI_BASE_URL:http://ai:8000}
+    callback-base-url: ${AI_CALLBACK_BASE_URL:http://api:8080/api}

@@ -191,6 +191,14 @@ app:
       ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
       ffmpeg-timeout: 30m
       upload-concurrency: 8
+  ai:
+    # AI 서버 가이드 생성(BUILDING_GUIDE · 콜백). 운영은 core 네트워크의 ai:8000, 콜백은 nginx 를 거치지 않는 api:8080
+    base-url: ${AI_BASE_URL:http://localhost:8000}
+    callback-base-url: ${AI_CALLBACK_BASE_URL:http://localhost:8080/api}
+    # 프레임 사전 서명 URL 만료, 콜백을 기다리는 시간(지나면 AI 에 묻는다), 확인 간격(worker)
+    frame-url-ttl: 24h
+    callback-timeout: ${AI_CALLBACK_TIMEOUT:60m}
+    watch-interval: 60s
   llm:
     gemini:
       # 단계 추출(worker). GMS 와 Google 직접은 요청 형식이 같아 주소·키만 바꾼다

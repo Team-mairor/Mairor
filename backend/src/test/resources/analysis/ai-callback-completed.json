@@ -1,0 +1,568 @@
+{
+  "jobId": "8728c83b0d124c74a23863a50d4d7c0c",
+  "videoId": "eFzG30avtOI",
+  "status": "COMPLETED",
+  "guide": {
+    "steps": [
+      {
+        "stepId": "s1",
+        "order": 1,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s2",
+        "order": 2,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s3",
+        "order": 3,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s4",
+        "order": 4,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s5",
+        "order": 5,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s6",
+        "order": 6,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s7",
+        "order": 7,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s8",
+        "order": 8,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s9",
+        "order": 9,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s10",
+        "order": 10,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s11",
+        "order": 11,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s12",
+        "order": 12,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s13",
+        "order": 13,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s14",
+        "order": 14,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s15",
+        "order": 15,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s16",
+        "order": 16,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s17",
+        "order": 17,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s18",
+        "order": 18,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      },
+      {
+        "stepId": "s19",
+        "order": 19,
+        "actions": [
+          {
+            "text": "브러시로 가볍게 펴 발라요.",
+            "tip": null
+          }
+        ],
+        "doneWhen": null
+      }
+    ]
+  },
+  "area": {
+    "videoId": "eFzG30avtOI",
+    "meshVersion": "v1",
+    "steps": [
+      {
+        "stepId": "s1",
+        "order": 1,
+        "makeup": "other",
+        "subSteps": [
+          {
+            "subStepId": "s1-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s2",
+        "order": 2,
+        "makeup": "other",
+        "subSteps": [
+          {
+            "subStepId": "s2-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s3",
+        "order": 3,
+        "makeup": "other",
+        "subSteps": [
+          {
+            "subStepId": "s3-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s4",
+        "order": 4,
+        "makeup": "other",
+        "subSteps": [
+          {
+            "subStepId": "s4-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s5",
+        "order": 5,
+        "makeup": "foundation",
+        "subSteps": [
+          {
+            "subStepId": "s5-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "foundation",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s6",
+        "order": 6,
+        "makeup": "other",
+        "subSteps": [
+          {
+            "subStepId": "s6-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s7",
+        "order": 7,
+        "makeup": "blush",
+        "subSteps": [
+          {
+            "subStepId": "s7-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "blush",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s8",
+        "order": 8,
+        "makeup": "other",
+        "subSteps": [
+          {
+            "subStepId": "s8-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s9",
+        "order": 9,
+        "makeup": "blush",
+        "subSteps": [
+          {
+            "subStepId": "s9-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "blush",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s10",
+        "order": 10,
+        "makeup": "eyeshadow",
+        "subSteps": [
+          {
+            "subStepId": "s10-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "eyeshadow",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s11",
+        "order": 11,
+        "makeup": "eyeliner",
+        "subSteps": [
+          {
+            "subStepId": "s11-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "eyeliner",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s12",
+        "order": 12,
+        "makeup": "eyeliner",
+        "subSteps": [
+          {
+            "subStepId": "s12-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "eyeliner",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s13",
+        "order": 13,
+        "makeup": "eyeshadow",
+        "subSteps": [
+          {
+            "subStepId": "s13-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "eyeshadow",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s14",
+        "order": 14,
+        "makeup": "mascara",
+        "subSteps": [
+          {
+            "subStepId": "s14-1",
+            "order": 1,
+            "status": "notApplicable",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s15",
+        "order": 15,
+        "makeup": "contour",
+        "subSteps": [
+          {
+            "subStepId": "s15-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "contour",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s16",
+        "order": 16,
+        "makeup": "highlight",
+        "subSteps": [
+          {
+            "subStepId": "s16-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "highlight",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s17",
+        "order": 17,
+        "makeup": "lip",
+        "subSteps": [
+          {
+            "subStepId": "s17-1",
+            "order": 1,
+            "status": "extracted",
+            "reasons": [],
+            "templateId": null,
+            "guideSets": [
+              {
+                "region": "lipsOuter",
+                "source": "extracted",
+                "guides": [
+                  {
+                    "type": "polygon",
+                    "outline": [
+                      {
+                        "triangle": 37,
+                        "bary": [
+                          0.21,
+                          0.52,
+                          0.27
+                        ]
+                      },
+                      {
+                        "triangle": 39,
+                        "bary": [
+                          0.6,
+                          0.25,
+                          0.15
+                        ]
+                      },
+                      {
+                        "triangle": 267,
+                        "bary": [
+                          0.18,
+                          0.47,
+                          0.35
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "stepId": "s18",
+        "order": 18,
+        "makeup": "lip",
+        "subSteps": [
+          {
+            "subStepId": "s18-1",
+            "order": 1,
+            "status": "template",
+            "reasons": [
+              "noUsableFrame"
+            ],
+            "templateId": "lip",
+            "guideSets": []
+          }
+        ]
+      },
+      {
+        "stepId": "s19",
+        "order": 19,
+        "makeup": "lip",
+        "subSteps": [
+          {
+            "subStepId": "s19-1",
+            "order": 1,
+            "status": "failed",
+            "reasons": [
+              "FRAME_UNREADABLE"
+            ],
+            "templateId": null,
+            "guideSets": []
+          }
+        ]
+      }
+    ]
+  },
+  "error": null
+}

@@ -75,6 +75,12 @@ public class AnalysisJobStore {
     guides.findByAnalysisJobId(jobId).orElseThrow().useFramesManifest(key);
   }
 
+  /** AI 서버에 맡긴 작업 ID 를 적는다. 작업은 콜백이 끝낼 때까지 RUNNING 이다. */
+  @Transactional
+  public void awaitAi(UUID jobId, String aiJobId) {
+    load(jobId).awaitAi(aiJobId);
+  }
+
   @Transactional
   public void advance(UUID jobId, ProgressStage stage) {
     load(jobId).advanceTo(stage);
@@ -104,7 +110,7 @@ public class AnalysisJobStore {
    */
   @Transactional
   public int requeueRunning() {
-    List<AnalysisJob> running = jobs.findByStatus(AnalysisStatus.RUNNING);
+    List<AnalysisJob> running = jobs.findByStatusAndAiJobIdIsNull(AnalysisStatus.RUNNING);
     running.forEach(AnalysisJob::requeueAfterCrash);
     return running.size();
   }

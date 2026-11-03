@@ -4,6 +4,8 @@ import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
+import com.mairor.backend.guides.entity.Guide;
+import com.mairor.backend.guides.repository.GuideRepository;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,10 +24,12 @@ public class AnalysisJobService {
 
   private final AnalysisJobWriter writer;
   private final AnalysisJobRepository jobs;
+  private final GuideRepository guides;
 
-  AnalysisJobService(AnalysisJobWriter writer, AnalysisJobRepository jobs) {
+  AnalysisJobService(AnalysisJobWriter writer, AnalysisJobRepository jobs, GuideRepository guides) {
     this.writer = writer;
     this.jobs = jobs;
+    this.guides = guides;
   }
 
   /**
@@ -56,6 +60,7 @@ public class AnalysisJobService {
   public AnalysisJobView get(UUID jobId) {
     AnalysisJob job =
         jobs.findById(jobId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-    return AnalysisJobView.of(job);
+    UUID guideId = guides.findByAnalysisJobId(jobId).map(Guide::getId).orElse(null);
+    return AnalysisJobView.of(job, guideId);
   }
 }

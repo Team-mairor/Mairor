@@ -17,4 +17,11 @@ public interface AnalysisStepHandler {
    * @throws AnalysisStepException 원인을 분류한 실패
    */
   void run(AnalysisContext context);
+
+  /**
+   * 일을 다른 곳(AI 서버)에 맡기고 결과는 나중에 오는 처리기인지. 그렇다면 실행기는 작업을 COMPLETED 로 바꾸지 않고, 콜백이 끝낸다. 마지막 단계에만 쓴다.
+   */
+  default boolean finishesLater() {
+    return false;
+  }
 }

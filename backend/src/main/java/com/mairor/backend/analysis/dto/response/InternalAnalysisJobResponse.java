@@ -22,7 +22,9 @@ public record InternalAnalysisJobResponse(
     @Schema(description = "접수 시각") Instant createdAt,
     @Schema(description = "worker 가 집은 시각. 대기 중이면 null") Instant startedAt,
     @Schema(description = "끝난 시각. 진행 중이면 null") Instant finishedAt,
-    @Schema(description = "분석에 쓴 영상 파일. 원본 정보는 영상 불러오기 단계 뒤에 채워진다") Source source) {
+    @Schema(description = "분석에 쓴 영상 파일. 원본 정보는 영상 불러오기 단계 뒤에 채워진다") Source source,
+    @Schema(description = "AI 가이드 생성 작업 ID. AI 에 맡기기 전이면 null") String aiJobId,
+    @Schema(description = "이 작업이 만든 가이드 ID(검수용). 단계 추출 전이면 null") UUID guideId) {
 
   public record Source(
       @Schema(description = "저장소 키", example = "videos/VxAXD6PP76I/source.mp4") String objectKey,
@@ -46,6 +48,8 @@ public record InternalAnalysisJobResponse(
         view.createdAt(),
         view.startedAt(),
         view.finishedAt(),
-        new Source(s.objectKey(), s.width(), s.height(), s.fps(), s.durationSeconds()));
+        new Source(s.objectKey(), s.width(), s.height(), s.fps(), s.durationSeconds()),
+        view.aiJobId(),
+        view.guideId());
   }
 }

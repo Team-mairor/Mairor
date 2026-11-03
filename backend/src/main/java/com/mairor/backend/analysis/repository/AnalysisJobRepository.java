@@ -2,12 +2,16 @@ package com.mairor.backend.analysis.repository;
 
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
+import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> {
 
@@ -30,4 +34,16 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
   Optional<AnalysisJob> lockNextPending();
 
   List<AnalysisJob> findByStatus(AnalysisStatus status);
+
+  /** worker 재시작 때 되돌릴 작업: RUNNING 이면서 AI 에 맡기기 전인 것. */
+  List<AnalysisJob> findByStatusAndAiJobIdIsNull(AnalysisStatus status);
+
+  /** AI 콜백을 기다리는 작업 중 마지막 변경(AI 요청)이 {@code before} 보다 앞선 것. */
+  List<AnalysisJob> findByStatusAndAiJobIdIsNotNullAndUpdatedAtBefore(
+      AnalysisStatus status, Instant before);
+
+  /** 콜백과 시간 초과 감시가 같은 작업을 동시에 끝내지 않게 행을 잠그고 찾는다. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select j from AnalysisJob j where j.aiJobId = :aiJobId")
+  Optional<AnalysisJob> lockByAiJobId(@Param("aiJobId") String aiJobId);
 }

@@ -3,8 +3,10 @@ package com.mairor.backend.analysis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.mairor.backend.analysis.dto.request.AiGuideJobCallbackRequest;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.entity.ProgressStage;
@@ -13,6 +15,7 @@ import com.mairor.backend.analysis.frames.FrameExtractionException;
 import com.mairor.backend.analysis.frames.FrameExtractor;
 import com.mairor.backend.analysis.frames.FramePlan;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
+import com.mairor.backend.analysis.service.AiResultService;
 import com.mairor.backend.analysis.service.AnalysisJobReceipt;
 import com.mairor.backend.analysis.service.AnalysisJobRequest;
 import com.mairor.backend.analysis.service.AnalysisJobService;
@@ -22,6 +25,8 @@ import com.mairor.backend.analysis.worker.AnalysisJobStore;
 import com.mairor.backend.analysis.worker.Ffprobe;
 import com.mairor.backend.analysis.worker.FfprobeException;
 import com.mairor.backend.analysis.worker.VideoProbe;
+import com.mairor.backend.common.external.ai.AiGuideJobClient;
+import com.mairor.backend.common.external.ai.AiServerException;
 import com.mairor.backend.common.external.llm.LlmClient;
 import com.mairor.backend.common.external.llm.LlmException;
 import com.mairor.backend.common.external.llm.LlmResult;
@@ -38,8 +43,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * 작업 접수 → worker 실행의 흐름. 실제 DB(스키마 SQL)와 로컬 저장소를 쓰고 ffprobe · Gemini(LlmClient) · ffmpeg 추출기만 가짜로
@@ -58,6 +65,27 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
   @MockitoBean private Ffprobe ffprobe;
   @MockitoBean private LlmClient llm;
   @MockitoBean private FrameExtractor frameExtractor;
+  @MockitoBean private AiGuideJobClient ai;
+  @Autowired private AiResultService aiResults;
+
+  /** 가짜 AI 서버: 요청을 받으면 작업 ID 를 돌려준다(영상마다 다르게). */
+  private void aiAccepts() {
+    doAnswer(call -> "ai-" + UUID.randomUUID()).when(ai).submit(any());
+  }
+
+  /** AI 콜백이 온 것처럼 결과를 반영한다. */
+  private void aiCompletes(UUID jobId) {
+    String aiJobId = jobs.findById(jobId).orElseThrow().getAiJobId();
+    var json = JsonMapper.builder().build();
+    aiResults.apply(
+        new AiGuideJobCallbackRequest(
+            aiJobId,
+            "VxAXD6PP76I",
+            "COMPLETED",
+            json.readTree("{\"steps\": [{\"stepId\": \"s1\", \"order\": 1, \"actions\": []}]}"),
+            null,
+            null));
+  }
 
   /** 가짜 추출기: 계획의 후보만큼 작은 파일을 만든다(ffmpeg 가 다 뽑은 것처럼). */
   private void framesExtractNormally() {
@@ -101,14 +129,31 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     when(ffprobe.probe(any())).thenReturn(PROBE);
     when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
     framesExtractNormally();
+    aiAccepts();
     AnalysisJobReceipt receipt = service.register(request("VxAXD6PP76I"));
 
     assertThat(runner.runNext()).isTrue();
 
     AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getStatus()).as("AI 콜백을 기다린다").isEqualTo(AnalysisStatus.RUNNING);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.BUILDING_GUIDE);
+    assertThat(job.getAiJobId()).startsWith("ai-");
+    assertThat(job.getStartedAt()).isNotNull();
+    assertThat(store.requeueRunning()).as("AI 를 기다리는 작업은 재시작 때 되돌리지 않는다").isZero();
+
+    ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
+    verify(ai).submit(body.capture());
+    assertThat(GuideJobSchemas.requestViolations(body.getValue())).isEmpty();
+    assertThat(body.getValue())
+        .contains(
+            "\"callbackUrl\":\"http://localhost:8080/api/v1/internal/ai/guide-jobs/callback\"")
+        .contains("\"frames\":{\"source\":{\"width\":1920,\"height\":1080,\"fps\":60.0}")
+        .contains("\"frameIndex\":38400,\"timestampMs\":640000,\"stepId\":\"s1\",\"url\":\"file:");
+
+    aiCompletes(receipt.jobId());
+    job = jobs.findById(receipt.jobId()).orElseThrow();
     assertThat(job.getStatus()).isEqualTo(AnalysisStatus.COMPLETED);
     assertThat(job.getProgressStage()).isEqualTo(ProgressStage.DONE);
-    assertThat(job.getStartedAt()).isNotNull();
     var video = videos.findByYoutubeVideoId("VxAXD6PP76I").orElseThrow();
     assertThat(video.getSourceWidth()).isEqualTo(1920);
     assertThat(video.getSourceFps()).isEqualTo(60.0);
@@ -134,7 +179,8 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
                 "select review_status || ':' || version from guides where analysis_job_id = ?",
                 String.class,
                 receipt.jobId()))
-        .isEqualTo("NOT_READY:1");
+        .as("AI 콜백 뒤 검수 대기")
+        .isEqualTo("PENDING:1");
     assertThat(
             jdbc.queryForObject(
                 "select provider || ':' || status || ':' || input_tokens || ':' || purpose"
@@ -159,6 +205,25 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
         .as("10:40(640초) 단계 시작 = 38400번 프레임")
         .contains("{\"frameIndex\":38400,\"timestampMs\":640000,\"stepId\":\"s1\"");
     assertThat(STORAGE_ROOT.resolve("videos/VxAXD6PP76I/frames/038400.jpg")).exists();
+  }
+
+  @Test
+  void aiServerThatDoesNotAcceptFailsAsRetryable() {
+    putObject("videos/aiIsDown01/source.mp4");
+    when(ffprobe.probe(any())).thenReturn(PROBE);
+    when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
+    framesExtractNormally();
+    when(ai.submit(any())).thenThrow(new AiServerException("AI 서버에 연결하지 못했습니다", null, null));
+    AnalysisJobReceipt receipt = service.register(request("aiIsDown01"));
+
+    runner.runNext();
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.FAILED);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.BUILDING_GUIDE);
+    assertThat(job.getFailureCode()).isEqualTo("AI_UNAVAILABLE");
+    assertThat(job.isRetryable()).isTrue();
+    assertThat(job.getAiJobId()).isNull();
   }
 
   @Test
@@ -251,8 +316,10 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     when(ffprobe.probe(any())).thenReturn(PROBE);
     when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
     framesExtractNormally();
-    service.register(request("twiceVideo1"));
+    aiAccepts();
+    AnalysisJobReceipt first = service.register(request("twiceVideo1"));
     runner.runNext();
+    aiCompletes(first.jobId());
     AnalysisJobReceipt second = service.register(request("twiceVideo1"));
 
     runner.runNext();
@@ -271,6 +338,7 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     when(ffprobe.probe(any())).thenReturn(PROBE);
     when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
     framesExtractNormally();
+    aiAccepts();
     AnalysisJobReceipt receipt = service.register(request("rerunVideo1"));
     runner.runNext();
 

@@ -23,6 +23,8 @@ import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
 import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.session.web.http.CookieSerializer;
@@ -140,6 +142,17 @@ public class SecurityConfig {
   static final RequestMatcher INTERNAL =
       PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/**");
 
+  /**
+   * AI 서버 콜백. AI 는 인증 헤더를 붙이지 못해 공유 토큰 검사에서 뺀다. 대신 nginx 가 바깥에서 이 경로를 막고({@code
+   * frontend/nginx/api.conf}), AI 는 내부망으로 api 에 바로 붙는다.
+   */
+  static final RequestMatcher AI_CALLBACK =
+      PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/ai/**");
+
+  /** 공유 토큰을 요구하는 내부 API(운영자 명령). */
+  static final RequestMatcher INTERNAL_TOKEN_REQUIRED =
+      new AndRequestMatcher(INTERNAL, new NegatedRequestMatcher(AI_CALLBACK));
+
   /** 인증 없이 열려 있는 경로 전체. 인가 규칙과 {@link SessionLifetimeFilter}(만료된 세션이어도 이 경로는 막지 않는다)가 같은 목록을 쓴다. */
   private static final RequestMatcher PERMIT_ALL =
       new OrRequestMatcher(
@@ -192,7 +205,7 @@ public class SecurityConfig {
             CsrfFilter.class)
         // 내부 API 는 CSRF 대신 공유 토큰으로 막는다. 세션을 읽기 전에 거절한다
         .addFilterBefore(
-            new InternalTokenFilter(INTERNAL, internalApiProperties, errorWriter),
+            new InternalTokenFilter(INTERNAL_TOKEN_REQUIRED, internalApiProperties, errorWriter),
             SecurityContextHolderFilter.class)
         // 세션을 읽은 뒤(SecurityContextHolderFilter), CSRF 검사 전에 절대 만료를 판단하고 쿠키를 갱신한다
         .addFilterAfter(

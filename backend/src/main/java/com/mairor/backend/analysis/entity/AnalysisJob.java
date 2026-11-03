@@ -155,6 +155,21 @@ public class AnalysisJob {
     this.finishedAt = Objects.requireNonNull(now, "now");
   }
 
+  /**
+   * AI 서버에 가이드 생성을 맡겼다. 작업은 RUNNING 으로 남아 콜백(또는 시간 초과 감시)이 끝낸다. RUNNING 일 때만.
+   *
+   * @param aiJobId AI 서버가 돌려준 작업 ID. 콜백을 이 값으로 찾는다
+   */
+  public void awaitAi(String aiJobId) {
+    requireStatus(AnalysisStatus.RUNNING, "AI 요청 기록");
+    this.aiJobId = Objects.requireNonNull(aiJobId, "aiJobId");
+  }
+
+  /** AI 콜백을 기다리는 중인지. worker 재시작 때 대기열로 되돌리지 않는다(AI 에서는 아직 돌고 있을 수 있다). */
+  public boolean isAwaitingAi() {
+    return status == AnalysisStatus.RUNNING && aiJobId != null;
+  }
+
   /** worker 가 처리 중에 죽었다. 다시 기동할 때 대기열로 돌린다. RUNNING 일 때만. */
   public void requeueAfterCrash() {
     requireStatus(AnalysisStatus.RUNNING, "재시작 복구");

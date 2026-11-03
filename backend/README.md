@@ -91,6 +91,8 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지운다 |
 | `FFPROBE_PATH` | `ffprobe` | ffprobe 실행 파일. 운영 이미지에는 들어 있다. 로컬에서 worker 를 돌리려면 ffmpeg 를 설치한다 |
 | `FFMPEG_PATH` | `ffmpeg` | 프레임 추출(SEGMENTING)의 ffmpeg. 운영 이미지에는 들어 있다. 추출 시간 제한(30분)·동시 업로드 수(8)는 `app.analysis.worker` 기본값 |
+| `AI_BASE_URL` · `AI_CALLBACK_BASE_URL` | 로컬 `http://localhost:8000` · `http://localhost:8080/api` / 운영 `http://ai:8000` · `http://api:8080/api` | AI 서버 주소와 AI 가 콜백을 보낼 BE 주소(context-path 포함). 운영은 `core` 네트워크로 nginx 를 거치지 않는다 |
+| `AI_CALLBACK_TIMEOUT` | `60m` | AI 콜백을 기다리는 시간. 지나면 worker 가 AI 에 상태를 묻고, 작업이 없거나 두 배가 지나면 `ANALYSIS_TIMEOUT` |
 | `GEMINI_API_KEY` | (없음) | 단계 추출(worker)의 Gemini 키. **비우면 단계 추출이 `LLM_UNAVAILABLE` 로 실패한다**(앱은 뜬다). 코드·문서에 적지 않는다 |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | Google 직접. GMS 는 `https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com`. 요청 형식이 같아 주소·키만 바꾼다 |
 | `GEMINI_API_KEY_HEADER` · `GEMINI_MODEL` | `x-goog-api-key` · `gemini-2.5-flash` | 키를 싣는 헤더, 모델 |
@@ -350,7 +352,9 @@ worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED �
    └─ 단계 처리기를 차례로: LOADING_VIDEO(내려받기 + ffprobe → videos.source_*)
         → EXTRACTING_STEPS(Gemini 에 유튜브 URL → 단계 목록 → 가이드 입력 v2 → guides.guide_input, llm_calls)
         → SEGMENTING(단계 구간을 따라 프레임 JPEG → 저장소, frames.json → guides.frames_manifest_key)
-        → (다음 티켓의 단계들) → COMPLETED
+        → BUILDING_GUIDE(AI 서버에 가이드 생성 요청: 가이드 입력 + 프레임 사전 서명 URL → ai_job_id, 작업은 RUNNING 으로 대기)
+ai ── POST api:8080/api/v1/internal/ai/guide-jobs/callback ──▶ guides.explanation·area·mesh_version, 검수 PENDING, 작업 COMPLETED
+운영자 ── POST /api/v1/internal/guides/{guideId}/review {APPROVED} ──▶ 이 영상의 공개 가이드
       실패하면 멈춘 단계에서 FAILED + failureCode·retryable
 ```
 
@@ -380,6 +384,9 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 | `LLM_UNAVAILABLE` | Gemini 를 부르지 못했다(키 없음·거절, 429·5xx·시간 초과를 재시도까지 다 씀). `llm_calls.error_code` 에 종류·HTTP 상태 | 예 |
 | `LLM_INVALID_RESPONSE` | Gemini 답을 쓸 수 없다(JSON 아님·잘림·차단) | 예 |
 | `NO_VALID_STEPS` | 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모두 틀림) | 아니오 |
+| `AI_UNAVAILABLE` | AI 서버에 가이드 생성을 맡기지 못했다(연결 실패·5xx 재시도까지, 400 형식 거절) | 예 |
+| `AI_GENERATION_FAILED` · `AI_INTERNAL_ERROR` | AI 콜백이 FAILED(`GENERATION_FAILED` · 그 밖). `failureMessage` 는 AI 의 `error.message` | 예 |
+| `ANALYSIS_TIMEOUT` | AI 콜백이 오지 않았다(AI 재시작으로 작업이 사라짐, 너무 오래 걸림) | 예 |
 | `FRAME_EXTRACTION_FAILED` | ffmpeg 가 프레임을 뽑지 못했다(실행 실패·시간 초과·장수가 계획과 다름). 프레임 업로드 실패는 `STORAGE_UNAVAILABLE` | 아니오 |
 | `INTERNAL_ERROR` | 예기치 않은 오류(서버 로그에 `분석 중 예기치 않은 오류 jobId=…`) | 예 |
 
@@ -399,6 +406,24 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 - 저장 위치: 그림 `videos/<youtubeVideoId>/frames/<frameIndex 6자리>.jpg`(같은 영상이면 같은 그림이라 다시 분석해도 덮어씀), 목록 `videos/<youtubeVideoId>/jobs/<jobId>/frames.json`(단계가 작업마다 달라 작업별). 가이드의 `frames_manifest_key` 에 목록 키를 적는다.
 - `frames.json` 은 현수 요청 칸(`source{width,height,fps}`, `items[]{frameIndex, timestampMs, stepId, …, width, height}`)에 `url` 대신 저장소 `key` 를 둔다. AI 요청을 보낼 때(-311) `ObjectStorage.presignGet` 으로 URL 을 만든다. 운영 EC2 는 역할의 임시 자격 증명으로 서명하므로 URL 이 요청한 시간보다 일찍 끝날 수 있다(받는 쪽이 바로 내려받는다).
 - 레퍼런스(31분 · 1080p60) 로컬 실측: 7,765장 · 745 MB · ffmpeg 43초.
+
+**AI 가이드 생성 · 검수** (S15P31A306-311, 형식은 `docs/references/ai-api.md`)
+
+- worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, guideInput, frames}` 를 보내고 AI 작업 ID 를 `analysis_jobs.ai_job_id` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다. 진행 알림(`progressUrl`)은 1차 MVP 에서 보내지 않는다.
+- 프레임 URL 은 저장소 키로 그때 사전 서명한다(24시간, 운영은 역할 자격 증명이라 더 일찍 끝날 수 있음).
+- **콜백 `POST /api/v1/internal/ai/guide-jobs/callback` 은 공유 토큰을 받지 않는다**(AI 가 헤더를 못 붙임). 대신 `frontend/nginx/api.conf` 가 바깥에서 `/api/v1/internal/ai/` 를 404 로 막고, AI 는 `core` 망으로 `api:8080` 에 바로 붙는다. 이 줄이 빠지면 `NginxInternalRouteTest` 가 실패한다.
+- 같은 작업의 콜백이 다시 오면(AI 재전송) 바꾸지 않고 204. 모르는 AI 작업은 404, 필수 칸이 없으면 400(AI 는 다시 보내지 않는다).
+- 콜백이 `AI_CALLBACK_TIMEOUT` 안에 오지 않으면 worker 가 1분마다 AI 에 상태를 묻는다: 끝났으면 콜백처럼 반영, AI 에 작업이 없으면(재시작·만료) 또는 두 배가 지나면 `ANALYSIS_TIMEOUT`.
+- 검수(운영자, 공유 토큰):
+
+```bash
+# 작업 → guideId
+curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
+# 가이드 입력·쉬운 설명·영역 보기
+curl https://mairor.co.kr/api/v1/internal/guides/<guideId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
+# 승인(또는 REJECTED). 검수 대기(PENDING)만 되고, 승인하면 같은 영상의 이전 공개 판은 REJECTED 로 내려간다
+curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-Internal-Token: $INTERNAL_API_TOKEN"   -H "Content-Type: application/json" -d '{"decision":"APPROVED"}'
+```
 
 **worker**
 
