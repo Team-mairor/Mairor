@@ -75,13 +75,6 @@ function anchorTools(mesh: FaceMesh) {
 // 선이 흰자 위로 내려간다.
 const WING_LENGTH = 0.15; // 눈 너비 대비
 
-// 블러셔 영역: 볼 영역 위쪽 점과 50(280). 볼 아래쪽까지 칠하면 처져 보인다.
-// 미리보기 블러셔 마스크(픽스처 생성 스크립트)도 이 점을 쓴다
-export const BLUSH_POINTS = {
-  right: [123, 116, 117, 118, 101, 50],
-  left: [352, 345, 346, 347, 330, 280],
-};
-
 // 윗눈꺼풀 점 (안쪽 1/3 → 눈꼬리 직전). 눈꼬리 점은 아래로 꺾여 있어 건너뛴다
 const EYELINER = {
   right: {
@@ -272,13 +265,13 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       ],
     },
     {
-      // 광대 위쪽 (BLUSH_POINTS)
+      // 볼 영역 전체. 볼 위쪽 점만 쓰면 실제 바른 곳을 일부만 덮는다
       stepId: "blush",
-      title: "블러셔: 광대 위쪽에 볼 앞에서 광대 쪽으로 둥글게 펴요",
+      title: "블러셔: 볼 앞에서 광대 쪽으로 둥글게 펴요",
       regions: ["rightCheek", "leftCheek"],
       guides: [
-        outline(BLUSH_POINTS.right),
-        outline(BLUSH_POINTS.left),
+        outline(regions.rightCheek.indices),
+        outline(regions.leftCheek.indices),
         point(between(101, 50)),
         arrow(between(101, 50), between(123, 117, 0.3)),
         point(between(330, 280)),

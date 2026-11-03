@@ -201,7 +201,7 @@
     },
     {
       "stepId": "blush",
-      "title": "블러셔: 광대 위쪽에 볼 앞에서 광대 쪽으로 둥글게 펴요",
+      "title": "블러셔: 볼 앞에서 광대 쪽으로 둥글게 펴요",
       "regions": [
         "rightCheek"
       ],
@@ -250,7 +250,31 @@
               ]
             },
             {
-              "triangle": 43,
+              "triangle": 147,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 127,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 127,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 389,
               "bary": [
                 1,
                 0,

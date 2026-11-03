@@ -13,7 +13,7 @@ if (major < 22 || (major === 22 && minor < 18)) {
 }
 const { crc32, deflateSync } = await import("node:zlib");
 const { REGIONS } = await import("../src/features/face/regions.ts");
-const { buildDefaultGuideSet, eyelinerPaths, BLUSH_POINTS } =
+const { buildDefaultGuideSet, eyelinerPaths } =
   await import("../src/features/guide/default-guides.ts");
 // 추적기와 같은 판정 기준을 그대로 쓴다. 값을 바꾸면 픽스처를 다시 생성한다.
 const { MIN_IN_FRAME_RATIO } = await import("../src/features/face/visibility.ts");
@@ -279,12 +279,15 @@ function writePng(path, values) {
   writePng("layers/masks/eyeshadow.png", soft);
 }
 
-// 블러셔: 튜토리얼 블러셔 가이드와 같은 점(광대 위쪽)을 넓게 흐린다.
+// 블러셔: 튜토리얼 가이드와 같은 볼 영역 전체를 크게 흐려, 경계 없이 바깥으로 옅어지게 한다.
 {
-  const { mask } = polygonMask([BLUSH_POINTS.right, BLUSH_POINTS.left]);
+  const { mask } = polygonMask([REGIONS.rightCheek.indices, REGIONS.leftCheek.indices]);
   writePng(
     "layers/masks/blush.png",
-    blur(mask, 10).map((v) => Math.min(1, v * 1.4)),
+    blur(mask, 24).map((v) => {
+      const t = Math.min(1, v * 1.2);
+      return t * t * (3 - 2 * t);
+    }),
   );
 }
 
@@ -349,7 +352,7 @@ const layers = {
     shape: "uvMask",
     uvMask: "masks/blush.png",
     color: "#F4A6A6",
-    opacity: 0.35,
+    opacity: 0.15,
     blend: "multiply",
     ...base,
   },

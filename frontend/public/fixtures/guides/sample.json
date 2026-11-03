@@ -850,7 +850,7 @@
     },
     {
       "stepId": "blush",
-      "title": "블러셔: 광대 위쪽에 볼 앞에서 광대 쪽으로 둥글게 펴요",
+      "title": "블러셔: 볼 앞에서 광대 쪽으로 둥글게 펴요",
       "regions": [
         "rightCheek",
         "leftCheek"
@@ -900,7 +900,31 @@
               ]
             },
             {
-              "triangle": 43,
+              "triangle": 147,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 127,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 127,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 389,
               "bary": [
                 1,
                 0,
@@ -913,19 +937,19 @@
           "type": "polygon",
           "outline": [
             {
-              "triangle": 270,
-              "bary": [
-                1,
-                0,
-                0
-              ]
-            },
-            {
-              "triangle": 266,
+              "triangle": 42,
               "bary": [
                 0,
                 0,
                 1
+              ]
+            },
+            {
+              "triangle": 42,
+              "bary": [
+                0,
+                1,
+                0
               ]
             },
             {
@@ -937,15 +961,7 @@
               ]
             },
             {
-              "triangle": 42,
-              "bary": [
-                0,
-                1,
-                0
-              ]
-            },
-            {
-              "triangle": 42,
+              "triangle": 266,
               "bary": [
                 0,
                 0,
@@ -953,10 +969,42 @@
               ]
             },
             {
-              "triangle": 42,
+              "triangle": 270,
               "bary": [
                 1,
                 0,
+                0
+              ]
+            },
+            {
+              "triangle": 388,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 126,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 126,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 146,
+              "bary": [
+                0,
+                1,
                 0
               ]
             }
