@@ -13,13 +13,16 @@ export function useQuery() {
   useEffect(() => {
     const read = () => setSearch(window.location.search);
     read();
+    // Next.js는 useInsertionEffect 안에서 주소를 바꾸고 그때 currententrychange가 바로 불린다.
+    // 거기서 상태를 바꾸면 React 오류라 렌더가 끝난 뒤에 읽는다
+    const readLater = () => queueMicrotask(read);
     // Navigation API는 TS 기본 타입에 아직 없다. 없는 브라우저에서는 popstate(뒤로·앞으로)만 따라간다
     const nav = (window as { navigation?: EventTarget }).navigation;
-    nav?.addEventListener("currententrychange", read);
-    window.addEventListener("popstate", read);
+    nav?.addEventListener("currententrychange", readLater);
+    window.addEventListener("popstate", readLater);
     return () => {
-      nav?.removeEventListener("currententrychange", read);
-      window.removeEventListener("popstate", read);
+      nav?.removeEventListener("currententrychange", readLater);
+      window.removeEventListener("popstate", readLater);
     };
   }, []);
   return useMemo(() => (search === null ? null : new URLSearchParams(search)), [search]);
