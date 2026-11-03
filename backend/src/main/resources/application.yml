@@ -187,3 +187,12 @@ app:
       work-dir: ${ANALYSIS_WORK_DIR:${java.io.tmpdir}/mairor-analysis}
       ffprobe-path: ${FFPROBE_PATH:ffprobe}
       ffprobe-timeout: 60s
+  llm:
+    gemini:
+      # 단계 추출(worker). GMS 와 Google 직접은 요청 형식이 같아 주소·키만 바꾼다
+      # GMS: https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com / Google 직접: 기본값
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+      # 비우면 단계 추출이 LLM_UNAVAILABLE 로 실패한다(앱은 뜬다)
+      api-key: ${GEMINI_API_KEY:}
+      api-key-header: ${GEMINI_API_KEY_HEADER:x-goog-api-key}
+      model: ${GEMINI_MODEL:gemini-2.5-flash}

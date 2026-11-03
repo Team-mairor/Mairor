@@ -1,0 +1,688 @@
+{
+  "steps": [
+    {
+      "order": 1,
+      "makeup": "other",
+      "partLabel": "스킨케어",
+      "startTime": "00:15",
+      "endTime": "01:04",
+      "summary": "얼굴에 스킨케어 패드를 붙이고 전체적으로 닦아준다.",
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "머리 말리는 동안 5~10분 정도 붙여두면 얼굴이 쩍쩍 갈라지는 것을 방지하고 화장이 잘 먹게 수분을 채워준다.",
+            "source": "voice",
+            "at": "00:29"
+          },
+          {
+            "value": "피부가 얇아서 빨개져도 너무 신경 쓰지 않아도 된다.",
+            "source": "voice",
+            "at": "00:54"
+          }
+        ],
+        "tool": {
+          "value": "스킨케어 패드",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "스킨1004",
+        "name": "마다가스카르 센텔라 퀵 카밍패드",
+        "shade": null,
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 2,
+      "makeup": "other",
+      "partLabel": "스킨케어",
+      "startTime": "01:15",
+      "endTime": "01:29",
+      "summary": "토너를 손에 덜어 얼굴에 흡토한다.",
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "다음 단계로 넘어가기 전에 90% 정도 흡수시킨 후 넘어간다.",
+            "source": "voice",
+            "at": "01:11"
+          },
+          {
+            "value": "건조하다고 크림을 많이 바르기보다 묽은 제형을 여러 번 발라 수분을 꽉 채운 후 크림은 콩알 딱지만큼만 바른다.",
+            "source": "voice",
+            "at": "01:40"
+          },
+          {
+            "value": "지성 피부는 수분 관리가 중요하다. 수분이 부족하게 되면 피부 보호를 위해 기름이 더 나온다.",
+            "source": "voice",
+            "at": "02:07"
+          }
+        ],
+        "tool": {
+          "value": "손",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "헤브블루",
+        "name": "살몬 케어링 센텔라 토너",
+        "shade": null,
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 3,
+      "makeup": "other",
+      "partLabel": "스킨케어",
+      "startTime": "01:30",
+      "endTime": "02:29",
+      "summary": "앰플을 손에 덜어 얼굴에 흡토한다.",
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
+        "amount": {
+          "value": "두 번 정도 레이어링",
+          "source": "voice",
+          "at": "01:35"
+        },
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "다음 단계로 넘어가기 전에 90% 정도 흡수시킨 후 넘어간다.",
+            "source": "voice",
+            "at": "01:11"
+          },
+          {
+            "value": "건조하다고 크림을 많이 바르기보다 묽은 제형을 여러 번 발라 수분을 꽉 채운 후 크림은 콩알 딱지만큼만 바른다.",
+            "source": "voice",
+            "at": "01:40"
+          },
+          {
+            "value": "지성 피부는 수분 관리가 중요하다. 수분이 부족하게 되면 피부 보호를 위해 기름이 더 나온다.",
+            "source": "voice",
+            "at": "02:07"
+          }
+        ],
+        "tool": {
+          "value": "손",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "엘라쥬",
+        "name": "리얼 히알루로닉 블루 100 앰플",
+        "shade": null,
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 4,
+      "makeup": "other",
+      "partLabel": "선 앰플",
+      "startTime": "02:41",
+      "endTime": "02:56",
+      "summary": "선 앰플을 얼굴에 얇게 코팅하듯이 발라준다.",
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "얇게 코팅시키듯이 발라준다.",
+            "source": "voice",
+            "at": "02:49"
+          }
+        ],
+        "tool": {
+          "value": "손",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "프롬리에",
+        "name": "비건 이지애프 시카 워터 선앰플",
+        "shade": null,
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 5,
+      "makeup": "foundation",
+      "partLabel": "얼굴 전체",
+      "startTime": "03:25",
+      "endTime": "03:36",
+      "summary": "스패출러로 파운데이션을 얹고 퍼프로 두드려준다.",
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": {
+          "value": "폭폭 두드린다",
+          "source": "voice",
+          "at": "03:33"
+        },
+        "tips": [],
+        "tool": {
+          "value": "스패출러, 퍼프",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "바닐라코",
+        "name": "커버리셔스 파워핏 파운데이션",
+        "shade": "19 라이트",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 6,
+      "makeup": "other",
+      "partLabel": "눈가",
+      "startTime": "03:48",
+      "endTime": "04:00",
+      "summary": "퍼프에 컨실러를 묻혀 눈가를 밝혀준다.",
+      "facts": {
+        "area": {
+          "value": "눈가",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "섀도우를 올렸을 때 화사하게 잘 올라간다.",
+            "source": "voice",
+            "at": "03:57"
+          }
+        ],
+        "tool": {
+          "value": "퍼프",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "마루빌츠",
+        "name": "캐머플라지 크림 컨실러",
+        "shade": "19호",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 7,
+      "makeup": "blush",
+      "partLabel": "볼 중앙",
+      "startTime": "04:10",
+      "endTime": "04:26",
+      "summary": "크림 블러셔를 볼 중앙 위주로 얹어준다.",
+      "facts": {
+        "area": {
+          "value": "볼 중앙",
+          "source": "voice",
+          "at": "04:20"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "파우더를 얹으면 연해지므로 과감하게 발라도 괜찮다.",
+            "source": "voice",
+            "at": "04:22"
+          }
+        ],
+        "tool": {
+          "value": "손가락",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "하밍",
+        "name": "젤리 에어 치크",
+        "shade": "02 베리피치",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 8,
+      "makeup": "other",
+      "partLabel": "파우더",
+      "startTime": "04:29",
+      "endTime": "04:35",
+      "summary": "루나 파우더를 얼굴에 발라준다.",
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "얼굴이 뽀얗게 된다.",
+            "source": "voice",
+            "at": "04:32"
+          }
+        ],
+        "tool": {
+          "value": "퍼프",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "루나",
+        "name": "프로 포토 피니셔",
+        "shade": "02",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 9,
+      "makeup": "eyeshadow",
+      "partLabel": "눈두덩이, 애교살",
+      "startTime": "04:57",
+      "endTime": "05:06",
+      "summary": "눈두덩이와 애교살에 베이스 섀도우를 깔아준다.",
+      "facts": {
+        "area": {
+          "value": "눈두덩이, 애교살",
+          "source": "voice",
+          "at": "05:01"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [],
+        "tool": {
+          "value": "아이섀도우 브러시",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": {
+          "color": {
+            "value": "연한 갈색",
+            "source": "scene",
+            "at": "04:58"
+          }
+        },
+        "brand": "웨이크메이크",
+        "name": "소프트 블러링 아이팔레트",
+        "shade": "03 선셋블러링",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 10,
+      "makeup": "eyeshadow",
+      "partLabel": "애교살, 아이라인",
+      "startTime": "05:08",
+      "endTime": "05:59",
+      "summary": "가장 진한 브라운 섀도우로 애교살과 아이라인을 일자로 빼서 잡아준다.",
+      "facts": {
+        "area": {
+          "value": "애교살, 아이라인",
+          "source": "voice",
+          "at": "05:09"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "경계가 너무 똑 떨어지지 않게 퍼뜨려준다.",
+            "source": "voice",
+            "at": "05:50"
+          }
+        ],
+        "tool": {
+          "value": "아이섀도우 브러시",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": {
+          "color": {
+            "value": "가장 진한 브라운",
+            "source": "voice",
+            "at": "05:14"
+          }
+        },
+        "brand": "웨이크메이크",
+        "name": "소프트 블러링 아이팔레트",
+        "shade": "03 선셋블러링",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 11,
+      "makeup": "eyeliner",
+      "partLabel": "눈 점막 아래",
+      "startTime": "06:09",
+      "endTime": "06:38",
+      "summary": "눈 점막에서 살짝 띄워 아이라이너를 그려주고, 뒤트임 부분은 조금 더 잡아준다.",
+      "facts": {
+        "area": {
+          "value": "눈 점막 아래",
+          "source": "voice",
+          "at": "06:21"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "점막보다 살짝 띄워서 그려주면 더 눈이 커 보인다.",
+            "source": "voice",
+            "at": "06:18"
+          },
+          {
+            "value": "뒤트임 해놓은 부분은 조금 더 잡아준다.",
+            "source": "voice",
+            "at": "06:28"
+          }
+        ],
+        "tool": {
+          "value": "아이라이너 펜슬",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "캔메이크",
+        "name": "크리미 터치 라이너",
+        "shade": "15 카푸치노 핑크",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 12,
+      "makeup": "eyeliner",
+      "partLabel": "눈 점막 아래",
+      "startTime": "06:42",
+      "endTime": "06:59",
+      "summary": "점막 바로 밑에 흰색 라이너로 선 하나만 살짝 그려준다.",
+      "facts": {
+        "area": {
+          "value": "눈 점막 아래",
+          "source": "voice",
+          "at": "06:47"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": {
+          "value": "살살살살",
+          "source": "voice",
+          "at": "06:54"
+        },
+        "tips": [
+          {
+            "value": "깔끔하면서도 뽀용한 애교살이 된다.",
+            "source": "voice",
+            "at": "06:57"
+          }
+        ],
+        "tool": {
+          "value": "아이라이너 펜슬",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "투쿨포스쿨",
+        "name": "워터프루프 슬림 라이너",
+        "shade": "도화살몬 밀크",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 13,
+      "makeup": "mascara",
+      "partLabel": "속눈썹",
+      "startTime": "07:02",
+      "endTime": "07:05",
+      "summary": "마스카라를 발라준다.",
+      "facts": {
+        "area": {
+          "value": "속눈썹",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [],
+        "tool": {
+          "value": "마스카라 브러시",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "롬앤",
+        "name": "한올 픽스 마스카라 롱 헤이즐",
+        "shade": null,
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 14,
+      "makeup": "contour",
+      "partLabel": "콧대, 코끝",
+      "startTime": "07:10",
+      "endTime": "07:31",
+      "summary": "코에 쉐딩을 넣어주고 코끝 모양을 잡아준다.",
+      "facts": {
+        "area": {
+          "value": "콧대, 코끝",
+          "source": "voice",
+          "at": "07:14"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "코끝 모양을 살짝 잡는다.",
+            "source": "voice",
+            "at": "07:25"
+          },
+          {
+            "value": "코끝을 살짝 커팅한다.",
+            "source": "voice",
+            "at": "07:31"
+          }
+        ],
+        "tool": {
+          "value": "쉐딩 브러시",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "페리페라",
+        "name": "브이 쉐딩",
+        "shade": "03 그레이쉬 쿨",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 15,
+      "makeup": "highlight",
+      "partLabel": "코끝, 콧대, 눈 앞머리",
+      "startTime": "07:35",
+      "endTime": "07:44",
+      "summary": "코끝, 콧대, 눈 앞머리에 하이라이터를 넣어준다.",
+      "facts": {
+        "area": {
+          "value": "코끝, 콧대, 눈 앞머리",
+          "source": "voice",
+          "at": "07:36"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [],
+        "tool": {
+          "value": "손가락",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": {
+          "color": {
+            "value": "하이라이터 색상",
+            "source": "scene",
+            "at": "07:33"
+          }
+        },
+        "brand": "데이지크",
+        "name": "멀티 큐브 섀도우",
+        "shade": "01 코튼키스",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 16,
+      "makeup": "lip",
+      "partLabel": "입술 라인",
+      "startTime": "07:49",
+      "endTime": "07:57",
+      "summary": "도화살몬 색상으로 립 라인을 커버해준다.",
+      "facts": {
+        "area": {
+          "value": "입술 라인",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [],
+        "tool": {
+          "value": "립 라이너 펜슬",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "투쿨포스쿨",
+        "name": "워터프루프 슬림 라이너",
+        "shade": "도화살몬 밀크",
+        "source": "voice"
+      }
+    },
+    {
+      "order": 17,
+      "makeup": "lip",
+      "partLabel": "입술 전체",
+      "startTime": "08:01",
+      "endTime": "08:11",
+      "summary": "베이스 립 틴트를 발라준다.",
+      "facts": {
+        "area": {
+          "value": "입술 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [
+          {
+            "value": "입술 주름을 잘 메꿔주고 괜찮다.",
+            "source": "voice",
+            "at": "08:09"
+          }
+        ],
+        "tool": {
+          "value": "립 틴트 어플리케이터",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "잉가",
+        "name": "벨벳 숏 틴트",
+        "shade": "애프리콧 숏",
+        "source": "onscreenText"
+      }
+    },
+    {
+      "order": 18,
+      "makeup": "lip",
+      "partLabel": "입술 전체",
+      "startTime": "08:21",
+      "endTime": "08:30",
+      "summary": "메인 립 틴트를 발라준다.",
+      "facts": {
+        "area": {
+          "value": "입술 전체",
+          "source": "scene"
+        },
+        "amount": null,
+        "cautions": [],
+        "finishCue": null,
+        "strength": null,
+        "tips": [],
+        "tool": {
+          "value": "립 틴트 어플리케이터",
+          "source": "scene"
+        }
+      },
+      "product": {
+        "palette": null,
+        "brand": "뮤",
+        "name": "3D 볼류밍 글로스 스카치",
+        "shade": "70%",
+        "source": "onscreenText"
+      }
+    }
+  ]
+}

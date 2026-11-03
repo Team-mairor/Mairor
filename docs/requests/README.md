@@ -20,13 +20,10 @@
 | 문서 | 날짜 | 요청 → 대상 | 상태 |
 |---|---|---|---|
 | [레퍼런스 프레임 전달](2026-10-28-hyeonsoo-jungyoon-reference-frames.md) | 2026-10-28 | 김현수 → 김정윤 | 요청 |
-| [화장 종류 값 10개 반영](2026-10-28-hyeonsoo-jungyoon-makeup-values.md) | 2026-10-28 | 김현수 → 김정윤 | 요청 |
 | [API 명세 v2 도포 정보 대응 확인](2026-10-28-hyeonsoo-jungyoon-api-v2-application.md) | 2026-10-28 | 김현수 → 김정윤 | 요청 |
 | [BE 로그 JSON 형식과 작업 ID 남기기](2026-10-29-hyeongjun-jungyoon-be-logging.md) | 2026-10-29 | 박형준 → 김정윤 | 요청 |
 | [기본 아이섀도 가이드에 눈 아래 안내 추가](2026-11-01-hyeonsoo-seoyun-default-eyeshadow-under-eye.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [바르는 자리가 바뀌면 단계 나누기](2026-11-01-hyeonsoo-jungyoon-split-steps-by-application.md) | 2026-11-01 | 김현수 → 김정윤 | 요청 |
 | [마스카라 단계 영역 없음 반영](2026-11-01-hyeonsoo-seoyun-mascara-no-area.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [Google 최초 로그인 추가 정보·약관 입력 흐름](2026-11-02-juyeon-seoyeon-google-signup.md) | 2026-11-02 | 최주연 → 김서연 | 요청 |
-| [가이드 입력에서 대표 장면 이미지 빼기](2026-11-02-hyeongjun-jungyoon-guide-input-images.md) | 2026-11-02 | 박형준 → 김정윤 | 요청 |
-| [가이드 입력에 바르는 곳·팔레트 색 넣기](2026-11-03-hyeongjun-jungyoon-required-step-facts.md) | 2026-11-03 | 박형준 → 김정윤 | 요청 |
 | [가이드 작업 결과·진행 받기와 분석 상태 SSE](2026-11-03-hyeongjun-jungyoon-guide-job-progress-sse.md) | 2026-11-03 | 박형준 → 김정윤 | 요청 |

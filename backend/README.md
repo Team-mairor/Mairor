@@ -90,6 +90,9 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `ANALYSIS_POLL_INTERVAL` | `5s` | worker 가 대기 작업을 확인하는 간격 |
 | `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지운다 |
 | `FFPROBE_PATH` | `ffprobe` | ffprobe 실행 파일. 운영 이미지에는 들어 있다. 로컬에서 worker 를 돌리려면 ffmpeg 를 설치한다 |
+| `GEMINI_API_KEY` | (없음) | 단계 추출(worker)의 Gemini 키. **비우면 단계 추출이 `LLM_UNAVAILABLE` 로 실패한다**(앱은 뜬다). 코드·문서에 적지 않는다 |
+| `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | Google 직접. GMS 는 `https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com`. 요청 형식이 같아 주소·키만 바꾼다 |
+| `GEMINI_API_KEY_HEADER` · `GEMINI_MODEL` | `x-goog-api-key` · `gemini-2.5-flash` | 키를 싣는 헤더, 모델 |
 
 프론트는 같은 Origin 의 `/api` 로 호출하므로 CORS 설정은 두지 않는다. `ALLOWED_ORIGINS` 에는 브라우저 주소창에 보이는 프론트 공개 Origin 만 넣는다 (리버스 프록시 뒤의 내부 주소가 아니다). 프록시는 `Origin` 헤더를 바꾸지 않고 그대로 넘겨야 한다.
 
@@ -343,7 +346,9 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 운영자 ── POST /api/v1/internal/analysis-jobs ──▶ api: videos·analysis_jobs(PENDING) 저장
                                                      │
 worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED 로 집음 → RUNNING
-   └─ 단계 처리기를 차례로: LOADING_VIDEO(내려받기 + ffprobe → videos.source_*) → (다음 티켓의 단계들) → COMPLETED
+   └─ 단계 처리기를 차례로: LOADING_VIDEO(내려받기 + ffprobe → videos.source_*)
+        → EXTRACTING_STEPS(Gemini 에 유튜브 URL → 단계 목록 → 가이드 입력 v2 → guides.guide_input, llm_calls)
+        → (다음 티켓의 단계들) → COMPLETED
       실패하면 멈춘 단계에서 FAILED + failureCode·retryable
 ```
 
@@ -370,7 +375,19 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 | `SOURCE_NOT_FOUND` | 저장소에 영상 파일이 없다(키가 틀리거나 안 올림) | 아니오 — 파일을 올리고 새로 넣는다 |
 | `SOURCE_UNREADABLE` | ffprobe 가 영상으로 읽지 못한다(영상 스트림 없음·손상) | 아니오 |
 | `STORAGE_UNAVAILABLE` | 저장소에 일시적으로 닿지 못했다 | 예 |
+| `LLM_UNAVAILABLE` | Gemini 를 부르지 못했다(키 없음·거절, 429·5xx·시간 초과를 재시도까지 다 씀). `llm_calls.error_code` 에 종류·HTTP 상태 | 예 |
+| `LLM_INVALID_RESPONSE` | Gemini 답을 쓸 수 없다(JSON 아님·잘림·차단) | 예 |
+| `NO_VALID_STEPS` | 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모두 틀림) | 아니오 |
 | `INTERNAL_ERROR` | 예기치 않은 오류(서버 로그에 `분석 중 예기치 않은 오류 jobId=…`) | 예 |
+
+**단계 추출** (S15P31A306-309)
+
+- 지시문·답 형식은 `src/main/resources/prompts/step-extraction.*`. 형준의 시험 도구(`ai/tools/gemini_prompt.txt`·`gemini_video_test.py`)를 옮기고 단계 분할·경계 규칙(현수 요청)을 더했다. 바꾸면 `GuideInputMapperTest` 와 실제 영상 1편으로 확인한다.
+- Gemini 에는 시각을 `"MM:SS"` 로 받아 초로 바꾼다(초로 달라면 분초를 붙인 숫자로 답한다). 영상 길이는 ffprobe 값을 쓴다.
+- 틀린 단계(구간이 뒤집힘·영상 밖·필수 칸 없음)는 그 단계만 버리고 로그 `단계 버림 jobId=…` 를 남긴다. 끝이 길이를 2초 이내로 넘으면 길이로 자른다. 남은 단계는 시작 순으로 `s1`, `s2`… 로 다시 매긴다.
+- **단계는 겹치지 않는다.** AI 가 단계 시작 직전·끝 직후 사진을 비교해서, 겹치면 영역이 섞인다. 앞 단계의 끝을 뒤 단계 시작으로 당기고, 앞 단계에 남는 구간이 없을 때만 버린다(짧은 단계가 긴 단계 안에 든 경우 짧은 단계를 살린다). 지시문에도 겹치지 말라고 적었다.
+- 결과는 작업의 `guides` 행(`guide_input`, 검수 `NOT_READY`, 영상마다 판 번호 1 부터)에 저장한다. 설명·영역은 AI 콜백(-311)이 채운다.
+- 공유 스키마(`shared/guide-input/guide_input.v2.schema.json`)와 맞는지는 테스트(`GuideInputSchema`)가 레포의 파일을 읽어 확인한다.
 
 **worker**
 

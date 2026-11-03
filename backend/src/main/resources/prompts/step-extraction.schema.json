@@ -1,0 +1,303 @@
+{
+  "type": "OBJECT",
+  "properties": {
+    "steps": {
+      "type": "ARRAY",
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "order": {
+            "type": "INTEGER"
+          },
+          "makeup": {
+            "type": "STRING",
+            "enum": [
+              "foundation",
+              "eyeshadow",
+              "eyeliner",
+              "blush",
+              "lip",
+              "brow",
+              "mascara",
+              "contour",
+              "highlight",
+              "other"
+            ]
+          },
+          "partLabel": {
+            "type": "STRING"
+          },
+          "startTime": {
+            "type": "STRING"
+          },
+          "endTime": {
+            "type": "STRING"
+          },
+          "summary": {
+            "type": "STRING"
+          },
+          "product": {
+            "type": "OBJECT",
+            "nullable": true,
+            "properties": {
+              "brand": {
+                "type": "STRING",
+                "nullable": true
+              },
+              "name": {
+                "type": "STRING",
+                "nullable": true
+              },
+              "shade": {
+                "type": "STRING",
+                "nullable": true
+              },
+              "palette": {
+                "type": "OBJECT",
+                "nullable": true,
+                "properties": {
+                  "color": {
+                    "type": "OBJECT",
+                    "properties": {
+                      "value": {
+                        "type": "STRING"
+                      },
+                      "source": {
+                        "type": "STRING",
+                        "enum": [
+                          "voice",
+                          "onscreenText",
+                          "scene",
+                          "estimated"
+                        ]
+                      },
+                      "at": {
+                        "type": "STRING",
+                        "nullable": true
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "source"
+                    ]
+                  }
+                },
+                "required": [
+                  "color"
+                ]
+              }
+            },
+            "required": [
+              "palette"
+            ]
+          },
+          "facts": {
+            "type": "OBJECT",
+            "properties": {
+              "area": {
+                "type": "OBJECT",
+                "properties": {
+                  "value": {
+                    "type": "STRING"
+                  },
+                  "source": {
+                    "type": "STRING",
+                    "enum": [
+                      "voice",
+                      "onscreenText",
+                      "scene",
+                      "estimated"
+                    ]
+                  },
+                  "at": {
+                    "type": "STRING",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ]
+              },
+              "tool": {
+                "type": "OBJECT",
+                "nullable": true,
+                "properties": {
+                  "value": {
+                    "type": "STRING"
+                  },
+                  "source": {
+                    "type": "STRING",
+                    "enum": [
+                      "voice",
+                      "onscreenText",
+                      "scene",
+                      "estimated"
+                    ]
+                  },
+                  "at": {
+                    "type": "STRING",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ]
+              },
+              "amount": {
+                "type": "OBJECT",
+                "nullable": true,
+                "properties": {
+                  "value": {
+                    "type": "STRING"
+                  },
+                  "source": {
+                    "type": "STRING",
+                    "enum": [
+                      "voice",
+                      "onscreenText",
+                      "scene",
+                      "estimated"
+                    ]
+                  },
+                  "at": {
+                    "type": "STRING",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ]
+              },
+              "strength": {
+                "type": "OBJECT",
+                "nullable": true,
+                "properties": {
+                  "value": {
+                    "type": "STRING"
+                  },
+                  "source": {
+                    "type": "STRING",
+                    "enum": [
+                      "voice",
+                      "onscreenText",
+                      "scene",
+                      "estimated"
+                    ]
+                  },
+                  "at": {
+                    "type": "STRING",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ]
+              },
+              "tips": {
+                "type": "ARRAY",
+                "items": {
+                  "type": "OBJECT",
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                }
+              },
+              "cautions": {
+                "type": "ARRAY",
+                "items": {
+                  "type": "OBJECT",
+                  "properties": {
+                    "value": {
+                      "type": "STRING"
+                    },
+                    "source": {
+                      "type": "STRING",
+                      "enum": [
+                        "voice",
+                        "onscreenText",
+                        "scene",
+                        "estimated"
+                      ]
+                    },
+                    "at": {
+                      "type": "STRING",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "value",
+                    "source"
+                  ]
+                }
+              },
+              "finishCue": {
+                "type": "OBJECT",
+                "nullable": true,
+                "properties": {
+                  "value": {
+                    "type": "STRING"
+                  },
+                  "source": {
+                    "type": "STRING",
+                    "enum": [
+                      "voice",
+                      "onscreenText",
+                      "scene",
+                      "estimated"
+                    ]
+                  },
+                  "at": {
+                    "type": "STRING",
+                    "nullable": true
+                  }
+                },
+                "required": [
+                  "value",
+                  "source"
+                ]
+              }
+            },
+            "required": [
+              "area"
+            ]
+          }
+        },
+        "required": [
+          "order",
+          "makeup",
+          "partLabel",
+          "startTime",
+          "endTime",
+          "summary",
+          "facts"
+        ]
+      }
+    }
+  },
+  "required": [
+    "steps"
+  ]
+}

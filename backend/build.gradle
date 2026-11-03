@@ -67,6 +67,8 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
+    // AI 서버로 보낼 가이드 입력을 공유 스키마(shared/guide-input)로 검사한다. 실행 코드는 쓰지 않는다
+    testImplementation 'com.networknt:json-schema-validator:1.5.6'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
