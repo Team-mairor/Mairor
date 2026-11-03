@@ -61,6 +61,16 @@ npm run dev:https
 | `npm run format`       | Prettier로 전체 포맷                   |
 | `npm run format:check` | 포맷 검사만                            |
 
+## 확인 화면과 DevNav
+
+`/debug/*` 확인 화면과 화면 왼쪽 아래의 화면 바로가기(DevNav)는 개발 도구라서 개발 서버(`npm run dev`)에서만 켜지고 `npm run build` 결과물에는 들어가지 않는다.
+
+- 확인 화면 파일은 `src/app/debug/` 아래에 `page.dev.tsx`·`layout.dev.tsx`로 둔다. 개발 도구가 꺼지면 `pageExtensions`에서 `dev.tsx`가 빠져 라우트가 생기지 않는다
+- 빌드에도 넣으려면 `DEV_TOOLS=1`로 빌드한다. 개발 서버에서 끄려면 `DEV_TOOLS=0`. `1`·`0` 말고 다른 값은 기본값을 따른다
+- DevNav는 `DEV_TOOLS=1`로 빌드해도 들어가지 않고 개발 서버에서만 보인다
+- 지금은 배포 이미지(`Dockerfile`)가 `DEV_TOOLS=1`로 빌드해 배포본에도 확인 화면이 들어간다. CI 빌드도 같은 값으로 돌려 확인 화면의 빌드 오류를 MR에서 잡는다
+- 새 확인 화면을 만들 때도 `*.dev.tsx`로 만든다. `.tsx`로 두면 운영 빌드에 그대로 들어간다
+
 ## 얼굴 추적 확인 화면
 
 `/debug/face`에서 카메라를 켜고 얼굴 추적 결과를 확인한다.
@@ -108,7 +118,7 @@ npm run dev:https
 - 얼굴 피부 분할(`shared/segmentation/`)로 앞머리·손·브러시가 가린 곳에는 칠하지 않는다 (2프레임마다 갱신)
 - 섞기 계산에 영상 픽셀이 필요해 영상도 같은 캔버스에 그린다. 영상을 숨기는 하프미러 모드에서는 `multiply`가 의미 없다
 
-`/debug/overlay`에서는 카메라 없이 픽스처 얼굴(`public/fixtures/`) 위에 레이어를 합성해 본다. 픽스처 설명은 `public/fixtures/README.md`.
+`/debug/overlay`에서는 카메라 없이 픽스처 얼굴(`public/fixtures/`) 위에 레이어를 합성해 본다. 픽스처 설명은 [docs/FIXTURES.md](docs/FIXTURES.md).
 
 ## 튜토리얼 가이드
 
@@ -177,7 +187,7 @@ src/
 │  │     ├─ tutorial/guide/   # 09 튜토리얼 안내 · 사진 저장 동의
 │  │     └─ tutorial/         # 10 튜토리얼
 │  ├─ done/                   # 11 완성
-│  └─ debug/                  # 확인 화면 (face·overlay·api·preview·tutorial). 앱 스타일 영향 없이 원래대로 보인다
+│  └─ debug/                  # 확인 화면 (face·overlay·api·preview·tutorial, *.dev.tsx). 개발 도구가 켜졌을 때만 들어가고 앱 스타일 영향 없이 원래대로 보인다
 ├─ components/                # 하단 탭 · 흐름 단계 · ui/ (버튼·입력·안내·모달)
 ├─ features/session/          # 로그인·파우치·리포트·실행 상태 (브라우저 저장, 로그인 상태는 서버 기준)
 ├─ features/pouch/            # 파우치 보드 · 제품 등록 시트 · 일러스트

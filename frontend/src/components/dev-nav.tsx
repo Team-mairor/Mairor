@@ -185,7 +185,6 @@ const ITEMS: Item[] = [
 
 /**
  * 개발용 화면 바로가기 패널. 프로토타입의 왼쪽 목록과 같다.
- * 빌드에서는 들어가지 않는다 (NODE_ENV). 배포본에서도 보려면 NEXT_PUBLIC_DEV_NAV=1 로 빌드한다.
  */
 export function DevNav() {
   const router = useRouter();
@@ -194,8 +193,6 @@ export function DevNav() {
   const { update, reset } = useSession();
   // 확인 화면은 화면 전체를 쓰므로 접힌 채로 시작한다
   const [open, setOpen] = useState(() => !pathname.startsWith("/debug"));
-
-  if (process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_DEV_NAV !== "1") return null;
 
   const current = pathname + (search.size ? `?${search.toString()}` : "");
   const go = (item: Item) => {

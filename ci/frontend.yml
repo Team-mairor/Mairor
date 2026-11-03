@@ -12,6 +12,8 @@ frontend:
   variables:
     npm_config_cache: $CI_PROJECT_DIR/.npm
     NEXT_TELEMETRY_DISABLED: "1"
+    # 배포 이미지와 같은 값으로 빌드한다 (frontend/Dockerfile)
+    DEV_TOOLS: "1"
   before_script:
     - cd frontend
     - npm ci --prefer-offline --no-audit --no-fund

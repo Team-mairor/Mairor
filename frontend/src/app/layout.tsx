@@ -3,11 +3,17 @@ import { Gowun_Dodum, Instrument_Sans, Instrument_Serif } from "next/font/google
 import localFont from "next/font/local";
 import "./globals.css";
 
+import dynamic from "next/dynamic";
 import { Suspense } from "react";
 
-import { DevNav } from "@/components/dev-nav";
 import { SessionProvider } from "@/features/session";
 import { MIRROR_SCRIPT } from "@/lib/mirror";
+
+// 개발 서버에서만 넣는다. 배포본은 DEV_TOOLS=1이어도 debug 화면만 들어간다
+const DevNav =
+  process.env.DEV_TOOLS && process.env.NODE_ENV !== "production"
+    ? dynamic(() => import("@/components/dev-nav").then((m) => m.DevNav))
+    : null;
 
 // Pretendard (SIL OFL 1.1, fonts/Pretendard-LICENSE.txt)
 const pretendard = localFont({
@@ -75,9 +81,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <SessionProvider>
             {children}
             {/* DevNav의 useSearchParams 경계. 화면 전체를 감싸면 정적 HTML이 비므로 여기만 감싼다 */}
-            <Suspense>
-              <DevNav />
-            </Suspense>
+            {DevNav && (
+              <Suspense>
+                <DevNav />
+              </Suspense>
+            )}
           </SessionProvider>
         </div>
       </body>

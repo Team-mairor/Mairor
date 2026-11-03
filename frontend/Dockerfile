@@ -9,8 +9,10 @@ COPY shared/ shared/
 COPY frontend/package.json frontend/package-lock.json frontend/
 RUN cd frontend && npm ci --no-audit --no-fund
 COPY frontend/ frontend/
+# DEV_TOOLS=1: 배포본에도 확인 화면(/debug)을 넣는다. 운영에서 빼려면 이 값과 ci/frontend.yml의 값을 지운다.
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_API_BASE_URL=/api
+    NEXT_PUBLIC_API_BASE_URL=/api \
+    DEV_TOOLS=1
 RUN cd frontend && npm run build
 
 # 2단계: nginx 에 결과물과 설정만 담기 (Node·node_modules 는 버린다)
