@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   faceFitTransform,
+  halfMirror,
+  loadMirrorFit,
   MIN_IN_FRAME_RATIO,
+  mirrorScreen,
   rescaleAround,
   RECOVER_IN_FRAME_MARGIN,
   regionNamesError,
@@ -18,6 +21,7 @@ import {
 } from "@/features/face";
 import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
+import { isMirror } from "@/lib/mirror";
 
 import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer, isStepVisible } from "./renderer";
@@ -224,13 +228,18 @@ export function GuideOverlay({
     };
   }, []);
 
-  useFaceFrame((frame) => {
+  useFaceFrame((camFrame) => {
     const canvas = canvasRef.current;
+    let frame = camFrame;
     let view = viewRef.current;
-    if (fit && frame && canvas) {
+    // 미러필름 위에서는 거울에 비친 얼굴 위치에 그린다. 비친 얼굴이 곧 실제 크기라 확대(fit)하지 않는다
+    if (isMirror() && frame && canvas) {
+      ({ frame, view } = halfMirror(frame, mirrorScreen(canvas), loadMirrorFit()));
+    } else if (fit && frame && canvas) {
+      const { landmarks } = frame;
       const size = { width: canvas.clientWidth, height: canvas.clientHeight };
       const target = faceFitTransform(
-        REGIONS.faceOval.indices.map((i) => frame.landmarks[i]),
+        REGIONS.faceOval.indices.map((i) => landmarks[i]),
         frame.imageSize,
         size,
         FACE_FILL,
@@ -261,7 +270,6 @@ export function GuideOverlay({
       step: stepRef.current,
       mesh: meshRef.current,
       face: faceRef.current,
-      // 지금은 카메라 화면 기준. 하프미러는 거울에 비친 상 위치로 바꿔 넘긴다.
       projection:
         frame && view
           ? { toPx: (p) => toScreen(p, frame.imageSize, view), unit: iod * view.scale }

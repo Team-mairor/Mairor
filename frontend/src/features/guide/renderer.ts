@@ -39,6 +39,8 @@ const FACE_PARTS: RegionName[] = [
   "leftEye",
   "lipsOuter",
 ];
+/** 코끝 점 번호. 코는 부위(regions.v1.json)에 없어 직접 쓴다 */
+const NOSE_TIP = 1;
 
 const STYLE = {
   alpha: 0.98,
@@ -47,8 +49,8 @@ const STYLE = {
     { alpha: 0.1, extra: 12 },
     { alpha: 0.22, extra: 5 },
   ],
-  /** 얼굴 윤곽 선의 진하기와 두께 */
-  face: { alpha: 0.2, size: 0.012, min: 1.5 },
+  /** 얼굴 윤곽 선의 진하기와 두께. 가이드(점선 0.032·실선 0.035)보다는 가늘게 둬 가이드가 먼저 보이게 한다 */
+  face: { alpha: 0.5, size: 0.02, min: 2.5 },
   /** 점선의 점 지름, 점 사이 간격(점 지름 대비) */
   dot: { size: 0.032, min: 3, gap: 0.8 },
   /** 얇은 띠 영역(isThinArea)의 점 지름(점 지름 대비). 멀어져도 dot.min은 지킨다 */
@@ -188,6 +190,8 @@ export class GuideRenderer {
   /** 얼굴 윤곽·눈·눈썹·입술 테두리를 옅게 그어, 가이드가 얼굴 어디에 있는지 알 수 있게 한다 */
   private drawFace(frame: FaceFrame, projection: Projection) {
     const ctx = this.ctx;
+    const ink = `rgba(${FACE_INK}, ${STYLE.face.alpha})`;
+    const width = sized(projection.unit, STYLE.face);
     ctx.beginPath();
     for (const part of FACE_PARTS) {
       traceSmooth(
@@ -198,9 +202,15 @@ export class GuideRenderer {
       );
     }
     ctx.setLineDash([]);
-    ctx.strokeStyle = `rgba(${FACE_INK}, ${STYLE.face.alpha})`;
-    ctx.lineWidth = sized(projection.unit, STYLE.face);
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = width;
     ctx.stroke();
+    // 코는 코끝 점만 찍는다. 콧방울은 볼과 색 차이가 적어 점이 실제 코 폭과 어긋나 선으로 그리지 않는다
+    const tip = projection.toPx(frame.landmarks[NOSE_TIP]);
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, width * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = ink;
+    ctx.fill();
   }
 
   /** 얼굴 가운데 선(top → bottom)으로 나눠 반쪽마다 고개 각도에 맞는 진하기로 그린다 */

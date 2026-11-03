@@ -451,6 +451,7 @@ function FaceVideo() {
     <video
       ref={ref}
       className="absolute inset-0 size-full -scale-x-100 object-cover"
+      data-mirror-keep
       playsInline
       muted
     />

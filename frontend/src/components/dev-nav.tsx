@@ -181,6 +181,7 @@ const ITEMS: Item[] = [
   { label: "확인 · 레이어 합성", sub: "픽스처 얼굴 · 카메라 없이", href: "/debug/overlay" },
   { label: "확인 · 화장 레이어", sub: "카메라 · ?layers=경로", href: "/debug/preview" },
   { label: "확인 · 튜토리얼 가이드", sub: "카메라 · ?guides=경로", href: "/debug/tutorial" },
+  { label: "거울 맞추기", sub: "하프미러 · 두 눈 맞춤", href: "/mirror-fit" },
 ];
 
 /**

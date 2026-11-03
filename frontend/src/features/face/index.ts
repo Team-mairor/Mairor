@@ -75,6 +75,16 @@ export {
   type TrackingIssue,
 } from "./tracking-issue";
 export {
+  fitMirror,
+  halfMirror,
+  loadMirrorFit,
+  mirrorScreen,
+  saveMirrorFit,
+  type MirrorFit,
+  type MirrorScreen,
+} from "./half-mirror";
+export { LEFT_IRIS_CENTER, RIGHT_IRIS_CENTER } from "./regions";
+export {
   containTransform,
   coverTransform,
   faceFitTransform,

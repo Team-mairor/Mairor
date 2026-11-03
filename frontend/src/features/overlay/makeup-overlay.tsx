@@ -5,11 +5,15 @@ import { useEffect, useRef, useState } from "react";
 import {
   containTransform,
   formatTiming,
+  halfMirror,
   landmarkerInfo,
+  loadMirrorFit,
+  mirrorScreen,
   useCamera,
   useFaceFrame,
 } from "@/features/face";
 import { observeCanvasSize } from "@/lib/canvas-size";
+import { isMirror } from "@/lib/mirror";
 
 import { loadLayerSet, type PreparedLayer } from "./layers";
 import { loadFaceMesh, type FaceMesh } from "./mesh";
@@ -202,21 +206,27 @@ export function MakeupOverlay({
     if (enabled) {
       // 피부 분할 시간이 섞이지 않도록 그리기만 잰다.
       const start = performance.now();
+      const canvas = canvasRef.current;
+      const mirror = isMirror();
+      // 미러필름 위에서는 거울에 비친 얼굴 위치에 그린다
+      const reflected =
+        mirror && frame && canvas ? halfMirror(frame, mirrorScreen(canvas), loadMirrorFit()) : null;
       rendererRef.current?.render({
         video,
-        frame,
-        view:
-          fit && frame && canvasRef.current
+        frame: reflected?.frame ?? frame,
+        view: reflected
+          ? reflected.view
+          : fit && frame && canvas
             ? containTransform(
                 frame.imageSize,
-                { width: canvasRef.current.clientWidth, height: canvasRef.current.clientHeight },
+                { width: canvas.clientWidth, height: canvas.clientHeight },
                 true,
               )
             : viewRef.current,
         layers: hiddenRef.current ? [] : layersRef.current,
         mesh: meshRef.current,
         // 미러필름 모드에서는 비친 얼굴과 겹치므로 캔버스에도 영상을 그리지 않는다 (globals.css의 .mirror video)
-        drawVideo: showVideoRef.current && !document.documentElement.classList.contains("mirror"),
+        drawVideo: showVideoRef.current && !mirror,
         skinMask: skinRef.current?.canvas ?? null,
         skinVersion: skinRef.current?.version,
       });

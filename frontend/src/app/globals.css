@@ -252,7 +252,8 @@
   backdrop-filter: none;
 }
 /* 비친 얼굴과 영상 속 얼굴이 겹치고 위치도 어긋나므로, 필름 위에서는 카메라 영상을 그리지 않는다 (추적은 그대로) */
-.mirror video {
+/* 얼굴 등록 원 안 미리보기(data-mirror-keep)는 비친 얼굴로는 원에 맞출 수 없어 남긴다 */
+.mirror video:not([data-mirror-keep]) {
   visibility: hidden;
 }
 

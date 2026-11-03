@@ -7,6 +7,9 @@ export const MIRROR_KEY = "mairor-mirror";
  */
 export const MIRROR_SCRIPT = `try{if(localStorage.getItem("${MIRROR_KEY}")==="1"){document.documentElement.classList.add("mirror");var m=document.querySelector("meta[name=theme-color]");m&&m.setAttribute("content","#000000")}}catch(e){}`;
 
+/** 지금 미러필름 모드인지 */
+export const isMirror = () => document.documentElement.classList.contains("mirror");
+
 /** 미러필름 모드를 켜고 끈다. 상단바 색도 함께 바꾼다 */
 export function setMirror(on: boolean) {
   document.documentElement.classList.toggle("mirror", on);
