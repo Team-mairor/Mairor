@@ -22,33 +22,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/product-categories")
 public class ProductCategoryController {
 
-  /** 성공 응답 예시. 9개 중 형태가 다른 두 카테고리만 싣는다. */
-  static final String CATEGORY_LIST =
-      """
-      {
-        "items": [
-          {
-            "code": "BASE",
-            "label": "베이스",
-            "matchable": true,
-            "shadeSelectable": true,
-            "types": [
-              {"code": "CUSHION", "label": "쿠션"},
-              {"code": "FOUNDATION", "label": "파운데이션"}
-            ],
-            "compatibleParts": []
-          },
-          {
-            "code": "FRAGRANCE",
-            "label": "향수",
-            "matchable": false,
-            "shadeSelectable": false,
-            "types": [{"code": "PERFUME", "label": "향수"}],
-            "compatibleParts": []
-          }
-        ]
-      }""";
-
   private final ProductCategoryService productCategoryService;
 
   public ProductCategoryController(ProductCategoryService productCategoryService) {
@@ -74,7 +47,7 @@ public class ProductCategoryController {
           @Content(
               mediaType = MediaType.APPLICATION_JSON_VALUE,
               schema = @Schema(implementation = ProductCategoryListResponse.class),
-              examples = @ExampleObject(name = "카테고리 목록", value = CATEGORY_LIST)))
+              examples = @ExampleObject(name = "카테고리 목록", value = ProductApiDocs.CATEGORY_LIST)))
   @AuthApiDocs.Unauthorized
   @GetMapping
   public ProductCategoryListResponse list() {

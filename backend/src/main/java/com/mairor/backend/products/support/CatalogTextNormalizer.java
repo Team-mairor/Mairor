@@ -19,6 +19,10 @@ public final class CatalogTextNormalizer {
   private static final Pattern WHITESPACE_RUN =
       Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
 
+  /** 앞뒤의 유니코드 공백. {@link #WHITESPACE_RUN}과 같은 공백 기준이다. */
+  private static final Pattern EDGE_WHITESPACE =
+      Pattern.compile("^\\s+|\\s+$", Pattern.UNICODE_CHARACTER_CLASS);
+
   private CatalogTextNormalizer() {}
 
   /**
@@ -33,5 +37,19 @@ public final class CatalogTextNormalizer {
       throw new IllegalArgumentException("정규화하면 빈 문자열이 되는 값은 쓸 수 없다");
     }
     return collapsed.toLowerCase(Locale.ROOT);
+  }
+
+  /**
+   * 앞뒤의 유니코드 공백만 지운 원문. 입력 검증에서 빈 값 판정과 길이 검사에 쓴다.
+   *
+   * <p>{@link #normalize}와 공백 기준은 같지만 NFC·내부 공백 축약·소문자화는 하지 않는다. 엔티티의 길이 상한도 NFC 전 원문 길이로 검사하므로 같은
+   * 단위로 세려면 NFC 를 적용하면 안 된다 (NFC 로 길어지는 문자가 있다).
+   *
+   * @return 공백만 있는 값이면 빈 문자열
+   * @throws NullPointerException 값이 {@code null}이면
+   */
+  public static String trimmed(String text) {
+    Objects.requireNonNull(text, "text");
+    return EDGE_WHITESPACE.matcher(text).replaceAll("");
   }
 }

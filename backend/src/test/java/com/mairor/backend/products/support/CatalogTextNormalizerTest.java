@@ -89,4 +89,35 @@ class CatalogTextNormalizerTest {
     assertThatThrownBy(() -> CatalogTextNormalizer.normalize(null))
         .isInstanceOf(NullPointerException.class);
   }
+
+  @Test
+  void trimmedRemovesOnlyLeadingAndTrailingUnicodeWhitespace() {
+    String text = NBSP + IDEOGRAPHIC_SPACE + "	 Dear" + NBSP + " DARLING  " + NBSP;
+
+    // 안쪽 공백과 대소문자는 그대로 둔다 (축약·소문자화는 normalize 의 몫)
+    assertThat(CatalogTextNormalizer.trimmed(text)).isEqualTo("Dear" + NBSP + " DARLING");
+  }
+
+  @Test
+  void trimmedDoesNotApplyNfcSoLengthStaysTheSameAsTheOriginal() {
+    String decomposed = Normalizer.normalize("틴트", Normalizer.Form.NFD);
+    // U+0344 는 NFC 를 거치면 두 글자(U+0308 U+0301)로 늘어난다
+    String growsUnderNfc = "̈́";
+
+    assertThat(CatalogTextNormalizer.trimmed(" " + decomposed + " ")).isEqualTo(decomposed);
+    assertThat(Normalizer.normalize(growsUnderNfc, Normalizer.Form.NFC)).hasSize(2);
+    assertThat(CatalogTextNormalizer.trimmed(growsUnderNfc)).hasSize(1);
+  }
+
+  @ParameterizedTest
+  @MethodSource("blankTexts")
+  void trimmedOfWhitespaceOnlyTextIsEmpty(String text) {
+    assertThat(CatalogTextNormalizer.trimmed(text)).isEmpty();
+  }
+
+  @Test
+  void trimmedRejectsNull() {
+    assertThatThrownBy(() -> CatalogTextNormalizer.trimmed(null))
+        .isInstanceOf(NullPointerException.class);
+  }
 }

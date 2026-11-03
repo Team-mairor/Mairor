@@ -17,4 +17,5 @@
 - **노션에 아직 없는 로컬 수정(S15P31A306-209 카탈로그 스키마 반영)**: API-POUCH-001 category·type 소속 검증, API-POUCH-008 type 코드 임시 제안·compatibleParts 빈 목록, PouchWrite 정규화 규칙 확정, Product.type non-null. 본문에 '로컬 수정 -209'로 표시했다. 노션에 반영한 뒤 표시와 이 줄을 지운다.
 - **노션에 아직 없는 로컬 수정(S15P31A306-307 임베드 제외·Top 4 정의, 2026-11-03 팀 결정)**: 영상 선택 화면은 서비스 안에서 재생(임베드)하지 않고 썸네일·챕터·'YouTube에서 보기' 링크로 확인한다. 그래서 VideoSelection·VideoSearchItem의 `embeddable` 칸을 없애고, '재생 불가'를 '분석 불가(비공개·삭제·연령 제한)'로 바꿨다. 인기 Top 4는 YouTube 순위가 아니라 서비스 안에서 많이 선택된 영상이다(feature-spec VIDEO-001·005·확인 필요 11, user-flow 4장, api-spec VIDEO-001·005·3절·데이터 모델). 본문에 '로컬 수정 -307'로 표시했다. 노션에 반영한 뒤 표시와 이 줄을 지운다.
 - **노션에 아직 없는 로컬 수정(S15P31A306-298 카테고리·종류 목록 API 반영)**: API-POUCH-008 정렬 기준·빈 types·compatibleParts 정렬, 카테고리·종류 코드 유지 원칙, NAIL\_FILE 호수 충돌(확인 필요). 본문에 '로컬 수정 -298'로 표시했다. 노션에 반영한 뒤 표시와 이 줄을 지운다.
+- **노션에 아직 없는 로컬 수정(S15P31A306-297 제품 검색·상세 조회 API 반영)**: API-POUCH-001 검색 계약 축소(정확 일치 0\~1건), 오류 필드 규칙, 유니코드 공백·NFC 전 길이 기준, name 상한 200자, color.source=CATALOG. API-POUCH-002 productId 형식 오류 400. PouchWrite brand·name 211 인계 메모. 본문에 '로컬 수정 -297'로 표시했다. 노션에 반영한 뒤 표시와 이 줄을 지운다.
 - 구버전은 담지 않았다: 유저플로우(구버전), API 명세(구버전/폐기).

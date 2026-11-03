@@ -1,8 +1,10 @@
 package com.mairor.backend.common.web;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.products.entity.Product;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,7 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiDocsTest {
 
   /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 21;
+  private static final int ALL_OPERATIONS = 23;
 
   @Autowired private MockMvc mockMvc;
 
@@ -331,6 +334,70 @@ class OpenApiDocsTest {
             jsonPath(
                     "$.components.schemas.ProductCategoryResponse.properties.compatibleParts.items.example")
                 .doesNotExist());
+  }
+
+  /** 제품 검색·상세는 로그인이 필요한 조회라 세션 쿠키만 요구하고, 오류 응답과 예시를 싣는다. 검색 조건은 쿼리 파라미터 4개로 펼쳐 보인다. */
+  @Test
+  void apiDocs_includesProductSearchAndDetailAsMemberOnlyReads() throws Exception {
+    String search = "$.paths['/v1/products'].get";
+    String detail = "$.paths['/v1/products/{productId}'].get";
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(search + ".tags[0]").value("화장품 카탈로그"))
+        .andExpect(jsonPath(detail + ".tags[0]").value("화장품 카탈로그"))
+        .andExpect(jsonPath(search + ".security.length()").value(1))
+        .andExpect(jsonPath(search + ".security[0].sessionCookie").exists())
+        .andExpect(jsonPath(search + ".security[0].csrfToken").doesNotExist())
+        .andExpect(jsonPath(detail + ".security[0].sessionCookie").exists())
+        .andExpect(jsonPath(detail + ".security[0].csrfToken").doesNotExist())
+        .andExpect(jsonPath(search + ".parameters.length()").value(4))
+        .andExpect(
+            jsonPath(
+                search + ".parameters[*].name",
+                containsInAnyOrder("category", "type", "brand", "name")))
+        .andExpect(jsonPath(search + ".parameters[*].in", everyItem(is("query"))))
+        // brand·name 길이 제한이 엔티티 상한과 같게 보여야 한다 (@CatalogText 만으로는 표시되지 않는다)
+        .andExpect(
+            jsonPath(search + ".parameters[?(@.name == 'brand')].schema.maxLength")
+                .value(Product.BRAND_MAX_LENGTH))
+        .andExpect(
+            jsonPath(search + ".parameters[?(@.name == 'name')].schema.maxLength")
+                .value(Product.NAME_MAX_LENGTH))
+        .andExpect(jsonPath(search + ".parameters[?(@.name == 'name')].schema.minLength").value(1))
+        // 네 값 모두 필수다 (@CatalogText 만 붙은 brand·name 도 필수로 보여야 한다)
+        .andExpect(jsonPath(search + ".parameters[*].required", everyItem(is(true))))
+        .andExpect(
+            jsonPath(search + ".parameters[?(@.name == 'type')].schema.example").value("LIP_TINT"))
+        .andExpect(jsonPath(detail + ".parameters.length()").value(1))
+        .andExpect(jsonPath(detail + ".parameters[0].name").value("productId"))
+        .andExpect(jsonPath(detail + ".parameters[0].in").value("path"))
+        .andExpect(
+            jsonPath(search + ".responses['200'].content['application/json'].examples")
+                .isNotEmpty())
+        .andExpect(
+            jsonPath(
+                    search
+                        + ".responses['400'].content['application/json'].examples.VALIDATION_FAILED")
+                .exists())
+        .andExpect(jsonPath(search + ".responses['401']").exists())
+        .andExpect(
+            jsonPath(detail + ".responses['200'].content['application/json'].examples")
+                .isNotEmpty())
+        .andExpect(jsonPath(detail + ".responses['400']").exists())
+        .andExpect(
+            jsonPath(detail + ".responses['404'].content['application/json'].examples.NOT_FOUND")
+                .exists())
+        .andExpect(jsonPath(detail + ".responses['401']").exists())
+        .andExpect(
+            jsonPath("$.components.schemas.ColorInfoResponse.properties.hex.example")
+                .value("#F2665A"))
+        .andExpect(
+            jsonPath("$.components.schemas.ColorInfoResponse.properties.source.example")
+                .value("CATALOG"))
+        .andExpect(
+            jsonPath("$.components.schemas.ProductResponse.properties.type.example")
+                .value("LIP_TINT"));
   }
 
   /** Swagger UI 의 그룹 이름이 한국어로 통일돼 있어야 한다(기본값 user-controller 같은 영문 이름이 남으면 안 된다). */

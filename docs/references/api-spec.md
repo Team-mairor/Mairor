@@ -271,6 +271,10 @@ API-POUCH-001 · GET /api/v1/products
 - type이 category 소속이 아니면 400 VALIDATION\_FAILED(field=type). brand/name 정확 일치는 아래 PouchWrite 정규화 규칙으로 비교한다. (로컬 수정 -209)
 - 200 \{items:Product\[\]\}, 최대5개(정확 일치 우선). 0건이면 직접 입력, 1건이면 호수 목록. 별도 검색 결과 목록 UI 없음. 다건을 임의로 첫 항목에 연결하지 않으며 다건 처리 UX는 확정 필요.
 - 400 VALIDATION\_FAILED(코드·필드 오류). 네트워크/서버 실패는 재시도 또는 직접 입력. 결과에 shades가 이미 있으면 API-POUCH-002 중복 조회 불필요.
+- <b>검색 계약 (로컬 수정 -297)</b>: 정규화한 brand·name과 type이 정확히 같은 제품을 0\~1건 제공하고, 0건은 200 \{items:\[\]\}(404 아님)이며 화면은 직접 입력으로 전환한다. 위 "최대5개(정확 일치 우선)"에서 부분 일치를 빼고 줄인 결정이다(검색 결과 목록 UI 없음, (type, brand, name) 유니크). 목록 응답 형태는 유지하며, 다건 검색을 도입하면 FE 처리와 계약을 별도로 조정한다.
+- <b>오류 필드 (로컬 수정 -297)</b>: 형식 오류는 필드마다 details에 모두 담는다. 코드 검사는 카테고리가 없으면 field=category(종류가 있어도), 종류가 없거나 다른 카테고리 소속이면 field=type.
+- <b>공백·길이 (로컬 수정 -297)</b>: 빈 값 판정과 앞뒤 공백 제거는 PouchWrite 정규화와 같은 유니코드 공백 기준(NBSP·전각 공백 포함)이다. 길이는 앞뒤 공백을 지운 원문을 NFC 전 String.length()로 센다(카탈로그 엔티티와 같은 단위). <b>name 상한은 200자</b>(카탈로그 저장 상한과 같게, 기존 100자), brand는 100자.
+- <b>응답 (로컬 수정 -297)</b>: brand·name은 카탈로그 원문. shades는 sort\_order, 이름 순. color.source는 항상 CATALOG(내부 출처값 비노출), 색을 모르면 color=null.
 </toggle>
 
 <toggle>
@@ -280,6 +284,7 @@ API-POUCH-002 · GET /api/v1/products/\{productId\}
 
 - 회원 GET. Path productId:string 필수. 200 Product. 404 NOT\_FOUND면 직접 입력으로 복귀.
 - shades=\[\]는 등록된 호수 정보 없음. 임의 호수·색상 생성 금지. 실제 피부 발색 보장 안 함.
+- <b>로컬 수정 -297</b>: productId가 UUID 형식이 아니면 400 VALIDATION\_FAILED(field=productId). 응답은 API-POUCH-001 검색 결과 항목과 같은 모양이다. FE 등록 흐름은 검색만 쓰며, 이 API는 저장된 productId로 호수를 다시 띄울 때(예: CATALOG 파우치 항목 수정) 쓸 수 있다.
 </toggle>
 
 <toggle>
@@ -784,7 +789,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | type | string | 등록 필수. API-POUCH-008의 해당 카테고리 종류 코드 |
 | productId | string | CATALOG 필수, MANUAL 입력 불가 |
 | shadeId | string 또는 null | CATALOG이고 shadeSelectable=true이면 해당 제품 호수 필수. false이면 null/생략 |
-| brand·name | string | MANUAL 필수, 앞뒤 공백 제거 후 각각 1\~100자. CATALOG는 서버 카탈로그에서 확정 |
+| brand·name | string | MANUAL 필수, 앞뒤 공백 제거 후 각각 1\~100자. CATALOG는 서버 카탈로그에서 확정. <b>211 인계 (로컬 수정 -297)</b>: 검색은 name 200자·유니코드 공백 기준이다. MANUAL name 상한을 200으로 맞출지 API-POUCH-004에서 정한다 |
 | category | string | MANUAL 필수, 9개 코드 중 하나. CATALOG는 제품 값, type은 해당 category 소속 |
 | shadeName | string 또는 null | MANUAL 선택, 최대100자. shadeSelectable=false이면 null/생략 |
 | colorHex | string 또는 null | MANUAL 선택, #RRGGBB. colorSource는 서버가 USER\_INPUT/NONE으로 결정. CATALOG는 직접 입력 불가 |
