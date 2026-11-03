@@ -25,14 +25,17 @@ const nextConfig = (phase: string): NextConfig => {
   const devTools = devToolsEnabled(phase);
   return {
     output: "export",
+    // 왼쪽 아래는 개발용 바로가기(DevNav) 열기 버튼 자리라, 개발 표시가 덮어 버튼이 눌리지 않는다
+    devIndicators: { position: "bottom-right" },
     env: { DEV_TOOLS: devTools ? "1" : "" },
     // debug 화면은 *.dev.tsx로 두어 개발 도구가 꺼지면 라우트에서 빠진다.
     pageExtensions: devTools ? ["dev.tsx", "tsx", "ts", "jsx", "js"] : ["tsx", "ts", "jsx", "js"],
     // 같은 와이파이의 폰·태블릿(https://<PC의 IP>:3000)에서 개발 서버 화면이 동작하게 사설 IP 대역을 허용한다.
     // 없으면 Next 16이 /_next 개발 요청을 막아 화면은 보여도 버튼이 눌리지 않는다.
-    // 172는 사설 대역(172.16~31)만 연다
+    // 172는 사설 대역(172.16~31)만 연다. 70.12는 교육장 와이파이가 PC에 주는 대역이다
     allowedDevOrigins: [
       "10.*.*.*",
+      "70.12.*.*",
       ...Array.from({ length: 16 }, (_, i) => `172.${16 + i}.*.*`),
       "192.168.*.*",
     ],
