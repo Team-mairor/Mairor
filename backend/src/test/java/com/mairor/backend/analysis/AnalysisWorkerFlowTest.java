@@ -2,12 +2,16 @@ package com.mairor.backend.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.entity.ProgressStage;
 import com.mairor.backend.analysis.extraction.GuideInputSchema;
+import com.mairor.backend.analysis.frames.FrameExtractionException;
+import com.mairor.backend.analysis.frames.FrameExtractor;
+import com.mairor.backend.analysis.frames.FramePlan;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.analysis.service.AnalysisJobReceipt;
 import com.mairor.backend.analysis.service.AnalysisJobRequest;
@@ -22,6 +26,11 @@ import com.mairor.backend.common.external.llm.LlmClient;
 import com.mairor.backend.common.external.llm.LlmException;
 import com.mairor.backend.common.external.llm.LlmResult;
 import com.mairor.backend.videos.repository.VideoRepository;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -33,8 +42,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
- * 작업 접수 → worker 실행의 흐름. 실제 DB(스키마 SQL)와 로컬 저장소를 쓰고 ffprobe 와 Gemini(LlmClient)만 가짜로 바꾼다. worker
- * 스케줄러는 {@code worker} 프로파일이 아니라 뜨지 않으므로 실행기를 직접 부른다.
+ * 작업 접수 → worker 실행의 흐름. 실제 DB(스키마 SQL)와 로컬 저장소를 쓰고 ffprobe · Gemini(LlmClient) · ffmpeg 추출기만 가짜로
+ * 바꾼다(진짜 ffmpeg 는 {@code FrameExtractorTest}). worker 스케줄러는 {@code worker} 프로파일이 아니라 뜨지 않으므로 실행기를
+ * 직접 부른다.
  */
 class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
 
@@ -47,6 +57,24 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
   @Autowired private VideoRepository videos;
   @MockitoBean private Ffprobe ffprobe;
   @MockitoBean private LlmClient llm;
+  @MockitoBean private FrameExtractor frameExtractor;
+
+  /** 가짜 추출기: 계획의 후보만큼 작은 파일을 만든다(ffmpeg 가 다 뽑은 것처럼). */
+  private void framesExtractNormally() {
+    doAnswer(
+            call -> {
+              FramePlan plan = call.getArgument(1);
+              Path outDir = call.getArgument(2);
+              Files.createDirectories(outDir);
+              List<Path> files = new ArrayList<>();
+              for (int i = 1; i <= plan.candidates().size(); i++) {
+                files.add(Files.writeString(outDir.resolve(String.format("%06d.jpg", i)), "jpg"));
+              }
+              return files;
+            })
+        .when(frameExtractor)
+        .extract(any(), any(), any());
+  }
 
   /** 단계 하나짜리 Gemini 답. 끝 시각(30:59)이 영상 길이(1858.2초)를 조금 넘어 길이로 잘린다. */
   private static final String GEMINI_STEPS =
@@ -72,6 +100,7 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     putObject("videos/VxAXD6PP76I/source.mp4");
     when(ffprobe.probe(any())).thenReturn(PROBE);
     when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
+    framesExtractNormally();
     AnalysisJobReceipt receipt = service.register(request("VxAXD6PP76I"));
 
     assertThat(runner.runNext()).isTrue();
@@ -113,6 +142,48 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
                 String.class,
                 receipt.jobId()))
         .isEqualTo("GMS:SUCCEEDED:540000:STEP_EXTRACTION");
+
+    String manifestKey =
+        jdbc.queryForObject(
+            "select frames_manifest_key from guides where analysis_job_id = ?",
+            String.class,
+            receipt.jobId());
+    assertThat(manifestKey)
+        .isEqualTo("videos/VxAXD6PP76I/jobs/" + receipt.jobId() + "/frames.json");
+    String manifest = readObject(manifestKey);
+    assertThat(manifest)
+        .contains("\"source\":{\"width\":1920,\"height\":1080,\"fps\":60.0}")
+        .contains(
+            "{\"frameIndex\":0,\"timestampMs\":0,\"stepId\":null,"
+                + "\"key\":\"videos/VxAXD6PP76I/frames/000000.jpg\",\"width\":1920,\"height\":1080}")
+        .as("10:40(640초) 단계 시작 = 38400번 프레임")
+        .contains("{\"frameIndex\":38400,\"timestampMs\":640000,\"stepId\":\"s1\"");
+    assertThat(STORAGE_ROOT.resolve("videos/VxAXD6PP76I/frames/038400.jpg")).exists();
+  }
+
+  @Test
+  void frameExtractionFailureStopsAtSegmentingWithoutRetry() {
+    putObject("videos/noFrames001/source.mp4");
+    when(ffprobe.probe(any())).thenReturn(PROBE);
+    when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
+    when(frameExtractor.extract(any(), any(), any()))
+        .thenThrow(new FrameExtractionException("ffmpeg 가 실패했습니다(종료 코드 1): broken", null));
+    AnalysisJobReceipt receipt = service.register(request("noFrames001"));
+
+    runner.runNext();
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.SEGMENTING);
+    assertThat(job.getFailureCode()).isEqualTo("FRAME_EXTRACTION_FAILED");
+    assertThat(job.isRetryable()).isFalse();
+  }
+
+  private static String readObject(String key) {
+    try {
+      return Files.readString(STORAGE_ROOT.resolve(key));
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   @Test
@@ -179,6 +250,7 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     putObject("videos/twiceVideo1/source.mp4");
     when(ffprobe.probe(any())).thenReturn(PROBE);
     when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
+    framesExtractNormally();
     service.register(request("twiceVideo1"));
     runner.runNext();
     AnalysisJobReceipt second = service.register(request("twiceVideo1"));
@@ -198,6 +270,7 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     putObject("videos/rerunVideo1/source.mp4");
     when(ffprobe.probe(any())).thenReturn(PROBE);
     when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
+    framesExtractNormally();
     AnalysisJobReceipt receipt = service.register(request("rerunVideo1"));
     runner.runNext();
 

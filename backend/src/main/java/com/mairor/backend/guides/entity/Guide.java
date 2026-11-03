@@ -157,6 +157,11 @@ public class Guide {
   }
 
   /** 같은 작업을 다시 돌려(멈춘 뒤 대기열로 되돌림) 단계를 새로 뽑았을 때 입력을 바꾼다. 설명·영역은 아직 없다. */
+  /** 프레임 목록({@code frames.json})의 저장소 키. */
+  public void useFramesManifest(String key) {
+    this.framesManifestKey = Objects.requireNonNull(key, "key");
+  }
+
   public void replaceGuideInput(String guideInput) {
     this.guideInput = Objects.requireNonNull(guideInput, "guideInput");
   }

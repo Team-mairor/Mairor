@@ -38,6 +38,18 @@ class LocalObjectStorageTest {
   }
 
   @Test
+  void uploadsAndGivesAFileUri() throws IOException {
+    Path source = Files.writeString(work.resolve("000030.jpg"), "jpeg");
+    LocalObjectStorage storage = new LocalObjectStorage(root);
+
+    storage.upload(source, "videos/abc/frames/000030.jpg", "image/jpeg");
+
+    assertThat(root.resolve("videos/abc/frames/000030.jpg")).hasContent("jpeg");
+    assertThat(storage.presignGet("videos/abc/frames/000030.jpg", java.time.Duration.ofHours(24)))
+        .isEqualTo(root.resolve("videos/abc/frames/000030.jpg").toUri());
+  }
+
+  @Test
   void keyOutsideTheRootIsRejected() {
     LocalObjectStorage storage = new LocalObjectStorage(root);
 

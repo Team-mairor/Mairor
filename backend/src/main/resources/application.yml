@@ -187,6 +187,10 @@ app:
       work-dir: ${ANALYSIS_WORK_DIR:${java.io.tmpdir}/mairor-analysis}
       ffprobe-path: ${FFPROBE_PATH:ffprobe}
       ffprobe-timeout: 60s
+      # 프레임 추출(SEGMENTING). 운영 이미지에는 ffmpeg 가 들어 있다
+      ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
+      ffmpeg-timeout: 30m
+      upload-concurrency: 8
   llm:
     gemini:
       # 단계 추출(worker). GMS 와 Google 직접은 요청 형식이 같아 주소·키만 바꾼다

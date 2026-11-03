@@ -109,6 +109,7 @@ class ExtractStepsStep implements AnalysisStepHandler {
           "쓸 수 있는 단계가 없습니다(받은 단계 " + mapped.dropped().size() + "개 모두 버림).");
     }
     store.saveGuideInput(jobId, objectMapper.writeValueAsString(mapped.input()));
+    context.stepsExtracted(mapped.input());
   }
 
   private static long millisSince(long nanoStart) {

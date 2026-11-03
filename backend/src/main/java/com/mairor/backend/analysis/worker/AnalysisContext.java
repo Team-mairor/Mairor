@@ -1,5 +1,7 @@
 package com.mairor.backend.analysis.worker;
 
+import com.mairor.backend.analysis.extraction.GuideInput;
+import com.mairor.backend.analysis.frames.FrameManifest;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.UUID;
@@ -19,6 +21,8 @@ public final class AnalysisContext {
   private final Path workDir;
   private Path sourceFile;
   private VideoProbe probe;
+  private GuideInput guideInput;
+  private FrameManifest frames;
 
   public AnalysisContext(
       UUID jobId, UUID videoId, String youtubeVideoId, String sourceObjectKey, Path workDir) {
@@ -63,5 +67,23 @@ public final class AnalysisContext {
   void sourceLoaded(Path file, VideoProbe probe) {
     this.sourceFile = Objects.requireNonNull(file, "file");
     this.probe = Objects.requireNonNull(probe, "probe");
+  }
+
+  /** 단계 추출 결과. 추출 전이면 null. */
+  public GuideInput guideInput() {
+    return guideInput;
+  }
+
+  void stepsExtracted(GuideInput guideInput) {
+    this.guideInput = Objects.requireNonNull(guideInput, "guideInput");
+  }
+
+  /** 프레임 목록. 추출 전이면 null. */
+  public FrameManifest frames() {
+    return frames;
+  }
+
+  void framesExtracted(FrameManifest frames) {
+    this.frames = Objects.requireNonNull(frames, "frames");
   }
 }

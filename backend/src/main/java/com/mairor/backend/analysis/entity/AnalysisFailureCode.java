@@ -17,6 +17,8 @@ public enum AnalysisFailureCode {
   LLM_UNAVAILABLE(true, "영상 분석 모델을 부르지 못했습니다."),
   /** LLM 이 쓸 수 없는 답을 냈다(JSON 아님, 잘림, 차단). 다시 부르면 대개 통과한다. */
   LLM_INVALID_RESPONSE(true, "영상 분석 모델의 답을 쓸 수 없습니다."),
+  /** ffmpeg 로 프레임을 뽑지 못했다(실행 실패·시간 초과·장수 불일치). 같은 파일이면 같은 결과다. */
+  FRAME_EXTRACTION_FAILED(false, "영상에서 프레임을 뽑지 못했습니다."),
   /** 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모든 단계가 틀림). API 명세 VIDEO-002. */
   NO_VALID_STEPS(false, "영상에서 따라 할 수 있는 메이크업 단계를 찾지 못했습니다."),
   /** 예기치 않은 오류. */

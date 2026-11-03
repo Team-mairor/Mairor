@@ -90,6 +90,7 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `ANALYSIS_POLL_INTERVAL` | `5s` | worker 가 대기 작업을 확인하는 간격 |
 | `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지운다 |
 | `FFPROBE_PATH` | `ffprobe` | ffprobe 실행 파일. 운영 이미지에는 들어 있다. 로컬에서 worker 를 돌리려면 ffmpeg 를 설치한다 |
+| `FFMPEG_PATH` | `ffmpeg` | 프레임 추출(SEGMENTING)의 ffmpeg. 운영 이미지에는 들어 있다. 추출 시간 제한(30분)·동시 업로드 수(8)는 `app.analysis.worker` 기본값 |
 | `GEMINI_API_KEY` | (없음) | 단계 추출(worker)의 Gemini 키. **비우면 단계 추출이 `LLM_UNAVAILABLE` 로 실패한다**(앱은 뜬다). 코드·문서에 적지 않는다 |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | Google 직접. GMS 는 `https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com`. 요청 형식이 같아 주소·키만 바꾼다 |
 | `GEMINI_API_KEY_HEADER` · `GEMINI_MODEL` | `x-goog-api-key` · `gemini-2.5-flash` | 키를 싣는 헤더, 모델 |
@@ -348,6 +349,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED 로 집음 → RUNNING
    └─ 단계 처리기를 차례로: LOADING_VIDEO(내려받기 + ffprobe → videos.source_*)
         → EXTRACTING_STEPS(Gemini 에 유튜브 URL → 단계 목록 → 가이드 입력 v2 → guides.guide_input, llm_calls)
+        → SEGMENTING(단계 구간을 따라 프레임 JPEG → 저장소, frames.json → guides.frames_manifest_key)
         → (다음 티켓의 단계들) → COMPLETED
       실패하면 멈춘 단계에서 FAILED + failureCode·retryable
 ```
@@ -378,6 +380,7 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 | `LLM_UNAVAILABLE` | Gemini 를 부르지 못했다(키 없음·거절, 429·5xx·시간 초과를 재시도까지 다 씀). `llm_calls.error_code` 에 종류·HTTP 상태 | 예 |
 | `LLM_INVALID_RESPONSE` | Gemini 답을 쓸 수 없다(JSON 아님·잘림·차단) | 예 |
 | `NO_VALID_STEPS` | 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모두 틀림) | 아니오 |
+| `FRAME_EXTRACTION_FAILED` | ffmpeg 가 프레임을 뽑지 못했다(실행 실패·시간 초과·장수가 계획과 다름). 프레임 업로드 실패는 `STORAGE_UNAVAILABLE` | 아니오 |
 | `INTERNAL_ERROR` | 예기치 않은 오류(서버 로그에 `분석 중 예기치 않은 오류 jobId=…`) | 예 |
 
 **단계 추출** (S15P31A306-309)
@@ -388,6 +391,14 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 - **단계는 겹치지 않는다.** AI 가 단계 시작 직전·끝 직후 사진을 비교해서, 겹치면 영역이 섞인다. 앞 단계의 끝을 뒤 단계 시작으로 당기고, 앞 단계에 남는 구간이 없을 때만 버린다(짧은 단계가 긴 단계 안에 든 경우 짧은 단계를 살린다). 지시문에도 겹치지 말라고 적었다.
 - 결과는 작업의 `guides` 행(`guide_input`, 검수 `NOT_READY`, 영상마다 판 번호 1 부터)에 저장한다. 설명·영역은 AI 콜백(-311)이 채운다.
 - 공유 스키마(`shared/guide-input/guide_input.v2.schema.json`)와 맞는지는 테스트(`GuideInputSchema`)가 레포의 파일을 읽어 확인한다.
+
+**프레임 추출** (S15P31A306-310, 현수 레퍼런스 프레임 요청)
+
+- 영상 전체에서 기본 초당 약 2장, 단계 시작·끝 앞뒤 3초는 초당 약 10장을 원본 해상도 JPEG(`-q:v 2`, 크기·색 변환 없음)로 뽑는다. 첫 단계 전 맨얼굴 구간도 들어간다.
+- `FramePlan` 이 프레임 번호 규칙(`n % round(fps/2) == 0`, 경계 창 안 `n % round(fps/10) == 0`)으로 목록을 먼저 정하고, ffmpeg 는 같은 규칙의 `select` 식으로 한 번만 영상을 푼다. 나온 장수가 계획과 다르면 실패시킨다(번호가 어긋난 채 저장하지 않는다).
+- 저장 위치: 그림 `videos/<youtubeVideoId>/frames/<frameIndex 6자리>.jpg`(같은 영상이면 같은 그림이라 다시 분석해도 덮어씀), 목록 `videos/<youtubeVideoId>/jobs/<jobId>/frames.json`(단계가 작업마다 달라 작업별). 가이드의 `frames_manifest_key` 에 목록 키를 적는다.
+- `frames.json` 은 현수 요청 칸(`source{width,height,fps}`, `items[]{frameIndex, timestampMs, stepId, …, width, height}`)에 `url` 대신 저장소 `key` 를 둔다. AI 요청을 보낼 때(-311) `ObjectStorage.presignGet` 으로 URL 을 만든다. 운영 EC2 는 역할의 임시 자격 증명으로 서명하므로 URL 이 요청한 시간보다 일찍 끝날 수 있다(받는 쪽이 바로 내려받는다).
+- 레퍼런스(31분 · 1080p60) 로컬 실측: 7,765장 · 745 MB · ffmpeg 43초.
 
 **worker**
 

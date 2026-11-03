@@ -22,7 +22,13 @@ class FfprobeTest {
   private final Ffprobe ffprobe =
       new Ffprobe(
           new WorkerProperties(
-              Duration.ofSeconds(5), Path.of("."), "ffprobe", Duration.ofSeconds(30)),
+              Duration.ofSeconds(5),
+              Path.of("."),
+              "ffprobe",
+              Duration.ofSeconds(30),
+              "ffmpeg",
+              Duration.ofMinutes(1),
+              1),
           JsonMapper.builder().build());
 
   @Test

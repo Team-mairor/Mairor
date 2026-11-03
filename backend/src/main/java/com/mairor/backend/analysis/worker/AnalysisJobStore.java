@@ -69,6 +69,12 @@ public class AnalysisJobStore {
             });
   }
 
+  /** 작업의 가이드에 프레임 목록 키를 적는다. 단계 추출이 가이드를 먼저 만든다. */
+  @Transactional
+  public void recordFramesManifest(UUID jobId, String key) {
+    guides.findByAnalysisJobId(jobId).orElseThrow().useFramesManifest(key);
+  }
+
   @Transactional
   public void advance(UUID jobId, ProgressStage stage) {
     load(jobId).advanceTo(stage);
