@@ -25,7 +25,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiDocsTest {
 
   /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 19;
+  private static final int ALL_OPERATIONS = 21;
 
   @Autowired private MockMvc mockMvc;
 
@@ -356,6 +356,30 @@ class OpenApiDocsTest {
         .andExpect(jsonPath("$.paths.*.*.description", everyItem(matchesPattern("(?s).*[가-힣].*"))))
         .andExpect(jsonPath("$.paths.*.*.summary", hasSize(ALL_OPERATIONS)))
         .andExpect(jsonPath("$.paths.*.*.description", hasSize(ALL_OPERATIONS)));
+  }
+
+  /** 운영 내부 API 는 세션이 아니라 공유 토큰 헤더로 표시한다. */
+  @Test
+  void apiDocs_internalAnalysisJobsUseTheInternalToken() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.paths['/v1/internal/analysis-jobs'].post.tags[0]").value("운영 · 분석 작업"))
+        .andExpect(
+            jsonPath("$.paths['/v1/internal/analysis-jobs'].post.security[0].internalToken")
+                .exists())
+        .andExpect(jsonPath("$.paths['/v1/internal/analysis-jobs'].post.responses['202']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/internal/analysis-jobs/{jobId}'].get.responses['404'].description")
+                .value(containsString("NOT_FOUND")))
+        .andExpect(
+            jsonPath("$.components.securitySchemes.internalToken.name").value("X-Internal-Token"))
+        .andExpect(
+            jsonPath(
+                    "$.components.schemas.RegisterAnalysisJobRequest.properties.youtubeVideoId.example")
+                .value("VxAXD6PP76I"));
   }
 
   /** Swagger UI 가 로그인 응답의 csrfToken 을 변경 요청에 자동으로 넣는다(springdoc 의 기본 설정은 그대로 유지). */

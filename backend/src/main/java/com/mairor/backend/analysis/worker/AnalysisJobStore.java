@@ -1,0 +1,86 @@
+package com.mairor.backend.analysis.worker;
+
+import com.mairor.backend.analysis.entity.AnalysisFailureCode;
+import com.mairor.backend.analysis.entity.AnalysisJob;
+import com.mairor.backend.analysis.entity.AnalysisStatus;
+import com.mairor.backend.analysis.entity.ProgressStage;
+import com.mairor.backend.analysis.repository.AnalysisJobRepository;
+import com.mairor.backend.videos.entity.Video;
+import com.mairor.backend.videos.repository.VideoRepository;
+import java.nio.file.Path;
+import java.time.Clock;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+/** worker 의 짧은 트랜잭션들. 실행기는 단계 사이사이에 이것만 부르고, 내려받기·외부 호출 같은 긴 일은 트랜잭션 밖에서 한다(행 잠금을 오래 쥐지 않게). */
+@Component
+public class AnalysisJobStore {
+
+  private final AnalysisJobRepository jobs;
+  private final VideoRepository videos;
+  private final Clock clock;
+
+  AnalysisJobStore(AnalysisJobRepository jobs, VideoRepository videos, Clock clock) {
+    this.jobs = jobs;
+    this.videos = videos;
+    this.clock = clock;
+  }
+
+  /** 가장 오래 기다린 PENDING 작업을 집어 RUNNING 으로 바꾼다. 없으면 빈 값. */
+  @Transactional
+  public Optional<AnalysisContext> claimNext(Path workRoot) {
+    return jobs.lockNextPending()
+        .map(
+            job -> {
+              job.start(clock.instant());
+              Video video = job.getVideo();
+              return new AnalysisContext(
+                  job.getId(),
+                  video.getId(),
+                  video.getYoutubeVideoId(),
+                  video.getSourceObjectKey(),
+                  workRoot.resolve(job.getId().toString()));
+            });
+  }
+
+  @Transactional
+  public void advance(UUID jobId, ProgressStage stage) {
+    load(jobId).advanceTo(stage);
+  }
+
+  @Transactional
+  public void complete(UUID jobId) {
+    load(jobId).complete(clock.instant());
+  }
+
+  @Transactional
+  public void fail(UUID jobId, AnalysisFailureCode code, String message) {
+    load(jobId).fail(code, message, clock.instant());
+  }
+
+  @Transactional
+  public void recordSourceProbe(UUID videoId, VideoProbe probe) {
+    Video video = videos.findById(videoId).orElseThrow();
+    video.recordSourceProbe(probe.width(), probe.height(), probe.fps(), probe.durationSeconds());
+  }
+
+  /**
+   * worker 가 처리 중에 죽어 RUNNING 으로 남은 작업을 PENDING 으로 되돌린다. worker 가 하나라는 전제다(둘 이상이면 다른 worker 가 처리 중인
+   * 작업까지 되돌린다).
+   *
+   * @return 되돌린 작업 수
+   */
+  @Transactional
+  public int requeueRunning() {
+    List<AnalysisJob> running = jobs.findByStatus(AnalysisStatus.RUNNING);
+    running.forEach(AnalysisJob::requeueAfterCrash);
+    return running.size();
+  }
+
+  private AnalysisJob load(UUID jobId) {
+    return jobs.findById(jobId).orElseThrow();
+  }
+}

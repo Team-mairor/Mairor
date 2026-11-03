@@ -83,6 +83,13 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `LOGIN_MAX_ENTRIES` | `10000` | 기억하는 이메일 상태의 최대 개수. 넘으면 진행 중 시도가 없는 가장 오래된 상태부터 지우고, 잠금만으로 가득 차면 새 이메일을 거절한다 |
 | `LOGIN_MAX_CONCURRENT_HASHES` | `4` | 서버 전체에서 동시에 처리하는 로그인 수. 사용자 조회부터 BCrypt 비교까지를 한 번에 묶어 센다(DB 연결 대기가 쌓이는 것도 막는다). 넘으면 DB 에 가지 않고 기다리지 않고 429 로 거절한다. 서버 코어 수에 맞춰 조정한다 |
 | `DB_CONNECTION_TIMEOUT_MS` | `5000` | DB 연결을 얻기까지 기다리는 최대 시간(ms). 넘으면 요청이 `503 SERVICE_UNAVAILABLE` 로 끝난다. 쿼리 실행 시간 제한은 두지 않았다(아래 "운영 전 확인") |
+| `INTERNAL_API_TOKEN` | (없음) | 내부 API(`/api/v1/internal/**`: 운영자 분석 명령, AI 콜백)의 공유 토큰. `X-Internal-Token` 헤더와 비교한다. **비우면 내부 API 는 모두 401**(앱은 뜬다). 코드·문서에 적지 않는다 ([분석 작업](#분석-작업-운영-명령--worker)) |
+| `APP_STORAGE_TYPE` | dev `local` / prod `s3` | 객체 저장소. `local` 은 아래 폴더, `s3` 는 버킷(자격 증명은 AWS 기본 공급자 체인, 운영은 EC2 역할) |
+| `APP_STORAGE_LOCAL_ROOT` | `<임시 폴더>/mairor-storage` | `local` 저장소의 뿌리 폴더. 저장소 키가 이 아래 상대 경로다 |
+| `APP_STORAGE_S3_BUCKET` | prod `mairor-prod-media` | `s3` 저장소 버킷. `s3` 인데 비어 있으면 기동 실패 |
+| `ANALYSIS_POLL_INTERVAL` | `5s` | worker 가 대기 작업을 확인하는 간격 |
+| `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지운다 |
+| `FFPROBE_PATH` | `ffprobe` | ffprobe 실행 파일. 운영 이미지에는 들어 있다. 로컬에서 worker 를 돌리려면 ffmpeg 를 설치한다 |
 
 프론트는 같은 Origin 의 `/api` 로 호출하므로 CORS 설정은 두지 않는다. `ALLOWED_ORIGINS` 에는 브라우저 주소창에 보이는 프론트 공개 Origin 만 넣는다 (리버스 프록시 뒤의 내부 주소가 아니다). 프록시는 `Origin` 헤더를 바꾸지 않고 그대로 넘겨야 한다.
 
@@ -327,6 +334,50 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 - **DB 가 막는 규칙**: 카테고리-종류 불일치(복합 FK `fk_products_category_type`), 제품·호수 중복(정규화 키 유니크), 색상 세 컬럼 일부만 채움, 소문자·잘못된 HEX.
 - **앱에서만 막는 규칙**: 호수 선택이 없는 카테고리(SKINCARE·FRAGRANCE·TOOL)의 제품에 호수를 연결하지 않는다(`Product.addShade`). SQL 로 직접 넣으면 막지 못한다.
 - 종류 코드명과 호환 부위 값은 확정 전이다(`TODO(확인 필요 2)`). 호환 부위는 비워 두며 API 는 빈 목록을 응답한다.
+
+## 분석 작업 (운영 명령 · worker)
+
+1차 MVP 에서는 사용자 분석 요청 API(VIDEO-002·003) 대신 **운영자가** 저장소에 올린 영상으로 분석 작업을 넣는다(S15P31A306-308). 작업은 `worker` 프로파일로 뜬 별도 프로세스가 처리하고, 사용자 요청을 받는 api 는 작업을 돌리지 않는다.
+
+```
+운영자 ── POST /api/v1/internal/analysis-jobs ──▶ api: videos·analysis_jobs(PENDING) 저장
+                                                     │
+worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED 로 집음 → RUNNING
+   └─ 단계 처리기를 차례로: LOADING_VIDEO(내려받기 + ffprobe → videos.source_*) → (다음 티켓의 단계들) → COMPLETED
+      실패하면 멈춘 단계에서 FAILED + failureCode·retryable
+```
+
+**운영 명령** — 공유 토큰(`INTERNAL_API_TOKEN`)이 필요하다. 세션·CSRF 는 쓰지 않는다.
+
+```bash
+curl -X POST https://mairor.co.kr/api/v1/internal/analysis-jobs \
+  -H "X-Internal-Token: $INTERNAL_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"youtubeVideoId":"VxAXD6PP76I","sourceObjectKey":"videos/VxAXD6PP76I/source.mp4",
+       "title":"완성도 up! 요즘 진짜 예뻐진 메이크업","channelTitle":"GO지승","durationSeconds":1858}'
+# 202 {"jobId":"…","videoId":"…","receiptType":"NEW_JOB","status":"PENDING","progressStage":"QUEUED"}
+
+curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
+```
+
+- 영상 파일은 먼저 저장소에 올린다. 운영은 S3 `mairor-prod-media` 의 `videos/<youtubeVideoId>/source.mp4` 를 권장한다. 로컬은 `APP_STORAGE_LOCAL_ROOT` 아래 같은 경로에 둔다.
+- 같은 영상의 진행 중(PENDING·RUNNING) 작업이 있으면 새로 만들지 않고 그 작업을 돌려준다(`JOINED_JOB`). DB 부분 유일 인덱스가 동시 요청까지 막는다. 끝난(COMPLETED·FAILED) 뒤에는 다시 넣을 수 있다.
+- 제목·채널·길이는 1차에 운영자가 넣는다(YouTube Data API 연동은 6단계). 이미 있는 영상의 값은 바꾸지 않는다.
+
+**실패 코드** (`failureCode`, 실패해도 조회는 200)
+
+| 코드 | 원인 | 다시 시도 |
+|---|---|---|
+| `SOURCE_NOT_FOUND` | 저장소에 영상 파일이 없다(키가 틀리거나 안 올림) | 아니오 — 파일을 올리고 새로 넣는다 |
+| `SOURCE_UNREADABLE` | ffprobe 가 영상으로 읽지 못한다(영상 스트림 없음·손상) | 아니오 |
+| `STORAGE_UNAVAILABLE` | 저장소에 일시적으로 닿지 못했다 | 예 |
+| `INTERNAL_ERROR` | 예기치 않은 오류(서버 로그에 `분석 중 예기치 않은 오류 jobId=…`) | 예 |
+
+**worker**
+
+- 로컬: api 를 띄운 채로 두 번째 프로세스를 `./gradlew bootRun --args='--spring.profiles.active=dev,worker --server.port=8081'` 로 띄운다. ffmpeg(ffprobe)가 PATH 에 있어야 한다.
+- 운영: compose 의 `worker` 서비스(같은 이미지, `SPRING_PROFILES_ACTIVE=prod,worker`)는 기본으로 꺼져 있다. 처음 한 번만 EC2 에서 `docker compose --profile worker up -d worker` 로 켠다. 그 뒤로는 배포 스크립트가 떠 있는 worker 를 같이 교체한다(`deploy/deploy.sh`).
+- **worker 는 하나만 띄운다.** 기동할 때 RUNNING 으로 남은 작업(처리 중에 죽은 작업)을 PENDING 으로 되돌리는데, 둘이면 다른 worker 가 처리 중인 작업까지 되돌린다.
+- 단계 처리기(`AnalysisStepHandler`)는 처음 단계부터 다시 돌아도 같은 결과를 내야 하고, 긴 일(내려받기·외부 호출)을 트랜잭션 안에서 하지 않는다. 처리기가 없는 단계는 건너뛴다.
 
 ## 응답 형식
 

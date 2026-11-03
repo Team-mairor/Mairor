@@ -20,3 +20,13 @@ springdoc:
     enabled: false
   swagger-ui:
     enabled: false
+
+# 운영 저장소는 S3 비공개 버킷(-203). 자격 증명은 EC2 역할이라 키를 두지 않는다
+app:
+  storage:
+    type: s3
+    s3:
+      bucket: ${APP_STORAGE_S3_BUCKET:mairor-prod-media}
+  analysis:
+    worker:
+      work-dir: ${ANALYSIS_WORK_DIR:/tmp/mairor-analysis}

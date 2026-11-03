@@ -133,9 +133,17 @@ public class SecurityConfig {
           PathPatternRequestMatcher.withDefaults()
               .matcher(HttpMethod.GET, "/v1/users/oauth/google/signup"));
 
+  /**
+   * 내부 API(운영자 명령·AI 콜백). 세션·CSRF 대신 {@link InternalTokenFilter}가 공유 토큰 헤더로 지킨다. 인가 규칙에서는 공개로 두고 토큰
+   * 필터가 막는다.
+   */
+  static final RequestMatcher INTERNAL =
+      PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/**");
+
   /** 인증 없이 열려 있는 경로 전체. 인가 규칙과 {@link SessionLifetimeFilter}(만료된 세션이어도 이 경로는 막지 않는다)가 같은 목록을 쓴다. */
   private static final RequestMatcher PERMIT_ALL =
-      new OrRequestMatcher(HEALTH, new OrRequestMatcher(PUBLIC_WRITES), GOOGLE_LOGIN, SWAGGER);
+      new OrRequestMatcher(
+          HEALTH, new OrRequestMatcher(PUBLIC_WRITES), GOOGLE_LOGIN, SWAGGER, INTERNAL);
 
   private static RequestMatcher path(String pattern) {
     return PathPatternRequestMatcher.withDefaults().matcher(pattern);
@@ -153,7 +161,8 @@ public class SecurityConfig {
       SessionMetrics sessionMetrics,
       SessionEndNotifier sessionEndNotifier,
       Clock clock,
-      CookieSerializer cookieSerializer)
+      CookieSerializer cookieSerializer,
+      InternalApiProperties internalApiProperties)
       throws Exception {
     http.securityContext(context -> context.securityContextRepository(securityContextRepository))
         // API 서버라 저장된 요청이 필요 없다. 기본값은 미인증 요청마다 익명 세션과 쿠키를 만들어 401 응답마다 세션 행이 쌓인다
@@ -176,11 +185,15 @@ public class SecurityConfig {
             csrf ->
                 csrf.csrfTokenRepository(csrfTokenRepository)
                     .csrfTokenRequestHandler(csrfTokenRequestHandler)
-                    .ignoringRequestMatchers(new OrRequestMatcher(PUBLIC_WRITES)))
+                    .ignoringRequestMatchers(new OrRequestMatcher(PUBLIC_WRITES), INTERNAL))
         // 필터를 빈으로 노출하면 서블릿 컨테이너에 한 번 더 등록되므로 여기서 만들어 보안 체인에만 끼운다
         .addFilterBefore(
             new OriginCheckFilter(PUBLIC_WRITES, originProperties.allowedOrigins(), errorWriter),
             CsrfFilter.class)
+        // 내부 API 는 CSRF 대신 공유 토큰으로 막는다. 세션을 읽기 전에 거절한다
+        .addFilterBefore(
+            new InternalTokenFilter(INTERNAL, internalApiProperties, errorWriter),
+            SecurityContextHolderFilter.class)
         // 세션을 읽은 뒤(SecurityContextHolderFilter), CSRF 검사 전에 절대 만료를 판단하고 쿠키를 갱신한다
         .addFilterAfter(
             new SessionLifetimeFilter(

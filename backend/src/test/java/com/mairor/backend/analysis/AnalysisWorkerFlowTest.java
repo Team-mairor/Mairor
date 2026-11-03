@@ -1,0 +1,172 @@
+package com.mairor.backend.analysis;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+import com.mairor.backend.analysis.entity.AnalysisJob;
+import com.mairor.backend.analysis.entity.AnalysisStatus;
+import com.mairor.backend.analysis.entity.ProgressStage;
+import com.mairor.backend.analysis.repository.AnalysisJobRepository;
+import com.mairor.backend.analysis.service.AnalysisJobReceipt;
+import com.mairor.backend.analysis.service.AnalysisJobRequest;
+import com.mairor.backend.analysis.service.AnalysisJobService;
+import com.mairor.backend.analysis.service.ReceiptType;
+import com.mairor.backend.analysis.worker.AnalysisJobRunner;
+import com.mairor.backend.analysis.worker.AnalysisJobStore;
+import com.mairor.backend.analysis.worker.Ffprobe;
+import com.mairor.backend.analysis.worker.FfprobeException;
+import com.mairor.backend.analysis.worker.VideoProbe;
+import com.mairor.backend.videos.repository.VideoRepository;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+/**
+ * 작업 접수 → worker 실행의 흐름. 실제 DB(스키마 SQL)와 로컬 저장소를 쓰고 ffprobe 만 가짜로 바꾼다. worker 스케줄러는 {@code worker}
+ * 프로파일이 아니라 뜨지 않으므로 실행기를 직접 부른다.
+ */
+class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
+
+  private static final VideoProbe PROBE = new VideoProbe(1920, 1080, 60.0, 1858.2);
+
+  @Autowired private AnalysisJobService service;
+  @Autowired private AnalysisJobRunner runner;
+  @Autowired private AnalysisJobStore store;
+  @Autowired private AnalysisJobRepository jobs;
+  @Autowired private VideoRepository videos;
+  @MockitoBean private Ffprobe ffprobe;
+
+  private static AnalysisJobRequest request(String youtubeVideoId) {
+    return new AnalysisJobRequest(
+        youtubeVideoId, "videos/" + youtubeVideoId + "/source.mp4", "제목", "채널", 600);
+  }
+
+  @Test
+  void loadsTheVideoAndCompletes() {
+    putObject("videos/VxAXD6PP76I/source.mp4");
+    when(ffprobe.probe(any())).thenReturn(PROBE);
+    AnalysisJobReceipt receipt = service.register(request("VxAXD6PP76I"));
+
+    assertThat(runner.runNext()).isTrue();
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.COMPLETED);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.DONE);
+    assertThat(job.getStartedAt()).isNotNull();
+    var video = videos.findByYoutubeVideoId("VxAXD6PP76I").orElseThrow();
+    assertThat(video.getSourceWidth()).isEqualTo(1920);
+    assertThat(video.getSourceFps()).isEqualTo(60.0);
+    assertThat(video.getSourceDurationSeconds()).isEqualTo(1858.2);
+    assertThat(runner.runNext()).as("대기 작업이 더 없다").isFalse();
+  }
+
+  @Test
+  void missingSourceFileFailsWithoutRetry() {
+    AnalysisJobReceipt receipt = service.register(request("noFileHere1"));
+
+    runner.runNext();
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.FAILED);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.LOADING_VIDEO);
+    assertThat(job.getFailureCode()).isEqualTo("SOURCE_NOT_FOUND");
+    assertThat(job.isRetryable()).isFalse();
+  }
+
+  @Test
+  void unreadableVideoFailsWithoutRetry() {
+    putObject("videos/brokenVideo/source.mp4");
+    when(ffprobe.probe(any())).thenThrow(new FfprobeException("영상 스트림이 없습니다."));
+    AnalysisJobReceipt receipt = service.register(request("brokenVideo"));
+
+    runner.runNext();
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getFailureCode()).isEqualTo("SOURCE_UNREADABLE");
+    assertThat(job.getFailureMessage()).contains("영상 스트림이 없습니다");
+    assertThat(job.isRetryable()).isFalse();
+  }
+
+  @Test
+  void unexpectedErrorFailsAsRetryableInternalError() {
+    putObject("videos/explodeVid1/source.mp4");
+    when(ffprobe.probe(any())).thenThrow(new IllegalStateException("boom"));
+    AnalysisJobReceipt receipt = service.register(request("explodeVid1"));
+
+    runner.runNext();
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getFailureCode()).isEqualTo("INTERNAL_ERROR");
+    assertThat(job.isRetryable()).isTrue();
+  }
+
+  @Test
+  void afterAFailureTheSameVideoCanBeRegisteredAgain() {
+    AnalysisJobReceipt first = service.register(request("retryVideo1"));
+    runner.runNext();
+
+    AnalysisJobReceipt second = service.register(request("retryVideo1"));
+
+    assertThat(second.receiptType()).isEqualTo(ReceiptType.NEW_JOB);
+    assertThat(second.jobId()).isNotEqualTo(first.jobId());
+  }
+
+  @Test
+  void runningJobLeftByACrashGoesBackToPending() {
+    AnalysisJobReceipt receipt = service.register(request("crashedVid1"));
+    jdbc.update(
+        "update analysis_jobs set status = 'RUNNING', progress_stage = 'LOADING_VIDEO',"
+            + " started_at = now() where id = ?",
+        receipt.jobId());
+
+    assertThat(store.requeueRunning()).isEqualTo(1);
+
+    AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.PENDING);
+    assertThat(job.getStartedAt()).isNull();
+  }
+
+  @Test
+  void concurrentRegistrationsOfTheSameVideoCreateOneJob() throws Exception {
+    int threads = 4;
+    ExecutorService pool = Executors.newFixedThreadPool(threads);
+    try {
+      Callable<AnalysisJobReceipt> task = () -> service.register(request("sameVideo01"));
+      List<Future<AnalysisJobReceipt>> futures = pool.invokeAll(List.of(task, task, task, task));
+
+      List<AnalysisJobReceipt> receipts =
+          futures.stream()
+              .map(
+                  f -> {
+                    try {
+                      return f.get();
+                    } catch (Exception e) {
+                      throw new IllegalStateException(e);
+                    }
+                  })
+              .toList();
+
+      assertThat(receipts)
+          .extracting(AnalysisJobReceipt::jobId)
+          .containsOnly(receipts.get(0).jobId());
+      assertThat(receipts).filteredOn(r -> r.receiptType() == ReceiptType.NEW_JOB).hasSize(1);
+      assertThat(jdbc.queryForObject("select count(*) from analysis_jobs", Integer.class))
+          .isEqualTo(1);
+      assertThat(jdbc.queryForObject("select count(*) from videos", Integer.class)).isEqualTo(1);
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void unknownJobIdHasNoRow() {
+    assertThat(jobs.findById(UUID.randomUUID())).isEmpty();
+  }
+}

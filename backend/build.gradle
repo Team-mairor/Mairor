@@ -49,6 +49,12 @@ dependencies {
     // 외부 HTTP 호출 (YouTube·LLM·AI 서버)
     implementation 'org.springframework.boot:spring-boot-starter-restclient'
 
+    // 객체 저장소 (S3: 분석 영상·프레임). 동기 클라이언트만 쓰므로 Netty 비동기 클라이언트는 뺀다
+    implementation platform('software.amazon.awssdk:bom:2.39.6')
+    implementation('software.amazon.awssdk:s3') {
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 

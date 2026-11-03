@@ -169,3 +169,21 @@ app:
       terms: ${AGREEMENT_TERMS_VERSION:2026-10-26}
       privacy: ${AGREEMENT_PRIVACY_VERSION:2026-10-26}
       age-over-14: ${AGREEMENT_AGE_OVER_14_VERSION:2026-10-26}
+  internal:
+    # 내부 API(/api/v1/internal/**: 운영자 명령·AI 콜백)의 공유 토큰. X-Internal-Token 헤더와 비교한다. 비우면 내부 API 는 모두 401
+    token: ${INTERNAL_API_TOKEN:}
+  storage:
+    # local(개발·테스트, 아래 폴더) | s3(운영)
+    type: ${APP_STORAGE_TYPE:local}
+    local:
+      root: ${APP_STORAGE_LOCAL_ROOT:${java.io.tmpdir}/mairor-storage}
+    s3:
+      bucket: ${APP_STORAGE_S3_BUCKET:}
+      region: ${AWS_REGION:ap-northeast-2}
+  analysis:
+    worker:
+      # worker 프로파일에서만 쓴다. 대기 작업 확인 간격, 작업 임시 폴더, ffprobe 위치·시간 제한
+      poll-interval: ${ANALYSIS_POLL_INTERVAL:5s}
+      work-dir: ${ANALYSIS_WORK_DIR:${java.io.tmpdir}/mairor-analysis}
+      ffprobe-path: ${FFPROBE_PATH:ffprobe}
+      ffprobe-timeout: 60s

@@ -116,10 +116,41 @@ public class Video {
     this.metaRefreshedAt = Objects.requireNonNull(metaRefreshedAt, "metaRefreshedAt");
   }
 
-  /** 분석에 쓸 영상 파일의 위치와 ffprobe 값을 기록한다. */
+  /** 분석에 쓸 영상 파일의 위치와 ffprobe 값을 함께 기록한다. */
   public void attachSource(
       String objectKey, int width, int height, double fps, double durationSeconds) {
-    this.sourceObjectKey = Objects.requireNonNull(objectKey, "objectKey");
+    useSourceObject(objectKey);
+    recordSourceProbe(width, height, fps, durationSeconds);
+  }
+
+  /**
+   * 분석에 쓸 영상 파일의 저장소 키를 정한다. 키가 바뀌면 이전 파일의 ffprobe 값은 지운다(다음 분석이 새로 잰다).
+   *
+   * @throws IllegalArgumentException 키가 비었거나 길면
+   */
+  public void useSourceObject(String objectKey) {
+    Objects.requireNonNull(objectKey, "objectKey");
+    if (objectKey.isBlank() || objectKey.length() > SOURCE_OBJECT_KEY_MAX_LENGTH) {
+      throw new IllegalArgumentException("영상 파일 키가 비었거나 너무 깁니다.");
+    }
+    if (!objectKey.equals(sourceObjectKey)) {
+      this.sourceObjectKey = objectKey;
+      this.sourceWidth = null;
+      this.sourceHeight = null;
+      this.sourceFps = null;
+      this.sourceDurationSeconds = null;
+    }
+  }
+
+  /**
+   * 영상 파일을 ffprobe 로 잰 값을 기록한다.
+   *
+   * @throws IllegalStateException 영상 파일 키가 아직 없으면
+   */
+  public void recordSourceProbe(int width, int height, double fps, double durationSeconds) {
+    if (sourceObjectKey == null) {
+      throw new IllegalStateException("영상 파일 키가 없어 원본 정보를 기록할 수 없습니다.");
+    }
     this.sourceWidth = width;
     this.sourceHeight = height;
     this.sourceFps = fps;

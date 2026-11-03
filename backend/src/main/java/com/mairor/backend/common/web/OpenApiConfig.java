@@ -38,7 +38,16 @@ import org.springframework.context.annotation.Configuration;
     description =
         "변경 요청(POST·PUT·PATCH·DELETE)에 필요한 값. Swagger UI 에서는 로그인·내 계정 조회 후 자동으로 들어가므로 비워 둔다."
             + " 직접 넣으면 그 값을 쓰며, 로그인할 때마다 새로 발급되므로 가장 최근 응답의 값이어야 한다.")
+@SecurityScheme(
+    name = OpenApiConfig.INTERNAL_TOKEN,
+    type = SecuritySchemeType.APIKEY,
+    in = SecuritySchemeIn.HEADER,
+    paramName = "X-Internal-Token",
+    description =
+        "내부 API(/v1/internal/**) 공유 토큰. 운영자 명령과 AI 서버 콜백이 쓴다. 값은 서버 설정(INTERNAL_API_TOKEN)과 같아야 한다.")
 public class OpenApiConfig {
+
+  public static final String INTERNAL_TOKEN = "internalToken";
 
   public static final String SESSION_COOKIE = "sessionCookie";
   public static final String CSRF_TOKEN = "csrfToken";

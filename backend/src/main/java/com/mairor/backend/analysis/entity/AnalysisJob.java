@@ -114,6 +114,67 @@ public class AnalysisJob {
     this.attempt = 1;
   }
 
+  // --- 상태 전이 (PENDING → RUNNING → COMPLETED | FAILED, 재시작 복구 RUNNING → PENDING) ---
+
+  /** worker 가 작업을 집었다. PENDING 일 때만. */
+  public void start(Instant now) {
+    requireStatus(AnalysisStatus.PENDING, "시작");
+    this.status = AnalysisStatus.RUNNING;
+    this.startedAt = Objects.requireNonNull(now, "now");
+  }
+
+  /** 다음 진행 단계로 넘어간다. RUNNING 일 때만, 대기(QUEUED)·완료(DONE)로는 넘어가지 않는다. */
+  public void advanceTo(ProgressStage stage) {
+    requireStatus(AnalysisStatus.RUNNING, "단계 진행");
+    if (stage == ProgressStage.QUEUED || stage == ProgressStage.DONE) {
+      throw new IllegalArgumentException("진행 단계로 " + stage + " 를 쓸 수 없습니다.");
+    }
+    this.progressStage = stage;
+  }
+
+  /** 모든 단계를 마쳤다. RUNNING 일 때만. */
+  public void complete(Instant now) {
+    requireStatus(AnalysisStatus.RUNNING, "완료");
+    this.status = AnalysisStatus.COMPLETED;
+    this.progressStage = ProgressStage.DONE;
+    this.progressPercent = 100;
+    this.finishedAt = Objects.requireNonNull(now, "now");
+  }
+
+  /**
+   * 실패로 끝낸다. 진행 단계는 멈춘 단계로 남는다(API 명세 v2: FAILED 면 progressStage = 멈춘 단계). RUNNING 일 때만.
+   *
+   * @param message 운영자가 볼 원인. 길면 자른다. {@code null}이면 코드의 기본 문구
+   */
+  public void fail(AnalysisFailureCode code, String message, Instant now) {
+    requireStatus(AnalysisStatus.RUNNING, "실패 처리");
+    this.status = AnalysisStatus.FAILED;
+    this.failureCode = Objects.requireNonNull(code, "code").name();
+    this.failureMessage = truncate(message == null ? code.defaultMessage() : message);
+    this.retryable = code.retryable();
+    this.finishedAt = Objects.requireNonNull(now, "now");
+  }
+
+  /** worker 가 처리 중에 죽었다. 다시 기동할 때 대기열로 돌린다. RUNNING 일 때만. */
+  public void requeueAfterCrash() {
+    requireStatus(AnalysisStatus.RUNNING, "재시작 복구");
+    this.status = AnalysisStatus.PENDING;
+    this.startedAt = null;
+  }
+
+  private void requireStatus(AnalysisStatus expected, String action) {
+    if (status != expected) {
+      throw new IllegalStateException(
+          "분석 작업 " + id + " 은 " + status + " 상태라 " + action + " 할 수 없습니다.");
+    }
+  }
+
+  private static String truncate(String message) {
+    return message.length() <= FAILURE_MESSAGE_MAX_LENGTH
+        ? message
+        : message.substring(0, FAILURE_MESSAGE_MAX_LENGTH);
+  }
+
   public UUID getId() {
     return id;
   }
