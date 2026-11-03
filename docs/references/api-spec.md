@@ -205,7 +205,7 @@ API-VIDEO-001 · POST /api/v1/videos
 
 - 회원·CSRF 필요. Body: youtubeVideoId:string 필수. 성공 200 VideoSelection(신규 내부 영상 생성 여부와 무관).
 - 400 VALIDATION\_FAILED(형식), 404 NOT\_FOUND(영상 없음), 502 VIDEO\_PROVIDER\_ERROR, 504 VIDEO\_PROVIDER\_TIMEOUT.
-- 서버가 메타데이터·재생 가능 여부 재확인. embeddable=false는 FE 선택 차단. guideAvailable=true는 검수 승인일 때만, 승인 전 guideId=null. analysisJobId는 본인이 조회 가능한 작업만 제공.
+- 서버가 메타데이터·공개 여부 재확인. 비공개·삭제·연령 제한 영상은 409 VIDEO_UNSUPPORTED_FOR_ANALYSIS (로컬 수정 -307: 임베드 재생을 하지 않아 embeddable 칸을 없앰). guideAvailable=true는 검수 승인일 때만, 승인 전 guideId=null. analysisJobId는 본인이 조회 가능한 작업만 제공.
 - 이 API 자체는 분석을 생성하지 않는다. 검색 결과는 분석하기 버튼, Top 4는 탭 직후 guideAvailable=false이면 API-VIDEO-002를 연이어 호출.
 </toggle>
 
@@ -247,9 +247,9 @@ API-VIDEO-005 · GET /api/v1/videos/popular
 
 관련 기능: VIDEO-005 · VIDEO-001
 
-- 회원 GET. Query·Body 없음(Top 4 고정). 200 PopularVideoResponse. 재생 불가·중복 제외, guideAvailable=false도 정상.
+- 회원 GET. Query·Body 없음(Top 4 고정). 200 PopularVideoResponse. 서비스 안에서 많이 선택된 영상 순(YouTube 인기 순위 아님). 분석 불가·중복 제외, guideAvailable=false도 정상. (로컬 수정 -307)
 - 503 VIDEO\_POPULAR\_UNAVAILABLE(집계·신선도·상위4개 미확보), 외부 오류 502 VIDEO\_PROVIDER\_ERROR / 504 VIDEO\_PROVIDER\_TIMEOUT.
-- 인기 산정·지역·기간·갱신 주기·4개 미확보의 503 정책은 현재 초안이며 결정 전 실제 실시간 집계로 표시하지 않는다. 고정 검수 가이드 목록으로 대체하지 않는다.
+- 집계 대상·기간·갱신 주기·4개 미확보의 503 정책은 현재 초안이며 결정 전 실제 실시간 집계로 표시하지 않는다. 고정 검수 가이드 목록으로 대체하지 않는다.
 </toggle>
 
 <toggle>
@@ -656,7 +656,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 1-3 회원가입 | API-USERS-011 중복 확인(이메일 변경 시 재확인) → (이메일 소유 확인 사용 시, 초안) API-USERS-012 인증번호 발송 → API-USERS-013 확인 → API-USERS-001(약관 agreements 포함) → 로그인 화면(이메일 채움) → 로그인 후 온보딩 |
 | 2 온보딩·파우치 담기 | 노출 여부는 기기 저장(API 없음). 파우치 담기 = 11 등록 시트와 동일(API-POUCH-008 → 001/002 → 004) |
 | 3 홈 | API-REPORT-001(최근 리포트·다시 따라 하기 카드) · API-VIDEO-007(검수 중 가이드 카드) · API-POUCH-003(파우치 보드 최대 5). '다시 하기'·'READY 따라 하기' → 5 준비(로딩 없음) |
-| 4 영상 입력 | 검색 API-VIDEO-004 / Top 4 API-VIDEO-005. 검색 결과 선택 → API-VIDEO-001(임베드·챕터) → guideAvailable면 '바로 따라 하기', 아니면 '분석하기' → API-VIDEO-002. Top 4 탭 → API-VIDEO-001 → 가이드 없으면 즉시 API-VIDEO-002. 429 한도 안내, 재생 불가 선택 차단 |
+| 4 영상 입력 | 검색 API-VIDEO-004 / Top 4 API-VIDEO-005. 검색 결과 선택 → API-VIDEO-001(메타·챕터, 재생 없음) → guideAvailable면 '바로 따라 하기', 아니면 '분석하기' → API-VIDEO-002. Top 4 탭 → API-VIDEO-001 → 가이드 없으면 즉시 API-VIDEO-002. 429 한도 안내, 분석 불가 선택 차단 (로컬 수정 -307) |
 | 5 분석 로딩·준비 | API-VIDEO-003 폴링(pollAfterSeconds): 진행 단계·%·찾은 제품. 없는 제품 탭 → 등록 시트(API-POUCH-004) → 다음 폴링에 보유 반영. 얼굴 등록 모달 → API-CAMERA-001(다시 촬영은 001 재호출 — 이전 미연결 등록 자동 폐기, 준비 이탈 시 API-CAMERA-003). 파우치 확인 모달 → API-POUCH-003/004. 실패: retryable이면 API-VIDEO-006, 아니면 영상 입력. 검수 대기(PENDING) → 홈 카드, 반려 → 다른 영상. 가이드 APPROVED + 얼굴 등록 완료 시 '미리보기 보기' |
 | 6 미리보기 | API-ANALYSIS-001 → previewable 단계(아이섀도·아이라이너·블러셔·하이라이터·립)만 클라이언트 오버레이, 'N / 전체' 안내. 카메라 오류·인식 알림은 클라이언트 |
 | 7 제품 체크 ↔ 입혀보며 고르기 | API-RECOMMEND-001(생성) / 002(조회). 바꾸기 패널 = candidates(추천 1·2·3) + API-POUCH-003?category=같은 카테고리. 두 보기의 선택값은 클라이언트 상태로 공유 |
@@ -826,15 +826,15 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | ReportRecord <b>v2</b> | recordId:string, executionId:string, videoId:string, videoTitle:string, channelTitle:string, guideId:string, guideVersion:integer, completedAt:datetime, completedPhoto:Photo\|null, stepCount:integer, substituteCount:integer, steps:ReportStep\[\]. 진하기 측정값·얼굴 등록 이미지는 포함하지 않음. |
 | ReportStep | GuideStep의 모든 필드 + matchingResult:SAME\|SUBSTITUTE\|NONE, selectedProduct:PouchItem\|null, skipped:boolean, photo:Photo\|null. 모두 실행 당시 정보. photo=null은 '미촬영'. |
 | VideoChapter <b>v2</b> | startSeconds:integer, label:string. 설명란 챕터. ANALYSIS-001 단계 경계 교차 확인에도 사용. |
-| VideoSelection <b>v2</b> | videoId:string, youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, chapters:VideoChapter\[\], embeddable:boolean, guideId:string\|null, guideAvailable:boolean, analysisJobId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED\|null. |
+| VideoSelection <b>v2</b> | videoId:string, youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, chapters:VideoChapter\[\], guideId:string\|null, guideAvailable:boolean, analysisJobId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED\|null. embeddable 칸 없음 (로컬 수정 -307). |
 | AnalysisJobReceipt <b>v2</b> | jobId:string\|null, videoId:string, receiptType:REUSED\_GUIDE\|JOINED\_JOB\|NEW\_JOB, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:string, guideId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, pollAfterSeconds:integer\|null. REUSED\_GUIDE면 jobId=null·status=COMPLETED·reviewStatus=APPROVED·guideId 필수. |
 | FoundProduct <b>v2</b> | stepId:string\|null, part:string, referenceProduct:ReferenceProduct, ownership:OWNED\|NOT\_OWNED\|UNKNOWN. ownership은 조회 시점 파우치 기준. |
 | AnalysisJobStatus <b>v2</b> | jobId:string, videoId:string, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:QUEUED\|LOADING\_VIDEO\|SEGMENTING\|RECOGNIZING\_PRODUCTS\|EXTRACTING\_STEPS\|BUILDING\_GUIDE\|DONE, progressPercent:integer(0\~100)\|null, estimatedRemainingSeconds:integer\|null, retryable:boolean, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, guideAvailable:boolean, guideId:string\|null, foundProducts:FoundProduct\[\], foundProductCount:integer, totalProductCount:integer\|null, failureCode:string\|null, failureMessage:string\|null, pollAfterSeconds:integer\|null, createdAt:datetime, completedAt:datetime\|null. FAILED면 progressStage=멈춘 단계. 실패·승인·반려 시 pollAfterSeconds=null. 얼굴 등록 상태는 별도(FaceRegistration). |
 | AnalysisJobSummary <b>v2</b> | jobId:string, videoId:string, youtubeVideoId:string, title:string, thumbnailUrl:string\|null, status:COMPLETED, reviewStatus:PENDING\|APPROVED\|REJECTED, guideId:string\|null, requestedAt:datetime, reviewedAt:datetime\|null. API-VIDEO-007 항목. |
-| VideoSearchItem <b>v2</b> | youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, embeddable:boolean, guideId:string\|null, guideAvailable:boolean. |
+| VideoSearchItem <b>v2</b> | youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, guideId:string\|null, guideAvailable:boolean. embeddable 칸 없음 (로컬 수정 -307). |
 | VideoSearchPage | items:VideoSearchItem\[\], nextPageToken:string\|null, size:integer. YouTube 검색은 page 대신 pageToken을 사용하는 예외. |
-| PopularVideoItem | VideoSearchItem의 모든 필드 + rank:integer(1\~4). embeddable=false는 응답에서 제외. guideAvailable=false 가능. |
-| PopularVideoResponse | items:PopularVideoItem\[\], rankingBasis:string, aggregationScope:string, updatedAt:datetime, nextRefreshAt:datetime\|null. 정상은 서로 다른 4개·인기순. 집계 기준·범위·주기는 확인 필요 11. 4개 미확보 시 임시 계약 503. |
+| PopularVideoItem | VideoSearchItem의 모든 필드 + rank:integer(1\~4). 분석 불가 영상은 응답에서 제외 (로컬 수정 -307). guideAvailable=false 가능. |
+| PopularVideoResponse | items:PopularVideoItem\[\], rankingBasis:string, aggregationScope:string, updatedAt:datetime, nextRefreshAt:datetime\|null. 정상은 서로 다른 4개·서비스 내 선택순 (로컬 수정 -307). 집계 대상·기간·주기는 확인 필요 11. 4개 미확보 시 임시 계약 503. |
 | Page | items:T\[\], page:integer(0부터), size:integer, hasNext:boolean. 개별 목록 API가 정의한 메타 필드(예: pouchVersion) 확장 가능. |
 | Error | code:string, message:string, details:array of \{field:string, reason:string\}(입력 필드 오류일 때만). 서버 내부 예외는 미노출. |
 </toggle>

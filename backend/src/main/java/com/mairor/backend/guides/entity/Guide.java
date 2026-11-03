@@ -1,0 +1,186 @@
+package com.mairor.backend.guides.entity;
+
+import com.mairor.backend.analysis.entity.AnalysisJob;
+import com.mairor.backend.videos.entity.Video;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.time.Instant;
+import java.util.Objects;
+import java.util.UUID;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
+
+/**
+ * 분석 작업 하나가 만든 가이드. 단계 입력·설명·영역을 레포 {@code shared/} 스키마 모양의 JSON 그대로 담는다.
+ *
+ * <ul>
+ *   <li>{@code guideInput}: AI 서버에 보낸 가이드 입력({@code shared/guide-input/guide_input.v1.schema.json})
+ *   <li>{@code explanation}: AI 콜백의 {@code guide}({@code shared/guide-job}). 콜백 전에는 {@code null}
+ *   <li>{@code area}: 가이드 영역({@code shared/guide-area}). 영역 분석이 늦으면 설명만 온 채로 {@code null}일 수 있다
+ * </ul>
+ *
+ * <p>같은 영상의 공개(APPROVED) 가이드는 하나뿐이다. 부분 유일 인덱스({@value #VIDEO_APPROVED_UNIQUE})라 {@code
+ * db/schema/analysis.sql}에만 있다. 검수 상태 전이는 S15P31A306-311 에서 더한다.
+ */
+@Entity
+@Table(
+    name = "guides",
+    uniqueConstraints = {
+      @UniqueConstraint(name = Guide.ANALYSIS_JOB_UNIQUE, columnNames = "analysis_job_id"),
+      @UniqueConstraint(
+          name = Guide.VIDEO_VERSION_UNIQUE,
+          columnNames = {"video_id", "version"})
+    })
+public class Guide {
+
+  public static final String VIDEO_FK = "fk_guides_video";
+  public static final String ANALYSIS_JOB_FK = "fk_guides_analysis_job";
+  public static final String REVIEWED_BY_FK = "fk_guides_reviewed_by";
+  public static final String ANALYSIS_JOB_UNIQUE = "uk_guides_analysis_job";
+  public static final String VIDEO_VERSION_UNIQUE = "uk_guides_video_version";
+  public static final String VIDEO_APPROVED_UNIQUE = "uk_guides_video_approved";
+
+  public static final int MESH_VERSION_MAX_LENGTH = 10;
+  public static final int FRAMES_MANIFEST_KEY_MAX_LENGTH = 500;
+
+  @Id
+  @GeneratedValue(strategy = GenerationType.UUID)
+  private UUID id;
+
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "video_id", nullable = false, foreignKey = @ForeignKey(name = VIDEO_FK))
+  private Video video;
+
+  // 작업당 가이드 하나는 이름 있는 유일 제약(ANALYSIS_JOB_UNIQUE)으로 지킨다. @OneToOne 은 Hibernate 가 이름 없는 유일 제약을 더 만든다
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(
+      name = "analysis_job_id",
+      nullable = false,
+      foreignKey = @ForeignKey(name = ANALYSIS_JOB_FK))
+  private AnalysisJob analysisJob;
+
+  /** 같은 영상 안에서 1부터 오른다. 매칭의 stale 판정(guideVersion)에 쓴다. */
+  @Column(nullable = false)
+  private int version;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "review_status", nullable = false, length = 20)
+  private ReviewStatus reviewStatus;
+
+  /** 가이드 영역의 얼굴 메시 버전({@code "v1"}). 영역이 오기 전에는 {@code null}. */
+  @Column(name = "mesh_version", length = MESH_VERSION_MAX_LENGTH)
+  private String meshVersion;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "guide_input", nullable = false)
+  private String guideInput;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "explanation")
+  private String explanation;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "area")
+  private String area;
+
+  @Column(name = "frames_manifest_key", length = FRAMES_MANIFEST_KEY_MAX_LENGTH)
+  private String framesManifestKey;
+
+  @Column(name = "reviewed_at")
+  private Instant reviewedAt;
+
+  @Column(name = "reviewed_by")
+  private UUID reviewedBy;
+
+  @CreationTimestamp
+  @Column(name = "created_at", nullable = false, updatable = false)
+  private Instant createdAt;
+
+  @UpdateTimestamp
+  @Column(name = "updated_at", nullable = false)
+  private Instant updatedAt;
+
+  protected Guide() {}
+
+  /**
+   * 단계 입력만 있는(NOT_READY) 가이드를 만든다.
+   *
+   * @param guideInput AI 서버에 보낼 가이드 입력 JSON 문자열
+   */
+  public Guide(AnalysisJob analysisJob, int version, String guideInput) {
+    this.analysisJob = Objects.requireNonNull(analysisJob, "analysisJob");
+    this.video = analysisJob.getVideo();
+    this.version = version;
+    this.guideInput = Objects.requireNonNull(guideInput, "guideInput");
+    this.reviewStatus = ReviewStatus.NOT_READY;
+  }
+
+  public UUID getId() {
+    return id;
+  }
+
+  public Video getVideo() {
+    return video;
+  }
+
+  public AnalysisJob getAnalysisJob() {
+    return analysisJob;
+  }
+
+  public int getVersion() {
+    return version;
+  }
+
+  public ReviewStatus getReviewStatus() {
+    return reviewStatus;
+  }
+
+  public String getMeshVersion() {
+    return meshVersion;
+  }
+
+  public String getGuideInput() {
+    return guideInput;
+  }
+
+  public String getExplanation() {
+    return explanation;
+  }
+
+  public String getArea() {
+    return area;
+  }
+
+  public String getFramesManifestKey() {
+    return framesManifestKey;
+  }
+
+  public Instant getReviewedAt() {
+    return reviewedAt;
+  }
+
+  public UUID getReviewedBy() {
+    return reviewedBy;
+  }
+
+  public Instant getCreatedAt() {
+    return createdAt;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+}
