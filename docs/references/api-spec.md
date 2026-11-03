@@ -268,6 +268,7 @@ API-POUCH-001 · GET /api/v1/products
 관련 기능: POUCH-002 제품 찾기
 
 - 회원 GET. Query category:string·type:string·brand:string·name:string 필수. category/type은 API-POUCH-008 코드, brand/name은 공백 제거 후 1\~100자.
+- type이 category 소속이 아니면 400 VALIDATION\_FAILED(field=type). brand/name 정확 일치는 아래 PouchWrite 정규화 규칙으로 비교한다. (로컬 수정 -209)
 - 200 \{items:Product\[\]\}, 최대5개(정확 일치 우선). 0건이면 직접 입력, 1건이면 호수 목록. 별도 검색 결과 목록 UI 없음. 다건을 임의로 첫 항목에 연결하지 않으며 다건 처리 UX는 확정 필요.
 - 400 VALIDATION\_FAILED(코드·필드 오류). 네트워크/서버 실패는 재시도 또는 직접 입력. 결과에 shades가 이미 있으면 API-POUCH-002 중복 조회 불필요.
 </toggle>
@@ -336,6 +337,7 @@ API-POUCH-008 · GET /api/v1/product-categories
 - 회원 GET. Query·Body 없음. 200 \{items:ProductCategory\[\]\}.
 - 9개 카테고리와 types·matchable·shadeSelectable·compatibleParts 포함. BASE/EYE/BROW/CHEEK/LIP만 matchable=true. SKINCARE/FRAGRANCE/TOOL은 shadeSelectable=false, NAIL은 true.
 - FE는 code를 저장하고 label을 표시한다. 세부 type 코드·compatibleParts 값은 데이터 계약 확정 필요. 미정 코드를 예시에서 추측해 하드코딩하지 않는다.
+- <b>임시 제안 (로컬 수정 -209)</b>: 현재 type 코드 38개는 기능명세 POUCH-004 라벨을 옮긴 임시 제안이며 확정 전 바뀔 수 있다(기준: `backend/src/main/resources/db/seed/product-categories.sql`). FE는 코드를 하드코딩하지 말고 이 API 응답을 쓴다. 향수는 하위 종류가 없어 `PERFUME` 하나를 임시로 둔다. compatibleParts는 값 확정 전까지 모든 카테고리에서 \[\]. 확인 필요 2
 </toggle>
 
 <toggle>
@@ -784,7 +786,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | shadeName | string 또는 null | MANUAL 선택, 최대100자. shadeSelectable=false이면 null/생략 |
 | colorHex | string 또는 null | MANUAL 선택, #RRGGBB. colorSource는 서버가 USER\_INPUT/NONE으로 결정. CATALOG는 직접 입력 불가 |
 
-브랜드·제품명·호수 중복 정규화의 상세 규칙(NFC·대소문자·연속 공백 등)은 데이터 설계에서 확정한다. 임의로 다른 제품을 동일 제품에 연결하지 않는다. 브랜드 없는 도구 등의 입력 정책과 향수의 type 코드처럼 현재 화면·데이터 분류에 빈틈이 있는 부분은 API-POUCH-008 분류 확정 시 함께 결정한다.
+브랜드·제품명·호수 중복 정규화의 상세 규칙(NFC·대소문자·연속 공백 등)은 데이터 설계에서 확정한다. <b>확정 (로컬 수정 -209)</b>: ① NFC ② 유니코드 공백(NBSP·전각 공백·탭 포함) 연속을 공백 한 칸으로 ③ 앞뒤 공백 제거 ④ Locale.ROOT 소문자화. 결과가 빈 문자열이면 400. 원문은 그대로 저장·응답하고 정규화 값은 중복 판정·정확 일치 검색에만 쓴다. 대소문자 접기는 하지 않는다(ß와 ss는 다르다). 구현: `CatalogTextNormalizer`. 등록(API-POUCH-004)·수정(API-POUCH-006)·검색(API-POUCH-001)이 같은 규칙을 쓴다. 임의로 다른 제품을 동일 제품에 연결하지 않는다. 브랜드 없는 도구 등의 입력 정책과 향수의 type 코드처럼 현재 화면·데이터 분류에 빈틈이 있는 부분은 API-POUCH-008 분류 확정 시 함께 결정한다.
 
 <toggle>
 공통 응답 데이터 모델
@@ -801,7 +803,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | PasswordResetVerification <b>v2</b> | resetToken:string, expiresAt:datetime. |
 | ColorInfo | colorSpace:'sRGB', hex:string(#RRGGBB), source:string, estimated:boolean. 보유 제품 source=CATALOG\|USER\_INPUT, 목표 발색은 VIDEO\_ESTIMATE\|CATALOG\|MANUAL\_REVIEW. 색상이 없으면 객체 자체를 null. |
 | Shade | shadeId:string, name:string, color:ColorInfo\|null. |
-| Product <b>v2</b> | productId:string, brand:string, name:string, category:string, type:string\|null, shades:Shade\[\]. 호수 선택이 없는 카테고리는 shades=\[\]. |
+| Product <b>v2</b> | productId:string, brand:string, name:string, category:string, type:string, shades:Shade\[\]. 호수 선택이 없는 카테고리는 shades=\[\]. type은 카탈로그 제품마다 필수(로컬 수정 -209, 기존 string\|null). |
 | ProductCategory <b>v2</b> | code:string, label:string, matchable:boolean, shadeSelectable:boolean, types:ProductType\[\], compatibleParts:string\[\]. ProductType = code:string, label:string. 9개 카테고리·종류 목록은 기능명세 POUCH-004 기준. |
 | PouchItem <b>v2</b> | pouchItemId:string, registrationMode:CATALOG\|MANUAL, productId:string\|null, shadeId:string\|null, brand:string, name:string, category:string, type:string, shadeName:string\|null, color:ColorInfo\|null, colorSource:CATALOG\|USER\_INPUT\|NONE, createdAt:datetime, updatedAt:datetime. MANUAL의 productId·shadeId는 null. |
 | ReferenceProduct | productId:string\|null, shadeId:string\|null, name:string\|null, shadeName:string\|null, matchStatus:MATCHED\|CANDIDATE\|UNMATCHED, verification:CONFIRMED\|ESTIMATED\|UNKNOWN, sources:string\[\], videoConfirmed:boolean\|null. 화면 라벨: ESTIMATED='추정', videoConfirmed=false='설명란에만 있음', UNMATCHED='이름만 확인'. 임의 제품 연결 금지. |

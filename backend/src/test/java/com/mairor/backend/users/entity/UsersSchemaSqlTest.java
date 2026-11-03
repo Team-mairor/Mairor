@@ -26,7 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
     properties = {
       "spring.jpa.hibernate.ddl-auto=validate",
       "spring.sql.init.mode=always",
-      "spring.sql.init.schema-locations=classpath:db/schema/users.sql",
+      // 엔티티 전체를 validate 하므로 다른 도메인의 스키마 SQL 도 함께 적용한다
+      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql",
       "app.security.allowed-origins=http://localhost:3000"
     })
 @Transactional

@@ -293,19 +293,37 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | 파일 | 테이블 |
 |---|---|
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
+| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수) |
 
-- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`
+- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`
 - **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼·테이블이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column`·`missing table` 로 앱 기동을 막는다.
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
 | `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
+| 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 
 - 적용은 BE(정윤)가 한다(S15P31A306-203). master 머지가 곧 운영 배포라, 스키마를 바꾸는 MR 은 **머지 전에** 운영 DB 에 적용한다. 그래서 옛 버전과 함께 돌아도 깨지지 않는 변경(추가 → 코드 전환 → 삭제)만 한다. 절차는 `deploy/README.md` "DB 스키마".
 - 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).
-- 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인).
+- 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest`·`ProductsSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인). 두 테스트 모두 엔티티 전체를 검사하므로 스키마 SQL 을 추가하면 두 테스트의 `schema-locations` 에 같이 넣는다.
 - Flyway 를 도입하면 `db/migration/V<번호>__*.sql` 로 옮긴다. 번호는 Flyway 담당과 맞춘다.
+
+### 화장품 카탈로그 시드
+
+스키마를 적용한 뒤 아래 순서로 적용한다. 앱이 자동으로 넣지 않는다.
+
+| 순서 | 파일 | 내용 | 적용 환경 | 다시 적용하면 |
+|---|---|---|---|---|
+| 1 | `db/schema/products.sql` | 테이블·제약·인덱스 | 모든 환경 | ❌ 빈 DB 에만 적용한다 (`already exists`) |
+| 2 | `db/seed/product-categories.sql` | 카테고리 9개, 종류 38개 | 모든 환경 | ✅ 같은 코드는 파일 값으로 갱신. 파일에서 지운 행은 DB 에 남는다 |
+| 3 | `db/seed/dev/product-samples.sql` | 설명용 샘플 제품 2개, 호수 3개 | **개발 환경만** (운영 금지) | ✅ 고정 id 로 파일 값으로 갱신 |
+
+- dev 는 `ddl-auto=update` 로 Hibernate 가 테이블을 만들어서 시드만 적용하면 된다. 다만 이렇게 만든 테이블에는 `products.sql` 의 복합 FK·CHECK 가 없다. 제약까지 확인하려면 빈 DB 에 `products.sql` 을 먼저 적용한다.
+- **정규화 컬럼**(`*_normalized`)은 `CatalogTextNormalizer` 로 만든 비교용 키다(NFC → 공백 축약 → 앞뒤 공백 제거 → 소문자화). DB 트리거가 없으므로 SQL 로 직접 넣는 데이터도 같은 규칙으로 계산한 값을 넣는다. 시드 값이 규칙과 어긋나면 `ProductSeedSqlTest` 가 실패한다. 크롤링 적재는 엔티티(`Product`·`ProductShade`)를 거쳐 저장한다.
+- **DB 가 막는 규칙**: 카테고리-종류 불일치(복합 FK `fk_products_category_type`), 제품·호수 중복(정규화 키 유니크), 색상 세 컬럼 일부만 채움, 소문자·잘못된 HEX.
+- **앱에서만 막는 규칙**: 호수 선택이 없는 카테고리(SKINCARE·FRAGRANCE·TOOL)의 제품에 호수를 연결하지 않는다(`Product.addShade`). SQL 로 직접 넣으면 막지 못한다.
+- 종류 코드명과 호환 부위 값은 확정 전이다(`TODO(확인 필요 2)`). 호환 부위는 비워 두며 API 는 빈 목록을 응답한다.
 
 ## 응답 형식
 
