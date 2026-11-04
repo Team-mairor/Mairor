@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 인프라 서버 배포. CI deploy-infra 잡이 infra/ 를 /opt/mairor-infra 에 올린 뒤 SSH 로 부른다.
 #   bash /opt/mairor-infra/deploy.sh
-# 설정 검사 → 이미지 받기 → 바뀐 컨테이너만 다시 띄우기 → 모두 준비될 때까지 기다리기. 하나라도 안 되면 종료 코드 1.
+# 설정 검사 → 이미지 받기 → 이미지 · 설정이 바뀐 컨테이너만 다시 띄우기 → 모두 준비될 때까지 기다리기. 하나라도 안 되면 종료 코드 1.
 # loki · tempo · phoenix 이미지에는 셸이 없어 compose 헬스체크를 못 단다. grafana 컨테이너에서 각자의 준비 주소를 부른다.
 set -euo pipefail
 
@@ -27,6 +27,17 @@ wait_ready() { # wait_ready <주소>
   done
   log "$url 준비 ($((SECONDS - start))초)"
 }
+
+# compose 는 붙인 설정 파일의 내용이 바뀐 걸 모른다. 폴더 해시를 라벨(docker-compose.yml)로 붙여 설정만 바뀐 컨테이너도 다시 띄운다
+config_hash() { # config_hash <폴더>
+  find "$1" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12
+}
+CADDY_CONFIG_HASH=$(config_hash caddy)
+GRAFANA_CONFIG_HASH=$(config_hash grafana)
+LOKI_CONFIG_HASH=$(config_hash loki)
+TEMPO_CONFIG_HASH=$(config_hash tempo)
+PROMETHEUS_CONFIG_HASH=$(config_hash prometheus)
+export CADDY_CONFIG_HASH GRAFANA_CONFIG_HASH LOKI_CONFIG_HASH TEMPO_CONFIG_HASH PROMETHEUS_CONFIG_HASH
 
 docker compose config -q
 log "이미지 받기"

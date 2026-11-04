@@ -19,6 +19,14 @@ metrics_generator:
   registry:
     external_labels:
       source: tempo
+  # 기본 시간 구간은 16초까지라 몇 분 걸리는 가이드 작업의 p95 가 잡히지 않는다
+  # 받는 쪽이 계측되지 않은 호출(BE → AI · 외부 API)은 server.address 로 연결도에 그린다
+  processor:
+    span_metrics:
+      histogram_buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 90, 120, 180, 300, 600]
+    service_graphs:
+      histogram_buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30, 60, 90, 120, 180, 300, 600]
+      peer_attributes: [peer.service, db.name, db.system, server.address]
   storage:
     path: /var/tempo/generator/wal
     remote_write:

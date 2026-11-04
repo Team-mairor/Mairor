@@ -24,6 +24,8 @@ services:
   caddy:
     <<: *common
     image: caddy:2.11.7-alpine
+    labels:
+      mairor.config-hash: ${CADDY_CONFIG_HASH:-}
     environment:
       INFRA_DOMAIN: ${INFRA_DOMAIN:?서버 .env 에 INFRA_DOMAIN 이 없다}
       PHOENIX_ADMIN_SECRET: ${PHOENIX_ADMIN_SECRET:?서버 .env 에 PHOENIX_ADMIN_SECRET 이 없다}
@@ -48,6 +50,8 @@ services:
   grafana:
     <<: *common
     image: grafana/grafana:13.2.5
+    labels:
+      mairor.config-hash: ${GRAFANA_CONFIG_HASH:-}
     environment:
       GF_SERVER_ROOT_URL: https://${INFRA_DOMAIN}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?서버 .env 에 GRAFANA_ADMIN_PASSWORD 가 없다}
@@ -76,6 +80,8 @@ services:
   loki:
     <<: *common
     image: grafana/loki:3.7.9
+    labels:
+      mairor.config-hash: ${LOKI_CONFIG_HASH:-}
     command: -config.file=/etc/loki/config.yml
     volumes:
       - ./loki/config.yml:/etc/loki/config.yml:ro
@@ -88,6 +94,8 @@ services:
   tempo:
     <<: *common
     image: grafana/tempo:3.1.1
+    labels:
+      mairor.config-hash: ${TEMPO_CONFIG_HASH:-}
     command: -config.file=/etc/tempo/config.yml
     volumes:
       - ./tempo/config.yml:/etc/tempo/config.yml:ro
@@ -100,6 +108,8 @@ services:
   prometheus:
     <<: *common
     image: prom/prometheus:v3.15.1
+    labels:
+      mairor.config-hash: ${PROMETHEUS_CONFIG_HASH:-}
     command:
       - --config.file=/etc/prometheus/config.yml
       - --storage.tsdb.path=/prometheus
