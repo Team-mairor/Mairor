@@ -3,6 +3,7 @@ package com.mairor.backend.analysis.service;
 import com.mairor.backend.analysis.dto.request.AiGuideJobCallbackRequest;
 import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.AnalysisJob;
+import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
@@ -24,6 +25,8 @@ import tools.jackson.databind.JsonNode;
  *   <li>FAILED: 작업 FAILED, {@code error.code}를 실패 코드로 바꿈(재시도 가능)
  *   <li>이미 끝난 작업이면 아무것도 바꾸지 않는다(같은 콜백이 다시 올 수 있다)
  * </ul>
+ *
+ * <p>작업을 실제로 끝냈을 때만 같은 트랜잭션에서 {@link AnalysisJobNotifier}로 알린다.
  */
 @Service
 public class AiResultService {
@@ -38,11 +41,17 @@ public class AiResultService {
 
   private final AnalysisJobRepository jobs;
   private final GuideRepository guides;
+  private final AnalysisJobNotifier notifier;
   private final Clock clock;
 
-  AiResultService(AnalysisJobRepository jobs, GuideRepository guides, Clock clock) {
+  AiResultService(
+      AnalysisJobRepository jobs,
+      GuideRepository guides,
+      AnalysisJobNotifier notifier,
+      Clock clock) {
     this.jobs = jobs;
     this.guides = guides;
+    this.notifier = notifier;
     this.clock = clock;
   }
 
@@ -93,6 +102,7 @@ public class AiResultService {
           code,
           message);
     }
+    notifier.changed(job.getId());
     return Outcome.APPLIED;
   }
 
@@ -108,6 +118,7 @@ public class AiResultService {
       return false;
     }
     job.fail(AnalysisFailureCode.ANALYSIS_TIMEOUT, reason, clock.instant());
+    notifier.changed(job.getId());
     log.warn("AI 결과 시간 초과 jobId={} aiJobId={} reason={}", job.getId(), aiJobId, reason);
     return true;
   }

@@ -45,6 +45,7 @@
 | API-VIDEO-005 | GET /api/v1/videos/popular | VIDEO-005 · VIDEO-001 |
 | API-VIDEO-006 | POST /api/v1/users/me/analysis-jobs/\{jobId\}/retry | VIDEO-003 분석 진행 및 상태 노출 |
 | API-VIDEO-007 | GET /api/v1/users/me/analysis-jobs | VIDEO-003 · ANALYSIS-006 |
+| API-VIDEO-008 | GET /api/v1/users/me/analysis-jobs/\{jobId\}/events | VIDEO-003 분석 진행 실시간 (SSE, 번호 임시) |
 | API-ANALYSIS-001 | GET /api/v1/guides/\{guideId\} | ANALYSIS-006 · VIDEO-004 · PREVIEW-001 · GUIDE-003 · GUIDE-006 · GUIDE-013 · REPORT-005 |
 | API-CAMERA-001 | POST /api/v1/users/me/face-registrations | CAMERA-005 · GUIDE-002 · VIDEO-004 |
 | API-CAMERA-002 | GET /api/v1/users/me/face-registrations/\{faceRegistrationId\} | CAMERA-005 · CAMERA-004 |
@@ -230,6 +231,10 @@ API-VIDEO-003 · GET /api/v1/users/me/analysis-jobs/\{jobId\}
 - FAILED도 HTTP 200이며 failureCode·failureMessage·retryable로 분기. ANALYSIS\_TIMEOUT은 실패 원인 값. 승인 전 guideAvailable=false·guideId=null.
 - PENDING/RUNNING은 pollAfterSeconds 후 재조회. COMPLETED+검수 PENDING도 유효한 pollAfterSeconds를 제공하고 검수 상태를 갱신한다. FAILED·APPROVED·REJECTED는 null로 중단. 홈 진입 시 API-VIDEO-007로 재확인.
 - progressPercent·남은 시간은 실제 계산 가능한 경우만 제공하고 알 수 없으면 null. FE는 null일 때 단계·처리 중만 표시. foundProducts의 보유 여부는 조회 시점 파우치로 계산한다.
+- <b>진행 화면은 API-VIDEO-008(SSE)로 받는다 (로컬 수정 -296)</b>: 이 조회는 새로고침·홈 재확인과 SSE를 쓸 수 없을 때(pollAfterSeconds 폴링) 쓴다. 응답은 SSE의 status 이벤트와 같다.
+- <b>구현 메모 (로컬 수정 -296)</b>: 지금은 본인이 요청한 작업(requestedBy)만 보고, 진행 작업에 합류한 회원은 API-VIDEO-002 구현 때 넓힌다. 운영 명령으로 만든 작업은 회원이 볼 수 없다(404). Cache-Control: no-store.
+- <b>단계 안 숫자 (로컬 수정 -296)</b>: stageProgress로 지금 단계 안에서 센 수를 준다(아래 StageProgress). 전체 %가 아니며 완료 여부는 status로만 본다. progressPercent는 가중치 실측 전이라 COMPLETED일 때만 100이고 그 밖은 null, estimatedRemainingSeconds는 늘 null이다.
+- <b>제품 칸 임시값 (로컬 수정 -296)</b>: 제품 인식(RECOGNIZING\_PRODUCTS)이 연결되기 전까지 foundProducts=[]·foundProductCount=0·totalProductCount=null이다.
 </toggle>
 
 <toggle>
@@ -617,6 +622,24 @@ GET /api/v1/users/me/analysis-jobs
   - PENDING → 'IN REVIEW · 검수 중', APPROVED → 'READY · 따라 하기'(guideId로 바로 따라 하기 준비), REJECTED → 기본 제외(카드 제거)
   - APPROVED 카드의 노출 종료 시점(첫 실행 시작 후 제외 등)은 미정
 
+### API-VIDEO-008 · 분석 상태 실시간 (SSE) (로컬 수정 -296, 번호 임시)
+
+GET /api/v1/users/me/analysis-jobs/\{jobId\}/events
+
+- 관련 기능: VIDEO-003 · ANALYSIS-006 · 회원(API-VIDEO-003과 같은 권한). 근거: Notion ADR-012 「분석 상태 전달 규칙 (SSE)」
+- 요청: Path <code>jobId</code>. 브라우저 <code>EventSource</code>로 연다. 같은 도메인이라 세션 쿠키가 함께 가고, GET이라 CSRF 토큰은 필요 없다
+- 성공 200 <code>text/event-stream</code>: 이벤트 이름 <code>status</code>, data는 AnalysisJobStatus JSON 전체(바뀐 칸만 보내지 않는다). 응답 헤더 <code>X-Accel-Buffering: no</code> · <code>Cache-Control: no-store</code>
+  - 연결하면 지금 상태 1개를 먼저 보낸다. 그 뒤 진행 단계·stageProgress·완료·실패·검수 상태가 바뀔 때만 보낸다. 같은 상태는 다시 보내지 않는다
+  - 20초마다 빈 신호(<code>: ping</code>)를 보낸다. 진행했다는 뜻이 아니며 FE는 무시한다
+- 오류: 401 UNAUTHORIZED(다른 API와 같이 JSON 오류 본문) · 404 NOT\_FOUND(없는 작업·본인 작업 아님, <b>본문 없음</b>. EventSource는 text/event-stream만 받아 JSON 오류 본문을 쓸 수 없다). EventSource는 200이 아니면 다시 붙지 않는다. 브라우저 EventSource.onerror에서는 상태 코드·본문을 읽을 수 없으므로, 로그인 만료·없는 작업과 일시적 끊김을 구분하려면 API-VIDEO-003을 한 번 조회해 판단한다
+- 끝나는 때
+  - FAILED, 검수 APPROVED·REJECTED를 보낸 뒤 서버가 닫는다
+  - <b>FE도 이 상태를 받으면 <code>close()</code> 해야 한다.</b> EventSource는 서버가 닫아도 몇 초 뒤 다시 붙으므로, 닫지 않으면 끝난 상태를 받고 다시 붙기를 되풀이한다
+  - 검수 대기(COMPLETED + reviewStatus PENDING)에서는 서버가 열어 둔다. FE가 홈 카드로 갈 때 <code>close()</code> 한다
+  - 서버는 연결 하나를 최대 30분 열어 두고 닫는다. 네트워크 끊김·배포 때도 닫힌다. 이때 EventSource가 다시 붙어 지금 상태를 다시 받는다
+- 대체: 연결이 계속 실패하면 API-VIDEO-003을 pollAfterSeconds마다 조회한다(null이면 그만)
+- 서버 동작: 상태가 바뀌면 저장 트랜잭션에서 DB 변경 알림(PostgreSQL NOTIFY)을 보내고, 연결을 가진 api가 받아 DB를 다시 읽어 보낸다. 알림을 놓쳐도 30초마다 다시 맞춘다
+
 ### API-CAMERA-001 · 얼굴 등록 이미지 업로드
 
 POST /api/v1/users/me/face-registrations
@@ -666,7 +689,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 2 온보딩·파우치 담기 | 노출 여부는 기기 저장(API 없음). 파우치 담기 = 11 등록 시트와 동일(API-POUCH-008 → 001/002 → 004) |
 | 3 홈 | API-REPORT-001(최근 리포트·다시 따라 하기 카드) · API-VIDEO-007(검수 중 가이드 카드) · API-POUCH-003(파우치 보드 최대 5). '다시 하기'·'READY 따라 하기' → 5 준비(로딩 없음) |
 | 4 영상 입력 | 검색 API-VIDEO-004 / Top 4 API-VIDEO-005. 검색 결과 선택 → API-VIDEO-001(메타·챕터, 재생 없음) → guideAvailable면 '바로 따라 하기', 아니면 '분석하기' → API-VIDEO-002. Top 4 탭 → API-VIDEO-001 → 가이드 없으면 즉시 API-VIDEO-002. 429 한도 안내, 분석 불가 선택 차단 (로컬 수정 -307) |
-| 5 분석 로딩·준비 | API-VIDEO-003 폴링(pollAfterSeconds): 진행 단계·%·찾은 제품. 없는 제품 탭 → 등록 시트(API-POUCH-004) → 다음 폴링에 보유 반영. 얼굴 등록 모달 → API-CAMERA-001(다시 촬영은 001 재호출 — 이전 미연결 등록 자동 폐기, 준비 이탈 시 API-CAMERA-003). 파우치 확인 모달 → API-POUCH-003/004. 실패: retryable이면 API-VIDEO-006, 아니면 영상 입력. 검수 대기(PENDING) → 홈 카드, 반려 → 다른 영상. 가이드 APPROVED + 얼굴 등록 완료 시 '미리보기 보기' |
+| 5 분석 로딩·준비 | API-VIDEO-008 SSE: 진행 단계·stageProgress(단계 안 숫자)·찾은 제품. 끝난 상태(FAILED·APPROVED·REJECTED)와 검수 대기에서 FE가 연결을 닫는다. SSE를 못 쓰면 API-VIDEO-003 폴링(pollAfterSeconds) (로컬 수정 -296). 없는 제품 탭 → 등록 시트(API-POUCH-004) → 다음 상태 갱신에 보유 반영. 얼굴 등록 모달 → API-CAMERA-001(다시 촬영은 001 재호출 — 이전 미연결 등록 자동 폐기, 준비 이탈 시 API-CAMERA-003). 파우치 확인 모달 → API-POUCH-003/004. 실패: retryable이면 API-VIDEO-006, 아니면 영상 입력. 검수 대기(PENDING) → 홈 카드, 반려 → 다른 영상. 가이드 APPROVED + 얼굴 등록 완료 시 '미리보기 보기' |
 | 6 미리보기 | API-ANALYSIS-001 → previewable 단계(아이섀도·아이라이너·블러셔·하이라이터·립)만 클라이언트 오버레이, 'N / 전체' 안내. 카메라 오류·인식 알림은 클라이언트 |
 | 7 제품 체크 ↔ 입혀보며 고르기 | API-RECOMMEND-001(생성) / 002(조회). 바꾸기 패널 = candidates(추천 1·2·3) + API-POUCH-003?category=같은 카테고리. 두 보기의 선택값은 클라이언트 상태로 공유 |
 | 7-3 시작 확인 | API-GUIDE-001(guideId·matchId·faceRegistrationId·selections·acceptMissingProducts) → 실행 스냅샷. 409 GUIDE\_MATCH\_STALE → API-RECOMMEND-001 재생성 + 토스트, 자동 시작 안 함 |
@@ -838,7 +861,8 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | VideoSelection <b>v2</b> | videoId:string, youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, chapters:VideoChapter\[\], guideId:string\|null, guideAvailable:boolean, analysisJobId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED\|null. embeddable 칸 없음 (로컬 수정 -307). |
 | AnalysisJobReceipt <b>v2</b> | jobId:string\|null, videoId:string, receiptType:REUSED\_GUIDE\|JOINED\_JOB\|NEW\_JOB, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:string, guideId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, pollAfterSeconds:integer\|null. REUSED\_GUIDE면 jobId=null·status=COMPLETED·reviewStatus=APPROVED·guideId 필수. |
 | FoundProduct <b>v2</b> | stepId:string\|null, part:string, referenceProduct:ReferenceProduct, ownership:OWNED\|NOT\_OWNED\|UNKNOWN. ownership은 조회 시점 파우치 기준. |
-| AnalysisJobStatus <b>v2</b> | jobId:string, videoId:string, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:QUEUED\|LOADING\_VIDEO\|SEGMENTING\|RECOGNIZING\_PRODUCTS\|EXTRACTING\_STEPS\|BUILDING\_GUIDE\|DONE, progressPercent:integer(0\~100)\|null, estimatedRemainingSeconds:integer\|null, retryable:boolean, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, guideAvailable:boolean, guideId:string\|null, foundProducts:FoundProduct\[\], foundProductCount:integer, totalProductCount:integer\|null, failureCode:string\|null, failureMessage:string\|null, pollAfterSeconds:integer\|null, createdAt:datetime, completedAt:datetime\|null. FAILED면 progressStage=멈춘 단계. 실패·승인·반려 시 pollAfterSeconds=null. 얼굴 등록 상태는 별도(FaceRegistration). |
+| AnalysisJobStatus <b>v2</b> | jobId:string, videoId:string, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:QUEUED\|LOADING\_VIDEO\|SEGMENTING\|RECOGNIZING\_PRODUCTS\|EXTRACTING\_STEPS\|BUILDING\_GUIDE\|DONE, progressPercent:integer(0\~100)\|null, estimatedRemainingSeconds:integer\|null, stageProgress:StageProgress\|null(로컬 수정 -296), retryable:boolean, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, guideAvailable:boolean, guideId:string\|null, foundProducts:FoundProduct\[\], foundProductCount:integer, totalProductCount:integer\|null, failureCode:string\|null, failureMessage:string\|null, pollAfterSeconds:integer\|null, createdAt:datetime, completedAt:datetime\|null. FAILED면 progressStage=멈춘 단계. 실패·승인·반려 시 pollAfterSeconds=null. 얼굴 등록 상태는 별도(FaceRegistration). |
+| StageProgress (로컬 수정 -296) | item:FRAMES\|LANDMARKS\|AREA\|EXPLANATION, done:integer, total:integer. 지금 진행 단계 안에서 센 수(전체 % 아님). 지금은 BUILDING\_GUIDE에서만 있고 그 밖·진행 알림 전·COMPLETED·FAILED는 null. FRAMES 사진 받기(장), LANDMARKS 얼굴 점 찾기(장), AREA 영역 만들기(단계), EXPLANATION 쉬운 설명(단계). 프레임 있는 작업은 사진 → 얼굴 점 → 영역 순서에서 덜 끝난 것, 영역이 끝났거나 프레임 없는 작업은 설명. done은 실패한 것도 센다. 영역 분석이 통째로 실패하면 AI가 영역 숫자를 멈춘 채 설명을 계속해 콜백 전까지 멈춘 숫자가 보인다. |
 | AnalysisJobSummary <b>v2</b> | jobId:string, videoId:string, youtubeVideoId:string, title:string, thumbnailUrl:string\|null, status:COMPLETED, reviewStatus:PENDING\|APPROVED\|REJECTED, guideId:string\|null, requestedAt:datetime, reviewedAt:datetime\|null. API-VIDEO-007 항목. |
 | VideoSearchItem <b>v2</b> | youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, guideId:string\|null, guideAvailable:boolean. embeddable 칸 없음 (로컬 수정 -307). |
 | VideoSearchPage | items:VideoSearchItem\[\], nextPageToken:string\|null, size:integer. YouTube 검색은 page 대신 pageToken을 사용하는 예외. |

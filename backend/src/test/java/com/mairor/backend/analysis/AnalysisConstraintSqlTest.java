@@ -134,6 +134,57 @@ class AnalysisConstraintSqlTest {
         .hasMessageContaining("ck_analysis_jobs_progress_stage");
   }
 
+  /**
+   * README 「DB 스키마」의 S15P31A306-296 한 번 채우기 문장. AI 콜백을 기다리던 행에만 맡긴 시각 대신 {@code updated_at}을 넣는다.
+   */
+  private static final String BACKFILL_AI_REQUESTED_AT =
+      "UPDATE analysis_jobs SET ai_requested_at = updated_at"
+          + " WHERE status = 'RUNNING' AND ai_job_id IS NOT NULL AND ai_requested_at IS NULL";
+
+  @Test
+  void backfillFillsOnlyJobsWaitingForTheAi() {
+    String video2 = "00000000-0000-4000-8000-0000000000a2";
+    String video3 = "00000000-0000-4000-8000-0000000000a3";
+    String video4 = "00000000-0000-4000-8000-0000000000a4";
+    String job4 = "00000000-0000-4000-8000-0000000000b4";
+    for (String[] v :
+        new String[][] {
+          {video2, "eFzG30avtOI"}, {video3, "aaaaaaaaaaa"}, {video4, "bbbbbbbbbbb"}
+        }) {
+      jdbc.update(
+          "insert into videos (id, youtube_video_id, title, channel_title, duration_seconds,"
+              + " chapters, meta_refreshed_at, created_at, updated_at)"
+              + " values (?::uuid, ?, '영상', '채널', 60, '[]'::jsonb, now(), now(), now())",
+          v[0],
+          v[1]);
+    }
+    String insertWithAi =
+        "insert into analysis_jobs (id, video_id, status, progress_stage, retryable, ai_job_id,"
+            + " ai_requested_at, attempt, created_at, updated_at)"
+            + " values (?::uuid, ?::uuid, ?, 'BUILDING_GUIDE', false, ?,"
+            + " ?::timestamptz, 1, now(), '2026-11-03T01:00:00Z'::timestamptz)";
+    // 기다리던 행(채울 대상), AI 에 맡기기 전 행, 끝난 행, 이미 값이 있는 행
+    jdbc.update(insertWithAi, JOB_1, VIDEO_ID, "RUNNING", "ai-1", null);
+    jdbc.update(INSERT_JOB, JOB_2, video2, "RUNNING", "SEGMENTING");
+    jdbc.update(insertWithAi, JOB_3, video3, "COMPLETED", "ai-3", null);
+    jdbc.update(insertWithAi, job4, video4, "RUNNING", "ai-4", "2026-11-03T00:30:00Z");
+
+    assertThat(jdbc.update(BACKFILL_AI_REQUESTED_AT)).isEqualTo(1);
+
+    assertThat(aiRequestedAt(JOB_1)).isEqualTo("2026-11-03T01:00:00Z");
+    assertThat(aiRequestedAt(JOB_2)).isNull();
+    assertThat(aiRequestedAt(JOB_3)).isNull();
+    assertThat(aiRequestedAt(job4)).isEqualTo("2026-11-03T00:30:00Z");
+  }
+
+  private String aiRequestedAt(String jobId) {
+    return jdbc.queryForObject(
+        "select to_char(ai_requested_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')"
+            + " from analysis_jobs where id = ?::uuid",
+        String.class,
+        jobId);
+  }
+
   // --- 가이드 ---
 
   @Test

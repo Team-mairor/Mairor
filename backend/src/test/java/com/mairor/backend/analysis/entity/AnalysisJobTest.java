@@ -99,4 +99,63 @@ class AnalysisJobTest {
     assertThatThrownBy(() -> running.fail(AnalysisFailureCode.INTERNAL_ERROR, null, T1))
         .isInstanceOf(IllegalStateException.class);
   }
+
+  // --- AI 진행 숫자 (S15P31A306-296) ---
+
+  private static final String AI_JOB = "8728c83b0d124c74a23863a50d4d7c0c";
+  private static final String PROGRESS = "{\"explanation\":{\"done\":3,\"total\":19}}";
+
+  private static AnalysisJob awaitingAiJob() {
+    AnalysisJob job = newJob();
+    job.start(T0);
+    job.advanceTo(ProgressStage.BUILDING_GUIDE);
+    job.awaitAi(AI_JOB, T0);
+    return job;
+  }
+
+  @Test
+  void awaitingAiRecordsWhenTheJobWasHandedOver() {
+    AnalysisJob job = awaitingAiJob();
+
+    assertThat(job.getAiJobId()).isEqualTo(AI_JOB);
+    assertThat(job.getAiRequestedAt()).isEqualTo(T0);
+    assertThat(job.isAwaitingAi()).isTrue();
+  }
+
+  @Test
+  void timeoutBaselineIsTheHandOverTimeEvenAfterProgress() {
+    AnalysisJob job = awaitingAiJob();
+    job.recordAiProgress(PROGRESS);
+
+    assertThat(job.aiTimeoutBaseline()).isEqualTo(T0);
+  }
+
+  @Test
+  void progressIsStoredWhileWaitingForTheAiWithoutMovingTheRequestTime() {
+    AnalysisJob job = awaitingAiJob();
+
+    assertThat(job.recordAiProgress(PROGRESS)).isTrue();
+    assertThat(job.recordAiProgress("{\"explanation\":{\"done\":19,\"total\":19}}")).isTrue();
+
+    assertThat(job.getAiProgress()).contains("\"done\":19");
+    assertThat(job.getAiRequestedAt()).isEqualTo(T0);
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.RUNNING);
+  }
+
+  @Test
+  void progressIsDroppedBeforeHandoverAndAfterTheJobEnds() {
+    AnalysisJob notYet = newJob();
+    notYet.start(T0);
+    assertThat(notYet.recordAiProgress(PROGRESS)).isFalse();
+    assertThat(notYet.getAiProgress()).isNull();
+
+    AnalysisJob completed = awaitingAiJob();
+    completed.complete(T1);
+    assertThat(completed.recordAiProgress(PROGRESS)).isFalse();
+    assertThat(completed.getAiProgress()).isNull();
+
+    AnalysisJob failed = awaitingAiJob();
+    failed.fail(AnalysisFailureCode.ANALYSIS_TIMEOUT, null, T1);
+    assertThat(failed.recordAiProgress(PROGRESS)).isFalse();
+  }
 }

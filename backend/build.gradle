@@ -41,7 +41,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-session-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-cache'
     implementation 'com.github.ben-manes.caffeine:caffeine'
-    runtimeOnly 'org.postgresql:postgresql'
+    // 분석 상태 SSE 가 변경 알림을 LISTEN 으로 받는다(PGConnection.getNotifications)
+    implementation 'org.postgresql:postgresql'
 
     // 메일 발송 (가입 이메일 인증번호). SMTP 는 Gmail
     implementation 'org.springframework.boot:spring-boot-starter-mail'

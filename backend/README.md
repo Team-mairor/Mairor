@@ -318,6 +318,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |
+| `analysis_jobs.ai_requested_at` (AI 에 맡긴 시각, 콜백 시간 초과 기준) · `analysis_jobs.ai_progress` (AI 진행 숫자) | S15P31A306-296 | `ALTER TABLE analysis_jobs ADD COLUMN ai_requested_at timestamp(6) with time zone, ADD COLUMN ai_progress jsonb;` 다음 이미 AI 콜백을 기다리던 행의 기준을 채운다: `UPDATE analysis_jobs SET ai_requested_at = updated_at WHERE status = 'RUNNING' AND ai_job_id IS NOT NULL AND ai_requested_at IS NULL;` (둘 다 NULL 허용이라 옛 코드와 함께 돌아도 된다. 그 사이 옛 코드가 맡긴 작업은 첫 진행 알림 때 채워진다) |
 
 - 적용은 BE(정윤)가 한다(S15P31A306-203). master 머지가 곧 운영 배포라, 스키마를 바꾸는 MR 은 **머지 전에** 운영 DB 에 적용한다. 그래서 옛 버전과 함께 돌아도 깨지지 않는 변경(추가 → 코드 전환 → 삭제)만 한다. 절차는 `deploy/README.md` "DB 스키마".
 - 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).
@@ -409,11 +410,12 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 
 **AI 가이드 생성 · 검수** (S15P31A306-311, 형식은 `docs/references/ai-api.md`)
 
-- worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, guideInput, frames}` 를 보내고 AI 작업 ID 를 `analysis_jobs.ai_job_id` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다. 진행 알림(`progressUrl`)은 1차 MVP 에서 보내지 않는다.
+- worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, progressUrl, guideInput, frames}` 를 보내고 AI 작업 ID 와 맡긴 시각을 `analysis_jobs.ai_job_id`·`ai_requested_at` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다.
 - 프레임 URL 은 저장소 키로 그때 사전 서명한다(24시간, 운영은 역할 자격 증명이라 더 일찍 끝날 수 있음).
 - **콜백 `POST /api/v1/internal/ai/guide-jobs/callback` 은 공유 토큰을 받지 않는다**(AI 가 헤더를 못 붙임). 대신 `frontend/nginx/api.conf` 가 바깥에서 `/api/v1/internal/ai/` 를 404 로 막고, AI 는 `core` 망으로 `api:8080` 에 바로 붙는다. 이 줄이 빠지면 `NginxInternalRouteTest` 가 실패한다.
 - 같은 작업의 콜백이 다시 오면(AI 재전송) 바꾸지 않고 204. 모르는 AI 작업은 404, 필수 칸이 없으면 400(AI 는 다시 보내지 않는다).
-- 콜백이 `AI_CALLBACK_TIMEOUT` 안에 오지 않으면 worker 가 1분마다 AI 에 상태를 묻는다: 끝났으면 콜백처럼 반영, AI 에 작업이 없으면(재시작·만료) 또는 두 배가 지나면 `ANALYSIS_TIMEOUT`.
+- **진행 알림 `POST /api/v1/internal/ai/guide-jobs/progress`** (S15P31A306-296): AI 가 1초에 한 번까지 보내는 진행 숫자(설명·사진·얼굴 점·영역)를 `analysis_jobs.ai_progress` 에 저장한다. 콜백과 같은 경로 아래라 공유 토큰 없이 받고 nginx 가 막는다. 받을 수 없는 알림(모르는 작업·끝난 작업·형식·숫자 오류)은 저장하지 않고 204 로 답한다(AI 는 진행 알림을 다시 보내지 않는다). DB 장애 같은 서버 오류는 예외로 5xx 가 날 수 있다.
+- 콜백이 AI 에 맡긴 시각(`ai_requested_at`)부터 `AI_CALLBACK_TIMEOUT` 안에 오지 않으면 worker 가 1분마다 AI 에 상태를 묻는다: 끝났으면 콜백처럼 반영, AI 에 작업이 없으면(재시작·만료) 또는 두 배가 지나면 `ANALYSIS_TIMEOUT`. 진행 알림이 와도 이 기준은 밀리지 않는다(`updated_at` 이 아니라 맡긴 시각 기준).
 - 검수(운영자, 공유 토큰):
 
 ```bash
@@ -431,6 +433,16 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 - 단계는 가이드 입력 순서대로, `stepId`로 쉬운 설명(`actions` · `doneWhen`)과 영역(`subSteps`, `shared/guide-area` 그대로)을 붙인다. 설명 · 영역이 없는 단계는 빈 목록 · null.
 - `part` = 화장 종류 10종, `partLabel` = 한국어. `other`만 EXCLUDED(진행률 · `stepCount`에서 빠짐), 마스카라는 영역이 없어도 GUIDE. `previewable`은 아이섀도 · 아이라인 · 블러셔 · 하이라이트 · 립.
 - 명세 v2와 다른 곳(`application` → `subSteps`, `coordinateSystem` → `meshVersion`, `instruction` → `summary` · `actions`)은 `docs/references/api-spec.md`의 "로컬 수정 -312".
+
+**분석 상태 (회원)** (S15P31A306-296, 명세 `docs/references/api-spec.md` API-VIDEO-003 · API-VIDEO-008)
+
+- `GET /api/v1/users/me/analysis-jobs/{jobId}` (003): 상태 한 번 조회. `GET .../{jobId}/events` (008): SSE 로 바뀔 때마다 받기. 둘 다 본인이 요청한 작업만(`AnalysisJobAccess`), 응답은 같은 `AnalysisJobStatus` 다.
+- 상태를 바꾸는 곳(worker 단계·AI 접수·진행 숫자·콜백·시간 초과·검수)은 저장 트랜잭션에서 `pg_notify('analysis_job', 작업 ID)` 를 보낸다(`AnalysisJobNotifier`). 커밋될 때만 전달된다.
+- api 프로세스마다 연결 풀 밖의 DB 연결 하나로 `LISTEN analysis_job` 하고(`PgNotificationListener`), 알림을 받으면 그 작업의 SSE 연결에 DB 에서 다시 읽은 상태를 보낸다(`SseHub`). 끊기면 다시 붙고 열린 작업 전부를 다시 보낸다. **SSE·LISTEN·주기 작업은 worker 프로세스에는 없다**(`@Profile("!worker")`).
+- 설정 `app.analysis.sse`: 연결 최대 `timeout` 30m(지나면 EventSource 가 다시 붙음), `ping-interval` 20s(ALB·nginx 60초 유휴 끊김보다 짧게), `reconcile-interval` 30s(알림을 놓쳐도 이 안에 맞춤), `listen-poll-timeout` 10s, `listen-retry-max` 30s. 폴링 간격 `app.analysis.status.poll-after` 3s.
+- 스케줄링(ping·맞추기)은 SSE 쪽에서 따로 켠다. 운영 api-b 는 `SESSION_SWEEP_ENABLED=false` 라 세션 정리 쪽 `@EnableScheduling` 이 없다.
+- 앱이 내려갈 때 SSE 연결을 graceful shutdown 보다 먼저 닫는다(`SseHub` 의 `SmartLifecycle` 단계가 가장 높다). ALB 대상 그룹 연결 정리 대기(deregistration delay)는 기본 300초라 30초 안팎으로 줄이는 것을 제안한다(인프라 확인 필요).
+- 로컬로 직접 볼 때: SSE 는 api 프로세스에서만 뜨므로 api 와 worker 를 별도 프로세스로 띄우고(아래), `AI_CALLBACK_BASE_URL` 은 api 를 가리킨다. 회원이 볼 수 있게 운영 등록 작업의 `requested_by` 를 SQL 로 넣는다.
 
 **worker**
 

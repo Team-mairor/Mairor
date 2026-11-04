@@ -18,7 +18,9 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.UpdateTimestamp;
+import org.hibernate.type.SqlTypes;
 
 /**
  * 영상 한 편의 분석 작업. 상태 전이는 S15P31A306-308 에서 이 클래스에 더한다.
@@ -76,6 +78,18 @@ public class AnalysisJob {
 
   @Column(name = "ai_job_id", length = AI_JOB_ID_MAX_LENGTH)
   private String aiJobId;
+
+  /**
+   * AI 에 가이드 생성을 맡긴 시각. 콜백 시간 초과의 기준이다. {@code updatedAt}은 진행 숫자를 저장할 때마다 바뀌어 기준으로 쓸 수 없다. 이 칸이 생기기
+   * 전에 맡긴 작업은 비어 있다({@link #recordAiProgress} 참고).
+   */
+  @Column(name = "ai_requested_at")
+  private Instant aiRequestedAt;
+
+  /** AI 진행 알림의 숫자 원본(JSON). 진행 알림을 받기 전에는 {@code null}. */
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "ai_progress")
+  private String aiProgress;
 
   @Column(name = "requested_by")
   private UUID requestedBy;
@@ -159,10 +173,41 @@ public class AnalysisJob {
    * AI 서버에 가이드 생성을 맡겼다. 작업은 RUNNING 으로 남아 콜백(또는 시간 초과 감시)이 끝낸다. RUNNING 일 때만.
    *
    * @param aiJobId AI 서버가 돌려준 작업 ID. 콜백을 이 값으로 찾는다
+   * @param now 맡긴 시각. 콜백 시간 초과의 기준이 된다
    */
-  public void awaitAi(String aiJobId) {
+  public void awaitAi(String aiJobId, Instant now) {
     requireStatus(AnalysisStatus.RUNNING, "AI 요청 기록");
     this.aiJobId = Objects.requireNonNull(aiJobId, "aiJobId");
+    this.aiRequestedAt = Objects.requireNonNull(now, "now");
+  }
+
+  /**
+   * AI 진행 알림의 숫자를 저장한다. AI 콜백을 기다리는 중일 때만 저장하고, 끝난 작업의 늦은 알림은 버린다. 숫자 검사는 부르는 쪽이 한다.
+   *
+   * <p>{@link #aiRequestedAt}이 비어 있으면(이 칸이 생기기 전에 맡긴 작업) 바뀌기 전의 {@code updatedAt}으로 먼저 채운다. 진행 숫자를
+   * 처음 저장하기 전의 마지막 변경은 AI 접수라 맡긴 시각 근처이고, 이렇게 고정해 두면 이후 진행 숫자 저장이 시간 초과 기준을 밀지 않는다.
+   *
+   * @param progressJson 검사를 통과한 진행 숫자 JSON
+   * @return 저장했으면 true. 콜백을 기다리는 중이 아니면 false
+   */
+  public boolean recordAiProgress(String progressJson) {
+    Objects.requireNonNull(progressJson, "progressJson");
+    if (!isAwaitingAi()) {
+      return false;
+    }
+    if (aiRequestedAt == null) {
+      this.aiRequestedAt = updatedAt;
+    }
+    this.aiProgress = progressJson;
+    return true;
+  }
+
+  /**
+   * 콜백 시간 초과의 기준 시각. AI 에 맡긴 시각이고, 비어 있으면(칸이 생기기 전에 맡긴 작업) 마지막 변경 시각이다. 감시 쿼리({@code
+   * AnalysisJobRepository.findAwaitingAiRequestedBefore})와 같은 규칙이다.
+   */
+  public Instant aiTimeoutBaseline() {
+    return aiRequestedAt != null ? aiRequestedAt : updatedAt;
   }
 
   /** AI 콜백을 기다리는 중인지. worker 재시작 때 대기열로 되돌리지 않는다(AI 에서는 아직 돌고 있을 수 있다). */
@@ -224,6 +269,14 @@ public class AnalysisJob {
 
   public String getAiJobId() {
     return aiJobId;
+  }
+
+  public Instant getAiRequestedAt() {
+    return aiRequestedAt;
+  }
+
+  public String getAiProgress() {
+    return aiProgress;
   }
 
   public UUID getRequestedBy() {

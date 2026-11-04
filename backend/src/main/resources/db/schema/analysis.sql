@@ -45,6 +45,8 @@ CREATE TABLE videos (
 -- 분석 작업. 상태·진행 단계 값은 API 명세 v2 AnalysisJobStatus 와 같다.
 -- requested_by: 분석을 요청한 회원. 운영 명령으로 만든 작업은 NULL.
 -- ai_job_id: AI 서버 POST /api/v1/guide-jobs 가 돌려준 jobId (콜백을 이 값으로 찾는다).
+-- ai_requested_at: AI 에 가이드 생성을 맡긴 시각. 콜백 시간 초과의 기준이다(진행 숫자를 저장해도 바뀌지 않는다).
+-- ai_progress: AI 진행 알림의 숫자 원본 {"explanation": {"done", "total"}, "frames": ..., "landmarks": ..., "area": ...}.
 CREATE TABLE analysis_jobs (
     id               uuid                        NOT NULL,
     video_id         uuid                        NOT NULL,
@@ -55,6 +57,8 @@ CREATE TABLE analysis_jobs (
     failure_code     varchar(50),
     failure_message  varchar(500),
     ai_job_id        varchar(64),
+    ai_requested_at  timestamp(6) with time zone,
+    ai_progress      jsonb,
     requested_by     uuid,
     attempt          integer                     NOT NULL,
     started_at       timestamp(6) with time zone,
@@ -78,7 +82,7 @@ CREATE INDEX idx_analysis_jobs_status_created ON analysis_jobs (status, created_
 CREATE INDEX idx_analysis_jobs_requested_by ON analysis_jobs (requested_by, created_at);
 
 -- 가이드. 분석 작업 하나가 가이드 하나를 만든다. 검수 상태 값은 API 명세 v2 reviewStatus 와 같다.
--- explanation·area 는 AI 콜백이 오기 전에는 NULL 이다. area 는 영역 분석이 늦으면 설명만 온 채로 NULL 일 수 있다.
+-- explanation·area 는 AI 콜백이 오기 전에는 NULL 이다. 콜백은 설명·영역을 한 번에 보내므로, 콜백 뒤 area 가 NULL 이면 프레임 없이 맡긴 작업이다.
 -- frames_manifest_key: 레퍼런스 프레임 목록(frames.json)의 S3 키.
 CREATE TABLE guides (
     id                  uuid                        NOT NULL,

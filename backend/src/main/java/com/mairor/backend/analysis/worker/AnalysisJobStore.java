@@ -4,6 +4,7 @@ import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.entity.ProgressStage;
+import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.guides.entity.Guide;
 import com.mairor.backend.guides.repository.GuideRepository;
@@ -17,20 +18,30 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/** worker 의 짧은 트랜잭션들. 실행기는 단계 사이사이에 이것만 부르고, 내려받기·외부 호출 같은 긴 일은 트랜잭션 밖에서 한다(행 잠금을 오래 쥐지 않게). */
+/**
+ * worker 의 짧은 트랜잭션들. 실행기는 단계 사이사이에 이것만 부르고, 내려받기·외부 호출 같은 긴 일은 트랜잭션 밖에서 한다(행 잠금을 오래 쥐지 않게).
+ *
+ * <p>회원에게 보이는 상태(시작·단계·AI 접수·완료·실패·재시작 되돌림)를 바꾸면 같은 트랜잭션에서 {@link AnalysisJobNotifier}로 알린다.
+ */
 @Component
 public class AnalysisJobStore {
 
   private final AnalysisJobRepository jobs;
   private final VideoRepository videos;
   private final GuideRepository guides;
+  private final AnalysisJobNotifier notifier;
   private final Clock clock;
 
   AnalysisJobStore(
-      AnalysisJobRepository jobs, VideoRepository videos, GuideRepository guides, Clock clock) {
+      AnalysisJobRepository jobs,
+      VideoRepository videos,
+      GuideRepository guides,
+      AnalysisJobNotifier notifier,
+      Clock clock) {
     this.jobs = jobs;
     this.videos = videos;
     this.guides = guides;
+    this.notifier = notifier;
     this.clock = clock;
   }
 
@@ -59,6 +70,7 @@ public class AnalysisJobStore {
         .map(
             job -> {
               job.start(clock.instant());
+              notifier.changed(job.getId());
               Video video = job.getVideo();
               return new AnalysisContext(
                   job.getId(),
@@ -75,25 +87,29 @@ public class AnalysisJobStore {
     guides.findByAnalysisJobId(jobId).orElseThrow().useFramesManifest(key);
   }
 
-  /** AI 서버에 맡긴 작업 ID 를 적는다. 작업은 콜백이 끝낼 때까지 RUNNING 이다. */
+  /** AI 서버에 맡긴 작업 ID 와 맡긴 시각을 적는다. 작업은 콜백이 끝낼 때까지 RUNNING 이다. */
   @Transactional
   public void awaitAi(UUID jobId, String aiJobId) {
-    load(jobId).awaitAi(aiJobId);
+    load(jobId).awaitAi(aiJobId, clock.instant());
+    notifier.changed(jobId);
   }
 
   @Transactional
   public void advance(UUID jobId, ProgressStage stage) {
     load(jobId).advanceTo(stage);
+    notifier.changed(jobId);
   }
 
   @Transactional
   public void complete(UUID jobId) {
     load(jobId).complete(clock.instant());
+    notifier.changed(jobId);
   }
 
   @Transactional
   public void fail(UUID jobId, AnalysisFailureCode code, String message) {
     load(jobId).fail(code, message, clock.instant());
+    notifier.changed(jobId);
   }
 
   @Transactional
@@ -111,7 +127,10 @@ public class AnalysisJobStore {
   @Transactional
   public int requeueRunning() {
     List<AnalysisJob> running = jobs.findByStatusAndAiJobIdIsNull(AnalysisStatus.RUNNING);
-    running.forEach(AnalysisJob::requeueAfterCrash);
+    for (AnalysisJob job : running) {
+      job.requeueAfterCrash();
+      notifier.changed(job.getId());
+    }
     return running.size();
   }
 

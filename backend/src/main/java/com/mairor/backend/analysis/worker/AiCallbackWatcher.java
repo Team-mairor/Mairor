@@ -23,8 +23,9 @@ import tools.jackson.databind.ObjectMapper;
  * AI 콜백이 늦은 작업을 확인한다(worker). AI 작업은 AI 서버 메모리에만 있어 AI 가 다시 시작되면 콜백 없이 사라진다({@code
  * docs/references/ai-api.md} "정할 것").
  *
- * <p>AI 에 맡긴 지 {@code app.ai.callback-timeout}이 지난 작업마다 AI 에 상태를 묻는다: 끝났으면 콜백과 같이 반영하고(콜백을 놓친 경우),
- * AI 에 작업이 없으면 {@code ANALYSIS_TIMEOUT}, 아직 진행 중이면 두 배까지 기다린 뒤 {@code ANALYSIS_TIMEOUT}.
+ * <p>AI 에 맡긴 시각({@link AnalysisJob#aiTimeoutBaseline()}. 진행 숫자를 저장해도 바뀌지 않는다)에서 {@code
+ * app.ai.callback-timeout}이 지난 작업마다 AI 에 상태를 묻는다: 끝났으면 콜백과 같이 반영하고(콜백을 놓친 경우), AI 에 작업이 없으면 {@code
+ * ANALYSIS_TIMEOUT}, 아직 진행 중이면 두 배까지 기다린 뒤 {@code ANALYSIS_TIMEOUT}.
  */
 @Component
 @Profile("worker")
@@ -61,10 +62,9 @@ class AiCallbackWatcher {
     Instant now = clock.instant();
     Instant late = now.minus(properties.callbackTimeout());
     Instant overdue = now.minus(properties.callbackTimeout().multipliedBy(2));
-    for (AnalysisJob job :
-        jobs.findByStatusAndAiJobIdIsNotNullAndUpdatedAtBefore(AnalysisStatus.RUNNING, late)) {
+    for (AnalysisJob job : jobs.findAwaitingAiRequestedBefore(AnalysisStatus.RUNNING, late)) {
       try {
-        checkOne(job.getAiJobId(), job.getUpdatedAt().isBefore(overdue));
+        checkOne(job.getAiJobId(), job.aiTimeoutBaseline().isBefore(overdue));
       } catch (RuntimeException e) {
         log.warn("AI 결과 확인 실패 jobId={} aiJobId={}", job.getId(), job.getAiJobId(), e);
       }

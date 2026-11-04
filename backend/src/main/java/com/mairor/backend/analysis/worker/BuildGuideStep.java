@@ -20,8 +20,8 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * 가이드 구성(BUILDING_GUIDE): AI 서버에 가이드 생성을 맡긴다({@code docs/references/ai-api.md}). 요청은 {@code
- * callbackUrl}, 가이드 입력, 레퍼런스 프레임(저장소 키 → 사전 서명 URL)이다. 진행 알림({@code progressUrl})은 1차 MVP 에서 보내지
- * 않는다.
+ * callbackUrl}, 진행 알림 주소({@code progressUrl}), 가이드 입력, 레퍼런스 프레임(저장소 키 → 사전 서명 URL)이다. 진행 알림은 같은 기준
+ * 주소의 {@code /v1/internal/ai/guide-jobs/progress}로 받는다(S15P31A306-296).
  *
  * <p>접수되면 AI 작업 ID 를 적고 끝난다. 작업은 RUNNING 으로 남고, AI 콜백이 설명·영역을 저장하며 COMPLETED 로 끝낸다({@link
  * #finishesLater()}).
@@ -30,6 +30,7 @@ import tools.jackson.databind.ObjectMapper;
 class BuildGuideStep implements AnalysisStepHandler {
 
   static final String CALLBACK_PATH = "/v1/internal/ai/guide-jobs/callback";
+  static final String PROGRESS_PATH = "/v1/internal/ai/guide-jobs/progress";
 
   private static final Logger log = LoggerFactory.getLogger(BuildGuideStep.class);
 
@@ -92,11 +93,13 @@ class BuildGuideStep implements AnalysisStepHandler {
   }
 
   /**
-   * {@code guide_job_request.v2}: {callbackUrl, guideInput, frames?}. 프레임이 없으면 AI 는 영역 없이 설명만 만든다.
+   * {@code guide_job_request.v2}: {callbackUrl, progressUrl, guideInput, frames?}. 프레임이 없으면 AI 는 영역
+   * 없이 설명만 만든다.
    */
   Map<String, Object> request(GuideInput guideInput, FrameManifest frames) {
     Map<String, Object> request = new LinkedHashMap<>();
     request.put("callbackUrl", properties.callbackBaseUrl() + CALLBACK_PATH);
+    request.put("progressUrl", properties.callbackBaseUrl() + PROGRESS_PATH);
     request.put("guideInput", guideInput);
     if (frames != null && !frames.items().isEmpty()) {
       List<Map<String, Object>> items = new ArrayList<>(frames.items().size());

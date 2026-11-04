@@ -24,4 +24,7 @@
 | [바르는 자리가 바뀌면 단계 나누기](2026-11-01-hyeonsoo-jungyoon-split-steps-by-application.md) | 2026-11-01 | 김현수 → 김정윤 | 요청 |
 | [마스카라 단계 영역 없음 반영](2026-11-01-hyeonsoo-seoyun-mascara-no-area.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [Google 최초 로그인 추가 정보·약관 입력 흐름](2026-11-02-juyeon-seoyeon-google-signup.md) | 2026-11-02 | 최주연 → 김서연 | 요청 |
-| [가이드 작업 결과·진행 받기와 분석 상태 SSE](2026-11-03-hyeongjun-jungyoon-guide-job-progress-sse.md) | 2026-11-03 | 박형준 → 김정윤 | 요청 |
+| [가이드 작업 결과·진행 받기와 분석 상태 SSE](2026-11-03-hyeongjun-jungyoon-guide-job-progress-sse.md) | 2026-11-03 | 박형준 → 김정윤 | 진행 중 (콜백·AI 요청 김정윤 !85, 진행 알림·003·SSE 김서연 S15P31A306-296) |
+| [가이드 작업 진행 알림·SSE 회신과 진행 알림 보완 제안](2026-11-04-seoyeon-hyeongjun-guide-job-progress-reply.md) | 2026-11-04 | 김서연 → 박형준 | 요청 |
+| [분석 상태 SSE 머지 전 확인과 AI 가이드 요청(!85) 후속 확인](2026-11-04-seoyeon-jungyoon-analysis-job-followups.md) | 2026-11-04 | 김서연 → 김정윤 | 요청 |
+| [분석 로딩 화면을 분석 상태 SSE 로 연결](2026-11-04-seoyeon-juyeon-analysis-status-sse.md) | 2026-11-04 | 김서연 → 최주연 | 요청 |

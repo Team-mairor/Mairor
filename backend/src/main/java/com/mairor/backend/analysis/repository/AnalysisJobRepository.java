@@ -38,9 +38,16 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
   /** worker 재시작 때 되돌릴 작업: RUNNING 이면서 AI 에 맡기기 전인 것. */
   List<AnalysisJob> findByStatusAndAiJobIdIsNull(AnalysisStatus status);
 
-  /** AI 콜백을 기다리는 작업 중 마지막 변경(AI 요청)이 {@code before} 보다 앞선 것. */
-  List<AnalysisJob> findByStatusAndAiJobIdIsNotNullAndUpdatedAtBefore(
-      AnalysisStatus status, Instant before);
+  /**
+   * AI 콜백을 기다리는 작업({@code status}·AI 작업 ID 있음) 중 AI 에 맡긴 시각이 {@code before} 보다 앞선 것. 진행 숫자를 저장하면
+   * {@code updated_at}이 바뀌므로 맡긴 시각으로 본다. 맡긴 시각이 빈 행(칸이 생기기 전에 맡김)은 {@code updated_at}으로 본다({@link
+   * AnalysisJob#aiTimeoutBaseline()}과 같은 규칙).
+   */
+  @Query(
+      "select j from AnalysisJob j where j.status = :status and j.aiJobId is not null"
+          + " and coalesce(j.aiRequestedAt, j.updatedAt) < :before")
+  List<AnalysisJob> findAwaitingAiRequestedBefore(
+      @Param("status") AnalysisStatus status, @Param("before") Instant before);
 
   /** 콜백과 시간 초과 감시가 같은 작업을 동시에 끝내지 않게 행을 잠그고 찾는다. */
   @Lock(LockModeType.PESSIMISTIC_WRITE)

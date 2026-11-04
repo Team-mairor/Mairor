@@ -29,7 +29,8 @@ import org.hibernate.type.SqlTypes;
  * <ul>
  *   <li>{@code guideInput}: AI 서버에 보낸 가이드 입력({@code shared/guide-input/guide_input.v1.schema.json})
  *   <li>{@code explanation}: AI 콜백의 {@code guide}({@code shared/guide-job}). 콜백 전에는 {@code null}
- *   <li>{@code area}: 가이드 영역({@code shared/guide-area}). 영역 분석이 늦으면 설명만 온 채로 {@code null}일 수 있다
+ *   <li>{@code area}: 가이드 영역({@code shared/guide-area}). AI 는 설명과 영역을 콜백 한 번에 보내므로, 프레임 없이 맡긴 작업만
+ *       {@code null}이다
  * </ul>
  *
  * <p>같은 영상의 공개(APPROVED) 가이드는 하나뿐이다. 부분 유일 인덱스({@value #VIDEO_APPROVED_UNIQUE})라 {@code

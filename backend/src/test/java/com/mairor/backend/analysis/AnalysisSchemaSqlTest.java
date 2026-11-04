@@ -16,9 +16,11 @@ import com.mairor.backend.guides.repository.GuideRepository;
 import com.mairor.backend.videos.entity.Video;
 import com.mairor.backend.videos.repository.VideoRepository;
 import jakarta.persistence.EntityManager;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -186,6 +188,8 @@ class AnalysisSchemaSqlTest {
             "failure_code",
             "failure_message",
             "ai_job_id",
+            "ai_requested_at",
+            "ai_progress",
             "requested_by",
             "started_at",
             "finished_at")) {
@@ -193,6 +197,89 @@ class AnalysisSchemaSqlTest {
     }
     assertThat(column(columns, "ai_job_id").get("character_maximum_length"))
         .isEqualTo(AnalysisJob.AI_JOB_ID_MAX_LENGTH);
+    assertThat(column(columns, "ai_progress").get("data_type")).isEqualTo("jsonb");
+  }
+
+  @Test
+  void aiRequestTimeAndProgressRoundTrip() {
+    Video video =
+        videos.save(
+            new Video(
+                "eFzG30avtOI",
+                "영상",
+                "채널",
+                525,
+                null,
+                null,
+                "[]",
+                Instant.parse("2026-11-03T00:00:00Z")));
+    AnalysisJob job = jobs.save(new AnalysisJob(video, null));
+    Instant handedOver = Instant.parse("2026-11-03T01:00:00Z");
+    job.start(handedOver);
+    job.advanceTo(ProgressStage.BUILDING_GUIDE);
+    job.awaitAi("8728c83b0d124c74a23863a50d4d7c0c", handedOver);
+    job.recordAiProgress(
+        "{\"explanation\": {\"done\": 19, \"total\": 19}, \"frames\": {\"done\": 840, \"total\":"
+            + " 2000}, \"landmarks\": {\"done\": 0, \"total\": 2000}, \"area\": {\"done\": 0,"
+            + " \"total\": 19}}");
+    em.flush();
+    em.clear();
+
+    AnalysisJob saved = jobs.findById(job.getId()).orElseThrow();
+    assertThat(saved.getAiRequestedAt()).isEqualTo(handedOver);
+    assertThat(
+            jdbc.queryForObject(
+                "select ai_progress -> 'frames' ->> 'done' from analysis_jobs where id = ?",
+                String.class,
+                job.getId()))
+        .isEqualTo("840");
+  }
+
+  /**
+   * {@code ai_requested_at} 칸이 생기기 전에 AI 에 맡긴 작업(칸이 빔)도 진행 숫자를 여러 번 저장하는 동안 시간 초과 기준이 첫 저장 전 {@code
+   * updated_at}으로 고정된다.
+   */
+  @Test
+  void legacyAwaitingJobKeepsItsTimeoutBaselineWhileProgressIsSaved() {
+    Video video =
+        videos.save(
+            new Video(
+                "eFzG30avtOI",
+                "영상",
+                "채널",
+                525,
+                null,
+                null,
+                "[]",
+                Instant.parse("2026-11-03T00:00:00Z")));
+    em.flush();
+    UUID jobId = UUID.randomUUID();
+    Instant lastChange = Instant.parse("2026-11-03T01:00:00Z");
+    jdbc.update(
+        "insert into analysis_jobs (id, video_id, status, progress_stage, retryable, ai_job_id,"
+            + " attempt, created_at, updated_at)"
+            + " values (?, ?, 'RUNNING', 'BUILDING_GUIDE', false, 'legacy-ai-job', 1, ?, ?)",
+        jobId,
+        video.getId(),
+        Timestamp.from(lastChange),
+        Timestamp.from(lastChange));
+
+    for (int done = 1; done <= 3; done++) {
+      AnalysisJob job = jobs.findById(jobId).orElseThrow();
+      assertThat(job.recordAiProgress("{\"explanation\": {\"done\": " + done + ", \"total\": 19}}"))
+          .isTrue();
+      em.flush();
+      em.clear();
+    }
+
+    Map<String, Object> row =
+        jdbc.queryForMap(
+            "select ai_requested_at, updated_at, ai_progress -> 'explanation' ->> 'done' as done"
+                + " from analysis_jobs where id = ?",
+            jobId);
+    assertThat(((Timestamp) row.get("ai_requested_at")).toInstant()).isEqualTo(lastChange);
+    assertThat(((Timestamp) row.get("updated_at")).toInstant()).isAfter(lastChange);
+    assertThat(row.get("done")).isEqualTo("3");
   }
 
   private List<Map<String, Object>> columns(String table) {

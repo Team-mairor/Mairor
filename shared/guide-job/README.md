@@ -13,7 +13,7 @@ API 명세는 [docs/references/ai-api.md](../../docs/references/ai-api.md)에 �
 ## 사용 위치
 
 - AI: `ai/tests/test_guide_schema.py`가 이 파일이 모델과 같은지, 샘플 요청과 콜백 본문이 통과하는지 본다.
-- BE (예정): 보낼 요청과 받은 콜백을 이 스키마로 검사한다.
+- BE: 테스트가 보내는 요청 본문(`AnalysisWorkerFlowTest`, `progressUrl` 포함)과 콜백 예시(`AiGuideJobFlowTest`)가 이 스키마를 통과하는지 `GuideJobSchemas`로 본다. 실행 중에는 처리에 필요한 칸만 검사한다(`AiResultService`, 진행 알림은 `AiProgressService`).
 
 ## 형식을 바꿀 때
 

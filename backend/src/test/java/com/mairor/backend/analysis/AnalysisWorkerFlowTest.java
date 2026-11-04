@@ -6,6 +6,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.mairor.backend.analysis.controller.AiCallbackController;
 import com.mairor.backend.analysis.dto.request.AiGuideJobCallbackRequest;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
@@ -147,6 +148,11 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     assertThat(body.getValue())
         .contains(
             "\"callbackUrl\":\"http://localhost:8080/api/v1/internal/ai/guide-jobs/callback\"")
+        .as("진행 알림 주소는 AI 가 부를 BE 의 진행 알림 API 다")
+        .contains(
+            "\"progressUrl\":\"http://localhost:8080/api"
+                + AiCallbackController.PROGRESS_PATH
+                + "\"")
         .contains("\"frames\":{\"source\":{\"width\":1920,\"height\":1080,\"fps\":60.0}")
         .contains("\"frameIndex\":38400,\"timestampMs\":640000,\"stepId\":\"s1\",\"url\":\"file:");
 
