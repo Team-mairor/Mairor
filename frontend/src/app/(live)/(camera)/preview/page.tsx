@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -12,6 +12,7 @@ import {
   parseAlert,
   useLiveState,
 } from "@/features/live/live-chrome";
+import { PillButton } from "@/components/ui/pill-button";
 import { MakeupOverlay } from "@/features/overlay";
 import { REF_PRODUCTS, TRY_STEPS } from "@/lib/mock-data";
 import { useQuery } from "@/lib/use-query";
@@ -55,17 +56,17 @@ export default function PreviewPage() {
       <LiveNote note={note} />
       {intro && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+100%*0)] z-[2] mx-auto mb-[380px] flex w-max items-center gap-2.5 rounded-full bg-ink py-3 pr-5 pl-3.5 text-[16px] font-bold text-white shadow-[0_10px_24px_rgba(11,20,48,.3)]"
+          className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+100%*0)] z-[2] mx-auto mb-[380px] flex w-max items-center gap-2.5 rounded-full bg-ink py-3 pr-5 pl-3.5 text-[16px] font-bold text-white shadow-float"
           style={{ animation: "mr-fade 400ms cubic-bezier(.34,1.56,.64,1) both" }}
         >
-          <Sparkles className="size-5 text-lime" aria-hidden />
+          <Sparkles className="size-5 text-mint" aria-hidden />
           영상 속 메이크업을 내 얼굴에 입혀 볼게요
         </div>
       )}
 
       <GlassPanel>
         <div className="flex items-baseline gap-3.5">
-          <span className="shrink-0 font-serif text-[44px] leading-[.9] text-rose italic">
+          <span className="shrink-0 font-serif text-[44px] leading-[.9] text-blush italic">
             Live
           </span>
           <h1 className="font-display text-[30px] leading-[1.15] text-white">
@@ -90,7 +91,7 @@ export default function PreviewPage() {
                 aria-pressed={on}
                 className={cn(
                   "flex min-h-16 items-center justify-center gap-3 rounded-[18px] border px-[18px] transition-colors",
-                  on ? "border-rose/60 bg-white/12" : "border-white/8 bg-white/4",
+                  on ? "border-blush/60 bg-white/12" : "border-white/8 bg-white/4",
                 )}
               >
                 {!m.off && (
@@ -121,16 +122,14 @@ export default function PreviewPage() {
         </div>
         <div className="flex items-center gap-3">
           <RoundBack onClick={() => router.push("/select")} label="영상 입력으로" />
-          <button
-            type="button"
+          <PillButton
+            size="cta"
+            trailing
             onClick={() => router.push("/check")}
-            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_color-mix(in_srgb,var(--color-pink)_38%,transparent)] active:scale-[.98]"
+            className="min-w-0 flex-1"
           >
-            <span className="truncate text-[22px] font-bold">이 메이크업으로 시작하기</span>
-            <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-              <ArrowRight className="size-[26px]" strokeWidth={2.4} aria-hidden />
-            </span>
-          </button>
+            이 메이크업으로 시작하기
+          </PillButton>
         </div>
       </GlassPanel>
     </main>

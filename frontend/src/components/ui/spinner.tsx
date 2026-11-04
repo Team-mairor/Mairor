@@ -14,7 +14,7 @@ export function Spinner({
       aria-label="처리 중"
       className={cn(
         "inline-block size-7 shrink-0 animate-spin rounded-full border-[2.5px]",
-        tone === "light" ? "border-white/40 border-t-white" : "border-line border-t-pink",
+        tone === "light" ? "border-white/40 border-t-white" : "border-line border-t-ice",
         className,
       )}
     />

@@ -206,7 +206,7 @@ export function DevNav() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "바로가기 닫기" : "바로가기 열기"}
-        className="fixed bottom-4 left-4 z-[100] flex size-11 items-center justify-center rounded-full bg-ink text-white shadow-[0_8px_20px_rgba(11,20,48,.3)]"
+        className="fixed bottom-4 left-4 z-[100] flex size-11 items-center justify-center rounded-full bg-ink text-white shadow-float"
       >
         {open ? (
           <PanelLeftClose className="size-5" aria-hidden />
@@ -217,10 +217,10 @@ export function DevNav() {
       {open && (
         <nav
           aria-label="화면 바로가기"
-          className="fixed top-4 bottom-[72px] left-4 z-[99] flex w-[212px] flex-col gap-1 overflow-y-auto rounded-[20px] bg-white px-3 py-[18px] text-ink shadow-[0_12px_32px_rgba(11,20,48,.18)]"
+          className="fixed top-4 bottom-[72px] left-4 z-[99] flex w-[212px] flex-col gap-1 overflow-y-auto rounded-[20px] bg-white px-3 py-[18px] text-ink shadow-float"
         >
           <div className="mb-2 flex flex-col gap-0.5 border-b border-line px-2.5 pb-3">
-            <span className="font-serif text-[28px] leading-none text-plum italic">mairor</span>
+            <span className="font-serif text-[28px] leading-none text-navy italic">mairor</span>
             <span className="text-[13px] text-mute">v11 · 화면 바로가기</span>
           </div>
           {ITEMS.map((it, i) => {
@@ -232,20 +232,20 @@ export function DevNav() {
                 onClick={() => go(it)}
                 className={cn(
                   "flex min-h-11 shrink-0 items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors",
-                  on ? "bg-plum text-white" : "hover:bg-cream",
+                  on ? "bg-navy text-white" : "hover:bg-cream",
                 )}
               >
                 <span
                   className={cn(
                     "w-6 font-serif text-[18px] leading-none tabular",
-                    on ? "text-pink-soft" : "text-plum",
+                    on ? "text-blush" : "text-navy",
                   )}
                 >
                   {String(i).padStart(2, "0")}
                 </span>
                 <span className="flex min-w-0 flex-col gap-px">
                   <span className="text-[14px] font-semibold">{it.label}</span>
-                  <span className={cn("text-[12px]", on ? "text-pink-soft" : "text-mute")}>
+                  <span className={cn("text-[12px]", on ? "text-blush" : "text-mute")}>
                     {it.sub}
                   </span>
                 </span>

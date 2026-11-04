@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
+import { Modal } from "@/components/ui/modal";
+import { PillButton } from "@/components/ui/pill-button";
 import { useCamera, useHiddenVideo } from "@/features/face";
 import { facePhoto } from "@/features/loading/face-register";
 import { FaceRegisterModal, ProgressBar } from "@/features/loading/face-register-modal";
@@ -210,7 +212,7 @@ export default function LoadingPage() {
           title="영상 입력"
           aria-label="영상 입력"
         />
-        <span className="font-serif text-[28px] leading-none text-plum italic">
+        <span className="font-serif text-[28px] leading-none text-navy italic">
           {replay ? "Ready" : "Analyzing"}
         </span>
         <span className="text-[17px] text-mute">
@@ -236,7 +238,7 @@ export default function LoadingPage() {
             className="absolute inset-0 bg-cover bg-center"
             style={{ backgroundImage: `url(${videoThumb(picked.ytid)})` }}
           />
-          <div className="absolute inset-0 bg-[rgba(11,20,48,.18)]" />
+          <div className="absolute inset-0 bg-night/20" />
           <div className="absolute inset-7">
             <span className="absolute top-0 left-0 size-[34px] rounded-tl-[10px] border-t-2 border-l-2 border-white" />
             <span className="absolute top-0 right-0 size-[34px] rounded-tr-[10px] border-t-2 border-r-2 border-white" />
@@ -291,10 +293,10 @@ export default function LoadingPage() {
           <div className="flex items-end justify-between gap-5">
             <span className="font-serif text-[120px] leading-[.8] tracking-[-.03em] text-ink tabular">
               {pct}
-              <span className="text-[44px] text-plum">%</span>
+              <span className="text-[44px] text-navy">%</span>
             </span>
             <span className="flex flex-col items-end gap-1.5 pb-1">
-              <span className="font-serif text-[32px] leading-none text-plum italic">
+              <span className="font-serif text-[32px] leading-none text-navy italic">
                 {phaseEn}
               </span>
               <span className="text-[17px] whitespace-nowrap text-mute">
@@ -308,7 +310,7 @@ export default function LoadingPage() {
               style={{ width: `${pct}%` }}
             />
             <div
-              className="absolute -top-1 -ml-[5px] size-2.5 rounded-full bg-pink-deep transition-[left] duration-600 ease-linear"
+              className="absolute -top-1 -ml-[5px] size-2.5 rounded-full bg-cyan transition-[left] duration-600 ease-linear"
               style={{ left: `${pct}%` }}
             />
           </div>
@@ -329,7 +331,7 @@ export default function LoadingPage() {
 
         {notice ? (
           <div className="flex shrink-0 flex-col gap-3 rounded-3xl bg-cream px-7 py-6">
-            <span className="font-label text-[15px] font-semibold tracking-[.14em] text-plum">
+            <span className="font-label text-[15px] font-semibold tracking-[.14em] text-navy">
               {notice.tag}
             </span>
             <span className="font-display text-[28px] leading-[1.3] text-pretty text-ink">
@@ -363,12 +365,12 @@ export default function LoadingPage() {
                     onClick={() => setForm(emptyDraft({ brand: "", name: "" }))}
                     className={cn(
                       "flex h-20 items-center gap-3 rounded-[20px] border px-4 text-left transition-colors",
-                      r.have ? "border-plum bg-plum" : "border-line bg-white",
+                      r.have ? "border-navy bg-navy" : "border-line bg-white",
                     )}
                     style={{ animation: "mr-fade 600ms cubic-bezier(.34,1.56,.64,1) both" }}
                   >
                     <span
-                      className="size-[34px] shrink-0 rounded-full border-2 border-white shadow-[0_0_0_1px_#E4E7EE]"
+                      className="size-[34px] shrink-0 rounded-full border-2 border-white ring-1 ring-line"
                       style={{ background: r.color }}
                     />
                     <span className="flex min-w-0 flex-col gap-0.5 overflow-hidden">
@@ -381,10 +383,7 @@ export default function LoadingPage() {
                         {r.cat}
                       </span>
                       <span
-                        className={cn(
-                          "truncate text-[18px]",
-                          r.have ? "text-pink-soft" : "text-mute",
-                        )}
+                        className={cn("truncate text-[18px]", r.have ? "text-blush" : "text-mute")}
                       >
                         {r.have ? "보유" : "없음 · 추가"}
                       </span>
@@ -417,14 +416,12 @@ export default function LoadingPage() {
               key={label}
               className="flex h-[68px] min-w-0 items-center gap-3 rounded-[20px] border border-line px-5"
             >
-              <span
-                className={cn("size-3 shrink-0 rounded-full", ok ? "bg-pink-deep" : "bg-line-3")}
-              />
+              <span className={cn("size-3 shrink-0 rounded-full", ok ? "bg-cyan" : "bg-line-3")} />
               <span className="text-[21px] font-semibold whitespace-nowrap text-ink">{label}</span>
               <span
                 className={cn(
                   "ml-auto text-[20px] font-semibold whitespace-nowrap tabular",
-                  ok ? "text-plum" : "text-mute",
+                  ok ? "text-navy" : "text-mute",
                 )}
               >
                 {st}
@@ -435,37 +432,30 @@ export default function LoadingPage() {
         {fail ? (
           <div className="flex gap-3">
             {notice?.retry && (
-              <button
-                type="button"
+              <PillButton
+                size="hero"
                 onClick={() => {
                   setFail(null);
                   router.replace("/loading");
                 }}
-                className="flex h-20 flex-1 items-center justify-center rounded-full bg-pink text-[23px] font-bold text-white active:scale-[.98]"
+                className="flex-1"
               >
                 다시 시도
-              </button>
+              </PillButton>
             )}
-            <button
-              type="button"
+            <PillButton
+              variant="line"
+              size="hero"
               onClick={() => router.push("/select")}
-              className="flex h-20 flex-1 items-center justify-center rounded-full border-[1.5px] border-ink text-[23px] font-bold text-ink active:scale-[.98]"
+              className="flex-1"
             >
               다른 영상 고르기
-            </button>
+            </PillButton>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => ctaGo?.()}
-            disabled={!ctaGo}
-            className={cn(
-              "flex h-20 items-center justify-center rounded-full px-6 text-center text-[23px] font-bold transition-colors active:scale-[.98] disabled:cursor-default",
-              ctaGo ? "bg-pink text-white" : "bg-line text-mute",
-            )}
-          >
+          <PillButton size="hero" onClick={() => ctaGo?.()} disabled={!ctaGo}>
             {ctaLabel}
-          </button>
+          </PillButton>
         )}
       </div>
 
@@ -487,72 +477,62 @@ export default function LoadingPage() {
         />
       )}
 
-      {pouchModal && (
-        <div
-          className="absolute inset-0 z-[4] flex items-center justify-center bg-[rgba(8,13,34,.62)] p-8"
-          role="dialog"
-          aria-modal="true"
-          aria-label="내 파우치 확인"
-        >
-          <div className="flex w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_80px_rgba(8,13,34,.35)]">
-            <ProgressBar pct={pct} text={barText} />
-            <div className="flex animate-step-in flex-col gap-[22px] px-8 pt-7 pb-8">
-              <div className="flex w-full items-center justify-between gap-3">
-                <span className="flex items-center gap-2.5 text-[16px] font-bold text-plum">
-                  <span className="flex gap-1.5">
-                    <span className="h-1.5 w-[22px] rounded-full bg-pink-soft" />
-                    <span className="h-1.5 w-[22px] rounded-full bg-pink-deep" />
-                  </span>
-                  STEP 2 · 내 파우치
-                </span>
-                <button
-                  type="button"
-                  onClick={closePouch}
-                  className="ml-auto flex h-14 items-center gap-3 text-[24px] font-bold whitespace-nowrap text-ink"
-                >
-                  {newIds.length ? "다 했어요" : "변경 없어요"}
-                  <span className="flex size-11 items-center justify-center rounded-full bg-ink text-white">
-                    <X className="size-5" strokeWidth={3} aria-hidden />
-                  </span>
-                </button>
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="font-display text-[30px] leading-[1.3] text-ink">
-                  기다리는 동안
-                  <br />내 파우치를 확인해 볼까요?
-                </span>
-                <span className="text-[19px] leading-[1.5] text-mute">
-                  최근에 산 제품이 있다면 지금 등록해 두세요. 분석 결과에 바로 반영돼요.
-                </span>
-              </div>
-              <PouchBoard
-                items={state.pouch}
-                scale={0.6}
-                className="h-[440px] shrink-0"
-                onEdit={(p) => setForm({ ...p })}
-              >
-                <div className="absolute top-5 left-[22px] z-[6]">
-                  <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
-                    <span className="font-serif text-[32px] leading-none text-ink italic">
-                      My pouch
-                    </span>
-                    <span className="text-[16px] text-mute">
-                      {state.pouch.length}개 · 탭해서 수정
-                    </span>
-                  </span>
-                </div>
-              </PouchBoard>
-              <button
-                type="button"
-                onClick={() => setForm(emptyDraft())}
-                className="flex h-20 items-center justify-center gap-2.5 rounded-full bg-pink text-[22px] font-bold text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
-              >
-                <Plus className="size-[22px]" strokeWidth={2.6} aria-hidden />새 제품 등록하기
-              </button>
-            </div>
+      <Modal
+        open={pouchModal}
+        label="내 파우치 확인"
+        overlayClassName="z-[4] p-8"
+        className="flex max-w-none flex-col overflow-hidden rounded-[32px] p-0"
+      >
+        <ProgressBar pct={pct} text={barText} />
+        <div className="flex animate-step-in flex-col gap-[22px] px-8 pt-7 pb-8">
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="flex items-center gap-2.5 text-[16px] font-bold text-navy">
+              <span className="flex gap-1.5">
+                <span className="h-1.5 w-[22px] rounded-full bg-blush" />
+                <span className="h-1.5 w-[22px] rounded-full bg-cyan" />
+              </span>
+              STEP 2 · 내 파우치
+            </span>
+            <button
+              type="button"
+              onClick={closePouch}
+              className="ml-auto flex h-14 items-center gap-3 text-[24px] font-bold whitespace-nowrap text-ink"
+            >
+              {newIds.length ? "다 했어요" : "변경 없어요"}
+              <span className="flex size-11 items-center justify-center rounded-full bg-ink text-white">
+                <X className="size-5" strokeWidth={3} aria-hidden />
+              </span>
+            </button>
           </div>
+          <div className="flex flex-col gap-2">
+            <span className="font-display text-[30px] leading-[1.3] text-ink">
+              기다리는 동안
+              <br />내 파우치를 확인해 볼까요?
+            </span>
+            <span className="text-[19px] leading-[1.5] text-mute">
+              최근에 산 제품이 있다면 지금 등록해 두세요. 분석 결과에 바로 반영돼요.
+            </span>
+          </div>
+          <PouchBoard
+            items={state.pouch}
+            scale={0.6}
+            className="h-[440px] shrink-0"
+            onEdit={(p) => setForm({ ...p })}
+          >
+            <div className="absolute top-5 left-[22px] z-[6]">
+              <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
+                <span className="font-serif text-[32px] leading-none text-ink italic">
+                  My pouch
+                </span>
+                <span className="text-[16px] text-mute">{state.pouch.length}개 · 탭해서 수정</span>
+              </span>
+            </div>
+          </PouchBoard>
+          <PillButton size="hero" onClick={() => setForm(emptyDraft())}>
+            <Plus className="size-[22px]" strokeWidth={2.6} aria-hidden />새 제품 등록하기
+          </PillButton>
         </div>
-      )}
+      </Modal>
 
       {form && (
         <ProductSheet

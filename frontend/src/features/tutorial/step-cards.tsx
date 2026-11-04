@@ -1,5 +1,7 @@
-import { ArrowRight, CircleCheck, Lightbulb, TriangleAlert } from "lucide-react";
+import { CircleCheck, Lightbulb, TriangleAlert } from "lucide-react";
 
+import { PillButton } from "@/components/ui/pill-button";
+import { Modal } from "@/components/ui/modal";
 import type { MatchResult } from "@/features/session";
 import { GUIDE_STEPS, REF_STATE_LABEL, type GuideStepInfo, type RefProduct } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -16,7 +18,7 @@ export function ActCard({
 }) {
   return (
     <div className="flex animate-fade gap-3.5 rounded-[24px] bg-white/10 px-4 py-4">
-      <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-pink text-[17px] font-extrabold text-white tabular">
+      <span className="flex size-[34px] shrink-0 items-center justify-center rounded-full bg-ice text-[17px] font-extrabold text-ink tabular">
         {n}
       </span>
       <div className="flex min-w-0 flex-col gap-2 pt-0.5">
@@ -27,7 +29,7 @@ export function ActCard({
           <span
             className={cn(
               "flex items-start gap-2 text-[17px] leading-[1.45] text-pretty",
-              act.tip.kind === "caution" ? "text-pink-soft" : "text-line-2",
+              act.tip.kind === "caution" ? "text-blush" : "text-line-2",
             )}
           >
             {act.tip.kind === "caution" ? (
@@ -39,7 +41,7 @@ export function ActCard({
           </span>
         )}
         {doneWhen && (
-          <span className="flex items-start gap-2 text-[17px] leading-[1.45] text-pretty text-lime">
+          <span className="flex items-start gap-2 text-[17px] leading-[1.45] text-pretty text-mint">
             <CircleCheck className="mt-0.5 size-[18px] shrink-0" aria-label="끝내는 기준" />
             {doneWhen}
           </span>
@@ -68,106 +70,96 @@ export function PrepCard({
 }) {
   const mine = match.p;
   return (
-    <div
-      className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-ink-deep/58 px-12 py-8 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="prep-title"
+    <Modal
+      open
+      labelledBy="prep-title"
+      overlayClassName="z-[4] px-12 py-8 backdrop-blur-sm"
+      className="flex max-w-[600px] flex-col gap-6 rounded-[36px] px-8 pt-8 pb-7 text-ink"
     >
-      {/* 그림자는 검정으로 둔다. ink-deep을 쓰면 미러필름 모드의 흰 면(bg-white)에서 흰색으로 뒤집혀 빛이 번진다 */}
-      <div className="flex w-full max-w-[600px] flex-col gap-6 rounded-[36px] bg-white px-8 pt-8 pb-7 text-ink shadow-[0_40px_80px_rgb(0_0_0/.4)]">
-        <div className="flex flex-col gap-1.5">
-          <span className="font-label text-[14px] font-semibold tracking-[.14em] text-mute">
-            STEP {String(step + 1).padStart(2, "0")} / {GUIDE_STEPS.length}
-          </span>
-          <h2 id="prep-title" className="font-display text-[36px] leading-[1.2]">
-            {info.title}
-          </h2>
-        </div>
-
-        <div className="flex flex-col gap-3 rounded-[24px] border border-line p-4">
-          <div className="flex items-center gap-4">
-            <span
-              className={cn(
-                "size-14 shrink-0 rounded-full",
-                mine
-                  ? "border-[3px] border-white ring-1 ring-line"
-                  : "border-[2.5px] border-dashed border-ash",
-              )}
-              style={mine ? { background: mine.color ?? "#fff" } : undefined}
-            />
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="text-[14px] font-semibold text-plum">
-                {match.kind === "same"
-                  ? "이 제품을 준비해 주세요 · 내 파우치"
-                  : match.kind === "sub"
-                    ? "이 제품을 준비해 주세요 · 대체 제품"
-                    : "내 파우치에 맞는 제품이 없어요"}
-              </span>
-              {mine ? (
-                <>
-                  <span className="text-[20px] leading-tight font-bold">
-                    {mine.brand} {mine.name}
-                  </span>
-                  {mine.shade && <span className="text-[16px] text-mute">{mine.shade}</span>}
-                </>
-              ) : (
-                <span className="text-[17px] leading-[1.45] text-pretty text-mute">
-                  설명을 보고 따라 하거나 건너뛸 수 있어요
-                </span>
-              )}
-            </div>
-          </div>
-          {match.kind !== "same" && (
-            <div className="flex items-center gap-2 border-t border-line pt-3 text-[15px] text-mute">
-              <span
-                className="size-5 shrink-0 rounded-full ring-1 ring-line"
-                style={{ background: refProduct.color }}
-              />
-              <span className="min-w-0 truncate">
-                영상 속 제품 · {refProduct.brand} {refProduct.name}
-                {refProduct.shade && ` ${refProduct.shade}`}
-              </span>
-              {refProduct.refState && (
-                <span className="shrink-0 rounded-full border border-dashed border-plum px-2 text-[13px] text-plum">
-                  {REF_STATE_LABEL[refProduct.refState]}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-2.5">
-          <span className="text-[15px] font-semibold text-mute">할 일 {info.acts.length}가지</span>
-          <ol className="flex flex-col gap-2">
-            {info.acts.map((a, i) => (
-              <li key={a.text} className="flex items-start gap-3 text-[19px] leading-[1.4]">
-                <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-full bg-cream text-[15px] font-extrabold text-plum tabular">
-                  {i + 1}
-                </span>
-                {a.text}
-              </li>
-            ))}
-          </ol>
-          {info.doneWhen && (
-            <span className="mt-1 flex items-start gap-2 text-[17px] leading-[1.45] text-plum">
-              <CircleCheck className="mt-0.5 size-[18px] shrink-0" aria-label="끝내는 기준" />
-              {info.doneWhen}
-            </span>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={onStart}
-          className="flex h-[72px] items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.98]"
-        >
-          <span className="text-[22px] font-bold">시작하기</span>
-          <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-            <ArrowRight className="size-[26px]" strokeWidth={2.4} aria-hidden />
-          </span>
-        </button>
+      <div className="flex flex-col gap-1.5">
+        <span className="font-label text-[14px] font-semibold tracking-[.14em] text-mute">
+          STEP {String(step + 1).padStart(2, "0")} / {GUIDE_STEPS.length}
+        </span>
+        <h2 id="prep-title" className="font-display text-[36px] leading-[1.2]">
+          {info.title}
+        </h2>
       </div>
-    </div>
+
+      <div className="flex flex-col gap-3 rounded-[24px] border border-line p-4">
+        <div className="flex items-center gap-4">
+          <span
+            className={cn(
+              "size-14 shrink-0 rounded-full",
+              mine
+                ? "border-[3px] border-white ring-1 ring-line"
+                : "border-[2.5px] border-dashed border-ash",
+            )}
+            style={mine ? { background: mine.color ?? "#fff" } : undefined}
+          />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[14px] font-semibold text-navy">
+              {match.kind === "same"
+                ? "이 제품을 준비해 주세요 · 내 파우치"
+                : match.kind === "sub"
+                  ? "이 제품을 준비해 주세요 · 대체 제품"
+                  : "내 파우치에 맞는 제품이 없어요"}
+            </span>
+            {mine ? (
+              <>
+                <span className="text-[20px] leading-tight font-bold">
+                  {mine.brand} {mine.name}
+                </span>
+                {mine.shade && <span className="text-[16px] text-mute">{mine.shade}</span>}
+              </>
+            ) : (
+              <span className="text-[17px] leading-[1.45] text-pretty text-mute">
+                설명을 보고 따라 하거나 건너뛸 수 있어요
+              </span>
+            )}
+          </div>
+        </div>
+        {match.kind !== "same" && (
+          <div className="flex items-center gap-2 border-t border-line pt-3 text-[15px] text-mute">
+            <span
+              className="size-5 shrink-0 rounded-full ring-1 ring-line"
+              style={{ background: refProduct.color }}
+            />
+            <span className="min-w-0 truncate">
+              영상 속 제품 · {refProduct.brand} {refProduct.name}
+              {refProduct.shade && ` ${refProduct.shade}`}
+            </span>
+            {refProduct.refState && (
+              <span className="shrink-0 rounded-full border border-dashed border-navy px-2 text-[13px] text-navy">
+                {REF_STATE_LABEL[refProduct.refState]}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <span className="text-[15px] font-semibold text-mute">할 일 {info.acts.length}가지</span>
+        <ol className="flex flex-col gap-2">
+          {info.acts.map((a, i) => (
+            <li key={a.text} className="flex items-start gap-3 text-[19px] leading-[1.4]">
+              <span className="mt-px flex size-7 shrink-0 items-center justify-center rounded-full bg-cream text-[15px] font-extrabold text-navy tabular">
+                {i + 1}
+              </span>
+              {a.text}
+            </li>
+          ))}
+        </ol>
+        {info.doneWhen && (
+          <span className="mt-1 flex items-start gap-2 text-[17px] leading-[1.45] text-navy">
+            <CircleCheck className="mt-0.5 size-[18px] shrink-0" aria-label="끝내는 기준" />
+            {info.doneWhen}
+          </span>
+        )}
+      </div>
+
+      <PillButton size="cta" trailing onClick={onStart}>
+        시작하기
+      </PillButton>
+    </Modal>
   );
 }

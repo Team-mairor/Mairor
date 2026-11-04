@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
 import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
 import { useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial/how-it-works";
@@ -37,13 +38,14 @@ export default function OnboardingPage() {
               <HowItWorksSlide index={slide} />
               <div className="flex items-center gap-3 px-3 pt-7">
                 {slide < 2 && (
-                  <button
-                    type="button"
+                  <PillButton
+                    variant="line"
+                    size="cta"
                     onClick={() => setSlide(3)}
-                    className="flex h-[72px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-line-2 px-[30px] text-[20px] font-semibold whitespace-nowrap text-mute hover:bg-cream active:scale-[.97]"
+                    className="text-mute"
                   >
                     건너뛰기
-                  </button>
+                  </PillButton>
                 )}
                 <CtaButton onClick={() => setSlide((s) => s + 1)}>
                   {slide < 2 ? "다음" : "다음 · 내 파우치 채우기"}
@@ -64,11 +66,11 @@ export default function OnboardingPage() {
               >
                 <span
                   className={cn(
-                    "absolute top-[18px] left-[18px] z-[2] flex items-center gap-2 rounded-full px-3.5 py-2 text-[16px] font-bold tabular shadow-[0_8px_20px_rgba(11,20,48,.12)]",
+                    "absolute top-[18px] left-[18px] z-[2] flex items-center gap-2 rounded-full px-3.5 py-2 text-[16px] font-bold tabular shadow-float",
                     demo ? "bg-ink text-white" : "bg-white text-ink",
                   )}
                 >
-                  <span className={cn("size-2 rounded-full", demo ? "bg-lime" : "bg-pink-deep")} />
+                  <span className={cn("size-2 rounded-full", demo ? "bg-mint" : "bg-cyan")} />
                   {demo ? "예시 · 이렇게 담겨요" : `My pouch · ${mine.length}개`}
                 </span>
                 <div
@@ -80,7 +82,7 @@ export default function OnboardingPage() {
                   <button
                     type="button"
                     onClick={() => setForm(emptyDraft())}
-                    className="flex size-[200px] -rotate-[4deg] flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed border-pink-deep bg-pink/5 text-plum hover:bg-pink/10"
+                    className="flex size-[200px] -rotate-[4deg] flex-col items-center justify-center gap-2 rounded-full border-4 border-dashed border-cyan bg-ice/5 text-navy hover:bg-ice/10"
                   >
                     <Plus className="size-12" strokeWidth={2.2} aria-hidden />
                     <span className="text-[28px] font-bold">제품 담기</span>
@@ -88,7 +90,7 @@ export default function OnboardingPage() {
                 </div>
               </PouchBoard>
               <div className="flex animate-fade flex-col gap-3 px-3 pt-7">
-                <span className="font-label text-[14px] font-semibold tracking-[.16em] text-plum">
+                <span className="font-label text-[14px] font-semibold tracking-[.16em] text-navy">
                   MY POUCH — 04
                 </span>
                 <h1 className="font-display text-[38px] leading-[1.2] text-pretty text-ink">
@@ -101,13 +103,9 @@ export default function OnboardingPage() {
                 </p>
               </div>
               <div className="flex items-center gap-3 px-3 pt-7">
-                <button
-                  type="button"
-                  onClick={finish}
-                  className="flex h-[72px] shrink-0 items-center justify-center rounded-full border-[1.5px] border-line-2 px-[30px] text-[20px] font-semibold whitespace-nowrap text-mute hover:bg-cream active:scale-[.97]"
-                >
+                <PillButton variant="line" size="cta" onClick={finish} className="text-mute">
                   나중에 할게요
-                </button>
+                </PillButton>
                 <CtaButton onClick={demo ? () => setForm(emptyDraft()) : finish}>
                   {demo ? "첫 화장품 담기" : `${mine.length}개 담고 시작하기`}
                 </CtaButton>
@@ -141,13 +139,13 @@ function Progress({ step, onAuto }: { step: number; onAuto: () => void }) {
             key={i}
             className={cn(
               "relative h-1 overflow-hidden rounded-full",
-              i < step ? "bg-plum" : "bg-line",
+              i < step ? "bg-navy" : "bg-line",
             )}
           >
             {i === step && (
               <span
                 key={step}
-                className="absolute inset-0 origin-left bg-plum"
+                className="absolute inset-0 origin-left bg-navy"
                 style={{
                   animation:
                     step < 3
@@ -160,7 +158,7 @@ function Progress({ step, onAuto }: { step: number; onAuto: () => void }) {
           </span>
         ))}
       </div>
-      <span className="font-serif text-[24px] leading-none whitespace-nowrap text-plum tabular">
+      <span className="font-serif text-[24px] leading-none whitespace-nowrap text-navy tabular">
         {String(step + 1).padStart(2, "0")}
         <span className="text-[16px] text-mute"> / 04</span>
       </span>
@@ -170,15 +168,8 @@ function Progress({ step, onAuto }: { step: number; onAuto: () => void }) {
 
 function CtaButton({ onClick, children }: { onClick: () => void; children: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white active:scale-[.98]"
-    >
-      <span className="truncate text-[21px] font-bold tabular">{children}</span>
-      <span className="flex size-[52px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-        <ArrowRight className="size-6" strokeWidth={2.4} aria-hidden />
-      </span>
-    </button>
+    <PillButton size="cta" trailing onClick={onClick} className="min-w-0 flex-1">
+      {children}
+    </PillButton>
   );
 }

@@ -20,7 +20,7 @@ const ACCOUNTS: {
     name: "김주연",
     email: "jooyeon.mairor@gmail.com",
     initial: "주",
-    bg: "bg-pink-soft",
+    bg: "bg-blush",
     result: "ok",
   },
   {

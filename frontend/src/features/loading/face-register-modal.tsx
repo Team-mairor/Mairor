@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
+import { Modal } from "@/components/ui/modal";
 import { useCamera } from "@/features/face";
 import { useCameraErrorNote } from "@/features/live/live-chrome";
 import { cn } from "@/lib/utils";
@@ -167,14 +169,18 @@ export function FaceRegisterModal({
         : { ok: false, text: CONDITIONS[firstFailed ?? "distance"][1] };
 
   return (
-    <div
-      className="absolute inset-0 z-[4] flex animate-fade items-center justify-center bg-[rgba(8,13,34,.62)] p-8"
-      role="dialog"
-      aria-modal="true"
-      aria-label="얼굴 등록"
+    <Modal
+      open
+      label="얼굴 등록"
+      overlayClassName="z-[4] animate-fade p-8"
+      className={
+        step === "intro"
+          ? "flex max-w-none animate-none flex-col overflow-hidden rounded-[32px] p-0"
+          : "relative flex max-w-none animate-[mr-rise_320ms_cubic-bezier(.2,.8,.2,1)_both] flex-col items-center gap-[18px] overflow-hidden rounded-[36px] px-9 pt-6 pb-8"
+      }
     >
       {step === "intro" ? (
-        <div className="flex w-full flex-col overflow-hidden rounded-[32px] bg-white shadow-[0_30px_80px_rgba(8,13,34,.35)]">
+        <>
           <ProgressBar pct={pct} text={barText} />
           <div className="grid grid-cols-[minmax(0,.85fr)_minmax(0,1fr)] items-stretch gap-9 p-7">
             <div className="relative min-h-[440px] overflow-hidden rounded-3xl bg-cream">
@@ -199,7 +205,7 @@ export function FaceRegisterModal({
               <div className="flex flex-col gap-[18px]">
                 {TIPS.map((t, i) => (
                   <div key={t} className="flex items-center gap-4">
-                    <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-pink-pale font-serif text-[24px] text-plum">
+                    <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-ice-pale font-serif text-[24px] text-navy">
                       {i + 1}
                     </span>
                     <span className="text-[20px] font-bold text-ink">{t}</span>
@@ -207,19 +213,12 @@ export function FaceRegisterModal({
                 ))}
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={start}
-                  className="flex h-20 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.98]"
-                >
+                <PillButton size="hero" trailing onClick={start}>
                   <span className="flex items-baseline gap-2.5 whitespace-nowrap">
                     <span className="text-[23px] font-bold">얼굴 등록 시작</span>
-                    <span className="text-[17px] font-semibold text-pink-tint">약 10초</span>
+                    <span className="text-[17px] font-semibold text-navy">약 10초</span>
                   </span>
-                  <span className="flex size-[60px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-                    <ArrowRight className="size-7" strokeWidth={2.4} aria-hidden />
-                  </span>
-                </button>
+                </PillButton>
                 <button
                   type="button"
                   onClick={onLater}
@@ -230,18 +229,15 @@ export function FaceRegisterModal({
               </div>
             </div>
           </div>
-        </div>
+        </>
       ) : (
-        <div
-          className="relative flex w-full flex-col items-center gap-[18px] overflow-hidden rounded-[36px] bg-white px-9 pt-6 pb-8 shadow-[0_40px_100px_rgba(8,13,34,.5)]"
-          style={{ animation: "mr-rise 320ms cubic-bezier(.2,.8,.2,1) both" }}
-        >
+        <>
           <div className="flex w-full items-center justify-between gap-3">
-            <span className="font-label text-[13px] font-bold tracking-[.16em] text-plum">
+            <span className="font-label text-[13px] font-bold tracking-[.16em] text-navy">
               FACE ID
             </span>
             <span className="flex h-8 items-center gap-2 rounded-full bg-cream px-3 text-[14px] font-semibold text-ink tabular">
-              <span className="size-1.5 rounded-full bg-pink-deep" />
+              <span className="size-1.5 rounded-full bg-cyan" />
               분석 {pct}%
             </span>
           </div>
@@ -252,7 +248,7 @@ export function FaceRegisterModal({
             <span className="font-display text-[30px] leading-[1.3] text-ink">{title}</span>
             <span className="min-h-[27px] text-[18px] leading-[1.5] text-mute">{sub}</span>
             {stage === "ready" && (
-              <span className="text-[15px] leading-[1.5] text-plum">
+              <span className="text-[15px] leading-[1.5] text-navy">
                 정면 1장을 찍어 조명·색온도 기준으로 써요 · 이번 메이크업에만 사용해요
               </span>
             )}
@@ -267,7 +263,7 @@ export function FaceRegisterModal({
                     className={cn(
                       "flex h-10 items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-[16px] font-semibold whitespace-nowrap transition-colors",
                       check[name]
-                        ? "border-plum bg-plum text-white"
+                        ? "border-navy bg-navy text-white"
                         : "border-dashed border-line-3 bg-white text-mute",
                     )}
                   >
@@ -284,7 +280,7 @@ export function FaceRegisterModal({
               <span
                 className={cn(
                   "flex h-10 items-center gap-1.5 rounded-full px-3.5 text-[16px] font-semibold",
-                  stage === "done" ? "bg-plum text-white" : "bg-cream text-mute",
+                  stage === "done" ? "bg-navy text-white" : "bg-cream text-mute",
                 )}
               >
                 <Check className="size-3.5" strokeWidth={2.6} aria-hidden />
@@ -294,42 +290,32 @@ export function FaceRegisterModal({
           </div>
 
           <div className="mt-1.5 flex w-full gap-3">
-            <button
-              type="button"
-              onClick={stage === "done" ? start : onLater}
-              className="flex h-20 shrink-0 items-center rounded-full border-2 border-line px-[30px] text-[21px] font-bold whitespace-nowrap text-ink active:scale-[.97]"
-            >
+            <PillButton variant="line" size="hero" onClick={stage === "done" ? start : onLater}>
               {stage === "done" ? "다시 촬영" : "나중에"}
-            </button>
+            </PillButton>
             {errorNote ? (
-              <button
-                type="button"
+              <PillButton
+                size="hero"
                 onClick={errorNote.onRetry}
                 disabled={!errorNote.onRetry}
-                className={cn(
-                  "flex h-20 min-w-0 flex-1 items-center justify-center gap-3 rounded-full text-[23px] font-bold whitespace-nowrap text-white transition-colors",
-                  errorNote.onRetry ? "bg-pink" : "bg-line-2",
-                )}
+                className="min-w-0 flex-1"
               >
                 {errorNote.retry ?? "다시 시도할 수 없어요"}
-              </button>
+              </PillButton>
             ) : (
-              <button
-                type="button"
+              <PillButton
+                size="hero"
                 onClick={onDone}
                 disabled={stage !== "done"}
-                className={cn(
-                  "flex h-20 min-w-0 flex-1 items-center justify-center gap-3 rounded-full text-[23px] font-bold whitespace-nowrap text-white tabular transition-colors",
-                  stage === "done" ? "bg-pink" : "bg-line-2",
-                )}
+                className="min-w-0 flex-1"
               >
                 {cta}
-              </button>
+              </PillButton>
             )}
           </div>
-        </div>
+        </>
       )}
-    </div>
+    </Modal>
   );
 }
 
@@ -338,12 +324,12 @@ export function ProgressBar({ pct, text }: { pct: number; text: string }) {
   return (
     <div className="relative flex h-[60px] shrink-0 items-center gap-3 bg-cream px-8">
       <span
-        className="absolute bottom-0 left-0 h-[3px] bg-pink-deep transition-[width] duration-600 ease-linear"
+        className="absolute bottom-0 left-0 h-[3px] bg-cyan transition-[width] duration-600 ease-linear"
         style={{ width: `${pct}%` }}
       />
-      <span className="size-2 shrink-0 rounded-full bg-pink-deep" />
+      <span className="size-2 shrink-0 rounded-full bg-cyan" />
       <span className="text-[17px] font-semibold text-ink">{text}</span>
-      <span className="ml-auto font-serif text-[26px] leading-none text-plum tabular">{pct}%</span>
+      <span className="ml-auto font-serif text-[26px] leading-none text-navy tabular">{pct}%</span>
     </div>
   );
 }
@@ -377,7 +363,7 @@ function FaceRing({
           key={i}
           className={cn(
             "absolute rounded-full transition-colors duration-150",
-            i < lit ? "bg-pink-deep" : "bg-line-2",
+            i < lit ? "bg-cyan" : "bg-line-2",
           )}
           style={{
             left: RING / 2 - 4.5,
@@ -393,14 +379,14 @@ function FaceRing({
         <div
           key={alert.text}
           className={cn(
-            "absolute inset-x-0 -top-[104px] z-[3] mx-auto flex w-max items-center gap-2.5 rounded-full py-4 pr-7 pl-4 text-[21px] font-bold whitespace-nowrap text-white shadow-[0_10px_24px_rgba(11,20,48,.25)]",
-            alert.ok ? "bg-plum" : "bg-ink",
+            "absolute inset-x-0 -top-[104px] z-[3] mx-auto flex w-max items-center gap-2.5 rounded-full py-4 pr-7 pl-4 text-[21px] font-bold whitespace-nowrap text-white shadow-float",
+            alert.ok ? "bg-navy" : "bg-ink",
           )}
         >
           <span
             className={cn(
               "flex size-9 items-center justify-center rounded-full text-[20px] font-extrabold",
-              alert.ok ? "bg-white text-ink" : "bg-lime text-ink",
+              alert.ok ? "bg-white text-ink" : "bg-mint text-ink",
             )}
           >
             {alert.ok ? <Check className="size-5" strokeWidth={3} aria-hidden /> : "!"}
@@ -415,14 +401,14 @@ function FaceRing({
         )}
         {stage === "scan" && (
           <div
-            className="absolute inset-x-0 h-0.5 bg-rose shadow-[0_0_12px_2px_color-mix(in_srgb,var(--color-rose)_60%,transparent)]"
+            className="absolute inset-x-0 h-0.5 bg-blush shadow-[0_0_12px_2px_color-mix(in_srgb,var(--color-blush)_60%,transparent)]"
             style={{ top: `${pct}%` }}
           />
         )}
         {stage === "done" && (
-          <div className="absolute inset-0 flex animate-fade items-center justify-center bg-[rgba(27,45,99,.55)]">
+          <div className="absolute inset-0 flex animate-fade items-center justify-center bg-navy/55">
             <span className="flex size-28 items-center justify-center rounded-full bg-white">
-              <Check className="size-[52px] text-plum" strokeWidth={2.6} aria-hidden />
+              <Check className="size-[52px] text-navy" strokeWidth={2.6} aria-hidden />
             </span>
           </div>
         )}

@@ -4,11 +4,11 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const TONES = {
-  success: { box: "bg-lime-pale", icon: "text-lime-ink", Icon: Check },
+  success: { box: "bg-mint-pale", icon: "text-mint-ink", Icon: Check },
   info: { box: "bg-cream", icon: "text-mute", Icon: AlertCircle },
-  error: { box: "bg-pink-tint", icon: "text-error", Icon: AlertCircle },
-  expired: { box: "bg-cream", icon: "text-plum", Icon: Clock },
-  locked: { box: "bg-pink-tint", icon: "text-plum", Icon: Clock },
+  error: { box: "bg-ice-tint", icon: "text-error", Icon: AlertCircle },
+  expired: { box: "bg-cream", icon: "text-navy", Icon: Clock },
+  locked: { box: "bg-ice-tint", icon: "text-navy", Icon: Clock },
 } as const;
 
 /** 화면 안 안내 상자. 한 줄이면 가로, 설명이 있으면 세로로 쌓는다 */
@@ -44,7 +44,7 @@ export function Notice({
       </span>
       {stacked && <span className="pl-7 text-mute">{children}</span>}
       {action && (
-        <span className={cn("font-bold text-plum", stacked ? "pl-7" : "ml-auto")}>{action}</span>
+        <span className={cn("font-bold text-navy", stacked ? "pl-7" : "ml-auto")}>{action}</span>
       )}
     </div>
   );
@@ -53,7 +53,7 @@ export function Notice({
 /** 입력 칸 아래 한 줄 오류 */
 export function FieldError({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span className={cn("flex items-center gap-2 text-[16px] text-wine", className)} role="alert">
+    <span className={cn("flex items-center gap-2 text-[16px] text-error", className)} role="alert">
       <AlertCircle className="size-[18px] shrink-0" strokeWidth={2} aria-hidden />
       {children}
     </span>

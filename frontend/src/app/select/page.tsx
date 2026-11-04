@@ -4,6 +4,7 @@ import { ArrowRight, Check, ChevronLeft, Lock, Play, Search, Trophy, X } from "l
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
 import { Notice } from "@/components/ui/notice";
@@ -13,7 +14,7 @@ import { useQuery } from "@/lib/use-query";
 import { cn } from "@/lib/utils";
 
 const KEYWORDS = ["데일리", "코랄 블러셔", "봄 웜톤", "10분 메이크업", "무쌍 섀도", "글로시 립"];
-const KW_BG = ["bg-pink-soft", "bg-lime", "bg-sky"];
+const KW_BG = ["bg-blush", "bg-mint", "bg-sky"];
 const TOP_VIEWS = ["312만회", "248만회", "196만회", "153만회"];
 
 // ponytail: API-VIDEO-001 응답을 흉내 낸 샘플 분기. y2 가이드 있음 · y3 분석 중 · y5 재생 불가 · y6 일일 한도
@@ -74,7 +75,7 @@ export default function SelectPage() {
     <main className="relative flex min-h-dvh flex-1 flex-col bg-white">
       <header className="flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-8">
         <IconButton size={44} onClick={() => router.push("/home")} title="홈" aria-label="홈" />
-        <span className="font-serif text-[28px] leading-none text-plum italic">New look</span>
+        <span className="font-serif text-[28px] leading-none text-navy italic">New look</span>
         <span className="text-[17px] text-mute">레퍼런스 영상 가져오기</span>
       </header>
 
@@ -99,14 +100,14 @@ export default function SelectPage() {
                 className="absolute inset-0 bg-cover bg-center"
                 style={{ backgroundImage: `url(${videoThumb(picked.ytid)})` }}
               />
-              <span className="absolute top-4 left-4 rounded-full bg-white px-3 py-[7px] font-label text-[15px] font-semibold tracking-[.14em] text-plum">
+              <span className="absolute top-4 left-4 rounded-full bg-white px-3 py-[7px] font-label text-[15px] font-semibold tracking-[.14em] text-navy">
                 YOUTUBE
               </span>
               <span className="absolute right-4 bottom-4 rounded-lg bg-ink px-2 py-1 text-[16px] font-semibold text-white tabular">
                 {picked.dur}
               </span>
               <span className="absolute top-1/2 left-1/2 flex size-[72px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white">
-                <Play className="size-[26px] fill-plum text-plum" aria-hidden />
+                <Play className="size-[26px] fill-navy text-navy" aria-hidden />
               </span>
             </div>
             <div className="flex items-start justify-between gap-4">
@@ -122,7 +123,7 @@ export default function SelectPage() {
                   setPicked(null);
                   setQuota(false);
                 }}
-                className="shrink-0 pt-1 text-[17px] font-semibold whitespace-nowrap text-plum"
+                className="shrink-0 pt-1 text-[17px] font-semibold whitespace-nowrap text-navy"
               >
                 다시 고르기
               </button>
@@ -134,11 +135,11 @@ export default function SelectPage() {
           <button
             type="button"
             onClick={() => openPicker()}
-            className="flex h-[76px] items-center gap-3.5 rounded-full border-[1.5px] border-ink bg-white py-0 pr-2.5 pl-[26px] text-left hover:border-plum"
+            className="flex h-[76px] items-center gap-3.5 rounded-full border-[1.5px] border-ink bg-white py-0 pr-2.5 pl-[26px] text-left hover:border-navy"
           >
             <Search className="size-[22px] text-ink" strokeWidth={1.8} aria-hidden />
             <span className="flex-1 text-[18px] text-mute">YouTube에서 메이크업 영상 검색</span>
-            <span className="flex h-14 items-center rounded-full bg-plum px-[26px] text-[19px] font-semibold text-white">
+            <span className="flex h-14 items-center rounded-full bg-navy px-[26px] text-[19px] font-semibold text-white">
               검색
             </span>
           </button>
@@ -153,7 +154,7 @@ export default function SelectPage() {
                   KW_BG[i % 3],
                 )}
               >
-                <span className="font-serif text-[19px] text-plum italic">#</span>
+                <span className="font-serif text-[19px] text-navy italic">#</span>
                 {k}
               </button>
             ))}
@@ -177,7 +178,7 @@ export default function SelectPage() {
               <button
                 type="button"
                 onClick={() => setApiFail(false)}
-                className="shrink-0 text-[17px] font-bold text-plum"
+                className="shrink-0 text-[17px] font-bold text-navy"
               >
                 다시 시도
               </button>
@@ -201,7 +202,7 @@ export default function SelectPage() {
                     <span
                       className={cn(
                         "absolute top-2 left-2 flex h-9 items-center gap-1.5 rounded-full py-0 pr-3.5 pl-2.5 text-[16px] font-bold tabular",
-                        i === 0 ? "bg-lime text-ink" : "bg-ink text-white",
+                        i === 0 ? "bg-mint text-ink" : "bg-ink text-white",
                       )}
                     >
                       <Trophy className="size-[18px]" aria-hidden />
@@ -224,15 +225,15 @@ export default function SelectPage() {
 
       {picked && (
         <div className="flex shrink-0 animate-fade justify-end border-t border-line px-10 pt-5 pb-7">
-          <button
-            type="button"
+          <PillButton
+            size="hero"
             onClick={() => start(picked)}
             disabled={pickedState === "quota" || pickedState === "blocked"}
-            className="flex h-[76px] min-w-[240px] items-center justify-center gap-3 rounded-full bg-pink px-[34px] text-[22px] font-bold text-white active:scale-[.97] disabled:bg-line disabled:text-mute"
+            className="min-w-[240px]"
           >
             {pickedState === "guide" ? "바로 따라 하기" : "이 영상으로 분석 시작"}
             <ArrowRight className="size-6" strokeWidth={2.4} aria-hidden />
-          </button>
+          </PillButton>
         </div>
       )}
 
@@ -277,7 +278,7 @@ export default function SelectPage() {
                 <button
                   type="button"
                   onClick={() => setSel(null)}
-                  className="flex items-center gap-2 px-8 pb-3 text-left text-[17px] font-semibold text-plum"
+                  className="flex items-center gap-2 px-8 pb-3 text-left text-[17px] font-semibold text-navy"
                 >
                   <ChevronLeft className="size-4" strokeWidth={2} aria-hidden />
                   검색 결과로
@@ -286,7 +287,7 @@ export default function SelectPage() {
                   {selState === "blocked" && (
                     <div
                       data-dark
-                      className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2.5 bg-[rgba(8,13,34,.82)] p-6 text-center text-white"
+                      className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2.5 bg-night/80 p-6 text-center text-white"
                     >
                       <span className="text-[21px] font-bold">
                         이 영상은 mairor에서 재생할 수 없어요
@@ -315,7 +316,7 @@ export default function SelectPage() {
                       aria-label="재생"
                     >
                       <span className="flex size-[84px] items-center justify-center rounded-full bg-white shadow-[0_10px_30px_rgba(0,0,0,.25)]">
-                        <Play className="size-[30px] fill-plum text-plum" aria-hidden />
+                        <Play className="size-[30px] fill-navy text-navy" aria-hidden />
                       </span>
                       <span
                         data-dark
@@ -331,7 +332,7 @@ export default function SelectPage() {
                     {sel.title}
                   </span>
                   <div className="flex items-center gap-3">
-                    <span className="flex size-10 items-center justify-center rounded-full bg-pink-soft text-[18px] font-bold text-ink">
+                    <span className="flex size-10 items-center justify-center rounded-full bg-blush text-[18px] font-bold text-ink">
                       {sel.ch.slice(-1)}
                     </span>
                     <span className="flex flex-col gap-0.5">
@@ -342,7 +343,7 @@ export default function SelectPage() {
                       href={`https://www.youtube.com/watch?v=${sel.ytid}`}
                       target="_blank"
                       rel="noopener"
-                      className="ml-auto text-[16px] font-semibold text-plum"
+                      className="ml-auto text-[16px] font-semibold text-navy"
                     >
                       YouTube에서 보기 ↗
                     </a>
@@ -358,14 +359,14 @@ export default function SelectPage() {
                         설명란에서 찾은 구간 · 분석에 사용돼요
                       </span>
                     </span>
-                    <span className="text-[16px] font-semibold text-plum">{CHAPTERS.length}개</span>
+                    <span className="text-[16px] font-semibold text-navy">{CHAPTERS.length}개</span>
                   </div>
                   {CHAPTERS.map((c) => (
                     <div
                       key={c.time}
                       className="flex items-baseline gap-4 border-t border-line py-2"
                     >
-                      <span className="w-11 text-[16px] font-semibold text-plum tabular">
+                      <span className="w-11 text-[16px] font-semibold text-navy tabular">
                         {c.time}
                       </span>
                       <span className="text-[18px] text-ink">{c.label}</span>
@@ -381,7 +382,7 @@ export default function SelectPage() {
                 <button
                   type="button"
                   onClick={() => setApiFail(false)}
-                  className="shrink-0 text-[17px] font-bold text-plum"
+                  className="shrink-0 text-[17px] font-bold text-navy"
                 >
                   다시 시도
                 </button>
@@ -448,34 +449,28 @@ export default function SelectPage() {
 
           {sel && (
             <div className="flex shrink-0 gap-2.5 border-t border-line px-10 pt-4 pb-6">
-              <button
-                type="button"
-                onClick={() => setSel(null)}
-                className="flex h-20 shrink-0 items-center justify-center rounded-full border-2 border-line px-[30px] text-[21px] font-bold whitespace-nowrap text-ink active:scale-[.96]"
-              >
+              <PillButton variant="line" size="hero" onClick={() => setSel(null)}>
                 다른 영상
-              </button>
+              </PillButton>
               {selState === "blocked" ? (
                 <div className="ml-auto flex h-20 min-w-[300px] items-center justify-center rounded-full bg-line px-8 text-[21px] font-bold text-mute">
                   선택할 수 없는 영상
                 </div>
               ) : (
-                <button
-                  type="button"
+                <PillButton
+                  size="hero"
+                  trailing
                   onClick={() => {
                     setPicked(sel);
                     setPicker(false);
                     setQuota(false);
                   }}
-                  className="ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full bg-pink py-0 pr-2.5 pl-8 text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] active:scale-[.97]"
+                  className="ml-auto min-w-[300px]"
                 >
-                  <span className="truncate text-[23px] font-bold tracking-[-.01em]">
+                  <span className="tracking-[-.01em]">
                     {selState === "guide" ? "바로 따라 하기" : "이 영상으로 메이크업 분석하기"}
                   </span>
-                  <span className="flex size-[60px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-                    <ArrowRight className="size-7" strokeWidth={2.4} aria-hidden />
-                  </span>
-                </button>
+                </PillButton>
               )}
             </div>
           )}
@@ -491,7 +486,7 @@ export default function SelectPage() {
 
 function GuideBadge() {
   return (
-    <span className="mt-1 flex h-7 items-center gap-1.5 self-start rounded-full bg-lime px-2.5 text-[14px] font-bold text-ink">
+    <span className="mt-1 flex h-7 items-center gap-1.5 self-start rounded-full bg-mint px-2.5 text-[14px] font-bold text-ink">
       <Check className="size-3" strokeWidth={3} aria-hidden />
       가이드 있음 · 바로 따라 하기
     </span>

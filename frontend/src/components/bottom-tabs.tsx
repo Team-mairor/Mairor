@@ -30,7 +30,7 @@ export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
   return (
     <nav
       aria-label="주요 메뉴"
-      className="grid h-32 shrink-0 grid-cols-4 gap-2 border-t border-line-2 bg-white px-8 pt-3 pb-5 shadow-[0_-8px_24px_rgba(11,20,48,.06)]"
+      className="grid h-32 shrink-0 grid-cols-4 gap-2 border-t border-line-2 bg-white px-8 pt-3 pb-5 shadow-[0_-8px_24px_color-mix(in_srgb,var(--color-night)_6%,transparent)]"
     >
       {TABS.map(({ href, label, Icon, match }) => {
         const on = match(pathname);
@@ -44,7 +44,7 @@ export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
             <span
               className={cn(
                 "flex h-12 w-[84px] items-center justify-center rounded-full transition-colors",
-                on ? "bg-plum text-white" : "text-mute-2",
+                on ? "bg-navy text-white" : "text-mute-2",
               )}
             >
               <Icon className="size-[30px]" strokeWidth={on ? 2 : 1.8} aria-hidden />
@@ -52,7 +52,7 @@ export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
             <span
               className={cn(
                 "text-[20px] tracking-[-.01em]",
-                on ? "font-bold text-plum" : "font-semibold text-mute-2",
+                on ? "font-bold text-navy" : "font-semibold text-mute-2",
               )}
             >
               {label}

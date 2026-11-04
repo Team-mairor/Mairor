@@ -97,7 +97,7 @@ export default function IntroPage() {
                   top: d.y,
                   width: DOT,
                   height: DOT,
-                  background: d.on ? "var(--color-plum)" : "var(--color-line)",
+                  background: d.on ? "var(--color-navy)" : "var(--color-line)",
                   animation: d.on
                     ? `mr-dot 420ms ${SPRING} ${d.d1}ms forwards, mr-dot-out 380ms ease-in ${d.d2}ms forwards`
                     : `mr-fade 300ms ease ${250 + d.seed * 300}ms forwards, mr-dot-out 380ms ease-in ${d.d2}ms forwards`,
@@ -113,7 +113,7 @@ export default function IntroPage() {
               N°01 — AI MAKEUP MIRROR
             </span>
             <div
-              className="flex font-serif text-[168px] leading-none tracking-[-.03em] text-plum italic"
+              className="flex font-serif text-[168px] leading-none tracking-[-.03em] text-navy italic"
               aria-label="mairor"
             >
               {WORD.split("").map((ch, i) => (
@@ -127,7 +127,7 @@ export default function IntroPage() {
               ))}
             </div>
             <div
-              className="mt-1 h-[1.5px] w-[480px] origin-center scale-x-0 bg-plum"
+              className="mt-1 h-[1.5px] w-[480px] origin-center scale-x-0 bg-navy"
               style={{ animation: `mr-line 800ms ${EASE} ${T + 500}ms forwards` }}
             />
           </div>
@@ -151,7 +151,7 @@ export default function IntroPage() {
             }}
           />
           <div
-            className="absolute inset-x-0 top-0 h-0.5 bg-pink-deep opacity-0 shadow-[0_0_0_1px_rgba(255,255,255,.6)]"
+            className="absolute inset-x-0 top-0 h-0.5 bg-cyan opacity-0 shadow-[0_0_0_1px_rgba(255,255,255,.6)]"
             style={{ animation: `mr-scan 1200ms cubic-bezier(.45,0,.55,1) ${T + 1700}ms forwards` }}
           />
         </div>
@@ -163,10 +163,10 @@ export default function IntroPage() {
             style={{ left: x, top: y, animation: `mr-fade 400ms ${EASE} ${d}ms forwards` }}
           >
             <span
-              className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-pink-deep"
+              className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-cyan"
               style={{ animation: `mr-pulse 1400ms ease-out ${d}ms infinite` }}
             />
-            <span className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-pink-deep shadow-[0_0_0_3px_#fff]" />
+            <span className="absolute -top-[7px] -left-[7px] size-3.5 rounded-full bg-cyan shadow-[0_0_0_3px_#fff]" />
             <span
               className={`absolute -top-3.5 flex h-7 items-center rounded-full bg-white px-3 font-label text-[11px] font-semibold tracking-[.12em] whitespace-nowrap text-ink ${side === "left" ? "right-4" : "left-4"}`}
             >
@@ -196,7 +196,7 @@ export default function IntroPage() {
         >
           <div className="h-[3px] w-40 overflow-hidden rounded-full bg-line">
             <div
-              className="h-full w-full origin-left scale-x-0 bg-pink"
+              className="h-full w-full origin-left scale-x-0 bg-ice"
               style={{ animation: `mr-bar 1700ms linear ${T + 1900}ms forwards` }}
             />
           </div>

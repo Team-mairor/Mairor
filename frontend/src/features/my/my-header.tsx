@@ -49,11 +49,11 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
   return (
     <>
       <div className="flex shrink-0 items-center gap-[18px] px-10 pt-7">
-        <span className="flex size-[72px] shrink-0 items-center justify-center rounded-full bg-lime font-serif text-[36px] text-ink italic">
+        <span className="flex size-[72px] shrink-0 items-center justify-center rounded-full bg-mint font-serif text-[36px] text-ink italic">
           {initial}
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <span className="font-label text-[14px] font-semibold tracking-[.16em] text-plum">
+          <span className="font-label text-[14px] font-semibold tracking-[.16em] text-navy">
             MY BEAUTY ARCHIVE
           </span>
           <h1 className="font-display text-[30px] leading-[1.2] text-ink">
@@ -99,7 +99,7 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
                 <span
                   className={cn(
                     "text-[16px] font-semibold whitespace-nowrap transition-colors",
-                    on ? "text-plum" : "text-ash",
+                    on ? "text-navy" : "text-ash",
                   )}
                 >
                   {t.ko}
@@ -107,7 +107,7 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
                 <span
                   className={cn(
                     "absolute right-[24%] -bottom-px left-[24%] h-[3px] rounded-full transition-colors",
-                    on ? "bg-pink-deep" : "bg-transparent",
+                    on ? "bg-cyan" : "bg-transparent",
                   )}
                 />
               </Link>

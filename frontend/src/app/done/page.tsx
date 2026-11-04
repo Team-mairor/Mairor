@@ -1,13 +1,13 @@
 "use client";
 
-import { ArrowRight, Camera, Home } from "lucide-react";
+import { Camera, Home } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
 import { snapshotSteps, useSession } from "@/features/session";
 import { GUIDE_STEPS, VIDEOS, type ReportSummary } from "@/lib/mock-data";
 import { useQuery } from "@/lib/use-query";
-import { cn } from "@/lib/utils";
 
 type Save = "saving" | "saved" | "fail";
 
@@ -89,10 +89,10 @@ export default function DonePage() {
   return (
     <main className="flex min-h-dvh flex-1 flex-col gap-6 bg-white px-10 pt-9 pb-8 text-ink">
       <div className="flex flex-col gap-3">
-        <span className="font-label text-[16px] font-semibold tracking-[.16em] text-plum">
+        <span className="font-label text-[16px] font-semibold tracking-[.16em] text-navy">
           LOOK COMPLETE · {n} / {n}
         </span>
-        <span className="font-serif text-[88px] leading-[.9] text-plum italic">
+        <span className="font-serif text-[88px] leading-[.9] text-navy italic">
           Beautifully done.
         </span>
         <h1 className="font-display text-[26px] leading-[1.35] text-pretty">
@@ -117,7 +117,7 @@ export default function DonePage() {
           </>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-cream p-6 text-center">
-            <span className="flex size-[72px] items-center justify-center rounded-full border-[2.5px] border-dashed border-ash text-plum">
+            <span className="flex size-[72px] items-center justify-center rounded-full border-[2.5px] border-dashed border-ash text-navy">
               <Camera className="size-[30px]" strokeWidth={1.8} aria-hidden />
             </span>
             <span className="font-display text-[26px]">미촬영</span>
@@ -133,7 +133,7 @@ export default function DonePage() {
       {save === "saving" && (
         <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
           <span
-            className="size-2.5 shrink-0 rounded-full bg-pink-deep"
+            className="size-2.5 shrink-0 rounded-full bg-cyan"
             style={{ animation: "mr-pulse 1.4s ease-out infinite" }}
           />
           <span className="text-[19px] font-semibold">기록 저장 중…</span>
@@ -141,17 +141,17 @@ export default function DonePage() {
       )}
       {save === "fail" && (
         <div
-          className="flex items-center gap-4 rounded-[18px] border-[1.5px] border-pink-deep bg-pink-pale py-4 pr-4 pl-5"
+          className="flex items-center gap-4 rounded-[18px] border-[1.5px] border-cyan bg-ice-pale py-4 pr-4 pl-5"
           role="alert"
         >
           <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[19px] font-bold text-plum">기록을 저장하지 못했어요</span>
+            <span className="text-[19px] font-bold text-navy">기록을 저장하지 못했어요</span>
             <span className="text-[16px] text-mute">다시 시도해도 같은 기록으로 저장돼요.</span>
           </span>
           <button
             type="button"
             onClick={() => runSave(false)}
-            className="flex h-14 shrink-0 items-center rounded-full bg-pink px-6 text-[18px] font-bold whitespace-nowrap text-white"
+            className="flex h-14 shrink-0 items-center rounded-full bg-ice px-6 text-[18px] font-bold whitespace-nowrap text-ink"
           >
             다시 시도
           </button>
@@ -159,13 +159,13 @@ export default function DonePage() {
       )}
       {save === "saved" && (
         <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
-          <span className="size-2.5 shrink-0 rounded-full bg-plum" />
+          <span className="size-2.5 shrink-0 rounded-full bg-navy" />
           <span className="min-w-0 flex-1 text-[19px] font-semibold">기록을 저장했어요</span>
         </div>
       )}
 
       <div className="flex min-w-0 flex-col gap-1.5 px-1">
-        <span className="font-label text-[15px] font-semibold tracking-[.14em] text-plum">
+        <span className="font-label text-[15px] font-semibold tracking-[.14em] text-navy">
           출처
         </span>
         <span className="font-display text-[30px] leading-[1.25] text-pretty">{picked.title}</span>
@@ -184,25 +184,20 @@ export default function DonePage() {
         >
           <Home className="size-7" strokeWidth={2} aria-hidden />
         </button>
-        <button
-          type="button"
+        <PillButton
+          size="hero"
+          trailing
           onClick={openReport}
           disabled={save !== "saved"}
-          className={cn(
-            "flex h-20 min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-3 pl-[34px] text-white shadow-[0_14px_30px_color-mix(in_srgb,var(--color-pink)_26%,transparent)] transition-opacity active:scale-[.98]",
-            save !== "saved" && "opacity-45",
-          )}
+          className="min-w-0 flex-1 transition-opacity disabled:bg-ice disabled:opacity-45"
         >
-          <span className="flex min-w-0 flex-col gap-0.5 text-left">
-            <span className="text-[23px] font-bold whitespace-nowrap">리포트 보기</span>
-            <span className="truncate text-[15px] font-medium text-pink-tint">
+          <span className="flex flex-col gap-0.5">
+            <span className="whitespace-nowrap">리포트 보기</span>
+            <span className="truncate text-[15px] font-medium text-navy">
               {hasPhoto ? "스텝별 사진 · 사용한 제품" : "사용한 제품 · 사진 없음"}
             </span>
           </span>
-          <span className="flex size-[58px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-            <ArrowRight className="size-7" strokeWidth={2.4} aria-hidden />
-          </span>
-        </button>
+        </PillButton>
       </div>
     </main>
   );

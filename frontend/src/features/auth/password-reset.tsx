@@ -135,10 +135,10 @@ export function PasswordReset({
   return (
     <>
       <div className="flex flex-col gap-2.5">
-        <span className="font-serif text-[30px] leading-none text-plum italic">mairor</span>
+        <span className="font-serif text-[30px] leading-none text-navy italic">mairor</span>
         <div className="flex items-baseline gap-3.5">
           <h1 className="font-display text-[40px] leading-[1.25] text-ink">비밀번호 재설정</h1>
-          <span className="font-label text-[15px] font-semibold tracking-[.12em] text-plum tabular">
+          <span className="font-label text-[15px] font-semibold tracking-[.12em] text-navy tabular">
             {STEP_NO[step]} / 3
           </span>
         </div>
@@ -202,17 +202,17 @@ export function PasswordReset({
             <div className="flex items-center justify-between gap-3 text-[15px] text-mute">
               {codeLeft > 0 ? (
                 <span>
-                  남은 시간 <b className="text-plum tabular">{mmss(codeLeft)}</b>
+                  남은 시간 <b className="text-navy tabular">{mmss(codeLeft)}</b>
                 </span>
               ) : (
-                <span className="text-wine">코드 시간이 지났어요. 다시 받아 주세요.</span>
+                <span className="text-error">코드 시간이 지났어요. 다시 받아 주세요.</span>
               )}
               {resendLeft > 0 ? (
                 <span className="tabular">{resendLeft}초 후 다시 받기</span>
               ) : (
                 <button
                   type="button"
-                  className="font-bold text-plum"
+                  className="font-bold text-navy"
                   onClick={send}
                   disabled={busy}
                 >
@@ -247,7 +247,7 @@ export function PasswordReset({
               autoComplete="new-password"
             />
             <span
-              className={`text-[15px] ${!pw ? "text-mute" : pwOk ? "text-lime-ink" : "text-wine"}`}
+              className={`text-[15px] ${!pw ? "text-mute" : pwOk ? "text-mint-ink" : "text-error"}`}
             >
               8~64자 · 영문·숫자·특수문자 포함 · 72바이트 이하
             </span>

@@ -42,7 +42,7 @@ export function MirrorToggle({ className }: { className?: string }) {
       <span
         className={cn(
           "relative h-6 w-10 rounded-full transition-colors",
-          on ? "bg-pink-deep" : "bg-line-2",
+          on ? "bg-cyan" : "bg-line-2",
         )}
       >
         <span

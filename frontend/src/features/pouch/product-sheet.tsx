@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowRight, Check, ChevronDown, Pencil, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, ChevronDown, Pencil, Search } from "lucide-react";
+import { useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
+import { PillButton } from "@/components/ui/pill-button";
 import { useSession } from "@/features/session";
 import {
   NO_SHADE_CATS,
@@ -109,12 +110,6 @@ export function ProductSheet({
   );
   const [delAsk, setDelAsk] = useState(false);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   const isEdit = !!f.id;
   const ready = !!f.brand.trim() && !!f.name.trim();
   const noShade = NO_SHADE_CATS.includes(f.cat);
@@ -158,364 +153,347 @@ export function ProductSheet({
   };
 
   return (
-    <div
-      className="absolute inset-0 z-30 flex animate-fade items-end bg-[rgba(11,20,48,.45)]"
-      onClick={onClose}
+    <Modal
+      open
+      align="bottom"
+      // 삭제 확인이 떠 있을 때 Esc가 시트까지 닫아 입력을 날리지 않게 한다
+      onClose={delAsk ? undefined : onClose}
+      label={isEdit ? "제품 수정" : "새 제품 등록"}
+      overlayClassName="z-30 animate-fade"
+      className="relative flex max-h-[92dvh] flex-col gap-6 overflow-y-auto rounded-t-[32px] px-10 pt-4 pb-9 shadow-none"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={isEdit ? "제품 수정" : "새 제품 등록"}
-        onClick={(e) => e.stopPropagation()}
-        className="relative flex max-h-[92dvh] w-full animate-sheet-up flex-col gap-6 overflow-y-auto rounded-t-[32px] bg-white px-10 pt-4 pb-9"
-      >
-        <span className="h-1.5 w-14 shrink-0 self-center rounded-full bg-line" />
-        <div className="flex items-center justify-between">
-          <h2 className="font-display text-[34px] text-ink">
-            {isEdit ? "제품 수정" : "새 제품 등록"}
-          </h2>
-          <button type="button" onClick={onClose} className="text-[20px] font-bold text-mute">
-            닫기
-          </button>
-        </div>
+      <span className="h-1.5 w-14 shrink-0 self-center rounded-full bg-line" />
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-[34px] text-ink">
+          {isEdit ? "제품 수정" : "새 제품 등록"}
+        </h2>
+        <button type="button" onClick={onClose} className="text-[20px] font-bold text-mute">
+          닫기
+        </button>
+      </div>
 
-        <div className="flex flex-col gap-2.5">
-          <Label>카테고리</Label>
-          <div className="flex flex-wrap gap-2">
-            {POUCH_CATS.map((c) => {
-              const on = f.cat === c;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => {
-                    patch({ cat: c as PouchCat, type: POUCH_TYPES[c][0][0], shade: "" });
-                    setShOpen(false);
-                    setCustom(false);
-                  }}
-                  className={cn(
-                    "flex h-[52px] items-center rounded-full border-2 px-[22px] text-[19px] font-bold",
-                    on ? "border-plum bg-plum text-white" : "border-line bg-white text-ink",
-                  )}
-                  aria-pressed={on}
-                >
-                  {c}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2.5">
-          <Label>종류</Label>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {POUCH_TYPES[f.cat].map(([label]) => {
-              const on = typeOf(f)[0] === label;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => patch({ type: label })}
-                  className={cn(
-                    "flex w-28 shrink-0 flex-col items-center gap-1.5 rounded-[18px] border-2 px-2 py-2.5",
-                    on ? "border-plum bg-pink-pale" : "border-line bg-white",
-                  )}
-                  aria-pressed={on}
-                >
-                  <Illustration item={{ cat: f.cat, type: label }} color={f.color} size={64} />
-                  <span
-                    className={cn(
-                      "text-center text-[15px] leading-[1.25] text-ink",
-                      on ? "font-extrabold" : "font-semibold",
-                    )}
-                  >
-                    {label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-3">
-          <label className="flex min-w-0 flex-col gap-2">
-            <Label>브랜드</Label>
-            <input
-              value={f.brand}
-              onChange={(e) => patch({ brand: e.target.value })}
-              placeholder="예) 클리오"
-              className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-plum"
-            />
-          </label>
-          <label className="flex min-w-0 flex-col gap-2">
-            <Label>제품명</Label>
-            <input
-              value={f.name}
-              onChange={(e) => patch({ name: e.target.value })}
-              placeholder="예) 킬커버 파운웨어 쿠션"
-              className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-plum"
-            />
-          </label>
-        </div>
-
-        {!noShade && (
-          <div className="flex flex-col gap-2">
-            <span className="flex items-baseline gap-2">
-              <Label>호수 · 컬러</Label>
-              <span className="text-[14px] text-mute">
-                {ready ? `${list.length}개 컬러` : "선택"}
-              </span>
-            </span>
-            {!ready ? (
-              <div className="flex h-[68px] items-center gap-3 rounded-[18px] border-2 border-dashed border-line bg-cream-2 px-[22px] text-[19px] font-semibold text-ash-3">
-                <Search className="size-5" strokeWidth={2.2} aria-hidden />
-                브랜드와 제품명을 입력하면 컬러가 나와요
-              </div>
-            ) : (
-              <div
+      <div className="flex flex-col gap-2.5">
+        <Label>카테고리</Label>
+        <div className="flex flex-wrap gap-2">
+          {POUCH_CATS.map((c) => {
+            const on = f.cat === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => {
+                  patch({ cat: c as PouchCat, type: POUCH_TYPES[c][0][0], shade: "" });
+                  setShOpen(false);
+                  setCustom(false);
+                }}
                 className={cn(
-                  "overflow-hidden rounded-[18px] border-2 transition-colors",
-                  shOpen ? "border-plum" : "border-line",
+                  "flex h-[52px] items-center rounded-full border-2 px-[22px] text-[19px] font-bold",
+                  on ? "border-navy bg-navy text-white" : "border-line bg-white text-ink",
                 )}
+                aria-pressed={on}
               >
-                <button
-                  type="button"
-                  onClick={() => setShOpen((o) => !o)}
-                  className="flex h-16 w-full items-center gap-3.5 pr-[18px] pl-4 text-left"
-                  aria-expanded={shOpen}
-                >
-                  <span
-                    className="size-9 shrink-0 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,.08)]"
-                    style={{ background: cur ? cur[1] : "var(--color-cream)" }}
-                  />
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate text-[21px] font-bold",
-                      cur || f.shade ? "text-ink" : "text-ash-3",
-                    )}
-                  >
-                    {cur ? cur[0] : f.shade ? `직접 입력 · ${f.shade}` : "컬러를 선택해 주세요"}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "size-[22px] text-mute transition-transform",
-                      shOpen && "rotate-180",
-                    )}
-                    strokeWidth={2.4}
-                    aria-hidden
-                  />
-                </button>
-                {shOpen && shFail && (
-                  <div className="flex flex-wrap items-center gap-3 border-t border-line px-[18px] py-5">
-                    <span className="min-w-[200px] flex-1 text-[18px] font-semibold text-plum">
-                      컬러 목록을 불러오지 못했어요
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShFail(false)}
-                      className="flex h-12 items-center rounded-full bg-ink px-5 text-[16px] font-bold text-white"
-                    >
-                      다시 시도
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        patch({ shade: "", color: null });
-                        setShOpen(false);
-                        setCustom(true);
-                        setShFail(false);
-                      }}
-                      className="flex h-12 items-center rounded-full border-[1.5px] border-line-2 px-5 text-[16px] font-bold text-ink"
-                    >
-                      직접 입력
-                    </button>
-                  </div>
+                {c}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        <Label>종류</Label>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {POUCH_TYPES[f.cat].map(([label]) => {
+            const on = typeOf(f)[0] === label;
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={() => patch({ type: label })}
+                className={cn(
+                  "flex w-28 shrink-0 flex-col items-center gap-1.5 rounded-[18px] border-2 px-2 py-2.5",
+                  on ? "border-navy bg-ice-pale" : "border-line bg-white",
                 )}
-                {shOpen && !shFail && (
-                  <div className="flex max-h-[300px] animate-fade flex-col overflow-y-auto border-t border-line">
-                    {list.map(([label, color]) => {
-                      const on = cur?.[0] === label;
-                      return (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => {
-                            patch({ shade: label, color });
-                            setShOpen(false);
-                            setCustom(false);
-                          }}
-                          className={cn(
-                            "flex min-h-[60px] items-center gap-3.5 pr-[18px] pl-4 text-left hover:bg-pink-pale",
-                            on && "bg-pink-pale",
-                          )}
-                        >
-                          <span
-                            className="size-8 shrink-0 rounded-full"
-                            style={{
-                              background: color,
-                              boxShadow:
-                                color === "#FFFFFF"
-                                  ? "inset 0 0 0 1px rgba(0,0,0,.15)"
-                                  : "inset 0 0 0 1px rgba(0,0,0,.08)",
-                            }}
-                          />
-                          <span
-                            className={cn(
-                              "min-w-0 flex-1 text-[19px] text-ink",
-                              on ? "font-bold" : "font-semibold",
-                            )}
-                          >
-                            {label}
-                          </span>
-                          {on && (
-                            <Check
-                              className="size-[22px] text-plum"
-                              strokeWidth={2.6}
-                              aria-hidden
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        patch({ shade: "", color: null });
-                        setShOpen(false);
-                        setCustom(true);
-                      }}
-                      className="flex min-h-[60px] items-center gap-3.5 border-t border-dashed border-line pr-[18px] pl-4 text-[18px] font-bold text-plum hover:bg-pink-pale"
-                    >
-                      <Pencil className="size-5" strokeWidth={2.4} aria-hidden />
-                      목록에 없어요 · 직접 입력
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-            {ready && custom && (
-              <>
-                <input
-                  value={f.shade ?? ""}
-                  onChange={(e) => patch({ shade: e.target.value })}
-                  placeholder="예) 21N 린넨 · 03 로지"
-                  className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-plum"
-                />
-                <div className="mt-1.5 flex flex-col gap-2.5">
-                  <Label>색상 (선택)</Label>
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    {SHADE_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => patch({ color: c })}
-                        aria-label={`색상 ${c}`}
-                        aria-pressed={f.color === c}
-                        className="size-11 rounded-full"
-                        style={{
-                          background: c,
-                          boxShadow:
-                            f.color === c
-                              ? "0 0 0 3px #fff, 0 0 0 5px #0B1430"
-                              : "inset 0 0 0 1px rgba(0,0,0,.08)",
-                        }}
-                      />
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => patch({ color: null })}
-                      aria-pressed={noColor}
-                      className={cn(
-                        "flex h-11 items-center rounded-full border-2 px-4 text-[16px] font-bold text-ink",
-                        noColor ? "border-solid border-ink" : "border-dashed border-ash",
-                      )}
-                    >
-                      모르겠어요
-                    </button>
-                  </div>
-                  {noColor && (
-                    <span className="text-[16px] leading-[1.5] text-plum">
-                      색상 정보가 없으면 대체 후보에서 빠져요.
-                    </span>
+                aria-pressed={on}
+              >
+                <Illustration item={{ cat: f.cat, type: label }} color={f.color} size={64} />
+                <span
+                  className={cn(
+                    "text-center text-[15px] leading-[1.25] text-ink",
+                    on ? "font-extrabold" : "font-semibold",
                   )}
-                </div>
-              </>
-            )}
-          </div>
-        )}
+                >
+                  {label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-        {dup && (
-          <div
-            className="flex items-center gap-2.5 rounded-2xl bg-pink-pale px-[18px] py-3.5 text-[17px] font-semibold text-plum"
-            role="alert"
-          >
-            <span className="size-2 shrink-0 rounded-full bg-pink-deep" />
-            이미 파우치에 있는 제품이에요 · 같은 제품·호수는 한 번만 등록할 수 있어요
-          </div>
-        )}
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-3">
+        <label className="flex min-w-0 flex-col gap-2">
+          <Label>브랜드</Label>
+          <input
+            value={f.brand}
+            onChange={(e) => patch({ brand: e.target.value })}
+            placeholder="예) 클리오"
+            className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-navy"
+          />
+        </label>
+        <label className="flex min-w-0 flex-col gap-2">
+          <Label>제품명</Label>
+          <input
+            value={f.name}
+            onChange={(e) => patch({ name: e.target.value })}
+            placeholder="예) 킬커버 파운웨어 쿠션"
+            className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-navy"
+          />
+        </label>
+      </div>
 
-        <div className="flex gap-2.5">
-          {isEdit && (
-            <button
-              type="button"
-              onClick={() => setDelAsk(true)}
-              className="flex h-20 shrink-0 items-center justify-center rounded-full border-2 border-error/25 px-[30px] text-[21px] font-bold whitespace-nowrap text-error active:scale-[.96]"
-            >
-              삭제
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={save}
-            disabled={!canSave}
-            className={cn(
-              "ml-auto flex h-20 min-w-[300px] items-center justify-between gap-6 rounded-full py-0 pr-2.5 pl-8 text-white transition-[background,transform] active:scale-[.97] disabled:cursor-default",
-              canSave ? "bg-pink" : "bg-line-3",
-            )}
-          >
-            <span className="truncate text-[23px] font-bold tracking-[-.01em]">저장</span>
-            <span
+      {!noShade && (
+        <div className="flex flex-col gap-2">
+          <span className="flex items-baseline gap-2">
+            <Label>호수 · 컬러</Label>
+            <span className="text-[14px] text-mute">
+              {ready ? `${list.length}개 컬러` : "선택"}
+            </span>
+          </span>
+          {!ready ? (
+            <div className="flex h-[68px] items-center gap-3 rounded-[18px] border-2 border-dashed border-line bg-cream-2 px-[22px] text-[19px] font-semibold text-ash-3">
+              <Search className="size-5" strokeWidth={2.2} aria-hidden />
+              브랜드와 제품명을 입력하면 컬러가 나와요
+            </div>
+          ) : (
+            <div
               className={cn(
-                "flex size-[60px] shrink-0 items-center justify-center rounded-full bg-white",
-                canSave ? "text-pink" : "text-line-3",
+                "overflow-hidden rounded-[18px] border-2 transition-colors",
+                shOpen ? "border-navy" : "border-line",
               )}
             >
-              <ArrowRight className="size-7" strokeWidth={2.4} aria-hidden />
-            </span>
+              <button
+                type="button"
+                onClick={() => setShOpen((o) => !o)}
+                className="flex h-16 w-full items-center gap-3.5 pr-[18px] pl-4 text-left"
+                aria-expanded={shOpen}
+              >
+                <span
+                  className="size-9 shrink-0 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,.08)]"
+                  style={{ background: cur ? cur[1] : "var(--color-cream)" }}
+                />
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate text-[21px] font-bold",
+                    cur || f.shade ? "text-ink" : "text-ash-3",
+                  )}
+                >
+                  {cur ? cur[0] : f.shade ? `직접 입력 · ${f.shade}` : "컬러를 선택해 주세요"}
+                </span>
+                <ChevronDown
+                  className={cn(
+                    "size-[22px] text-mute transition-transform",
+                    shOpen && "rotate-180",
+                  )}
+                  strokeWidth={2.4}
+                  aria-hidden
+                />
+              </button>
+              {shOpen && shFail && (
+                <div className="flex flex-wrap items-center gap-3 border-t border-line px-[18px] py-5">
+                  <span className="min-w-[200px] flex-1 text-[18px] font-semibold text-navy">
+                    컬러 목록을 불러오지 못했어요
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShFail(false)}
+                    className="flex h-12 items-center rounded-full bg-ink px-5 text-[16px] font-bold text-white"
+                  >
+                    다시 시도
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      patch({ shade: "", color: null });
+                      setShOpen(false);
+                      setCustom(true);
+                      setShFail(false);
+                    }}
+                    className="flex h-12 items-center rounded-full border-[1.5px] border-line-2 px-5 text-[16px] font-bold text-ink"
+                  >
+                    직접 입력
+                  </button>
+                </div>
+              )}
+              {shOpen && !shFail && (
+                <div className="flex max-h-[300px] animate-fade flex-col overflow-y-auto border-t border-line">
+                  {list.map(([label, color]) => {
+                    const on = cur?.[0] === label;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => {
+                          patch({ shade: label, color });
+                          setShOpen(false);
+                          setCustom(false);
+                        }}
+                        className={cn(
+                          "flex min-h-[60px] items-center gap-3.5 pr-[18px] pl-4 text-left hover:bg-ice-pale",
+                          on && "bg-ice-pale",
+                        )}
+                      >
+                        <span
+                          className="size-8 shrink-0 rounded-full"
+                          style={{
+                            background: color,
+                            boxShadow:
+                              color === "#FFFFFF"
+                                ? "inset 0 0 0 1px rgba(0,0,0,.15)"
+                                : "inset 0 0 0 1px rgba(0,0,0,.08)",
+                          }}
+                        />
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 text-[19px] text-ink",
+                            on ? "font-bold" : "font-semibold",
+                          )}
+                        >
+                          {label}
+                        </span>
+                        {on && (
+                          <Check className="size-[22px] text-navy" strokeWidth={2.6} aria-hidden />
+                        )}
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      patch({ shade: "", color: null });
+                      setShOpen(false);
+                      setCustom(true);
+                    }}
+                    className="flex min-h-[60px] items-center gap-3.5 border-t border-dashed border-line pr-[18px] pl-4 text-[18px] font-bold text-navy hover:bg-ice-pale"
+                  >
+                    <Pencil className="size-5" strokeWidth={2.4} aria-hidden />
+                    목록에 없어요 · 직접 입력
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {ready && custom && (
+            <>
+              <input
+                value={f.shade ?? ""}
+                onChange={(e) => patch({ shade: e.target.value })}
+                placeholder="예) 21N 린넨 · 03 로지"
+                className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-navy"
+              />
+              <div className="mt-1.5 flex flex-col gap-2.5">
+                <Label>색상 (선택)</Label>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {SHADE_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => patch({ color: c })}
+                      aria-label={`색상 ${c}`}
+                      aria-pressed={f.color === c}
+                      className="size-11 rounded-full"
+                      style={{
+                        background: c,
+                        boxShadow:
+                          f.color === c
+                            ? "0 0 0 3px #fff, 0 0 0 5px #0B1430"
+                            : "inset 0 0 0 1px rgba(0,0,0,.08)",
+                      }}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => patch({ color: null })}
+                    aria-pressed={noColor}
+                    className={cn(
+                      "flex h-11 items-center rounded-full border-2 px-4 text-[16px] font-bold text-ink",
+                      noColor ? "border-solid border-ink" : "border-dashed border-ash",
+                    )}
+                  >
+                    모르겠어요
+                  </button>
+                </div>
+                {noColor && (
+                  <span className="text-[16px] leading-[1.5] text-navy">
+                    색상 정보가 없으면 대체 후보에서 빠져요.
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {dup && (
+        <div
+          className="flex items-center gap-2.5 rounded-2xl bg-ice-pale px-[18px] py-3.5 text-[17px] font-semibold text-navy"
+          role="alert"
+        >
+          <span className="size-2 shrink-0 rounded-full bg-cyan" />
+          이미 파우치에 있는 제품이에요 · 같은 제품·호수는 한 번만 등록할 수 있어요
+        </div>
+      )}
+
+      <div className="flex gap-2.5">
+        {isEdit && (
+          <button
+            type="button"
+            onClick={() => setDelAsk(true)}
+            className="flex h-20 shrink-0 items-center justify-center rounded-full border-2 border-error/25 px-[30px] text-[21px] font-bold whitespace-nowrap text-error active:scale-[.96]"
+          >
+            삭제
+          </button>
+        )}
+        <PillButton
+          size="hero"
+          trailing
+          onClick={save}
+          disabled={!canSave}
+          className="ml-auto min-w-[300px] tracking-[-.01em] disabled:bg-line-3"
+        >
+          저장
+        </PillButton>
+      </div>
+
+      <Modal
+        open={delAsk}
+        onClose={() => setDelAsk(false)}
+        className="flex max-w-[520px] flex-col gap-6 px-[30px] pt-8 pb-6"
+      >
+        <div className="flex flex-col gap-2.5">
+          <h3 className="font-display text-[30px] leading-[1.25] text-ink">
+            이 제품을 파우치에서 뺄까요?
+          </h3>
+          <p className="text-[18px] leading-[1.55] text-mute">
+            {f.brand} {f.name} · 다음 매칭부터 반영돼요. 이미 끝난 리포트는 바뀌지 않아요.
+          </p>
+        </div>
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => setDelAsk(false)}
+            className="flex h-[68px] flex-1 items-center justify-center rounded-full border-[1.5px] border-line-2 text-[19px] font-bold text-ink"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={remove}
+            className="flex h-[68px] flex-1 items-center justify-center rounded-full bg-error text-[19px] font-bold text-white"
+          >
+            삭제
           </button>
         </div>
-
-        <Modal
-          open={delAsk}
-          onClose={() => setDelAsk(false)}
-          className="flex max-w-[520px] flex-col gap-6 px-[30px] pt-8 pb-6"
-        >
-          <div className="flex flex-col gap-2.5">
-            <h3 className="font-display text-[30px] leading-[1.25] text-ink">
-              이 제품을 파우치에서 뺄까요?
-            </h3>
-            <p className="text-[18px] leading-[1.55] text-mute">
-              {f.brand} {f.name} · 다음 매칭부터 반영돼요. 이미 끝난 리포트는 바뀌지 않아요.
-            </p>
-          </div>
-          <div className="flex gap-2.5">
-            <button
-              type="button"
-              onClick={() => setDelAsk(false)}
-              className="flex h-[68px] flex-1 items-center justify-center rounded-full border-[1.5px] border-line-2 text-[19px] font-bold text-ink"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              onClick={remove}
-              className="flex h-[68px] flex-1 items-center justify-center rounded-full bg-error text-[19px] font-bold text-white"
-            >
-              삭제
-            </button>
-          </div>
-        </Modal>
-      </div>
-    </div>
+      </Modal>
+    </Modal>
   );
 }

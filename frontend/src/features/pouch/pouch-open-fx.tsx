@@ -38,7 +38,7 @@ export function PouchOpenFx() {
                 "--dy": `${dy}px`,
                 "--r": `${r}deg`,
                 filter:
-                  "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 10px 14px rgba(11,20,48,.22))",
+                  "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 10px 14px color-mix(in srgb, var(--color-night) 22%, transparent))",
                 animation: `mr-pop-out 700ms ${SPRING} ${820 + i * 110}ms forwards`,
               } as React.CSSProperties
             }
@@ -48,17 +48,17 @@ export function PouchOpenFx() {
         ))}
         {/* 열리는 입구 */}
         <div
-          className="absolute top-[52px] left-6 z-0 h-[26px] w-[272px] origin-left scale-x-0 rounded-full bg-plum"
+          className="absolute top-[52px] left-6 z-0 h-[26px] w-[272px] origin-left scale-x-0 rounded-full bg-navy"
           style={{ animation: "mr-open-x 650ms cubic-bezier(.6,0,.3,1) 150ms forwards" }}
         />
         {/* 파우치 몸통 */}
-        <div className="absolute top-[60px] left-0 z-[2] h-[190px] w-80 [filter:drop-shadow(0_22px_30px_rgba(11,20,48,.28))]">
+        <div className="absolute top-[60px] left-0 z-[2] h-[190px] w-80 [filter:drop-shadow(0_22px_30px_color-mix(in_srgb,var(--color-night)_28%,transparent))]">
           <div
             className="absolute inset-0 rounded-t-[26px] rounded-b-[54px]"
             style={{
               clipPath: "polygon(6% 0, 94% 0, 100% 100%, 0 100%)",
               background:
-                "linear-gradient(160deg,color-mix(in srgb,var(--color-plum) 82%,white) 0%,var(--color-plum) 45%,color-mix(in srgb,var(--color-plum) 70%,black) 100%)",
+                "linear-gradient(160deg,color-mix(in srgb,var(--color-navy) 82%,white) 0%,var(--color-navy) 45%,color-mix(in srgb,var(--color-navy) 70%,black) 100%)",
             }}
           >
             <div
@@ -67,8 +67,8 @@ export function PouchOpenFx() {
                 background: "repeating-linear-gradient(90deg,#E4E7EE 0 5px,#9AA3B8 5px 8px)",
               }}
             />
-            <div className="absolute top-8 right-[22px] bottom-[18px] left-[22px] rounded-t-[14px] rounded-b-[40px] border-2 border-dashed border-rose/65" />
-            <div className="absolute inset-x-0 top-[82px] mx-auto w-max rounded-[10px] bg-white px-4 py-1.5 font-serif text-[30px] text-plum italic shadow-[0_2px_0_rgba(0,0,0,.08)]">
+            <div className="absolute top-8 right-[22px] bottom-[18px] left-[22px] rounded-t-[14px] rounded-b-[40px] border-2 border-dashed border-blush/65" />
+            <div className="absolute inset-x-0 top-[82px] mx-auto w-max rounded-[10px] bg-white px-4 py-1.5 font-serif text-[30px] text-navy italic shadow-[0_2px_0_rgba(0,0,0,.08)]">
               mairor
             </div>
           </div>
@@ -78,7 +78,7 @@ export function PouchOpenFx() {
             style={{ animation: "mr-zip 650ms cubic-bezier(.6,0,.3,1) 150ms forwards" }}
           >
             <span className="absolute top-0 left-1 h-3.5 w-[18px] rounded border-2 border-white bg-line-3" />
-            <span className="absolute top-3 left-[5px] h-[26px] w-4 rounded-t-md rounded-b-[10px] border-[3px] border-white bg-lime" />
+            <span className="absolute top-3 left-[5px] h-[26px] w-4 rounded-t-md rounded-b-[10px] border-[3px] border-white bg-mint" />
           </div>
           {/* 고리 */}
           <div className="absolute top-10 -right-[26px] h-14 w-11 rounded-r-[26px] border-8 border-l-0 border-ink" />

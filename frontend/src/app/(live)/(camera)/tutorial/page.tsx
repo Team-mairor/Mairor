@@ -4,6 +4,7 @@ import { ArrowRight, Volume2, VolumeX, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
 import { Modal } from "@/components/ui/modal";
 import { useHiddenVideo } from "@/features/face";
 import {
@@ -118,10 +119,10 @@ export default function TutorialPage() {
   const meterColor = blocked
     ? "var(--color-ash)"
     : gv > 62
-      ? "var(--color-rose)"
+      ? "var(--color-blush)"
       : gv < 45
         ? "var(--color-sky)"
-        : "var(--color-lime)";
+        : "var(--color-mint)";
   // 잴 수 없을 때는 이유를 위쪽 알림이 알려 주므로 판정 문구를 띄우지 않는다
   const gaugeLabel =
     gv > 62 ? "레퍼런스보다 진해요" : gv < 45 ? "레퍼런스보다 연해요" : "레퍼런스와 비슷해요";
@@ -215,7 +216,7 @@ export default function TutorialPage() {
             cancelTimer();
             setExitAsk(true);
           }}
-          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-ink-deep/82 py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-ink-deep/95"
+          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-night/80 py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-night/95"
         >
           <X className="size-[18px]" strokeWidth={2.4} aria-hidden />
           나가기
@@ -227,7 +228,7 @@ export default function TutorialPage() {
           aria-label={state.voice ? "음성 안내 끄기" : "음성 안내 켜기"}
           className={cn(
             "flex size-12 shrink-0 items-center justify-center rounded-full border border-white/15",
-            state.voice ? "bg-white text-plum" : "bg-ink-deep/82 text-white",
+            state.voice ? "bg-white text-navy" : "bg-night/80 text-white",
           )}
         >
           {state.voice ? (
@@ -236,7 +237,7 @@ export default function TutorialPage() {
             <VolumeX className="size-[20px]" strokeWidth={2.2} aria-hidden />
           )}
         </button>
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-ink-deep/82 px-[18px]">
+        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-night/80 px-[18px]">
           <div
             className="flex min-w-0 flex-1 gap-1"
             role="progressbar"
@@ -251,7 +252,7 @@ export default function TutorialPage() {
                 aria-label={`${i + 1}단계 ${s.short}`}
                 className={cn(
                   "h-1.5 flex-1 rounded-full transition-colors",
-                  i < step ? "bg-plum" : i === step ? "bg-pink" : "bg-line-2",
+                  i < step ? "bg-navy" : i === step ? "bg-ice" : "bg-line-2",
                 )}
               />
             ))}
@@ -270,7 +271,7 @@ export default function TutorialPage() {
             aria-label="영상 속 제품 색"
           />
           <span className="max-w-[200px] truncate text-mute">{ref.name}</span>
-          <ArrowRight className="size-4 shrink-0 text-plum" strokeWidth={2.4} aria-hidden />
+          <ArrowRight className="size-4 shrink-0 text-navy" strokeWidth={2.4} aria-hidden />
           {hasProduct ? (
             <>
               <span
@@ -281,7 +282,7 @@ export default function TutorialPage() {
               <span className="max-w-[200px] truncate">{pr.p?.name}</span>
             </>
           ) : (
-            <span className="whitespace-nowrap text-plum">내 파우치에 없음</span>
+            <span className="whitespace-nowrap text-navy">내 파우치에 없음</span>
           )}
         </div>
       )}
@@ -290,7 +291,7 @@ export default function TutorialPage() {
       {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
       <div className="relative flex flex-col gap-3.5 px-7 pt-2 pb-[18px]">
         <div className="flex items-end gap-3">
-          <span className="shrink-0 font-serif text-[34px] leading-[.9] text-rose italic tabular">
+          <span className="shrink-0 font-serif text-[34px] leading-[.9] text-blush italic tabular">
             {String(step + 1).padStart(2, "0")}
           </span>
           <h1 className="font-display text-[26px] leading-[1.15] text-white">{info.title}</h1>
@@ -355,17 +356,15 @@ export default function TutorialPage() {
             label={act > 0 ? "이전 할 일" : "이전 단계"}
             className={cn((busy || (step === 0 && act === 0)) && "opacity-35")}
           />
-          <button
-            type="button"
+          <PillButton
+            size="cta"
+            trailing
             onClick={next}
             disabled={busy}
-            className="flex h-[72px] min-w-0 flex-1 items-center justify-between gap-4 rounded-full bg-pink py-0 pr-2.5 pl-[30px] text-white shadow-[0_12px_28px_color-mix(in_srgb,var(--color-pink)_38%,transparent)] active:scale-[.98] disabled:opacity-60"
+            className="min-w-0 flex-1 disabled:opacity-60"
           >
-            <span className="truncate text-[22px] font-bold">{nextLabel}</span>
-            <span className="flex size-[54px] shrink-0 items-center justify-center rounded-full bg-white text-pink">
-              <ArrowRight className="size-[26px]" strokeWidth={2.4} aria-hidden />
-            </span>
-          </button>
+            {nextLabel}
+          </PillButton>
         </div>
       </div>
 
@@ -391,20 +390,12 @@ export default function TutorialPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={quit}
-            className="flex h-[72px] flex-1 items-center justify-center rounded-full border-[1.5px] border-line-2 text-[20px] font-bold hover:bg-cream"
-          >
+          <PillButton variant="line" size="cta" onClick={quit} className="flex-1">
             종료
-          </button>
-          <button
-            type="button"
-            onClick={() => setExitAsk(false)}
-            className="flex h-[72px] flex-1 items-center justify-center rounded-full bg-pink text-[20px] font-bold text-white active:scale-[.98]"
-          >
+          </PillButton>
+          <PillButton size="cta" onClick={() => setExitAsk(false)} className="flex-1">
             계속하기
-          </button>
+          </PillButton>
         </div>
       </Modal>
     </main>

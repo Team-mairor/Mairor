@@ -60,12 +60,12 @@ export default function HomePage() {
   return (
     <main className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-[68px] shrink-0 items-center gap-3 px-8">
-        <span className="font-serif text-[40px] leading-none tracking-[-.02em] text-plum italic">
+        <span className="font-serif text-[40px] leading-none tracking-[-.02em] text-navy italic">
           mairor
         </span>
         <Link
           href="/my/pouch"
-          className="ml-auto flex size-11 items-center justify-center rounded-full bg-lime font-serif text-[22px] text-ink italic"
+          className="ml-auto flex size-11 items-center justify-center rounded-full bg-mint font-serif text-[22px] text-ink italic"
           aria-label="마이페이지"
         >
           {(displayName(state).trim()[0] ?? "m").toUpperCase()}
@@ -87,13 +87,13 @@ export default function HomePage() {
         <div className="grid h-[292px] shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)] gap-4">
           <Link
             href="/select"
-            className="flex min-w-0 flex-col justify-between rounded-3xl bg-plum p-6 hover:brightness-90"
+            className="flex min-w-0 flex-col justify-between rounded-3xl bg-navy p-6 hover:brightness-90"
           >
             <div className="flex items-start justify-between gap-3">
-              <span className="font-label text-[15px] font-semibold tracking-[.16em] text-pink-soft">
+              <span className="font-label text-[15px] font-semibold tracking-[.16em] text-blush">
                 NEW LOOK
               </span>
-              <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-lime text-ink">
+              <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-mint text-ink">
                 <Plus className="size-[26px]" strokeWidth={1.8} aria-hidden />
               </span>
             </div>
@@ -143,9 +143,9 @@ export default function HomePage() {
           ) : (
             <Link
               href="/select"
-              className="flex min-w-0 flex-col justify-center gap-2.5 rounded-3xl border-[1.5px] border-dashed border-line-2 bg-white p-6 hover:border-plum"
+              className="flex min-w-0 flex-col justify-center gap-2.5 rounded-3xl border-[1.5px] border-dashed border-line-2 bg-white p-6 hover:border-navy"
             >
-              <span className="font-serif text-[26px] leading-none text-plum italic">
+              <span className="font-serif text-[26px] leading-none text-navy italic">
                 First look
               </span>
               <span className="font-display text-[22px] leading-[1.35] text-pretty text-ink">
@@ -167,7 +167,7 @@ export default function HomePage() {
               }}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <span className="font-label text-[14px] font-semibold tracking-[.14em] text-plum">
+              <span className="font-label text-[14px] font-semibold tracking-[.14em] text-navy">
                 {approved ? "READY" : "IN REVIEW"}
               </span>
               <span className="truncate font-display text-[20px] leading-[1.3] text-ink">
@@ -220,7 +220,7 @@ export default function HomePage() {
               </span>
               <Link
                 href="/my/pouch?add=1"
-                className="flex h-12 items-center gap-2 rounded-full bg-pink px-[22px] text-[17px] font-semibold text-white"
+                className="flex h-12 items-center gap-2 rounded-full bg-ice px-[22px] text-[17px] font-semibold text-ink"
               >
                 <Plus className="size-4" strokeWidth={2} aria-hidden />첫 제품 담기
               </Link>
@@ -234,7 +234,7 @@ export default function HomePage() {
               <span className="font-serif text-[34px] leading-none text-ink italic">Reports</span>
               <span className="text-[18px] text-mute">최근 리포트</span>
             </span>
-            <Link href="/my/reports" className="text-[18px] font-semibold text-plum">
+            <Link href="/my/reports" className="text-[18px] font-semibold text-navy">
               전체 보기
             </Link>
           </div>
@@ -243,7 +243,7 @@ export default function HomePage() {
               <span className="text-[17px] leading-[1.5] text-pretty text-mute">
                 아직 완료한 메이크업이 없어요. 영상을 골라 따라 해 보세요.
               </span>
-              <Link href="/select" className="shrink-0 text-[17px] font-bold text-plum">
+              <Link href="/select" className="shrink-0 text-[17px] font-bold text-navy">
                 영상 고르기
               </Link>
             </div>
@@ -253,7 +253,7 @@ export default function HomePage() {
                 <Link
                   key={r.id}
                   href={`/my/report?id=${r.id}`}
-                  className="flex min-w-0 flex-col gap-2.5 rounded-[22px] border border-line bg-white px-2.5 pt-2.5 pb-3.5 hover:border-plum"
+                  className="flex min-w-0 flex-col gap-2.5 rounded-[22px] border border-line bg-white px-2.5 pt-2.5 pb-3.5 hover:border-navy"
                 >
                   <span className="relative h-[110px] w-full shrink-0 overflow-hidden rounded-[14px]">
                     <img

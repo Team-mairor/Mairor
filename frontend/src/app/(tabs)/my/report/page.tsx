@@ -82,12 +82,12 @@ export default function ReportPage() {
           title="리포트 목록"
           aria-label="리포트 목록"
         />
-        <span className="font-serif text-[28px] leading-none text-plum italic">Report</span>
+        <span className="font-serif text-[28px] leading-none text-navy italic">Report</span>
         <span className="text-[17px] text-mute">메이크업 분석 리포트</span>
         <button
           type="button"
           onClick={() => setDel("ask")}
-          className="ml-auto flex h-11 items-center rounded-full border-[1.5px] border-error/25 px-[18px] text-[16px] font-bold text-error hover:bg-pink-pale"
+          className="ml-auto flex h-11 items-center rounded-full border-[1.5px] border-error/25 px-[18px] text-[16px] font-bold text-error hover:bg-ice-pale"
         >
           삭제
         </button>
@@ -133,7 +133,7 @@ export default function ReportPage() {
             <button
               type="button"
               onClick={() => setExpanded((e) => !e)}
-              className="text-[17px] font-semibold text-plum"
+              className="text-[17px] font-semibold text-navy"
               aria-expanded={expanded}
             >
               {expanded ? "접기" : "펼쳐보기"}
@@ -184,7 +184,7 @@ export default function ReportPage() {
               key={c.no}
               className="grid grid-cols-[40px_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] items-start gap-3.5 border-t border-line py-3.5"
             >
-              <span className="font-serif text-[26px] leading-none text-plum">{c.no}</span>
+              <span className="font-serif text-[26px] leading-none text-navy">{c.no}</span>
               <span className="flex flex-col gap-1">
                 <span className="font-display text-[17px] text-ink">{c.title}</span>
                 <span className="text-[16px] leading-[1.45] text-mute">{c.guide}</span>

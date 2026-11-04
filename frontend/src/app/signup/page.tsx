@@ -101,7 +101,7 @@ type Pending = "check" | "send" | "verify" | "submit";
 
 function RuleItem({ ok, children }: { ok: boolean; children: string }) {
   return (
-    <span className={cn("flex items-center gap-1.5", ok ? "text-plum" : "text-ash-2")}>
+    <span className={cn("flex items-center gap-1.5", ok ? "text-navy" : "text-ash-2")}>
       <Check className="size-3.5" strokeWidth={3} aria-hidden />
       {children}
     </span>
@@ -122,13 +122,13 @@ function SideButton({
       className={cn(
         "flex h-[60px] shrink-0 items-center justify-center gap-2 rounded-2xl border px-5 text-[17px] font-semibold whitespace-nowrap",
         tone === "done"
-          ? "border-lime bg-lime-pale text-lime-ink"
+          ? "border-mint bg-mint-pale text-mint-ink"
           : tone === "on"
-            ? "border-plum bg-white text-plum"
+            ? "border-navy bg-white text-navy"
             : "border-line-2 bg-white text-ash-2",
       )}
     >
-      {busy && <Spinner tone="brand" className="size-4 border-pink-soft border-t-plum" />}
+      {busy && <Spinner tone="brand" className="size-4 border-blush border-t-navy" />}
       {children}
     </button>
   );
@@ -357,7 +357,7 @@ export default function SignupPage() {
           title="로그인으로"
           aria-label="로그인으로"
         />
-        <span className="font-serif text-[28px] leading-none text-plum italic">Sign up</span>
+        <span className="font-serif text-[28px] leading-none text-navy italic">Sign up</span>
         <span className="text-[17px] text-mute">회원가입</span>
       </header>
 
@@ -425,7 +425,7 @@ export default function SignupPage() {
             </div>
             {emailBad && <FieldError>이메일 형식을 확인해 주세요.</FieldError>}
             {checked && !emailErr && (
-              <span className="flex items-center gap-1.5 text-[15px] text-lime-ink">
+              <span className="flex items-center gap-1.5 text-[15px] text-mint-ink">
                 <Check className="size-3.5" strokeWidth={3} aria-hidden />
                 {done ? "이메일 인증을 마쳤어요." : "사용할 수 있는 이메일이에요."}
               </span>
@@ -435,13 +435,13 @@ export default function SignupPage() {
             )}
             {emailErr?.kind === "dup" && (
               <span
-                className="flex flex-wrap items-center gap-2.5 text-[15px] text-wine-2"
+                className="flex flex-wrap items-center gap-2.5 text-[15px] text-error-2"
                 role="alert"
               >
                 <span>이미 가입된 이메일이에요.</span>
                 <button
                   type="button"
-                  className="font-bold text-plum underline"
+                  className="font-bold text-navy underline"
                   onClick={() => router.push(`/login?mode=email&email=${encodeURIComponent(emN)}`)}
                 >
                   로그인하기
@@ -489,10 +489,10 @@ export default function SignupPage() {
                     {codeLeft > 0 ? (
                       <span>
                         메일로 받은 인증번호를 입력해 주세요{" "}
-                        <b className="text-plum tabular">{mmss(codeLeft)}</b>
+                        <b className="text-navy tabular">{mmss(codeLeft)}</b>
                       </span>
                     ) : (
-                      <span className="text-wine-2">
+                      <span className="text-error-2">
                         인증번호 시간이 지났어요. 다시 받아 주세요.
                       </span>
                     )}
@@ -501,7 +501,7 @@ export default function SignupPage() {
                     ) : (
                       <button
                         type="button"
-                        className="font-bold text-plum"
+                        className="font-bold text-navy"
                         onClick={sendCode}
                         disabled={!!pending}
                       >
@@ -643,7 +643,7 @@ export default function SignupPage() {
                   className={cn(
                     "h-[60px] rounded-2xl border text-[17px] font-semibold",
                     gender === g.value
-                      ? "border-plum bg-pink-tint text-plum"
+                      ? "border-navy bg-ice-tint text-navy"
                       : "border-line-2 bg-white text-mute",
                   )}
                 >
@@ -667,8 +667,8 @@ export default function SignupPage() {
           >
             <span
               className={cn(
-                "flex size-[26px] shrink-0 items-center justify-center rounded-lg border-[1.5px] text-white",
-                allAgreed ? "border-pink bg-pink" : "border-ash-2 bg-white",
+                "flex size-[26px] shrink-0 items-center justify-center rounded-lg border-[1.5px]",
+                allAgreed ? "border-ice bg-ice text-ink" : "border-ash-2 bg-white text-white",
               )}
             >
               <Check className="size-4" strokeWidth={3} aria-hidden />
@@ -689,7 +689,7 @@ export default function SignupPage() {
                 <span
                   className={cn(
                     "flex size-5 shrink-0 items-center justify-center",
-                    agree[a.type] ? "text-plum" : "text-line-3",
+                    agree[a.type] ? "text-navy" : "text-line-3",
                   )}
                 >
                   <Check className="size-[18px]" strokeWidth={2.6} aria-hidden />

@@ -142,7 +142,7 @@ export default function LoginPage() {
       <div className="flex shrink-0 flex-col gap-8 px-10 py-8">
         {mode === "pick" && (
           <div className="flex flex-col gap-4">
-            <span className="font-serif text-[120px] leading-[.85] tracking-[-.03em] text-plum italic">
+            <span className="font-serif text-[120px] leading-[.85] tracking-[-.03em] text-navy italic">
               mairor
             </span>
             <div className="flex flex-col gap-1.5">
@@ -157,7 +157,7 @@ export default function LoginPage() {
         )}
         {mode === "email" && (
           <div className="flex flex-col gap-2.5">
-            <span className="font-serif text-[30px] leading-none text-plum italic">mairor</span>
+            <span className="font-serif text-[30px] leading-none text-navy italic">mairor</span>
             <h1 className="font-display text-[40px] leading-[1.25] text-ink">이메일로 로그인</h1>
             <p className="text-[17px] leading-[1.5] text-mute">
               가입할 때 쓴 이메일과 비밀번호를 입력해 주세요.
@@ -311,7 +311,7 @@ export default function LoginPage() {
 
             <div className="flex justify-center gap-2 text-[17px]">
               <span className="text-mute">아직 계정이 없나요?</span>
-              <Link href="/signup" className="font-bold text-plum">
+              <Link href="/signup" className="font-bold text-navy">
                 이메일로 회원가입
               </Link>
             </div>

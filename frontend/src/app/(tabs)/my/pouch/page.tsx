@@ -3,6 +3,7 @@
 import { ChevronRight, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
 import { MyHeader } from "@/features/my/my-header";
 import {
   emptyDraft,
@@ -51,21 +52,17 @@ export default function MyPouchPage() {
       <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-10 pt-1 pb-8">
         {empty ? (
           <div className="flex flex-col items-center gap-3.5 rounded-3xl border-[1.5px] border-dashed border-line-2 px-8 py-14 text-center">
-            <span className="font-serif text-[34px] leading-none text-plum italic">
+            <span className="font-serif text-[34px] leading-none text-navy italic">
               Empty pouch
             </span>
             <span className="font-display text-[26px] text-ink">아직 등록한 제품이 없어요</span>
             <span className="text-[18px] leading-[1.55] text-pretty text-mute">
               가진 제품을 등록하면 영상 속 제품과 맞춰 보유·대체를 찾아 드려요.
             </span>
-            <button
-              type="button"
-              onClick={() => setForm(emptyDraft())}
-              className="mt-1.5 flex h-16 items-center gap-2 rounded-full bg-pink px-7 text-[20px] font-bold text-white"
-            >
+            <PillButton size="xl" onClick={() => setForm(emptyDraft())} className="mt-1.5">
               <Plus className="size-[18px]" strokeWidth={2.2} aria-hidden />
               제품 등록
-            </button>
+            </PillButton>
           </div>
         ) : (
           <>
@@ -121,7 +118,7 @@ export default function MyPouchPage() {
                       className={cn(
                         "flex h-11 items-center gap-1.5 rounded-full border-[1.5px] px-[18px] text-[16px] font-bold transition-colors",
                         on
-                          ? "border-plum bg-plum text-white"
+                          ? "border-navy bg-navy text-white"
                           : n
                             ? "border-line bg-white text-ink"
                             : "border-line bg-white text-ash",
@@ -139,14 +136,14 @@ export default function MyPouchPage() {
                     key={p.id}
                     type="button"
                     onClick={() => setForm({ ...p })}
-                    className="flex min-w-0 items-center gap-3.5 rounded-[20px] border border-line bg-white py-3.5 pr-[18px] pl-3.5 text-left transition-colors hover:border-plum"
+                    className="flex min-w-0 items-center gap-3.5 rounded-[20px] border border-line bg-white py-3.5 pr-[18px] pl-3.5 text-left transition-colors hover:border-navy"
                   >
                     <span
-                      className="size-14 shrink-0 rounded-full border-4 border-white shadow-[0_0_0_1px_#E4E7EE,0_4px_10px_rgba(11,20,48,.12)]"
+                      className="size-14 shrink-0 rounded-full border-4 border-white shadow-float ring-1 ring-line"
                       style={{ background: p.color ?? "var(--color-cream)" }}
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="text-[14px] font-bold text-plum">
+                      <span className="text-[14px] font-bold text-navy">
                         {p.cat} · <span className="font-medium text-mute">{p.brand}</span>
                       </span>
                       <span className="truncate font-serif text-[21px] leading-[1.15] text-ink">

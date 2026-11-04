@@ -163,12 +163,12 @@ export function LiveTag({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "flex h-12 items-center gap-2.5 rounded-full border border-white/15 bg-[rgba(11,20,48,.78)] py-0 pr-[18px] pl-3.5 font-label text-[15px] font-bold tracking-[.14em] text-white",
+        "flex h-12 items-center gap-2.5 rounded-full border border-white/15 bg-night/80 py-0 pr-[18px] pl-3.5 font-label text-[15px] font-bold tracking-[.14em] text-white",
         className,
       )}
     >
       <span
-        className={cn("size-2.5 rounded-full", face ? "bg-lime" : "bg-rose")}
+        className={cn("size-2.5 rounded-full", face ? "bg-mint" : "bg-blush")}
         style={{ animation: "mr-pulse 1.4s ease-out infinite" }}
       />
       {status === "ready" ? "LIVE" : "CAMERA"}
@@ -190,11 +190,11 @@ export function LiveNote({ note, className }: { note: LiveNoteData | null; class
     <div
       role="status"
       className={cn(
-        "absolute inset-x-5 top-[84px] z-[2] flex animate-fade items-center gap-[18px] rounded-3xl border border-white/15 bg-[rgba(11,20,48,.9)] px-[22px] py-[18px] text-white",
+        "absolute inset-x-5 top-[84px] z-[2] flex animate-fade items-center gap-[18px] rounded-3xl border border-white/15 bg-night/90 px-[22px] py-[18px] text-white",
         className,
       )}
     >
-      <span className="size-3 shrink-0 rounded-full bg-rose" />
+      <span className="size-3 shrink-0 rounded-full bg-blush" />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="text-[22px] leading-[1.3] font-bold text-pretty">{note.title}</span>
         <span className="text-[17px] leading-[1.5] text-pretty text-line-2">{note.desc}</span>
@@ -203,7 +203,7 @@ export function LiveNote({ note, className }: { note: LiveNoteData | null; class
         <button
           type="button"
           onClick={note.onRetry}
-          className="flex h-[52px] shrink-0 items-center rounded-full bg-white px-[22px] text-[17px] font-bold whitespace-nowrap text-ink-deep active:scale-[.97]"
+          className="flex h-[52px] shrink-0 items-center rounded-full bg-white px-[22px] text-[17px] font-bold whitespace-nowrap text-ink active:scale-[.97]"
         >
           {note.retry}
         </button>
@@ -228,7 +228,7 @@ export function GlassPanel({
     <div
       ref={coversFace ? setCoverPanel : undefined}
       className={cn(
-        "absolute inset-x-4 bottom-4 flex flex-col gap-5 rounded-[36px] border border-white/10 bg-[rgba(11,20,48,.92)] px-7 pt-6 pb-[18px] text-white shadow-[0_24px_60px_rgba(6,10,26,.45)] backdrop-blur-2xl",
+        "absolute inset-x-4 bottom-4 flex flex-col gap-5 rounded-[36px] border border-white/10 bg-night/90 px-7 pt-6 pb-[18px] text-white shadow-modal backdrop-blur-2xl",
         className,
       )}
     >
