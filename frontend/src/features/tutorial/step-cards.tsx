@@ -1,9 +1,13 @@
 import { CircleCheck, Lightbulb, TriangleAlert } from "lucide-react";
 
-import { PillButton } from "@/components/ui/pill-button";
 import { Modal } from "@/components/ui/modal";
-import type { MatchResult } from "@/features/session";
-import { GUIDE_STEPS, REF_STATE_LABEL, type GuideStepInfo, type RefProduct } from "@/lib/mock-data";
+import { PillButton } from "@/components/ui/pill-button";
+import {
+  REF_STATE_LABEL,
+  type GuideStepInfo,
+  type MatchResult,
+  type RefProduct,
+} from "@/features/session";
 import { cn } from "@/lib/utils";
 
 /** 튜토리얼 동작 한 장. 팁·주의와 끝내는 기준이 있으면 그 아래 붙인다 */
@@ -57,12 +61,15 @@ export function ActCard({
  */
 export function PrepCard({
   step,
+  total,
   info,
   refProduct,
   match,
   onStart,
 }: {
   step: number;
+  /** 전체 단계 수 */
+  total: number;
   info: GuideStepInfo;
   refProduct: RefProduct;
   match: MatchResult;
@@ -78,7 +85,7 @@ export function PrepCard({
     >
       <div className="flex flex-col gap-1.5">
         <span className="font-label text-[14px] font-semibold tracking-[.14em] text-mute">
-          STEP {String(step + 1).padStart(2, "0")} / {GUIDE_STEPS.length}
+          STEP {String(step + 1).padStart(2, "0")} / {total}
         </span>
         <h2 id="prep-title" className="font-display text-[36px] leading-[1.2]">
           {info.title}

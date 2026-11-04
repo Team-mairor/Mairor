@@ -1,11 +1,9 @@
 "use client";
 
-import { ArrowRight, Volume2, VolumeX, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { Modal } from "@/components/ui/modal";
 import { useHiddenVideo } from "@/features/face";
 import {
   GuideOverlay,
@@ -13,30 +11,26 @@ import {
   loadGuideArea,
   resolveStep,
   useStepInView,
-  type AreaSubStep,
   type GuideArea,
   type GuideSet,
 } from "@/features/guide";
-import { LiveNote, RoundBack, parseAlert, useLiveState } from "@/features/live/live-chrome";
+import { LiveNote, parseAlert, RoundBack, useLiveState } from "@/features/live";
 import { matchFor, useSession } from "@/features/session";
-import { ActCard, PrepCard } from "@/features/tutorial/step-cards";
-import { MOCK_GUIDE_AREA_URL } from "@/lib/mock-guide";
-import { GUIDE_STEPS, REF_PRODUCTS, type GuideStepInfo } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
-import { useSpeech } from "@/lib/use-speech";
+import {
+  ActCard,
+  DensityMeter,
+  ExitModal,
+  PrepCard,
+  ProductChip,
+  templateOf,
+  TutorialTopBar,
+} from "@/features/tutorial";
+import { useQuery } from "@/lib/hooks/use-query";
+import { useSpeech } from "@/lib/hooks/use-speech";
+import { useTimeout } from "@/lib/hooks/use-timeout";
 import { cn } from "@/lib/utils";
-
-/** 영역 데이터에 없는 단계는 화장 종류의 기본 가이드로 그린다 */
-function templateOf(info: GuideStepInfo): AreaSubStep {
-  return {
-    subStepId: `${info.stepId}-1`,
-    order: 1,
-    status: "template",
-    reasons: [],
-    templateId: info.makeup,
-    guideSets: [],
-  };
-}
+import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
+import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
 /**
  * 10 튜토리얼 (GUIDE-003 · 006 · 007 · 008 · 011 · 013).
@@ -61,7 +55,7 @@ export default function TutorialPage() {
   const [gauge, setGauge] = useState(10);
   const [busy, setBusy] = useState(false);
   const [exitAsk, setExitAsk] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timer = useTimeout();
 
   // API 연동 전까지는 목업 가이드와 같은 샘플 영상의 가이드 영역을 쓰고, ?area=경로 로 다른 파일을 본다.
   useEffect(() => {
@@ -73,14 +67,13 @@ export default function TutorialPage() {
       .then(setArea)
       .catch((e) => console.warn("가이드 영역을 불러오지 못해 기본 가이드로 보여 줍니다", e));
   }, [query]);
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
   // 카메라는 추적에만 쓰고 영상은 보여 주지 않는다. 얼굴 자리에는 가이드만 뜬다
   useHiddenVideo();
 
   const info = GUIDE_STEPS[step];
   const ref = REF_PRODUCTS[step];
-  const pr = matchFor(step, run, state.pouch);
+  const pr = matchFor(REF_PRODUCTS[step], run, state.pouch);
   const hasProduct = pr.kind !== "none";
   const last = step >= GUIDE_STEPS.length - 1;
   // 설명·제품(GUIDE_STEPS)과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다.
@@ -133,8 +126,7 @@ export default function TutorialPage() {
 
   // 진행바·이전 버튼으로 옮기면 촬영 대기 타이머는 버린다. 예전 step으로 advance가 실행되지 않게
   const cancelTimer = () => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = null;
+    timer.clear();
     setBusy(false);
   };
   const goStep = (i: number, prep = true) => {
@@ -160,13 +152,13 @@ export default function TutorialPage() {
     // 남길 사진이 없으면 '저장 중…' 없이 바로 넘긴다
     if (!photo) return advance();
     setBusy(true);
-    timer.current = setTimeout(() => {
+    timer.set(() => {
       setBusy(false);
       advance();
     }, 600);
   };
   const quit = () => {
-    if (timer.current) clearTimeout(timer.current);
+    timer.clear();
     startRun({});
     router.push("/home");
   };
@@ -207,85 +199,20 @@ export default function TutorialPage() {
         <GuideOverlay step={canRender ? guideStep : null} fit face={canRender} />
       </div>
 
-      {/* 준비 카드(z-[4])가 떠 있어도 나가기·음성 끄기를 누를 수 있게 그 위에 둔다 */}
-      <div className="absolute inset-x-5 top-5 z-[5] flex items-center gap-3.5">
-        <button
-          type="button"
-          onClick={() => {
-            // 저장 대기 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 버린다
-            cancelTimer();
-            setExitAsk(true);
-          }}
-          className="flex h-12 shrink-0 items-center gap-2 rounded-full border border-white/15 bg-night/80 py-0 pr-[18px] pl-3 text-[16px] font-bold whitespace-nowrap text-white hover:bg-night/95"
-        >
-          <X className="size-[18px]" strokeWidth={2.4} aria-hidden />
-          나가기
-        </button>
-        <button
-          type="button"
-          onClick={() => update({ voice: !state.voice })}
-          aria-pressed={state.voice}
-          aria-label={state.voice ? "음성 안내 끄기" : "음성 안내 켜기"}
-          className={cn(
-            "flex size-12 shrink-0 items-center justify-center rounded-full border border-white/15",
-            state.voice ? "bg-white text-navy" : "bg-night/80 text-white",
-          )}
-        >
-          {state.voice ? (
-            <Volume2 className="size-[20px]" strokeWidth={2.2} aria-hidden />
-          ) : (
-            <VolumeX className="size-[20px]" strokeWidth={2.2} aria-hidden />
-          )}
-        </button>
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-night/80 px-[18px]">
-          <div
-            className="flex min-w-0 flex-1 gap-1"
-            role="progressbar"
-            aria-valuenow={step + 1}
-            aria-valuemax={GUIDE_STEPS.length}
-          >
-            {GUIDE_STEPS.map((s, i) => (
-              <button
-                key={s.stepId}
-                type="button"
-                onClick={() => goStep(i, i > step)}
-                aria-label={`${i + 1}단계 ${s.short}`}
-                className={cn(
-                  "h-1.5 flex-1 rounded-full transition-colors",
-                  i < step ? "bg-navy" : i === step ? "bg-ice" : "bg-line-2",
-                )}
-              />
-            ))}
-          </div>
-          <span className="font-serif text-[24px] leading-none whitespace-nowrap text-white tabular">
-            {step + 1} / {GUIDE_STEPS.length}
-          </span>
-        </div>
-      </div>
-      {/* 영상 속 제품 → 내 제품. 자세한 건 준비 카드에 있어 한 줄로 줄인다. 같은 자리에 알림이 뜨면 숨긴다 */}
-      {!note && (
-        <div className="absolute top-[84px] left-5 z-[2] flex h-11 max-w-[calc(100%-40px)] items-center gap-2 rounded-full bg-white/92 py-0 pr-4 pl-2 text-[14px] font-bold text-ink backdrop-blur-md">
-          <span
-            className="size-7 shrink-0 rounded-full border-2 border-white ring-1 ring-line"
-            style={{ background: ref.color }}
-            aria-label="영상 속 제품 색"
-          />
-          <span className="max-w-[200px] truncate text-mute">{ref.name}</span>
-          <ArrowRight className="size-4 shrink-0 text-navy" strokeWidth={2.4} aria-hidden />
-          {hasProduct ? (
-            <>
-              <span
-                className="size-7 shrink-0 rounded-full border-2 border-white ring-1 ring-line"
-                style={{ background: pr.p?.color ?? "#fff" }}
-                aria-label="내 제품 색"
-              />
-              <span className="max-w-[200px] truncate">{pr.p?.name}</span>
-            </>
-          ) : (
-            <span className="whitespace-nowrap text-navy">내 파우치에 없음</span>
-          )}
-        </div>
-      )}
+      <TutorialTopBar
+        steps={GUIDE_STEPS}
+        step={step}
+        voice={state.voice}
+        onExit={() => {
+          // 저장 대기 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 버린다
+          cancelTimer();
+          setExitAsk(true);
+        }}
+        onToggleVoice={() => update({ voice: !state.voice })}
+        onGoStep={(i) => goStep(i, i > step)}
+      />
+      {/* 같은 자리에 알림이 뜨면 숨긴다 */}
+      {!note && <ProductChip refProduct={ref} mine={hasProduct ? pr.p : null} />}
       <LiveNote note={note} />
 
       {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
@@ -326,24 +253,7 @@ export default function TutorialPage() {
           )}
         </div>
 
-        {hasProduct && (
-          <div className="flex items-center gap-3 text-[13px] font-semibold text-line-2">
-            <span>연하게</span>
-            <div className="relative h-2.5 flex-1">
-              <div className="absolute inset-0 rounded-full bg-white/10" />
-              <span
-                className="absolute top-0 bottom-0 left-0 rounded-full transition-[width,background] duration-400"
-                style={{ width: blocked ? "0%" : `${gv}%`, background: meterColor }}
-              />
-              {/* 레퍼런스 위치선. 어두운 게이지 위라 미러필름 모드에서도 흰색 그대로 둔다(data-dark) */}
-              <span
-                data-dark
-                className="absolute -top-1.5 -bottom-1.5 left-[53.5%] -ml-[1.5px] w-[3px] rounded-sm bg-white"
-              />
-            </div>
-            <span>진하게</span>
-          </div>
-        )}
+        {hasProduct && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
 
         <div className="flex items-center gap-3">
           <RoundBack
@@ -371,6 +281,7 @@ export default function TutorialPage() {
       {!ready && (
         <PrepCard
           step={step}
+          total={GUIDE_STEPS.length}
           info={info}
           refProduct={ref}
           match={pr}
@@ -378,26 +289,7 @@ export default function TutorialPage() {
         />
       )}
 
-      <Modal
-        open={exitAsk}
-        onClose={() => setExitAsk(false)}
-        className="flex flex-col gap-7 rounded-[32px] px-9 pt-10 pb-8 text-ink"
-      >
-        <div className="flex flex-col gap-3">
-          <h2 className="font-display text-[34px] leading-[1.25]">튜토리얼을 종료할까요?</h2>
-          <p className="text-[19px] leading-[1.55] text-pretty text-mute">
-            완료하지 않으면 기록과 사진이 남지 않아요.
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <PillButton variant="line" size="cta" onClick={quit} className="flex-1">
-            종료
-          </PillButton>
-          <PillButton size="cta" onClick={() => setExitAsk(false)} className="flex-1">
-            계속하기
-          </PillButton>
-        </div>
-      </Modal>
+      <ExitModal open={exitAsk} onQuit={quit} onClose={() => setExitAsk(false)} />
     </main>
   );
 }

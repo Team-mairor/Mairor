@@ -7,10 +7,9 @@ import { FieldError } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { TextField } from "@/components/ui/text-field";
 import { api, ApiError, failText, type CodeSent, type PasswordResetVerified } from "@/lib/api";
-import { useRequest } from "@/lib/use-request";
+import { mmss, useCountdown } from "@/lib/hooks/use-countdown";
+import { useRequest } from "@/lib/hooks/use-request";
 import { isValidEmail, passwordRule } from "@/lib/validation";
-
-import { mmss, useCountdown } from "./use-countdown";
 
 export type ResetStep = "email" | "code" | "pw";
 

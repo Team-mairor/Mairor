@@ -2,16 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  faceWidthRatio,
-  KEY_REGIONS,
-  MIN_FACE_WIDTH_RATIO,
-  MIN_IN_FRAME_RATIO,
-  useCamera,
-  useFaceFrame,
-  type FaceFrame,
-  type RegionName,
-} from "@/features/face";
+import { useCamera, useFaceFrame } from "./camera-provider";
+import { faceWidthRatio, MIN_FACE_WIDTH_RATIO } from "./tracking-issue";
+import { KEY_REGIONS } from "./tracking-rules";
+import type { FaceFrame, RegionName } from "./types";
+import { MIN_IN_FRAME_RATIO } from "./visibility";
 
 /** 얼굴 등록 필수 촬영 조건 (CAMERA-005). 모달에 표시하는 순서와 같다 */
 export const CHECKS = ["light", "distance", "front", "clear"] as const;

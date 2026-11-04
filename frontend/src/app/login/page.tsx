@@ -10,9 +10,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { FieldError, Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { TextField } from "@/components/ui/text-field";
-import { GoogleSheet, type GoogleResult } from "@/features/auth/google-sheet";
-import { PasswordReset } from "@/features/auth/password-reset";
-import { useCountdown } from "@/features/auth/use-countdown";
+import { GoogleSheet, PasswordReset, type GoogleResult } from "@/features/auth";
 import { useSession } from "@/features/session";
 import {
   api,
@@ -22,8 +20,9 @@ import {
   type LoginResponse,
   type User,
 } from "@/lib/api";
-import { useQuery } from "@/lib/use-query";
-import { useRequest } from "@/lib/use-request";
+import { useCountdown } from "@/lib/hooks/use-countdown";
+import { useQuery } from "@/lib/hooks/use-query";
+import { useRequest } from "@/lib/hooks/use-request";
 import { normalizeEmail } from "@/lib/validation";
 
 type Mode = "pick" | "email" | "reset";

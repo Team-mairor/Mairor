@@ -7,7 +7,7 @@ import { useState } from "react";
 import { PillButton } from "@/components/ui/pill-button";
 import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
 import { useSession } from "@/features/session";
-import { HowItWorksSlide } from "@/features/tutorial/how-it-works";
+import { HowItWorksSlide } from "@/features/tutorial";
 import { cn } from "@/lib/utils";
 
 /** 온보딩 4장: 기능 소개 3장 + 파우치 담기. 이 기기에서 최초 1회 (POUCH-001) */

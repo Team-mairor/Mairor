@@ -8,7 +8,7 @@ import { MirrorToggle } from "@/components/mirror-toggle";
 import { Notice } from "@/components/ui/notice";
 import { displayName, useSession } from "@/features/session";
 import { api, ApiError, errorMessage } from "@/lib/api";
-import { useRequest } from "@/lib/use-request";
+import { useRequest } from "@/lib/hooks/use-request";
 import { cn } from "@/lib/utils";
 
 /** 마이페이지 상단: 프로필 · 로그아웃 + 내 파우치 · 리포트 탭 */

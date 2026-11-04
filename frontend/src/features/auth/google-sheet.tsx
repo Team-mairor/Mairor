@@ -1,10 +1,11 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { Spinner } from "@/components/ui/spinner";
+import { useTimeout } from "@/lib/hooks/use-timeout";
 
 export type GoogleResult = "ok" | "linked" | "fail" | "cancel";
 
@@ -38,17 +39,15 @@ const ACCOUNTS: {
  */
 export function GoogleSheet({ onResult }: { onResult: (r: GoogleResult, email?: string) => void }) {
   const [busy, setBusy] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  const timer = useTimeout();
 
   const pick = (a: (typeof ACCOUNTS)[number]) => {
     setBusy(true);
-    timer.current = setTimeout(() => onResult(a.result, a.email), 900);
+    timer.set(() => onResult(a.result, a.email), 900);
   };
 
   const cancel = () => {
-    if (timer.current) clearTimeout(timer.current);
+    timer.clear();
     onResult("cancel");
   };
 

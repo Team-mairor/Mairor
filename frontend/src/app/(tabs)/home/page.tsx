@@ -7,8 +7,9 @@ import { useRouter } from "next/navigation";
 import { PillButton } from "@/components/ui/pill-button";
 import { PouchBoard } from "@/features/pouch";
 import { displayName, useSession } from "@/features/session";
-import { videoThumb, VIDEOS } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+import { videoThumb } from "@/features/video";
+import { useQuery } from "@/lib/hooks/use-query";
+import { VIDEOS } from "@/mocks/mock-data";
 
 const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 const MONTHS = [

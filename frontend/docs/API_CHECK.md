@@ -1,6 +1,6 @@
 # 화면별 API 대조
 
-화면마다 서버에 필요한 데이터·동작을 API 명세 v2(`docs/references/api-spec.md`)와 BE 구현에 맞춰 본 결과다. 지금 화면은 API 대신 `lib/mock-data.ts`, `lib/mock-guide.ts`, `features/session`(브라우저 저장), 타이머로 흉내 낸다.
+화면마다 서버에 필요한 데이터·동작을 API 명세 v2(`docs/references/api-spec.md`)와 BE 구현에 맞춰 본 결과다. 지금 화면은 API 대신 `mocks/mock-data.ts`, `mocks/mock-guide.ts`, `features/session`(브라우저 저장), 타이머로 흉내 낸다.
 
 - BE에 구현된 API는 회원(`users`)과 `GET /health`뿐이다. 회원 API는 Google 로그인(USERS-006·007)을 빼고 명세와 같다
 - 나머지 도메인(영상·분석·얼굴 등록·파우치·추천·실행·리포트)은 명세만 있고 구현이 없다

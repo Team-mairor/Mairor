@@ -1,6 +1,7 @@
-import { REF_PRODUCTS, type PouchItem, type RefProduct } from "@/lib/mock-data";
+import type { PouchItem } from "@/features/pouch";
 
 import type { RunState } from "./session-provider";
+import type { RefProduct } from "./types";
 
 export type MatchKind = "same" | "sub" | "none";
 
@@ -23,17 +24,16 @@ export function hasSame(ref: RefProduct, pouch: PouchItem[]) {
 }
 
 /**
- * 단계 i의 매칭 결과. 프로토타입 prodFor와 같은 규칙:
+ * 영상 속 제품 r의 매칭 결과. 프로토타입 prodFor와 같은 규칙:
  * 사용자가 고른 제품 > 보유 > 추천 대체(켜져 있을 때) > 없음
  * 파우치가 비어 있으면 모든 단계가 없음. emptyPouch는 ?empty=1 확인용 강제값
  */
 export function matchFor(
-  i: number,
+  r: RefProduct,
   run: Pick<RunState, "choice" | "subOn">,
   pouch: PouchItem[],
   emptyPouch = false,
 ): MatchResult {
-  const r = REF_PRODUCTS[i];
   const ch = run.choice[r.id];
   if (emptyPouch || pouch.length === 0 || ch?.kind === "none") return { kind: "none", p: null };
   if (ch?.kind === "pouch") {
@@ -54,16 +54,18 @@ export interface ReportStep {
 }
 
 export function snapshotSteps(
+  refs: RefProduct[],
   run: Pick<RunState, "choice" | "subOn">,
   pouch: PouchItem[],
 ): ReportStep[] {
-  return REF_PRODUCTS.map((_, i) => {
-    const m = matchFor(i, run, pouch);
+  return refs.map((r) => {
+    const m = matchFor(r, run, pouch);
     return { kind: m.kind, used: m.p ? { brand: m.p.brand, name: m.p.name } : null };
   });
 }
 
 export function matchCounts(
+  refs: RefProduct[],
   run: Pick<RunState, "choice" | "subOn">,
   pouch: PouchItem[],
   emptyPouch = false,
@@ -71,8 +73,8 @@ export function matchCounts(
   let same = 0;
   let sub = 0;
   let none = 0;
-  REF_PRODUCTS.forEach((_, i) => {
-    const k = matchFor(i, run, pouch, emptyPouch).kind;
+  refs.forEach((r) => {
+    const k = matchFor(r, run, pouch, emptyPouch).kind;
     if (k === "same") same++;
     else if (k === "sub") sub++;
     else none++;

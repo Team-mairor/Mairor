@@ -6,6 +6,8 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
 import { useSession } from "@/features/session";
+import { cn } from "@/lib/utils";
+
 import {
   NO_SHADE_CATS,
   POUCH_CATS,
@@ -13,9 +15,7 @@ import {
   SHADE_COLORS,
   type PouchCat,
   type PouchItem,
-} from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
-
+} from "./catalog";
 import { Illustration, typeOf } from "./illustration";
 
 /** 샘플 호수 목록 (API-POUCH-001: 브랜드·제품명으로 특정한 제품의 호수). */

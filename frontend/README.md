@@ -188,15 +188,19 @@ src/
 │  │     └─ tutorial/         # 10 튜토리얼
 │  ├─ done/                   # 11 완성
 │  └─ debug/                  # 확인 화면 (face·overlay·api·preview·tutorial, *.dev.tsx). 개발 도구가 켜졌을 때만 들어가고 앱 스타일 영향 없이 원래대로 보인다
-├─ components/                # 하단 탭 · 흐름 단계 · ui/ (버튼·입력·안내·모달)
-├─ features/session/          # 로그인·파우치·리포트·실행 상태 (브라우저 저장, 로그인 상태는 서버 기준)
-├─ features/pouch/            # 파우치 보드 · 제품 등록 시트 · 일러스트
-├─ features/auth/ · loading/ · live/ · my/ · tutorial/   # 화면별 조각
-├─ features/face/             # 카메라·얼굴 추적 ('use client')
-├─ features/overlay/          # 화장 레이어 합성 ('use client')
-├─ features/guide/            # 튜토리얼 가이드 ('use client')
-├─ lib/                       # mock-data(샘플 데이터) · validation · 공통 유틸
+├─ components/                # 여러 화면이 쓰는 조각: 하단 탭 · 흐름 단계 · ui/ (버튼·입력·안내·모달)
+├─ features/                  # 도메인 기능과 한 화면 전용 조각
+│  ├─ session/                # 로그인·파우치·리포트·실행 상태와 단계·제품·리포트 타입
+│  ├─ video/                  # 영상 모양 · 썸네일 주소 · 분석 단계 이름
+│  ├─ pouch/                  # 파우치 카테고리·종류 · 보드 · 제품 등록 시트 · 일러스트
+│  ├─ face/                   # 카메라·얼굴 추적·얼굴 등록 조건 ('use client')
+│  ├─ overlay/                # 화장 레이어 합성 ('use client')
+│  ├─ guide/                  # 튜토리얼 가이드 ('use client')
+│  ├─ live/                   # 카메라 화면 공통: 추적 상태 · 안내 문구 · 상태 훅 · 패널
+│  └─ auth/ · select/ · loading/ · check/ · tutorial/ · my/   # 화면 전용 조각
+├─ lib/                       # validation · 공통 유틸 · hooks/(여러 화면이 쓰는 훅. 파일 이름은 use-*.ts)
 │  └─ api/                    # BE API 클라이언트·모의 응답
+├─ mocks/                     # API 연동 전 샘플 데이터. 화면(app/)·layout·개발용 dev-nav만 가져온다
 scripts/
 ├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
 └─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
@@ -205,9 +209,12 @@ public/
 └─ images/                    # 로그인·온보딩 이미지, 샘플 얼굴
 ```
 
-- 얼굴 등록(로딩 화면 모달)은 실시간으로 조명(얼굴 가운데 밝기)·거리(얼굴 폭 비율과 가운데 위치)·정면(yaw·pitch·roll)·가림(핵심 부위와 얼굴 윤곽이 화면 안에 정면으로 보임)을 판정하고, 4개를 1.5초 유지하면 정면 1장을 찍는다. 찍는 순간 눈을 감았으면 버리고 다시 잰다. 표정은 판정하지 않고 안내 문구로만 요청한다. 기준값은 `features/loading/face-register.ts`에 있다. 밝기·좌우·기울기는 갤럭시탭 S6 Lite에서 재서 정했고, 거리·가운데·위아래는 원 표시 방식과 하프미러 보정이 정해지면 확정한다. 손 가림은 아직 판정하지 못하고, 사진은 업로드 API 전까지 메모리에만 둔다
+- 훅 위치: 기능과 상관없이 여러 화면이 쓰는 훅은 `lib/hooks/use-*.ts`에 둔다. 한 기능에 묶인 훅은 그 기능 폴더의 주제별 파일에 함께 둔다(예: `features/face/face-register.ts`의 `useFaceCheck`, `features/live/live-state.ts`의 `useLiveState`)
+- import 기준: 모든 `features/<이름>/`에 `index.ts`를 두고, 폴더 밖에서는 `@/features/<이름>`으로만 가져온다. 폴더 안에서는 `./파일`로 가져오고 자기 barrel은 쓰지 않는다. `lib`는 `features`를 가져오지 않는다. import 순서(패키지 / `@/` / 상대 경로, 묶음 안은 경로 알파벳순)는 eslint `import/order`가 검사하고 `npx eslint src --fix`로 맞춘다
+- 얼굴 등록(로딩 화면 모달)은 실시간으로 조명(얼굴 가운데 밝기)·거리(얼굴 폭 비율과 가운데 위치)·정면(yaw·pitch·roll)·가림(핵심 부위와 얼굴 윤곽이 화면 안에 정면으로 보임)을 판정하고, 4개를 1.5초 유지하면 정면 1장을 찍는다. 찍는 순간 눈을 감았으면 버리고 다시 잰다. 표정은 판정하지 않고 안내 문구로만 요청한다. 기준값은 `features/face/face-register.ts`에 있다. 밝기·좌우·기울기는 갤럭시탭 S6 Lite에서 재서 정했고, 거리·가운데·위아래는 원 표시 방식과 하프미러 보정이 정해지면 확정한다. 손 가림은 아직 판정하지 못하고, 사진은 업로드 API 전까지 메모리에만 둔다
 - 등록에 쓴 카메라는 미리보기에서 그대로 이어 쓴다. 등록 전에 '나중에'를 누르면 카메라를 끈다
-- 회원(로그인·가입·비밀번호 재설정·로그아웃)만 BE API를 쓰고, 나머지는 API 연동 전이라 데이터는 `lib/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `lib/mock-guide.ts`에서 만들고, 가이드 대상이 아닌 단계(스킨케어 등)는 뺀다. 단계 수가 영상마다 다르므로 화면은 이 목록 길이대로 돈다.
+- 회원(로그인·가입·비밀번호 재설정·로그아웃)만 BE API를 쓰고, 나머지는 API 연동 전이라 데이터는 `mocks/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `mocks/mock-guide.ts`에서 만들고, 가이드 대상이 아닌 단계(스킨케어 등)는 뺀다. 단계 수가 영상마다 다르므로 화면은 이 목록 길이대로 돈다.
+- 샘플은 화면(app/)과 layout에서만 가져와 features에 props·인자로 넘긴다(파우치·리포트 기본값은 `SessionProvider`의 `seed`, 영상 상태는 `VideoPicker`의 `stateOf`, 영상 속 제품은 `matchFor` 등의 인자). 그래서 mocks를 지우면 화면·layout과 개발용 `dev-nav`만 깨지고 features·lib는 그대로다. API가 붙으면 그 자리에 응답을 넣는다.
 - 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`, `/my/pouch?demo=shade-fail`
 
 ## MediaPipe 파일

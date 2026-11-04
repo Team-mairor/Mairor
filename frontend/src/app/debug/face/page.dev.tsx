@@ -5,34 +5,35 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   applyLandmarkerParams,
-  DEFAULT_SMOOTHING as SMOOTHING,
-  FaceTracker,
-  landmarkerInfo,
   coverTransform,
+  DEFAULT_SMOOTHING as SMOOTHING,
+  describeControls,
+  exposureRange,
+  FaceTracker,
   faceWidthRatio,
   formatTiming,
   isGuideVisible,
-  REGIONS,
+  landmarkerInfo,
+  listCameras,
+  lockControls,
+  openCamera,
   REGION_NAMES,
+  REGIONS,
+  RESOLUTIONS,
+  setExposureTime,
   toScreen,
   TRACKING_ISSUE_TEXT,
   trackingIssue,
-} from "@/features/face";
-import type { CloseUpMode, FaceFrame, RegionName, TrackerStats } from "@/features/face";
-
-import {
-  describeControls,
-  listCameras,
-  exposureRange,
-  lockControls,
-  openCamera,
-  setExposureTime,
   unlockControls,
-  type ControlName,
-  type Range,
-  RESOLUTIONS,
+  type CloseUpMode,
   type ControlInfo,
-} from "@/features/face/camera";
+  type ControlName,
+  type ControlRange as Range,
+  type FaceFrame,
+  type RegionName,
+  type TrackerStats,
+} from "@/features/face";
+
 import { ColorProbe, type ColorStats } from "./color-probe";
 
 const REGION_COLORS: Record<RegionName, string> = {

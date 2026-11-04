@@ -1,0 +1,79 @@
+// 단계·제품·리포트를 화면끼리 주고받는 모양. API가 붙으면 lib/api/types와 맞춘다
+import type { Makeup } from "@/features/guide";
+import type { PouchCat } from "@/features/pouch";
+
+import type { ReportStep } from "./matching";
+
+/** 영상 속 제품 인식 상태. 확정 제품은 라벨 없음 */
+export type RefState = "guess" | "desc" | "unreg";
+
+export interface RefProduct {
+  id: string;
+  /** 단계 부위 이름 (파운데이션·크림 블러셔·…) */
+  cat: string;
+  /** 대체 후보를 찾을 파우치 카테고리 (API의 matchCategory) */
+  matchCat: PouchCat;
+  brand: string;
+  name: string;
+  color: string;
+  /** 호수·컬러명. 영상에서 확인하지 못했으면 null */
+  shade: string | null;
+  /** 샘플: 내 파우치에 같은 제품이 있는지 */
+  have: boolean;
+  /** 영상 구간 */
+  time: string;
+  /** 샘플: 색이 가까운 대체 제품 */
+  sub?: { brand: string; name: string; color: string } | null;
+  refState?: RefState;
+}
+
+export const REF_STATE_LABEL: Record<RefState, string> = {
+  guess: "추정",
+  desc: "설명란에만 있음",
+  unreg: "이름만 확인",
+};
+
+/** 단계 안의 동작 하나와 그 팁·주의 */
+export interface GuideAction {
+  text: string;
+  tip: { kind: "tip" | "caution"; text: string } | null;
+}
+
+export interface GuideStepInfo {
+  /** 원본 가이드의 단계 ID. 얼굴 위 가이드 영역도 이 ID로 찾는다 */
+  stepId: string;
+  makeup: Makeup;
+  en: string;
+  short: string;
+  title: string;
+  /** 동작과 그 동작의 팁·주의 */
+  acts: GuideAction[];
+  /** 끝내는 기준. 영상에서 확인하지 못했으면 null */
+  doneWhen: string | null;
+  guide: string;
+  area: string;
+  /** 프로토타입 가이드 영역 (x, y, w, h · 얼굴 기준 %) */
+  a: [number, number, number, number];
+  /** 레퍼런스 진하기 위치 (0~100) */
+  target: number;
+}
+
+export interface ReportSummary {
+  id: string;
+  title: string;
+  date: string;
+  steps: number;
+  /** 대체 제품 수 */
+  subs: number;
+  isNew?: boolean;
+  /** 사진 없이 완료 (단계 사진 저장 안 함) */
+  noPhoto?: boolean;
+  /** 마지막 단계 사진이 있어 최종 사진으로 쓸 수 있음. 샘플은 없으면 있음으로 본다 */
+  finalPhoto?: boolean;
+  /** 사진을 저장한 단계 번호. 샘플은 없으면 전부 있음으로 본다 */
+  captures?: number[];
+  /** 출처 영상 id (VideoItem.id) */
+  videoId?: string;
+  /** 저장 당시 단계별 확정 제품. 샘플은 없으면 현재 파우치로 매칭한다 */
+  items?: ReportStep[];
+}

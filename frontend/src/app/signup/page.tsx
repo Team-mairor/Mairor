@@ -9,7 +9,6 @@ import { FieldError, Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
-import { mmss, useCountdown } from "@/features/auth/use-countdown";
 import {
   api,
   ApiError,
@@ -21,7 +20,8 @@ import {
   type SignUpRequest,
   type User,
 } from "@/lib/api";
-import { useRequest } from "@/lib/use-request";
+import { mmss, useCountdown } from "@/lib/hooks/use-countdown";
+import { useRequest } from "@/lib/hooks/use-request";
 import { cn } from "@/lib/utils";
 import {
   AGREEMENT_VERSION,

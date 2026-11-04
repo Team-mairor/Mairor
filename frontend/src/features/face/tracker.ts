@@ -15,8 +15,8 @@ import {
 } from "./geometry";
 import { createFaceDetector, createFaceLandmarker } from "./landmarker";
 import { REGION_NAMES } from "./regions";
-import { DEFAULT_MAX_YAW, KEY_REGIONS, MIN_KEY_REGIONS_IN_VIEW } from "./tracking-rules";
 import { LandmarkSmoother, type SmoothingOptions } from "./smoothing";
+import { DEFAULT_MAX_YAW, KEY_REGIONS, MIN_KEY_REGIONS_IN_VIEW } from "./tracking-rules";
 import type {
   FaceFrame,
   NormalizedRect,

@@ -1,4 +1,4 @@
-import { ILL_SIZE, POUCH_TYPES, type PouchCat, type PouchItem } from "@/lib/mock-data";
+import { ILL_SIZE, POUCH_TYPES, type PouchCat, type PouchItem } from "./catalog";
 
 /** 선화+채움 두 장으로 된 옛 일러스트. 채움을 제품 색으로 물들인다 */
 const TINTED = new Set(["lip", "compact", "jar", "spray", "pencil", "brush"]);

@@ -1,32 +1,27 @@
 "use client";
 
-import { Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
-import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
-import { useCamera, useHiddenVideo } from "@/features/face";
-import { facePhoto } from "@/features/loading/face-register";
-import { FaceRegisterModal, ProgressBar } from "@/features/loading/face-register-modal";
-import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
+import { facePhoto, useCamera, useHiddenVideo } from "@/features/face";
+import {
+  AnalysisProgress,
+  FaceRegisterModal,
+  FoundProducts,
+  PouchCheckModal,
+  ReadyStatus,
+  ScanPreview,
+} from "@/features/loading";
+import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
 import { hasSame, useSession } from "@/features/session";
-import { ANALYSIS_PHASES, REF_PRODUCTS, VIDEOS, videoThumb } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
-import { cn } from "@/lib/utils";
+import { ANALYSIS_PHASES } from "@/features/video";
+import { useQuery } from "@/lib/hooks/use-query";
+import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
 const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composing"];
-const TAG_POS: [number, number][] = [
-  [50, 60],
-  [34, 45],
-  [30, 28],
-  [66, 28],
-  [20, 62],
-  [66, 50],
-  [50, 80],
-];
 
 /** i번째 제품을 찾았다고 보여 줄 진행률. 단계 수와 상관없이 6~90% 사이에 고르게 나눈다 */
 const foundAt = (i: number) => 6 + (i * 84) / REF_PRODUCTS.length;
@@ -229,105 +224,32 @@ export default function LoadingPage() {
       <div className="flex min-h-0 flex-1 flex-col justify-between gap-6 overflow-hidden px-10 pt-7 pb-8">
         <FlowSteps step={1} ready={replay} />
 
-        {/* 영상 썸네일 위 스캔 연출. 사진 위라 미러필름 모드에서도 흰 선·점은 흰색 그대로 둔다(data-dark) */}
-        <div
-          data-dark
-          className="relative aspect-video w-full shrink-0 overflow-hidden rounded-3xl bg-ink"
-        >
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${videoThumb(picked.ytid)})` }}
-          />
-          <div className="absolute inset-0 bg-night/20" />
-          <div className="absolute inset-7">
-            <span className="absolute top-0 left-0 size-[34px] rounded-tl-[10px] border-t-2 border-l-2 border-white" />
-            <span className="absolute top-0 right-0 size-[34px] rounded-tr-[10px] border-t-2 border-r-2 border-white" />
-            <span className="absolute bottom-0 left-0 size-[34px] rounded-bl-[10px] border-b-2 border-l-2 border-white" />
-            <span className="absolute right-0 bottom-0 size-[34px] rounded-br-[10px] border-r-2 border-b-2 border-white" />
-          </div>
-          {running && (
-            <div
-              data-dark
-              className="absolute inset-x-7 h-[1.5px] bg-white shadow-[0_0_16px_3px_rgba(255,255,255,.55)]"
-              style={{ top: `${10 + ((pct * 9) % 100) * 0.8}%` }}
-            />
-          )}
-          {/* 자리가 TAG_POS만큼이라, 단계가 많으면 가장 최근에 찾은 것만 남겨 겹치지 않게 한다 */}
-          {rows.map((r, i) =>
-            r.found && i >= foundCount - TAG_POS.length ? (
-              <div
-                key={r.id}
-                className="absolute flex items-center gap-2"
-                style={{
-                  left: `${TAG_POS[i % TAG_POS.length][0]}%`,
-                  top: `${TAG_POS[i % TAG_POS.length][1]}%`,
-                  animation: "mr-fade 600ms cubic-bezier(.34,1.56,.64,1) both",
-                }}
-              >
-                <span
-                  data-dark
-                  className="size-2.5 rounded-full bg-white"
-                  style={{ animation: "mr-pulse 1.6s ease-out infinite" }}
-                />
-                <span className="rounded-full bg-white/90 px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap text-ink">
-                  {r.cat}
-                </span>
-              </div>
-            ) : null,
-          )}
-          <span className="absolute bottom-[18px] left-5 rounded-full bg-white px-3 py-[7px] font-label text-[11px] font-semibold tracking-[.14em] text-ink">
-            {fail
+        <ScanPreview
+          ytid={picked.ytid}
+          title={picked.title}
+          status={
+            fail
               ? `STOPPED · ${scanTime}`
               : done
                 ? review
                   ? "IN REVIEW"
                   : "ANALYSIS COMPLETE"
-                : `SCANNING · ${scanTime}`}
-          </span>
-          <span className="absolute right-5 bottom-[18px] max-w-[55%] truncate text-[13px] font-semibold text-white">
-            {picked.title}
-          </span>
-        </div>
+                : `SCANNING · ${scanTime}`
+          }
+          running={running}
+          pct={pct}
+          rows={rows}
+          foundCount={foundCount}
+        />
 
-        <div className="flex shrink-0 flex-col gap-3.5">
-          <div className="flex items-end justify-between gap-5">
-            <span className="font-serif text-[120px] leading-[.8] tracking-[-.03em] text-ink tabular">
-              {pct}
-              <span className="text-[44px] text-navy">%</span>
-            </span>
-            <span className="flex flex-col items-end gap-1.5 pb-1">
-              <span className="font-serif text-[32px] leading-none text-navy italic">
-                {phaseEn}
-              </span>
-              <span className="text-[17px] whitespace-nowrap text-mute">
-                {phaseLabel} · {eta}
-              </span>
-            </span>
-          </div>
-          <div className="relative h-0.5 bg-line">
-            <div
-              className="absolute top-0 left-0 h-0.5 bg-ink transition-[width] duration-600 ease-linear"
-              style={{ width: `${pct}%` }}
-            />
-            <div
-              className="absolute -top-1 -ml-[5px] size-2.5 rounded-full bg-cyan transition-[left] duration-600 ease-linear"
-              style={{ left: `${pct}%` }}
-            />
-          </div>
-          <div className="grid grid-cols-6 gap-2">
-            {ANALYSIS_PHASES.map(([en], i) => (
-              <span
-                key={en}
-                className={cn(
-                  "font-label text-[15px] font-semibold tracking-[.12em] transition-colors",
-                  fail && i === phaseIdx ? "text-error" : i <= phaseIdx ? "text-ink" : "text-mute",
-                )}
-              >
-                {en}
-              </span>
-            ))}
-          </div>
-        </div>
+        <AnalysisProgress
+          pct={pct}
+          phaseIdx={phaseIdx}
+          phaseEn={phaseEn}
+          phaseLabel={phaseLabel}
+          eta={eta}
+          failed={!!fail}
+        />
 
         {notice ? (
           <div className="flex shrink-0 flex-col gap-3 rounded-3xl bg-cream px-7 py-6">
@@ -340,95 +262,22 @@ export default function LoadingPage() {
             <span className="text-[18px] leading-[1.5] text-pretty text-mute">{notice.sub}</span>
           </div>
         ) : (
-          <div className="flex shrink-0 flex-col gap-3">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="flex min-w-0 items-baseline gap-2.5">
-                <span className="font-serif text-[32px] leading-none whitespace-nowrap text-ink italic">
-                  Found in video
-                </span>
-                <span className="truncate text-[19px] text-mute">
-                  없는 제품은 탭해서 파우치에 추가
-                </span>
-              </span>
-              <span className="text-[19px] whitespace-nowrap text-mute tabular">
-                {foundCount} / {REF_PRODUCTS.length} · 파우치 {haveCount}
-              </span>
-            </div>
-            {/* 단계 수는 영상마다 달라, 두 줄을 넘으면 이 안에서 넘겨 본다 */}
-            <div className="grid max-h-[168px] grid-cols-4 gap-2 overflow-y-auto">
-              {rows.map((r) =>
-                r.found ? (
-                  <button
-                    key={r.id}
-                    type="button"
-                    disabled={r.have}
-                    onClick={() => setForm(emptyDraft({ brand: "", name: "" }))}
-                    className={cn(
-                      "flex h-20 items-center gap-3 rounded-[20px] border px-4 text-left transition-colors",
-                      r.have ? "border-navy bg-navy" : "border-line bg-white",
-                    )}
-                    style={{ animation: "mr-fade 600ms cubic-bezier(.34,1.56,.64,1) both" }}
-                  >
-                    <span
-                      className="size-[34px] shrink-0 rounded-full border-2 border-white ring-1 ring-line"
-                      style={{ background: r.color }}
-                    />
-                    <span className="flex min-w-0 flex-col gap-0.5 overflow-hidden">
-                      <span
-                        className={cn(
-                          "truncate text-[21px] font-semibold",
-                          r.have ? "text-white" : "text-mute",
-                        )}
-                      >
-                        {r.cat}
-                      </span>
-                      <span
-                        className={cn("truncate text-[18px]", r.have ? "text-blush" : "text-mute")}
-                      >
-                        {r.have ? "보유" : "없음 · 추가"}
-                      </span>
-                    </span>
-                  </button>
-                ) : (
-                  <div
-                    key={r.id}
-                    className="flex h-20 items-center gap-3 rounded-[20px] border border-dashed border-line-3 px-4 text-[19px] text-mute"
-                  >
-                    <span className="size-[34px] shrink-0 rounded-full bg-cream" />
-                    {r.next ? "찾는 중…" : "대기"}
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
+          <FoundProducts
+            rows={rows}
+            foundCount={foundCount}
+            haveCount={haveCount}
+            onAdd={() => setForm(emptyDraft({ brand: "", name: "" }))}
+          />
         )}
       </div>
 
       <div className="flex shrink-0 flex-col gap-4 border-t border-line px-10 pt-5 pb-7">
-        <div className="grid grid-cols-2 gap-3">
-          {(
-            [
-              ["가이드 준비", guideState, guideOk],
-              ["얼굴 인식 준비", faceOk ? "완료" : faceModal ? "등록 중" : "등록 필요", faceOk],
-            ] as [string, string, boolean][]
-          ).map(([label, st, ok]) => (
-            <div
-              key={label}
-              className="flex h-[68px] min-w-0 items-center gap-3 rounded-[20px] border border-line px-5"
-            >
-              <span className={cn("size-3 shrink-0 rounded-full", ok ? "bg-cyan" : "bg-line-3")} />
-              <span className="text-[21px] font-semibold whitespace-nowrap text-ink">{label}</span>
-              <span
-                className={cn(
-                  "ml-auto text-[20px] font-semibold whitespace-nowrap tabular",
-                  ok ? "text-navy" : "text-mute",
-                )}
-              >
-                {st}
-              </span>
-            </div>
-          ))}
-        </div>
+        <ReadyStatus
+          items={[
+            ["가이드 준비", guideState, guideOk],
+            ["얼굴 인식 준비", faceOk ? "완료" : faceModal ? "등록 중" : "등록 필요", faceOk],
+          ]}
+        />
         {fail ? (
           <div className="flex gap-3">
             {notice?.retry && (
@@ -477,62 +326,16 @@ export default function LoadingPage() {
         />
       )}
 
-      <Modal
+      <PouchCheckModal
         open={pouchModal}
-        label="내 파우치 확인"
-        overlayClassName="z-[4] p-8"
-        className="flex max-w-none flex-col overflow-hidden rounded-[32px] p-0"
-      >
-        <ProgressBar pct={pct} text={barText} />
-        <div className="flex animate-step-in flex-col gap-[22px] px-8 pt-7 pb-8">
-          <div className="flex w-full items-center justify-between gap-3">
-            <span className="flex items-center gap-2.5 text-[16px] font-bold text-navy">
-              <span className="flex gap-1.5">
-                <span className="h-1.5 w-[22px] rounded-full bg-blush" />
-                <span className="h-1.5 w-[22px] rounded-full bg-cyan" />
-              </span>
-              STEP 2 · 내 파우치
-            </span>
-            <button
-              type="button"
-              onClick={closePouch}
-              className="ml-auto flex h-14 items-center gap-3 text-[24px] font-bold whitespace-nowrap text-ink"
-            >
-              {newIds.length ? "다 했어요" : "변경 없어요"}
-              <span className="flex size-11 items-center justify-center rounded-full bg-ink text-white">
-                <X className="size-5" strokeWidth={3} aria-hidden />
-              </span>
-            </button>
-          </div>
-          <div className="flex flex-col gap-2">
-            <span className="font-display text-[30px] leading-[1.3] text-ink">
-              기다리는 동안
-              <br />내 파우치를 확인해 볼까요?
-            </span>
-            <span className="text-[19px] leading-[1.5] text-mute">
-              최근에 산 제품이 있다면 지금 등록해 두세요. 분석 결과에 바로 반영돼요.
-            </span>
-          </div>
-          <PouchBoard
-            items={state.pouch}
-            scale={0.6}
-            className="h-[440px] shrink-0"
-            onEdit={(p) => setForm({ ...p })}
-          >
-            <div className="absolute top-5 left-[22px] z-[6]">
-              <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
-                <span className="font-serif text-[32px] leading-none text-ink italic">
-                  My pouch
-                </span>
-                <span className="text-[16px] text-mute">{state.pouch.length}개 · 탭해서 수정</span>
-              </span>
-            </div>
-          </PouchBoard>
-          <PillButton size="hero" onClick={() => setForm(emptyDraft())}>
-            <Plus className="size-[22px]" strokeWidth={2.6} aria-hidden />새 제품 등록하기
-          </PillButton>
-        </div>
-      </Modal>
+        pct={pct}
+        barText={barText}
+        pouch={state.pouch}
+        changed={newIds.length > 0}
+        onClose={closePouch}
+        onEdit={(p) => setForm({ ...p })}
+        onAdd={() => setForm(emptyDraft())}
+      />
 
       {form && (
         <ProductSheet

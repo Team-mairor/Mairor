@@ -4,19 +4,19 @@ import { Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { PillButton } from "@/components/ui/pill-button";
 import {
   GlassPanel,
   LiveNote,
   LiveTag,
-  RoundBack,
   parseAlert,
+  RoundBack,
   useLiveState,
-} from "@/features/live/live-chrome";
-import { PillButton } from "@/components/ui/pill-button";
+} from "@/features/live";
 import { MakeupOverlay } from "@/features/overlay";
-import { REF_PRODUCTS, TRY_STEPS } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
+import { REF_PRODUCTS, TRY_STEPS } from "@/mocks/mock-data";
 
 // 레시피 연동 전까지는 ?layers=경로 로 레이어 파일을 바꿔 본다.
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";

@@ -2,12 +2,13 @@
 
 import { Camera, Home } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { snapshotSteps, useSession } from "@/features/session";
-import { GUIDE_STEPS, VIDEOS, type ReportSummary } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+import { snapshotSteps, useSession, type ReportSummary } from "@/features/session";
+import { useQuery } from "@/lib/hooks/use-query";
+import { useTimeout } from "@/lib/hooks/use-timeout";
+import { GUIDE_STEPS, VIDEOS, REF_PRODUCTS } from "@/mocks/mock-data";
 
 type Save = "saving" | "saved" | "fail";
 
@@ -31,7 +32,7 @@ export default function DonePage() {
   const reportId = run.id ? `rp-${run.id}` : fallbackId;
 
   const [save, setSave] = useState<Save>("saving");
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timer = useTimeout();
 
   // 저장 성공 시점에 기록을 만든다 (upsert). 리포트 보기 버튼은 이동만 한다
   // 타이머가 끝날 때의 최신 실행 상태(prev.run)로 기록한다. 렌더 시점 값을 붙잡지 않게
@@ -41,7 +42,7 @@ export default function DonePage() {
       const r = prev.run;
       const id = r.id ? `rp-${r.id}` : fallbackId;
       const video = r.picked ?? VIDEOS[0];
-      const items = snapshotSteps(r, prev.pouch);
+      const items = snapshotSteps(REF_PRODUCTS, r, prev.pouch);
       const report: ReportSummary = {
         id,
         title: video.title,
@@ -62,8 +63,7 @@ export default function DonePage() {
   // 서버 저장을 흉내 낸다. 처음 한 번은 주소의 ?fail 로 실패를 만들 수 있다
   const runSave = (fail: boolean) => {
     setSave("saving");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
+    timer.set(() => {
       if (!fail) commit();
       setSave(fail ? "fail" : "saved");
     }, 1200);
@@ -72,11 +72,11 @@ export default function DonePage() {
     if (!query) return;
     // 진입 때 한 번만 저장한다. 상태는 초기값이 saving이라 타이머만 건다
     const fail = query.get("fail") === "1";
-    timer.current = setTimeout(() => {
+    timer.set(() => {
       if (!fail) commit();
       setSave(fail ? "fail" : "saved");
     }, 1200);
-    return () => void (timer.current && clearTimeout(timer.current));
+    return timer.clear;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 진입 때 한 번만 저장한다
   }, [query]);
 

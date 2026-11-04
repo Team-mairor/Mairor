@@ -3,6 +3,7 @@
 // 단계 수·종류는 영상마다 다르고, 화면은 이 목록 길이와 순서대로 돈다.
 // ponytail: API 클라이언트가 붙으면 API-ANALYSIS-001 응답(Guide.steps)으로 바꾼다.
 import type { Makeup } from "@/features/guide";
+import type { GuideAction } from "@/features/session";
 
 export interface MockGuideStep {
   stepId: string;
@@ -14,7 +15,7 @@ export interface MockGuideStep {
   /** 한국어 부위 이름 */
   part: string;
   /** 화면에 보여 줄 동작. 제품 이름은 따로 보여 주므로 넣지 않는다 */
-  actions: { text: string; tip: { kind: "tip" | "caution"; text: string } | null }[];
+  actions: GuideAction[];
   /** 끝내는 기준 */
   doneWhen: string | null;
   product: { brand: string | null; name: string | null; shade: string | null } | null;

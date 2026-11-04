@@ -4,17 +4,17 @@ import { ChevronRight, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { MyHeader } from "@/features/my/my-header";
+import { MyHeader } from "@/features/my";
 import {
   emptyDraft,
-  PouchOpenFx,
+  POUCH_CATS,
   PouchBoard,
+  PouchOpenFx,
   ProductSheet,
   type ProductDraft,
 } from "@/features/pouch";
 import { useSession } from "@/features/session";
-import { POUCH_CATS } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
 
 /** 마이페이지 · 내 파우치 (POUCH-004). ?add=1 로 등록 시트, ?edit=<id> 로 수정 시트를 바로 연다 */

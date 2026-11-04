@@ -1,8 +1,7 @@
 // 부위 점 번호는 AI(Python)와 같이 쓰도록 shared/face-mesh/regions.v1.json에 둔다.
 // 픽스처 생성 스크립트도 Node에서 바로 읽으므로 JSON은 import 속성을 붙여 가져온다.
-import shared from "../../../../shared/face-mesh/regions.v1.json" with { type: "json" };
-
 import type { RegionName } from "./types";
+import shared from "../../../../shared/face-mesh/regions.v1.json" with { type: "json" };
 
 export const RIGHT_IRIS_CENTER = 468;
 export const LEFT_IRIS_CENTER = 473;

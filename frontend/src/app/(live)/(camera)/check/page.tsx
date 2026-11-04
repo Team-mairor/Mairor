@@ -1,58 +1,40 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, Check, Contrast, List, Plus, Smile } from "lucide-react";
+import { ArrowRight, Contrast, List, Plus, Smile } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { Modal } from "@/components/ui/modal";
-import { useHiddenVideo } from "@/features/face";
 import {
-  GlassPanel,
-  LiveNote,
-  LiveTag,
-  RoundBack,
-  useLiveState,
-} from "@/features/live/live-chrome";
+  GROUPS,
+  similarity,
+  SwapPanel,
+  TAG_BG,
+  Toast,
+  PouchModal,
+  StartModal,
+} from "@/features/check";
+import { useHiddenVideo } from "@/features/face";
+import { GlassPanel, LiveNote, LiveTag, RoundBack, useLiveState } from "@/features/live";
 import { MakeupOverlay } from "@/features/overlay";
-import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
+import { emptyDraft, ProductSheet, type PouchItem, type ProductDraft } from "@/features/pouch";
 import {
   hasSame,
   matchCounts,
   matchFor,
+  REF_STATE_LABEL,
   sameName,
   useSession,
   type Choice,
   type MatchKind,
-} from "@/features/session";
-import {
-  REF_PRODUCTS,
-  REF_STATE_LABEL,
-  TRY_STEPS,
-  type PouchItem,
   type RefProduct,
-} from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+} from "@/features/session";
+import { useQuery } from "@/lib/hooks/use-query";
+import { useTimeout } from "@/lib/hooks/use-timeout";
 import { cn } from "@/lib/utils";
+import { REF_PRODUCTS, TRY_STEPS } from "@/mocks/mock-data";
 
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
-
-const GROUPS: { k: MatchKind; label: string; dot: string }[] = [
-  { k: "same", label: "보유", dot: "var(--color-sky)" },
-  { k: "sub", label: "대체", dot: "var(--color-mint)" },
-  { k: "none", label: "없음", dot: "var(--color-blush)" },
-];
-const TAG_BG: Record<MatchKind, string> = { same: "bg-sky", sub: "bg-mint", none: "bg-blush" };
-
-function hex(c: string) {
-  return [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16));
-}
-/** 색 거리 기반 유사도 (정렬용·화면 미노출) */
-function similarity(a: string, b: string) {
-  const x = hex(a);
-  const y = hex(b);
-  return 100 - Math.sqrt(x.reduce((t, v, i) => t + (v - y[i]) ** 2, 0)) / 4.4;
-}
 
 /**
  * 08 제품 체크 ↔ 입혀보며 고르기 (GUIDE-001 · GUIDE-004 · RECOMMEND-001/002).
@@ -82,16 +64,15 @@ export default function CheckPage() {
   const [form, setForm] = useState<ProductDraft | null>(null);
   const [skipAsk, setSkipAsk] = useState(false);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
-  const toastT = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastT = useTimeout();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 보기를 한 번 반영한다
     if (query?.get("view") === "try") setView("try");
   }, [query]);
-  useEffect(() => () => void (toastT.current && clearTimeout(toastT.current)), []);
 
-  const m = (i: number) => matchFor(i, run, pouch, emptyPouch);
-  const counts = matchCounts(run, pouch, emptyPouch);
+  const m = (i: number) => matchFor(REF_PRODUCTS[i], run, pouch, emptyPouch);
+  const counts = matchCounts(REF_PRODUCTS, run, pouch, emptyPouch);
   const activeGroup = group ?? (counts.none ? "none" : counts.sub ? "sub" : "same");
   const items = REF_PRODUCTS.map((r, i) => ({ r, i, pr: m(i) }));
   const shown = items.filter((x) => x.pr.kind === activeGroup);
@@ -154,8 +135,7 @@ export default function CheckPage() {
   };
   const showToast = (ok: boolean, text: string) => {
     setToast({ ok, text });
-    if (toastT.current) clearTimeout(toastT.current);
-    toastT.current = setTimeout(() => setToast(null), 2800);
+    toastT.set(() => setToast(null), 2800);
   };
   // matchFor와 같은 기준(이름이 같을 때만 보유)으로 판단해야 안내와 목록이 어긋나지 않는다
   const onSaved = (item: PouchItem, isNew: boolean) => {
@@ -660,294 +640,27 @@ export default function CheckPage() {
         </GlassPanel>
       )}
 
-      {/* 파우치 확인 모달 */}
-      <Modal
+      <PouchModal
         open={pouchModal}
-        label="내 파우치"
-        overlayClassName="z-[8] p-8"
-        className="flex max-w-none flex-col gap-[22px] p-8 text-ink"
-      >
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2.5 rounded-full bg-cream px-[18px] py-2.5 text-[17px] font-semibold">
-            <span className="size-2 rounded-full bg-cyan" />내 파우치 · {pouch.length}개
-          </span>
-          <button
-            type="button"
-            onClick={() => setPouchModal(false)}
-            aria-label="닫기"
-            className="flex size-11 items-center justify-center rounded-full border border-line"
-          >
-            <ArrowLeft className="size-[18px]" strokeWidth={1.8} aria-hidden />
-          </button>
-        </div>
-        <div className="flex flex-col gap-2">
-          <span className="font-display text-[30px] leading-[1.3]">
-            시작하기 전에
-            <br />내 파우치를 확인해 볼까요?
-          </span>
-          <span className="text-[19px] leading-[1.5] text-mute">
-            최근에 산 제품이 있다면 지금 등록해 두세요. 매칭에 바로 반영돼요.
-          </span>
-        </div>
-        <PouchBoard
-          items={pouch}
-          scale={0.6}
-          className="h-[440px] shrink-0"
-          onEdit={(p) => setForm({ ...p })}
-        >
-          <div className="absolute top-5 left-[22px] z-[2]">
-            <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
-              <span className="font-serif text-[32px] leading-none italic">My pouch</span>
-              <span className="text-[16px] text-mute">{pouch.length}개 · 탭해서 수정</span>
-            </span>
-          </div>
-        </PouchBoard>
-        <div className="flex gap-2.5">
-          <PillButton variant="line" size="hero" onClick={() => setForm(emptyDraft())}>
-            <Plus className="size-[18px]" strokeWidth={2} aria-hidden />새 제품 등록
-          </PillButton>
-          <PillButton
-            size="hero"
-            trailing
-            onClick={() => setPouchModal(false)}
-            className="ml-auto min-w-[300px]"
-          >
-            다 했어요
-          </PillButton>
-        </div>
-      </Modal>
+        pouch={pouch}
+        onEdit={(p) => setForm({ ...p })}
+        onAdd={() => setForm(emptyDraft())}
+        onClose={() => setPouchModal(false)}
+      />
 
-      {/* 시작 확인 */}
-      <Modal
+      <StartModal
         open={skipAsk}
+        missing={noneRows.map(({ r }) => r)}
+        onRecheck={() => {
+          setSkipAsk(false);
+          setGroup("none");
+          setView("list");
+        }}
+        onStart={startTutorial}
         onClose={() => setSkipAsk(false)}
-        className="flex max-w-none flex-col gap-7 rounded-[32px] px-9 pt-10 pb-8 text-ink"
-      >
-        <div className="flex flex-col gap-3">
-          <h2 className="font-display text-[36px] leading-[1.25]">
-            {noneRows.length ? `없는 제품 ${noneRows.length}개는` : "이대로"}
-            <br />
-            {noneRows.length ? "건너뛰고 시작할까요?" : "시작할까요?"}
-          </h2>
-          <p className="text-[20px] leading-[1.5] text-mute">
-            {noneRows.length ? "이 단계들은 설명만 보여 드리고 넘어가요. " : ""}시작하면 제품을 바꿀
-            수 없어요.
-          </p>
-        </div>
-        {noneRows.length > 0 && (
-          <div className="flex flex-col gap-2.5">
-            {noneRows.map(({ r }) => (
-              <div
-                key={r.id}
-                className="flex items-center gap-4 rounded-[22px] border-2 border-dashed border-ash px-5 py-4"
-              >
-                <span className="size-12 shrink-0 rounded-full" style={{ background: r.color }} />
-                <span className="min-w-0 flex-1 truncate text-[22px] font-bold">
-                  {r.brand} {r.name}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="flex gap-3">
-          <PillButton
-            variant="line"
-            size="hero"
-            onClick={() => {
-              setSkipAsk(false);
-              setGroup("none");
-              setView("list");
-            }}
-          >
-            다시 확인
-          </PillButton>
-          <PillButton
-            size="hero"
-            trailing
-            onClick={startTutorial}
-            className="ml-auto min-w-[300px]"
-          >
-            {noneRows.length ? "건너뛰고 시작" : "시작하기"}
-          </PillButton>
-        </div>
-      </Modal>
+      />
 
       {form && <ProductSheet draft={form} onClose={() => setForm(null)} onSaved={onSaved} />}
     </main>
-  );
-}
-
-function Toast({ toast }: { toast: { ok: boolean; text: string } }) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        "absolute top-0 left-5 flex h-[60px] max-w-[calc(100%-40px)] -translate-y-[calc(100%+12px)] animate-fade items-center gap-3 rounded-full py-0 pr-5 pl-2.5 shadow-float",
-        toast.ok ? "bg-ink text-white" : "bg-white/92 text-ink",
-      )}
-    >
-      <span
-        className={cn(
-          "flex size-10 shrink-0 items-center justify-center rounded-full text-ink",
-          toast.ok ? "bg-sky" : "bg-ash",
-        )}
-      >
-        <Check className="size-[18px]" strokeWidth={2.6} aria-hidden />
-      </span>
-      <span className="truncate text-[15px] font-bold">{toast.text}</span>
-    </div>
-  );
-}
-
-/** 바꾸기 패널: 같은 카테고리 파우치 제품, 색이 가까운 상위 3개에 추천 표시 */
-/** 색 계열 분류 (바꾸기 패널 톤 필터) */
-function toneOf(c: string) {
-  const [r, g, b] = hex(c);
-  return r - b > 70 && g < r * 0.62
-    ? "코랄·레드"
-    : r - g < 45
-      ? "로즈"
-      : (r + g + b) / 3 > 190
-        ? "누드"
-        : "브라운";
-}
-
-function SwapPanel({
-  r,
-  cur,
-  list,
-  onPick,
-  onClose,
-}: {
-  r: RefProduct;
-  cur: { kind: MatchKind; p: { brand: string; name: string } | null };
-  list: PouchItem[];
-  onPick: (choice: Choice) => void;
-  onClose: () => void;
-}) {
-  const curId = (cur.p as PouchItem | null)?.id;
-  const [tone, setTone] = useState("전체");
-  const tones = ["전체", ...new Set(list.map((p) => toneOf(p.color ?? "#FFFFFF")))];
-  const shown = tone === "전체" ? list : list.filter((p) => toneOf(p.color ?? "#FFFFFF") === tone);
-  return (
-    <div className="absolute inset-0 z-[3] flex animate-slide-in flex-col gap-5 rounded-[36px] bg-night pt-[26px] pb-5">
-      <div className="flex items-center gap-4 px-8">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="닫기"
-          className="flex size-14 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/8 text-white hover:bg-white/15"
-        >
-          <ArrowLeft className="size-6" strokeWidth={2.2} aria-hidden />
-        </button>
-        <h2 className="font-display text-[38px] leading-[1.15] text-white">{r.cat} 바꾸기</h2>
-      </div>
-      <div className="mx-8 flex items-center gap-4 rounded-[20px] border border-white/10 bg-white/5 px-[18px] py-3.5">
-        <span
-          className="size-14 shrink-0 rounded-full border-[3px] border-white/30"
-          style={{ background: r.color }}
-        />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[17px] font-semibold text-line-2">영상 속 제품</span>
-          <span className="truncate text-[24px] font-bold text-white">
-            {r.brand} {r.name}
-          </span>
-        </span>
-        <span className="text-[17px] font-semibold whitespace-nowrap text-line-2">
-          비슷한 색 순
-        </span>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-8">
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="text-[22px] font-extrabold text-white">내 파우치에서 고르기</span>
-          <span className="text-[17px] font-semibold whitespace-nowrap text-ash">
-            {list.length ? `추천 ${Math.min(3, list.length)}개 · 같은 종류 ${list.length}개` : ""}
-          </span>
-        </span>
-        {list.length === 0 && (
-          <span className="py-7 text-center text-[20px] font-semibold text-ash">
-            파우치에 같은 종류 제품이 없어요
-          </span>
-        )}
-        {list.length > 9 && (
-          <div className="flex flex-wrap gap-2">
-            {tones.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTone(t)}
-                aria-pressed={t === tone}
-                className={cn(
-                  "flex h-11 items-center rounded-full px-[18px] text-[17px] font-semibold",
-                  t === tone ? "bg-white text-ink" : "bg-white/10 text-white",
-                )}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3.5">
-          {shown.map((p, i) => {
-            const on = curId === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => onPick({ kind: "pouch", id: p.id })}
-                className={cn(
-                  "flex min-w-0 items-center gap-[18px] rounded-3xl border-2 py-[18px] pr-[18px] pl-4 text-left transition-colors hover:bg-white/10",
-                  on ? "border-blush bg-blush/14" : "border-white/10 bg-white/5",
-                )}
-              >
-                <span
-                  className="size-[76px] shrink-0 rounded-full border-[3px] border-white/30"
-                  style={{ background: p.color ?? "#fff" }}
-                />
-                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <span className="flex min-h-[30px] items-center gap-2">
-                    {i < 3 && (
-                      <span className="text-[22px] font-extrabold whitespace-nowrap text-mint">
-                        추천 {i + 1}
-                      </span>
-                    )}
-                    {on && (
-                      <span className="flex h-[30px] items-center rounded-full bg-blush px-3 text-[15px] font-extrabold text-ink">
-                        선택됨
-                      </span>
-                    )}
-                  </span>
-                  <span className="truncate text-[17px] font-semibold text-line-2">
-                    {p.cat} · {p.brand}
-                  </span>
-                  <span className="line-clamp-2 text-[23px] leading-[1.25] font-bold text-white">
-                    {p.name}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2.5 px-8">
-        <button
-          type="button"
-          onClick={() => onPick({ kind: "none" })}
-          className={cn(
-            "flex h-[72px] flex-1 items-center justify-center rounded-full border-2 border-dashed text-[21px] font-bold text-white hover:bg-white/12",
-            cur.kind === "none" ? "border-blush" : "border-white/30",
-          )}
-        >
-          이 제품 없이 진행
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-[72px] flex-1 items-center justify-center rounded-full bg-white text-[21px] font-bold text-ink"
-        >
-          지금 선택 유지
-        </button>
-      </div>
-    </div>
   );
 }

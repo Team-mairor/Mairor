@@ -3,21 +3,22 @@
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { PillButton } from "@/components/ui/pill-button";
 import { Modal } from "@/components/ui/modal";
-import { useCamera } from "@/features/face";
-import { useCameraErrorNote } from "@/features/live/live-chrome";
-import { cn } from "@/lib/utils";
-
+import { PillButton } from "@/components/ui/pill-button";
 import {
   allPassed,
   captureFace,
   CHECKS,
   eyesClosed,
   saveFacePhoto,
+  useCamera,
   useFaceCheck,
   type CheckName,
-} from "./face-register";
+} from "@/features/face";
+import { useCameraErrorNote } from "@/features/live";
+import { cn } from "@/lib/utils";
+
+import { ProgressBar } from "./progress-bar";
 
 /** 필수 촬영 조건의 이름과 맞지 않을 때 안내 */
 const CONDITIONS: Record<CheckName, [label: string, hint: string]> = {
@@ -316,21 +317,6 @@ export function FaceRegisterModal({
         </>
       )}
     </Modal>
-  );
-}
-
-/** 모달 상단 분석 진행 바 */
-export function ProgressBar({ pct, text }: { pct: number; text: string }) {
-  return (
-    <div className="relative flex h-[60px] shrink-0 items-center gap-3 bg-cream px-8">
-      <span
-        className="absolute bottom-0 left-0 h-[3px] bg-cyan transition-[width] duration-600 ease-linear"
-        style={{ width: `${pct}%` }}
-      />
-      <span className="size-2 shrink-0 rounded-full bg-cyan" />
-      <span className="text-[17px] font-semibold text-ink">{text}</span>
-      <span className="ml-auto font-serif text-[26px] leading-none text-navy tabular">{pct}%</span>
-    </div>
   );
 }
 

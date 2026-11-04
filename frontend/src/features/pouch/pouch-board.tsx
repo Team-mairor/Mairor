@@ -2,9 +2,9 @@
 
 import type { ReactNode } from "react";
 
-import type { PouchItem } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
+import type { PouchItem } from "./catalog";
 import { Illustration } from "./illustration";
 
 /** 스티커 자리 (x%, y%, 회전, 배율, z). 최대 5개 */

@@ -4,9 +4,9 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { MyHeader } from "@/features/my/my-header";
+import { MyHeader } from "@/features/my";
 import { useSession } from "@/features/session";
-import { useQuery } from "@/lib/use-query";
+import { useQuery } from "@/lib/hooks/use-query";
 
 const PHOTO_POS = [
   { mt: "-62%", ml: "-40%", w: "180%" },

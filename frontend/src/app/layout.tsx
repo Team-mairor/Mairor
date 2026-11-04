@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import dynamic from "next/dynamic";
 import { Gowun_Dodum, Instrument_Sans, Instrument_Serif } from "next/font/google";
 import localFont from "next/font/local";
-import "./globals.css";
-
-import dynamic from "next/dynamic";
 import { Suspense } from "react";
 
 import { SessionProvider } from "@/features/session";
 import { MIRROR_SCRIPT } from "@/lib/mirror";
+import { DEFAULT_POUCH, DEFAULT_REPORTS } from "@/mocks/mock-data";
+
+import "./globals.css";
 
 // 개발 서버에서만 넣는다. 배포본은 DEV_TOOLS=1이어도 debug 화면만 들어간다
 const DevNav =
@@ -78,7 +79,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           id="app"
           className="relative mx-auto flex min-h-dvh w-full max-w-[800px] flex-1 flex-col bg-white"
         >
-          <SessionProvider>
+          {/* 샘플 파우치·리포트. API가 붙으면 seed를 지운다 */}
+          <SessionProvider seed={{ pouch: DEFAULT_POUCH, reports: DEFAULT_REPORTS }}>
             {children}
             {/* DevNav의 useSearchParams 경계. 화면 전체를 감싸면 정적 HTML이 비므로 여기만 감싼다 */}
             {DevNav && (

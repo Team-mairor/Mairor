@@ -3,15 +3,15 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { PillButton } from "@/components/ui/pill-button";
 import { Modal } from "@/components/ui/modal";
+import { PillButton } from "@/components/ui/pill-button";
 import { useHiddenVideo } from "@/features/face";
-import { CameraErrorNote } from "@/features/live/live-chrome";
+import { CameraErrorNote } from "@/features/live";
 import { useSession } from "@/features/session";
-import { HowItWorksSlide } from "@/features/tutorial/how-it-works";
-import { GUIDE_STEPS } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+import { HowItWorksSlide } from "@/features/tutorial";
+import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
+import { GUIDE_STEPS } from "@/mocks/mock-data";
 
 const CONSENT_ROWS: [string, string][] = [
   ["저장 항목", `스텝별 얼굴 사진 (최대 ${GUIDE_STEPS.length}장)`],

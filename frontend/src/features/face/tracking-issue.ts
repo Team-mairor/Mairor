@@ -4,8 +4,8 @@ import { useState } from "react";
 
 import { useFaceFrame } from "./camera-provider";
 import { KEY_REGIONS } from "./tracking-rules";
-import { MIN_IN_FRAME_RATIO } from "./visibility";
 import type { FaceFrame } from "./types";
+import { MIN_IN_FRAME_RATIO } from "./visibility";
 
 /** 가이드·화장이 숨겨졌거나 색이 정확하지 않은 이유 */
 export type TrackingIssue = "lost" | "turned" | "out-of-frame" | "far";

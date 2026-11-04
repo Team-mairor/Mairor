@@ -10,14 +10,11 @@ import {
   type ReactNode,
 } from "react";
 
+import type { PouchItem } from "@/features/pouch";
+import type { VideoItem } from "@/features/video";
 import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/lib/api";
-import {
-  DEFAULT_POUCH,
-  DEFAULT_REPORTS,
-  type PouchItem,
-  type ReportSummary,
-  type VideoItem,
-} from "@/lib/mock-data";
+
+import type { ReportSummary } from "./types";
 
 /** 검수 대기 중인 가이드 (홈 카드) */
 export interface PendingGuide {
@@ -78,7 +75,7 @@ export const EMPTY_RUN: RunState = {
   captures: [],
 };
 
-const DEFAULT_STATE: SessionState = {
+const EMPTY_STATE: SessionState = {
   loggedIn: false,
   email: "",
   nickname: "",
@@ -86,8 +83,8 @@ const DEFAULT_STATE: SessionState = {
   onboarded: false,
   tutSeen: false,
   voice: false,
-  pouch: DEFAULT_POUCH,
-  reports: DEFAULT_REPORTS,
+  pouch: [],
+  reports: [],
   pendingGuide: null,
   run: EMPTY_RUN,
 };
@@ -116,8 +113,19 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 const ME_TIMEOUT_MS = 5000;
 
 // ponytail: 브라우저 저장소 하나에 통째로 저장. loggedIn·email만 서버 세션(내 계정 조회) 기준으로 맞춘다.
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SessionState>(DEFAULT_STATE);
+export function SessionProvider({
+  children,
+  seed,
+}: {
+  children: ReactNode;
+  /**
+   * 저장값이 없는 기기에서 처음 보여 줄 파우치·리포트. API가 붙기 전 샘플을 넣는 자리다 (app/layout.tsx).
+   * layout에서 한 번만 넘기므로 처음 값으로 고정한다
+   */
+  seed?: Pick<SessionState, "pouch" | "reports">;
+}) {
+  const [initial] = useState<SessionState>(() => ({ ...EMPTY_STATE, ...seed }));
+  const [state, setState] = useState<SessionState>(initial);
   const [hydrated, setHydrated] = useState(false);
 
   const signIn = useCallback<SessionContextValue["signIn"]>((user, csrfToken) => {
@@ -147,7 +155,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
       if (saved && typeof saved === "object") {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소는 브라우저에서만 읽을 수 있다
-        setState({ ...DEFAULT_STATE, ...saved, run: { ...EMPTY_RUN, ...saved.run } });
+        setState({ ...initial, ...saved, run: { ...EMPTY_RUN, ...saved.run } });
       }
     } catch {
       // 깨진 저장값은 기본값으로 시작한다
@@ -183,7 +191,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [signIn]);
+  }, [initial, signIn]);
 
   // hydrated는 저장값을 state에 넣은 다음 렌더부터 true라, 기본값으로 저장값을 덮어쓰지 않는다
   useEffect(() => {
@@ -210,7 +218,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, run: { ...EMPTY_RUN, id: `run${Date.now()}`, ...run } }));
   }, []);
 
-  const reset = useCallback(() => setState(DEFAULT_STATE), []);
+  const reset = useCallback(() => setState(initial), [initial]);
 
   const value = useMemo(
     () => ({ state, hydrated, update, signIn, signOut, updateRun, startRun, reset }),

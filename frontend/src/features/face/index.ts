@@ -1,5 +1,32 @@
-export { CameraError, listCameras, openCamera, RESOLUTIONS, type CameraErrorKind } from "./camera";
+export {
+  CameraError,
+  describeControls,
+  exposureRange,
+  listCameras,
+  lockControls,
+  openCamera,
+  RESOLUTIONS,
+  setExposureTime,
+  unlockControls,
+  type CameraErrorKind,
+  type ControlInfo,
+  type ControlName,
+  type Range as ControlRange,
+} from "./camera";
 export { isRetryable } from "./camera-error-view";
+export {
+  allPassed,
+  captureFace,
+  checkFace,
+  CHECKS,
+  eyesClosed,
+  facePhoto,
+  NO_CHECK,
+  saveFacePhoto,
+  useFaceCheck,
+  type CheckName,
+  type FaceCheck,
+} from "./face-register";
 export {
   CameraProvider,
   StartCamera,

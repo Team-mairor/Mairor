@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
 import { matchFor, useSession, type MatchResult, type ReportStep } from "@/features/session";
-import { GUIDE_STEPS, REF_PRODUCTS } from "@/lib/mock-data";
-import { useQuery } from "@/lib/use-query";
+import { useQuery } from "@/lib/hooks/use-query";
+import { useTimeout } from "@/lib/hooks/use-timeout";
+import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 
 type DelState = null | "ask" | "busy" | "fail";
 
@@ -25,8 +26,7 @@ export default function ReportPage() {
   const { state, hydrated, update } = useSession();
   const [expanded, setExpanded] = useState(true);
   const [del, setDel] = useState<DelState>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  const timer = useTimeout();
 
   // 정확한 id로만 찾는다. 저장값을 읽기 전에는 판단을 미룬다
   const id = query?.get("id");
@@ -39,7 +39,7 @@ export default function ReportPage() {
   // ponytail: 저장 당시 snapshot(items)이 있으면 그것을, 샘플 기록은 현재 파우치 기준 매칭을 쓴다.
   const steps = (rep ? GUIDE_STEPS.slice(0, rep.steps) : []).map((x, i) => {
     const snap = rep?.items?.[i];
-    const m = snap ?? snapOf(matchFor(i, state.run, state.pouch));
+    const m = snap ?? snapOf(matchFor(REF_PRODUCTS[i], state.run, state.pouch));
     const used = m.used;
     const r = REF_PRODUCTS[i];
     return {
@@ -67,7 +67,7 @@ export default function ReportPage() {
   const remove = () => {
     if (del === "busy") return;
     setDel("busy");
-    timer.current = setTimeout(() => {
+    timer.set(() => {
       update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
       router.replace("/my/reports");
     }, 700);
