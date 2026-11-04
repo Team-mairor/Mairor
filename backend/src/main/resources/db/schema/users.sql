@@ -14,6 +14,9 @@
 -- password_version: 비밀번호를 바꿀 때마다 1씩 오른다 (S15P31A306-210). 로그인이 비밀번호 재설정과 겹쳤는지 세션 발급 뒤에 확인하는 데 쓴다.
 --   이미 users 테이블이 있는 DB 에는 이 파일을 다시 적용할 수 없으므로 아래 한 줄만 따로 적용한다.
 --   ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;
+-- pouch_version (S15P31A306-211): 개인 파우치 변경 번호. 기존 DB는 아래 문장 후 pouch.sql을 적용한다.
+--   ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;
+-- JPA의 일반 회원 저장에서는 쓰지 않고 파우치 쓰기 트랜잭션이 명시적으로 증가시킨다.
 CREATE TABLE users (
     id            uuid                        NOT NULL,
     email         varchar(254)                NOT NULL,
@@ -26,6 +29,7 @@ CREATE TABLE users (
     gender        varchar(10),
     email_verified_at timestamp(6) with time zone,
     password_version integer                 NOT NULL DEFAULT 0,
+    pouch_version bigint                     NOT NULL DEFAULT 0,
     created_at    timestamp(6) with time zone NOT NULL,
     updated_at    timestamp(6) with time zone NOT NULL,
     CONSTRAINT users_pkey PRIMARY KEY (id),

@@ -27,8 +27,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class OpenApiDocsTest {
 
-  /** 문서에 나오는 API 수(메서드 단위). API 를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 30;
+  /** 문서에 나오는 API 수(메서드 단위). 파우치 등록 POST 포함. API 를 추가하면 함께 올린다. */
+  private static final int ALL_OPERATIONS = 31;
 
   @Autowired private MockMvc mockMvc;
 

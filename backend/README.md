@@ -308,13 +308,15 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
 | `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수) |
 | `db/schema/analysis.sql` | `videos` (유튜브 영상), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
+| `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
 
-- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`, `psql -d <DB> -f analysis.sql` (이 순서. `analysis.sql`이 `users`를 참조한다)
+- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`, `psql -d <DB> -f analysis.sql`, `psql -d <DB> -f pouch.sql` (이 순서. `analysis.sql`이 `users`를, `pouch.sql`이 `users`·카탈로그 분류/제품/호수 테이블을 참조한다)
 - **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼·테이블이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column`·`missing table` 로 앱 기동을 막는다.
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
+| 개인 파우치·회원별 버전 기반 | S15P31A306-211 | 먼저 `ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;` 다음 `pouch.sql` 전체. 기존 회원도 버전 0으로 시작한다. 기존 카탈로그 테이블은 변경·재적재하지 않는다 |
 | `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |
@@ -325,6 +327,17 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 - 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest`·`ProductsSchemaSqlTest`·`AnalysisSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인). `validate` 는 엔티티 전체를 검사하므로 스키마 SQL 을 추가하면 `schema-locations` 를 쓰는 모든 테스트에 같이 넣는다(`grep -rn schema-locations src/test`).
 - `analysis.sql` 의 부분 유일 인덱스 두 개(`uk_analysis_jobs_video_active` 같은 영상 진행 작업 하나, `uk_guides_video_approved` 같은 영상 공개 가이드 하나)는 JPA 로 표현할 수 없어 SQL 에만 있다. dev 의 `ddl-auto=update` 로 만든 DB 에는 없으므로, 이 규칙을 확인하려면 SQL 로 만든 DB 를 쓴다.
 - Flyway 를 도입하면 `db/migration/V<번호>__*.sql` 로 옮긴다. 번호는 Flyway 담당과 맞춘다.
+
+### 개인 파우치 저장 기반 (S15P31A306-211 · 2단계)
+
+- 현재 단계는 엔티티·저장소·SQL·회원 버전 기반이다. 등록 API·요청 검증·업무 오류 변환은 다음 단계에서 추가한다. 목록·수정·삭제 API는 아직 없다.
+- `pouch_items`는 연결 ID와 개인 표시 문자열·색상 복사본을 보관한다. 공용 제품·호수를 생성/수정하지 않으며, 연결에는 cascade가 없다. 카탈로그 삭제는 기존 참조가 있으면 FK로 거절된다.
+- brand/name/shadeName은 앞뒤 유니코드 공백 제거 후 최대 100/200/100자로 저장한다. 비교키는 CatalogTextNormalizer를 재사용한다. 회원+브랜드+제품명+호수 비교키에 UNIQUE를 걸며 type·모드가 달라도 중복이다. 호수 없음의 비교키는 NULL 대신 빈 문자열이다.
+- SQL은 소유 회원·기존 제품/호수·카테고리/종류 참조, 등록 모드/연결 ID, 색상 컬럼의 전부 존재/전부 NULL, 색상 출처/추정 여부·HEX를 검사한다. 제품과 호수의 소속·shadeSelectable은 다음 단계 서비스에서 검증한다. `ddl-auto=update`의 자동 생성에는 SQL 전용 FK·CHECK가 없으므로 제약 검증은 SQL 적용+validate로 한다.
+- 색이 없으면 DB의 color_hex/source/estimated가 모두 NULL이고 임베디드 색 객체도 null이다. API용 colorSource는 `NONE`으로 파생한다. USER_INPUT은 estimated=true, CATALOG는 복사한 추정 여부를 유지한다.
+- 버전은 `users.pouch_version`이다. User에서는 insertable=false·updatable=false로 매핑해 오래된 User merge나 프로필 변경이 덮어쓰지 못하게 한다. 현재 버전은 엔티티 캐시 대신 PouchVersionRepository에서 읽는다.
+- 쓰기 서비스는 READ_COMMITTED 트랜잭션을 열고 `lockByUserId`(회원 행 FOR UPDATE) → 본인 항목 조회/저장·flush → `increment` 순서를 지킨다. 두 쓰기 메서드는 기존 트랜잭션이 없으면 거절한다. JDBC와 JPA는 같은 datasource/트랜잭션을 사용하며 항목과 버전은 함께 롤백된다. 버전 증가는 회원 프로필 updatedAt을 바꾸지 않는다.
+- `PouchPersistenceTest`는 SQL/엔티티 validate·DB 중복/참조/색상 제약·소유권·복사본·오래된 회원 merge를 확인하고, `PouchWriteTransactionTest`는 별도 연결에서 회원별 잠금·동시 쓰기·중복 경합·롤백을 검증한다. 운영 DB 적용은 기존 담당 절차로 인계하며 테스트가 대신 적용하지 않는다.
 
 ### 화장품 카탈로그 시드
 

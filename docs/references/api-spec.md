@@ -309,7 +309,65 @@ API-POUCH-004 · POST /api/v1/users/me/pouch-items
 
 - 회원·CSRF 필요. Body는 아래 PouchWrite 계약. 201 \{item:PouchItem,pouchVersion:integer\}.
 - 400 POUCH\_INVALID\_PRODUCT(조건부 필드·제품/호수 조합), 409 POUCH\_DUPLICATE(정규화 브랜드·제품명·호수 중복). 공통 필드 형식 오류는 400 VALIDATION\_FAILED.
-- colorHex 생략/null이면 color=null·colorSource=NONE, 대체 후보 제외. CATALOG는 서버에서 정보·색상 연결. MANUAL 색상은 추정 USER\_INPUT. 성공 시 pouchVersion 증가·시작 전 매칭 무효화, 기존 실행 스냅샷 불변.
+- <b>등록 계약 (로컬 수정 -211 · 구현 전 명세 반영)</b>: CATALOG는 서버에서 기존 제품·호수를 검증하고 표시 정보·색상을 개인 항목에 복사하며 연결 ID도 보관한다. MANUAL은 개인 항목에만 저장한다. 이 요청은 공용 카탈로그를 생성·수정하거나 크롤링을 시작하지 않는다.
+- MANUAL의 colorHex 생략/null은 color=null·colorSource=NONE이고, 입력한 색은 color.source=USER\_INPUT·estimated=true다. CATALOG는 요청 colorHex가 아니라 선택 호수의 색을 사용하며, 색이 있으면 source=CATALOG·estimated는 카탈로그 값을 보존한다. 어느 방식이든 색이 없으면 color=null·colorSource=NONE이고 대체 후보에서 제외한다.
+- 본인 항목 저장과 pouchVersion 증가는 원자적으로 처리한다. 초기 pouchVersion=0, 등록 성공마다 +1이며 실패·중복·롤백 시 증가하지 않는다. 시작 전 매칭은 변경된 버전으로 재계산 대상이 되고, 이미 시작한 실행·완료 리포트의 당시 제품 스냅샷은 변경하지 않는다.
+- 카탈로그 복사본·정규화 중복키와 표시값은 등록 시점 기준이다. 이후 카탈로그 이름·색상 변경은 기존 개인 항목이나 pouchVersion에 자동 반영하지 않는다. 개인 목록·상세·매칭 입력도 이 복사본을 사용한다. 카탈로그 연결 ID만으로 조회 때 최신값으로 치환하지 않는다.
+- 중복 범위는 같은 회원의 정규화 brand·name·shadeName이다. type·category·registrationMode·productId·shadeId·color는 제외하므로 다른 종류 및 CATALOG/MANUAL 간에도 같은 비교값이면 409 POUCH\_DUPLICATE다. 다른 회원의 동일 제품 등록은 허용한다. 호수 없음(null·생략·공백)은 같은 값으로 취급하며 DB 유니크 제약으로 동시 중복도 차단한다.
+- shadeSelectable=true인데 해당 제품에 선택할 유효 호수가 없으면 CATALOG 등록은 400 POUCH\_INVALID\_PRODUCT다. NAIL\_FILE도 이 규칙을 따르며, 화면은 호수·색상을 생략할 수 있는 MANUAL 등록을 안내한다. 임의 호수 생성이나 분류·기초 데이터 변경은 하지 않는다.
+
+등록 요청 예시 (ID·브랜드·색상은 계약 설명용이며 실제 카탈로그 데이터가 아니다):
+
+```json
+{
+  "registrationMode": "CATALOG",
+  "type": "LIPSTICK",
+  "productId": "00000000-0000-4000-8000-000000000101",
+  "shadeId": "00000000-0000-4000-8000-000000000201"
+}
+```
+
+```json
+{
+  "registrationMode": "MANUAL",
+  "category": "LIP",
+  "type": "LIPSTICK",
+  "brand": " 예시 브랜드 ",
+  "name": " 예시 립스틱 ",
+  "shadeName": " 01 로즈 ",
+  "colorHex": "#112233"
+}
+```
+
+위 MANUAL 요청의 성공 응답 예시(첫 등록):
+
+```json
+{
+  "item": {
+    "pouchItemId": "00000000-0000-4000-8000-000000000301",
+    "registrationMode": "MANUAL",
+    "productId": null,
+    "shadeId": null,
+    "brand": "예시 브랜드",
+    "name": "예시 립스틱",
+    "category": "LIP",
+    "type": "LIPSTICK",
+    "shadeName": "01 로즈",
+    "color": {
+      "colorSpace": "sRGB",
+      "hex": "#112233",
+      "source": "USER_INPUT",
+      "estimated": true
+    },
+    "colorSource": "USER_INPUT",
+    "createdAt": "2026-11-04T00:00:00Z",
+    "updatedAt": "2026-11-04T00:00:00Z"
+  },
+  "pouchVersion": 1
+}
+```
+
+색상을 모르면 MANUAL 요청의 colorHex를 생략/null로 보내며 응답은 color=null·colorSource=NONE이다. TOOL 등 shadeSelectable=false 분류는 shadeName·colorHex를 모두 생략/null로 보낸다. 예시는 API 동작 검증 결과가 아니며 구현·테스트는 후속 단계다.
 </toggle>
 
 <toggle>
@@ -351,7 +409,7 @@ API-POUCH-008 · GET /api/v1/product-categories
 - <b>임시 제안 (로컬 수정 -209)</b>: 현재 type 코드 38개는 기능명세 POUCH-004 라벨을 옮긴 임시 제안이며 확정 전 바뀔 수 있다(기준: `backend/src/main/resources/db/seed/product-categories.sql`). FE는 코드를 하드코딩하지 말고 이 API 응답을 쓴다. 향수는 하위 종류가 없어 `PERFUME` 하나를 임시로 둔다. compatibleParts는 값 확정 전까지 모든 카테고리에서 \[\]. 확인 필요 2
 - <b>구현 (로컬 수정 -298)</b>: 카테고리는 sort\_order, 같으면 code 순. types는 카테고리 안에서 sort\_order, 같으면 code 순. 종류가 없는 카테고리도 types=\[\]로 포함한다(null 아님). compatibleParts는 DB 값을 문자열 순으로 정렬해 반환하며, 현재 시드에 값이 없어 \[\]다. 401 외 업무 오류 없음.
 - <b>코드 유지 원칙 (로컬 수정 -298)</b>: 카테고리·종류 코드는 확정 후 바꾸지 않고 label·순서만 바꾼다. 꼭 바꿔야 하면 모든 참조(product\_types·product\_category\_parts·products의 카테고리·종류 복합 FK, 이후 pouch\_items 등)와 FK 순서를 고려한 별도 이관 SQL로 처리한다. 시드는 행을 지우지 않으므로 코드만 바꾸면 구·신 코드가 함께 노출된다.
-- <b>확인 필요 (로컬 수정 -298)</b>: NAIL은 shadeSelectable=true지만 NAIL\_FILE에는 호수가 없어 PouchWrite의 CATALOG shadeId 필수 규칙과 충돌한다. API-POUCH-004(S15P31A306-211)에서 처리 방식을 정한다.
+- <b>등록 경로 확정 (로컬 수정 -211)</b>: NAIL은 shadeSelectable=true를 유지한다. NAIL\_FILE처럼 유효 호수가 없는 제품은 CATALOG 등록을 거절하고 MANUAL 등록으로 안내한다(API-POUCH-004). 이 결정으로 분류 응답·시드·공용 카탈로그를 변경하지 않는다.
 </toggle>
 
 <toggle>
@@ -813,12 +871,20 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | type | string | 등록 필수. API-POUCH-008의 해당 카테고리 종류 코드 |
 | productId | string | CATALOG 필수, MANUAL 입력 불가 |
 | shadeId | string 또는 null | CATALOG이고 shadeSelectable=true이면 해당 제품 호수 필수. false이면 null/생략 |
-| brand·name | string | MANUAL 필수, 앞뒤 공백 제거 후 각각 1\~100자. CATALOG는 서버 카탈로그에서 확정. <b>211 인계 (로컬 수정 -297)</b>: 검색은 name 200자·유니코드 공백 기준이다. MANUAL name 상한을 200으로 맞출지 API-POUCH-004에서 정한다 |
+| brand·name | string | <b>로컬 수정 -211</b>: MANUAL 필수, 앞뒤 유니코드 공백 제거 후 brand 1\~100자·name 1\~200자. CATALOG는 서버 카탈로그에서 복사하며 등록 요청에 직접 입력 불가 |
 | category | string | MANUAL 필수, 9개 코드 중 하나. CATALOG는 제품 값, type은 해당 category 소속 |
-| shadeName | string 또는 null | MANUAL 선택, 최대100자. shadeSelectable=false이면 null/생략 |
-| colorHex | string 또는 null | MANUAL 선택, #RRGGBB. colorSource는 서버가 USER\_INPUT/NONE으로 결정. CATALOG는 직접 입력 불가 |
+| shadeName | string 또는 null | MANUAL 선택, 앞뒤 유니코드 공백 제거 후 최대100자. null·생략·공백만 있는 값은 null. shadeSelectable=false이면 null/생략. CATALOG 등록은 직접 입력 불가 |
+| colorHex | string 또는 null | MANUAL 선택, #RRGGBB. colorSource는 서버가 USER\_INPUT/NONE으로 결정. shadeSelectable=false이면 null/생략만 허용(로컬 수정 -211). CATALOG는 직접 입력 불가 |
 
-브랜드·제품명·호수 중복 정규화의 상세 규칙(NFC·대소문자·연속 공백 등)은 데이터 설계에서 확정한다. <b>확정 (로컬 수정 -209)</b>: ① NFC ② 유니코드 공백(NBSP·전각 공백·탭 포함) 연속을 공백 한 칸으로 ③ 앞뒤 공백 제거 ④ Locale.ROOT 소문자화. 결과가 빈 문자열이면 400. 원문은 그대로 저장·응답하고 정규화 값은 중복 판정·정확 일치 검색에만 쓴다. 대소문자 접기는 하지 않는다(ß와 ss는 다르다). 구현: `CatalogTextNormalizer`. 등록(API-POUCH-004)·수정(API-POUCH-006)·검색(API-POUCH-001)이 같은 규칙을 쓴다. 임의로 다른 제품을 동일 제품에 연결하지 않는다. 브랜드 없는 도구 등의 입력 정책과 향수의 type 코드처럼 현재 화면·데이터 분류에 빈틈이 있는 부분은 API-POUCH-008 분류 확정 시 함께 결정한다.
+<b>비교용 정규화 (로컬 수정 -209, 저장 정책 보완 -211)</b>: ① NFC ② 유니코드 공백(NBSP·전각 공백·탭 포함) 연속을 공백 한 칸으로 ③ 앞뒤 공백 제거 ④ Locale.ROOT 소문자화. 등록·수정의 중복 판정과 검색의 정확 일치 비교는 같은 `CatalogTextNormalizer` 규칙을 사용한다. 대소문자 접기는 하지 않으므로 ß와 ss는 다르다. 임의로 다른 제품을 동일 제품에 연결하지 않는다.
+
+<b>개인 표시 문자열 저장 (로컬 수정 -211)</b>: CATALOG 복사값과 MANUAL의 brand·name·shadeName은 `CatalogTextNormalizer.trimmed`로 앞뒤 유니코드 공백을 제거한 **같은 값**을 길이 검사·저장·응답한다. 길이는 NFC 전 Java String.length()로 센다. 내부 공백·대소문자·Unicode 표현은 표시값에 보존하며 비교키에만 위 정규화를 적용한다. 공백을 포함한 입력 전체를 별도 원문으로 저장하지 않는다. 공용 카탈로그의 원문 저장 정책·검색 응답은 변경하지 않는다.
+
+- brand/name은 null·공백만 있는 값·길이 초과이면 400 VALIDATION\_FAILED다. brand는 도구를 포함해 모든 MANUAL 항목에서 필수이며, 서버가 가짜 브랜드를 대입하지 않는다.
+- 선택 shadeName은 null·생략·공백만 있는 값이면 표시값 null, 내부 중복키는 NOT NULL 빈 문자열로 저장한다. 나머지 비교키도 NOT NULL이며 `(userId,정규화 brand,정규화 name,정규화 shadeName)` 유니크를 보장한다. 내부 비교키는 응답하지 않는다.
+- 예: name이 공백 10개 + 본문 200자 + 공백 10개이면 본문 200자만 저장·응답한다. 본문 201자는 거절한다. brand·shadeName도 100/101자로 동일하게 판단한다.
+- 등록 시 CATALOG는 productId/type·호수 조건을 검증하고 category는 제품에서 결정한다. category를 함께 보냈다면 제품과 일치해야 한다. MANUAL의 연결 ID 입력, CATALOG의 brand/name/shadeName/colorHex 직접 입력, 제품·호수 관계 및 분류 소속 위반은 400 POUCH\_INVALID\_PRODUCT다. 공통 필드 형식 오류는 VALIDATION\_FAILED로 구분한다.
+- 위 표의 등록 모드별 금지 필드는 POST 기준이다. PATCH의 직접 편집·등록 방식 전환은 API-POUCH-006 계약을 우선하며, 상세 전환 사례·변경 없음 판정은 -213에서 반영할 후속 범위다.
 
 <toggle>
 공통 응답 데이터 모델
@@ -837,7 +903,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | Shade | shadeId:string, name:string, color:ColorInfo\|null. |
 | Product <b>v2</b> | productId:string, brand:string, name:string, category:string, type:string, shades:Shade\[\]. 호수 선택이 없는 카테고리는 shades=\[\]. type은 카탈로그 제품마다 필수(로컬 수정 -209, 기존 string\|null). |
 | ProductCategory <b>v2</b> | code:string, label:string, matchable:boolean, shadeSelectable:boolean, types:ProductType\[\], compatibleParts:string\[\]. ProductType = code:string, label:string. 9개 카테고리·종류 목록은 기능명세 POUCH-004 기준. |
-| PouchItem <b>v2</b> | pouchItemId:string, registrationMode:CATALOG\|MANUAL, productId:string\|null, shadeId:string\|null, brand:string, name:string, category:string, type:string, shadeName:string\|null, color:ColorInfo\|null, colorSource:CATALOG\|USER\_INPUT\|NONE, createdAt:datetime, updatedAt:datetime. MANUAL의 productId·shadeId는 null. |
+| PouchItem <b>v2</b> | pouchItemId:string, registrationMode:CATALOG\|MANUAL, productId:string\|null, shadeId:string\|null, brand:string, name:string, category:string, type:string, shadeName:string\|null, color:ColorInfo\|null, colorSource:CATALOG\|USER\_INPUT\|NONE, createdAt:datetime, updatedAt:datetime. MANUAL의 productId·shadeId는 null. <b>로컬 수정 -211</b>: 표시값·색상은 개인 저장 복사본이며 카탈로그를 실시간 참조하지 않는다. brand/name/shadeName은 앞뒤 유니코드 공백 제거 후 최대 100/200/100자, shadeName 공백은 null. 색이 없으면 color=null·colorSource=NONE. |
 | ReferenceProduct | productId:string\|null, shadeId:string\|null, name:string\|null, shadeName:string\|null, matchStatus:MATCHED\|CANDIDATE\|UNMATCHED, verification:CONFIRMED\|ESTIMATED\|UNKNOWN, sources:string\[\], videoConfirmed:boolean\|null. 화면 라벨: ESTIMATED='추정', videoConfirmed=false='설명란에만 있음', UNMATCHED='이름만 확인'. 임의 제품 연결 금지. |
 | Application | coordinateSystem:string(버전 포함), side:LEFT\|RIGHT\|BOTH\|CENTER, region:object \{ templateId:string\|null, polygon:number\[2\]\[\] \}, strokes:Stroke\[\], isFallback:boolean. templateId 또는 3점 이상 polygon 중 하나 필수. |
 | Stroke | motion:SWEEP\|BACK\_AND\_FORTH\|DAB\|CIRCLE, direction:FORWARD\|BIDIRECTIONAL\|CLOCKWISE\|COUNTERCLOCKWISE\|NONE, points:number\[2\]\[\]. 쓸기 2점 이상, 두드리기 1점 이상. 픽셀 좌표가 아님. |

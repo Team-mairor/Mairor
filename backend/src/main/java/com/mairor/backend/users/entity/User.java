@@ -70,6 +70,11 @@ public class User {
   @Column(name = "password_version", nullable = false)
   private int passwordVersion;
 
+  /** 파우치 쓰기 트랜잭션의 명시적 SQL로만 증가시킨다. 일반 회원 merge/update가 덮어쓰지 않는다. */
+  @ColumnDefault("0")
+  @Column(name = "pouch_version", nullable = false, insertable = false, updatable = false)
+  private long pouchVersion;
+
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
@@ -148,6 +153,11 @@ public class User {
 
   public int getPasswordVersion() {
     return passwordVersion;
+  }
+
+  /** 엔티티를 읽은 시점의 값. 현재 버전·잠금은 PouchVersionRepository를 사용한다. */
+  public long getPouchVersion() {
+    return pouchVersion;
   }
 
   public Instant getCreatedAt() {

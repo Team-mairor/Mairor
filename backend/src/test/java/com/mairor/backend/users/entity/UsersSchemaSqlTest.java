@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
       "spring.jpa.hibernate.ddl-auto=validate",
       "spring.sql.init.mode=always",
       // 엔티티 전체를 validate 하므로 다른 도메인의 스키마 SQL 도 함께 적용한다
-      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql",
+      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql,classpath:db/schema/pouch.sql",
       "app.security.allowed-origins=http://localhost:3000"
     })
 @Transactional
@@ -62,10 +62,12 @@ class UsersSchemaSqlTest {
             "gender",
             "email_verified_at",
             "password_version",
+            "pouch_version",
             "created_at",
             "updated_at");
     assertThat(column(columns, "password_hash").get("is_nullable")).isEqualTo("YES");
     assertThat(column(columns, "password_version").get("is_nullable")).isEqualTo("NO");
+    assertThat(column(columns, "pouch_version").get("is_nullable")).isEqualTo("NO");
     assertThat(column(columns, "email").get("is_nullable")).isEqualTo("NO");
     assertThat(column(columns, "email").get("character_maximum_length")).isEqualTo(254);
     assertThat(column(columns, "password_hash").get("character_maximum_length")).isEqualTo(255);
