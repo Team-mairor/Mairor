@@ -65,6 +65,38 @@ export function checkFace(frame: FaceFrame | null, brightness: number | null): F
   };
 }
 
+/** 거리·위치가 기준을 벗어난 쪽. 좌우·위아래는 거울처럼 뒤집어 보여 주는 화면 기준이다 */
+export type DistanceHint = "closer" | "back" | "left" | "right" | "up" | "down";
+
+export const DISTANCE_HINT_TEXT: Record<DistanceHint, string> = {
+  closer: "조금 더 가까이 와 주세요",
+  back: "조금 뒤로 물러나 주세요",
+  left: "얼굴을 왼쪽으로 조금 옮겨 주세요",
+  right: "얼굴을 오른쪽으로 조금 옮겨 주세요",
+  up: "얼굴을 조금 위로 올려 주세요",
+  down: "얼굴을 조금 아래로 내려 주세요",
+};
+
+/** 적정 거리 조건(checkFace의 distance)을 어떻게 맞추면 되는지. 맞거나 얼굴이 없으면 null */
+export function distanceHint(frame: FaceFrame | null): DistanceHint | null {
+  if (!frame || frame.trackingState === "lost" || frame.trackingState === "hold") return null;
+  const ratio = faceWidthRatio(frame);
+  if (ratio < DISTANCE.min) return "closer";
+  if (ratio > DISTANCE.max) return "back";
+  const box = faceBox(frame);
+  // 영상은 원본 좌표라, 거울처럼 뒤집어 보여 주는 화면에서는 x를 뒤집어 본다
+  const x = 1 - (box.minX + box.maxX) / 2;
+  const y = (box.minY + box.maxY) / 2;
+  if (x - 0.5 > CENTER_TOLERANCE) return "left";
+  if (0.5 - x > CENTER_TOLERANCE) return "right";
+  if (y - 0.5 > CENTER_TOLERANCE) return "up";
+  if (0.5 - y > CENTER_TOLERANCE) return "down";
+  return null;
+}
+
+/** 적정 거리의 최소 얼굴 폭 비율 (얼굴 폭 / 영상 폭). 원 안에 목표 크기를 그릴 때 쓴다 */
+export const MIN_DISTANCE_RATIO = DISTANCE.min;
+
 export function allPassed(check: FaceCheck) {
   return CHECKS.every((name) => check[name]);
 }
@@ -81,6 +113,10 @@ export function eyesClosed(frame: FaceFrame | null) {
 export function useFaceCheck(enabled: boolean) {
   const { videoRef } = useCamera();
   const [check, setCheck] = useState(NO_CHECK);
+  /** 얼굴이 잡혔는지. 바뀔 때만 다시 그린다 */
+  const [found, setFound] = useState(false);
+  /** 거리·위치를 어떻게 맞추면 되는지 */
+  const [hint, setHint] = useState<DistanceHint | null>(null);
   const frameRef = useRef<FaceFrame | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const brightness = useRef<number | null>(null);
@@ -92,6 +128,8 @@ export function useFaceCheck(enabled: boolean) {
   if (enabled !== prevEnabled) {
     setPrevEnabled(enabled);
     setCheck(NO_CHECK);
+    setFound(false);
+    setHint(null);
   }
   useEffect(() => {
     frameRef.current = null;
@@ -111,6 +149,8 @@ export function useFaceCheck(enabled: boolean) {
       canvasRef.current ??= document.createElement("canvas");
       brightness.current = faceBrightness(video, frame, canvasRef.current);
     }
+    setFound(tracked);
+    setHint(distanceHint(frame));
     let next = checkFace(frame, brightness.current);
     if (allPassed(next)) passedAt.current = now;
     else if (now - passedAt.current < PASS_GRACE_MS) next = ALL_PASSED;
@@ -122,7 +162,7 @@ export function useFaceCheck(enabled: boolean) {
     [],
   );
 
-  return { check, frame: frameRef, passedNow };
+  return { check, found, hint, frame: frameRef, passedNow };
 }
 
 /** 지금 영상을 원본 그대로(좌우 반전 없이) 한 장 찍는다 */
@@ -159,7 +199,8 @@ interface Box {
   maxY: number;
 }
 
-function faceBox(frame: FaceFrame): Box {
+/** 얼굴 랜드마크를 감싸는 상자 (원본 영상 기준 0~1) */
+export function faceBox(frame: FaceFrame): Box {
   const box = { minX: 1, minY: 1, maxX: 0, maxY: 0 };
   for (const p of frame.landmarks) {
     box.minX = Math.min(box.minX, p.x);

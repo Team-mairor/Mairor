@@ -19,12 +19,17 @@ export {
   captureFace,
   checkFace,
   CHECKS,
+  DISTANCE_HINT_TEXT,
+  distanceHint,
   eyesClosed,
+  faceBox,
   facePhoto,
+  MIN_DISTANCE_RATIO,
   NO_CHECK,
   saveFacePhoto,
   useFaceCheck,
   type CheckName,
+  type DistanceHint,
   type FaceCheck,
 } from "./face-register";
 export {

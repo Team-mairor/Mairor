@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
+/* 미러필름 모드에서만 줄 스타일. 흰 카드가 검정이 되어 경계가 사라질 때 테두리를 두르는 데 쓴다 */
+@custom-variant mirror (&:is(.mirror *));
 
 @theme inline {
   --color-background: var(--background);
@@ -233,6 +235,18 @@
 .mirror [class*="border-white/"]:not([class*="border-t-"]) {
   border-color: rgb(255 255 255 / 0.45);
 }
+/*
+ * 투명도로 흐리게 한 비활성(disabled:opacity-*)은 필름 위에서 사라진다.
+ * 투명도 대신 회색조로 바꾸고 조금만 어둡게 해, 누를 수 없다는 것과 모양이 함께 보이게 한다
+ */
+.mirror :disabled[class*="disabled:opacity"] {
+  opacity: 1;
+  filter: grayscale(1) brightness(0.85);
+}
+/* 게이지 바탕 막대(data-track)는 반투명이라 필름 위에서 안 보인다. 테두리로 길이를 보여 준다 */
+.mirror [data-track] {
+  box-shadow: inset 0 0 0 2px var(--color-line);
+}
 /* 검은 바탕 위라 흐림 효과가 보이지 않는다 */
 .mirror [class*="backdrop-blur"] {
   backdrop-filter: none;
@@ -281,7 +295,7 @@
   --color-white: #ffffff;
   --color-ink: #000000;
 }
-.mirror :is(.bg-ice, .bg-navy, .bg-blush, .bg-mint, .bg-sky, .bg-error) {
+.mirror :is(.bg-ice, .bg-navy, .bg-blush, .bg-mint, .bg-sky, .bg-error, .bg-ash) {
   --color-white: #000000;
   --color-ink: #000000;
   --color-ice-tint: #000000;
@@ -680,6 +694,45 @@ body:has([data-debug]) {
   100% {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* 얼굴 등록 예시: 정면 → 비스듬히 멀리 → 다가오며 정면 → 반대로 → 정면. 앞뒤가 정면이라 반복이 끊기지 않는다 */
+@keyframes mr-face-turn {
+  0%,
+  4% {
+    transform: scale(1) rotateY(0);
+  }
+  14% {
+    transform: scale(0.8) rotateY(-34deg);
+  }
+  34%,
+  50% {
+    transform: scale(1) rotateY(0);
+  }
+  62% {
+    transform: scale(0.8) rotateY(34deg);
+  }
+  82%,
+  100% {
+    transform: scale(1) rotateY(0);
+  }
+}
+/* 정면일 때만 윤곽이 시안으로 빛난다 */
+@keyframes mr-face-glow {
+  0%,
+  4%,
+  36%,
+  48%,
+  84%,
+  100% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--color-cyan) 35%, transparent);
+  }
+  12%,
+  28%,
+  56%,
+  76% {
+    box-shadow: none;
   }
 }
 

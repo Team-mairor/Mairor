@@ -125,7 +125,15 @@ export default function MyPouchPage() {
                       )}
                     >
                       {k}
-                      <span className="text-[14px] font-semibold tabular opacity-70">{n}</span>
+                      {/* 투명도로 흐리게 하면 미러필름 모드에서 안 보여서, 고른 칩만 투명도를 쓰고 나머지는 색으로 낮춘다 */}
+                      <span
+                        className={cn(
+                          "text-[14px] font-semibold tabular",
+                          on ? "opacity-70" : n ? "text-mute" : "",
+                        )}
+                      >
+                        {n}
+                      </span>
                     </button>
                   );
                 })}

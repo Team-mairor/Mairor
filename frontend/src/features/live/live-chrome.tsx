@@ -94,20 +94,23 @@ export function GlassPanel({
 export function RoundBack({
   onClick,
   label = "뒤로",
+  disabled = false,
   className,
 }: {
   onClick: () => void;
   label?: string;
+  disabled?: boolean;
   className?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       title={label}
       className={cn(
-        "flex size-[72px] shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/8 text-white hover:bg-white/15 active:scale-[.95]",
+        "flex size-[72px] shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/8 text-white hover:bg-white/15 active:not-disabled:scale-[.95] disabled:opacity-35",
         className,
       )}
     >

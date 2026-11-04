@@ -25,9 +25,9 @@ const T = 1900;
 const AUTO_MS = T + 3600;
 
 const LABELS: [x: number, y: number, label: string, side: "left" | "right", delay: number][] = [
-  [190 + 147, 384 + 178, "BLUSH · CORAL", "left", T + 2350],
-  [190 + 185, 384 + 287, "LIP · ROSE MLBB", "right", T + 2550],
-  [190 + 276, 384 + 225, "BLUSH · PEACH", "right", T + 2450],
+  [190 + 147, 318 + 178, "BLUSH · CORAL", "left", T + 2350],
+  [190 + 185, 318 + 287, "LIP · ROSE MLBB", "right", T + 2550],
+  [190 + 276, 318 + 225, "BLUSH · PEACH", "right", T + 2450],
 ];
 
 /** 00 인트로. 약 6초 뒤 또는 탭하면 로그인 상태에 따라 홈·로그인으로 간다 (USERS-003) */
@@ -84,7 +84,7 @@ export default function IntroPage() {
     <main className="flex flex-1 flex-col bg-white" onClick={next}>
       <Stage className="cursor-pointer">
         <div
-          className="absolute inset-x-0 top-[430px] h-[230px]"
+          className="absolute inset-x-0 top-[364px] h-[230px]"
           style={{ animation: `mr-up 1000ms cubic-bezier(.7,0,.2,1) ${T + 700}ms forwards` }}
         >
           <div className="absolute top-10 left-1/2 -ml-[315px] h-[126px] w-[630px]">
@@ -97,7 +97,9 @@ export default function IntroPage() {
                   top: d.y,
                   width: DOT,
                   height: DOT,
-                  background: d.on ? "var(--color-navy)" : "var(--color-line)",
+                  // 바탕 점은 cream-3: 일반 모드에선 연한 회색, 미러필름 모드에선 거의 검정이라 글자 점만 빛난다.
+                  // line은 미러에서 밝은 회색이 되어 글자 점과 구분되지 않았다
+                  background: d.on ? "var(--color-navy)" : "var(--color-cream-3)",
                   animation: d.on
                     ? `mr-dot 420ms ${SPRING} ${d.d1}ms forwards, mr-dot-out 380ms ease-in ${d.d2}ms forwards`
                     : `mr-fade 300ms ease ${250 + d.seed * 300}ms forwards, mr-dot-out 380ms ease-in ${d.d2}ms forwards`,
@@ -134,7 +136,7 @@ export default function IntroPage() {
         </div>
 
         <div
-          className="absolute top-[384px] left-[190px] h-[540px] w-[420px] bg-white"
+          className="absolute top-[318px] left-[190px] h-[540px] w-[420px] bg-white"
           style={{
             clipPath: "inset(100% 0 0 0 round 210px 210px 28px 28px)",
             animation: `mr-wipe 1100ms cubic-bezier(.7,0,.2,1) ${T + 900}ms forwards`,
@@ -175,7 +177,7 @@ export default function IntroPage() {
           </div>
         ))}
 
-        <div className="absolute inset-x-0 top-[956px] flex flex-col items-center gap-2">
+        <div className="absolute inset-x-0 top-[890px] flex flex-col items-center gap-2">
           <span
             className="font-serif text-[32px] text-ink italic opacity-0"
             style={{ animation: `mr-fade 700ms ${EASE} ${T + 1700}ms forwards` }}

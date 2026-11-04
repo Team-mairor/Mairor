@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Contrast, List, Plus, Smile } from "lucide-react";
+import { ArrowDown, Check, Contrast, List, Plus, Smile } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -151,7 +151,7 @@ export default function CheckPage() {
   const noneRows = items.filter((x) => x.pr.kind === "none");
   const layersUrl = query ? (query.get("layers") ?? DEFAULT_LAYERS) : null;
   // 카메라 오류·얼굴 없음이면 안내를 띄우고 메이크업은 숨긴다 (CAMERA-004)
-  const { note, canRender } = useLiveState();
+  const { note, canRender, reason } = useLiveState();
   useHiddenVideo();
 
   return (
@@ -162,7 +162,9 @@ export default function CheckPage() {
         <MakeupOverlay layersUrl={layersUrl} hidden={!canRender} fit />
       </div>
 
-      <LiveNote note={note} />
+      {/* 목록은 얼굴을 덮는 시트라 인식 안내가 필요 없고, 같은 자리(top 84px)라 제목줄을 가린다. 입혀볼 때만 띄운다.
+          입혀볼 때는 84px에 부위 탭이 있어, 탭을 가리지 않게 화장 영역 시작(150px)으로 내린다 */}
+      {view === "try" && <LiveNote note={note} className="top-[150px]" />}
       <div className="absolute inset-x-5 top-5 flex items-center justify-between gap-3">
         <LiveTag />
         <div className="min-w-0 flex-1" />
@@ -302,12 +304,22 @@ export default function CheckPage() {
                   role="tab"
                   aria-selected={on}
                   onClick={() => setGroup(g.k)}
+                  // 고른 탭은 그룹 색으로 채우고 체크를 붙인다. 흰 면은 미러필름 모드에서 검정이 되어 고른 티가 안 났다
                   className={cn(
                     "flex h-[76px] items-center gap-3 rounded-[20px] px-5 transition-[background,box-shadow]",
-                    on ? "bg-white shadow-float" : "",
+                    on ? cn(TAG_BG[g.k], "shadow-float") : "hover:bg-white/8",
                   )}
                 >
-                  <span className="size-3.5 shrink-0 rounded-full" style={{ background: g.dot }} />
+                  {on ? (
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-ink text-[#fff]">
+                      <Check className="size-4" strokeWidth={3.2} aria-hidden />
+                    </span>
+                  ) : (
+                    <span
+                      className="size-3.5 shrink-0 rounded-full"
+                      style={{ background: g.dot }}
+                    />
+                  )}
                   <span
                     className={cn(
                       "min-w-0 flex-1 text-left text-[24px] font-extrabold",
@@ -319,7 +331,7 @@ export default function CheckPage() {
                   <span
                     className={cn(
                       "font-serif text-[48px] leading-none tabular",
-                      on ? "text-cyan" : "text-line-2",
+                      on ? "text-ink" : "text-line-2",
                     )}
                   >
                     {n}
@@ -391,34 +403,58 @@ export default function CheckPage() {
                 const outline =
                   focus === i ? "outline outline-[3px] -outline-offset-[3px] outline-blush" : "";
                 return pr.kind === "sub" ? (
+                  // 영상 속 제품 → 대신 쓸 내 제품을 위아래로 잇는다. 원본 보유 여부는 고른 제품과 따로 본다
                   <div
                     key={r.id}
                     className={cn(
-                      "flex animate-fade flex-col overflow-hidden rounded-[28px] bg-white/90 text-ink shadow-float backdrop-blur-md",
+                      "flex shrink-0 animate-fade flex-col overflow-hidden rounded-[28px] bg-white/90 text-ink shadow-float backdrop-blur-md mirror:shadow-[inset_0_0_0_2px_var(--color-line-2)]",
                       outline,
                     )}
                   >
-                    <div className="flex items-center gap-6 px-6 pt-6 pb-5 pl-[26px]">
+                    <div className="flex items-center gap-5 px-6 pt-5 pb-6 pl-[26px]">
                       <span
-                        className="size-20 shrink-0 rounded-full"
+                        className="size-16 shrink-0 rounded-full"
                         style={{ background: r.color }}
                       />
-                      {Head}
-                    </div>
-                    <div className="flex items-center gap-6 border-t border-line px-6 pt-5 pb-[22px] pl-[26px]">
-                      <span className="flex w-20 shrink-0 justify-center text-navy">
-                        <ArrowRight className="size-[26px]" strokeWidth={2.2} aria-hidden />
-                      </span>
-                      <span
-                        className="size-12 shrink-0 rounded-full"
-                        style={{ background: pr.p?.color ?? "#fff" }}
-                      />
-                      <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                        <span className="flex h-7 items-center self-start rounded-full bg-ice-tint px-3 text-[15px] font-extrabold whitespace-nowrap text-navy">
-                          대체 제품
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="flex h-[26px] shrink-0 items-center rounded-full bg-ink px-2.5 text-[14px] font-extrabold text-white">
+                            영상 속
+                          </span>
+                          <span className="truncate text-[17px] font-semibold text-mute">
+                            {r.cat} · {r.brand}
+                          </span>
                         </span>
                         <span className="truncate text-[24px] leading-[1.25] font-bold text-ink">
-                          {pr.p?.brand} {pr.p?.name}
+                          {r.name}
+                        </span>
+                        <span className="text-[15px] font-semibold text-mute">
+                          {!emptyPouch && hasSame(r, pouch)
+                            ? "내 파우치에 있음"
+                            : "내 파우치에 없음"}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="relative flex items-center gap-5 border-t border-line bg-mint-pale px-6 pt-6 pb-5 pl-[26px]">
+                      <span className="absolute -top-[18px] left-[42px] flex size-9 items-center justify-center rounded-full border border-line bg-white text-ink">
+                        <ArrowDown className="size-5" strokeWidth={2.6} aria-hidden />
+                      </span>
+                      <span
+                        className="size-16 shrink-0 rounded-full ring-4 ring-mint"
+                        style={{ background: pr.p?.color ?? "#fff" }}
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="flex h-[26px] shrink-0 items-center gap-1 rounded-full bg-mint px-2.5 text-[14px] font-extrabold text-ink">
+                            <Check className="size-3.5" strokeWidth={3.2} aria-hidden />
+                            대체 제품
+                          </span>
+                          <span className="truncate text-[17px] font-semibold text-mute">
+                            {pr.p?.brand}
+                          </span>
+                        </span>
+                        <span className="truncate text-[24px] leading-[1.25] font-bold text-ink">
+                          {pr.p?.name}
                         </span>
                       </span>
                       {Actions}
@@ -428,7 +464,7 @@ export default function CheckPage() {
                   <div
                     key={r.id}
                     className={cn(
-                      "flex min-h-[136px] animate-fade items-center gap-6 rounded-[28px] bg-white/90 px-6 py-6 pl-[26px] text-ink shadow-float backdrop-blur-md",
+                      "flex min-h-[136px] shrink-0 animate-fade items-center gap-6 rounded-[28px] bg-white/90 px-6 py-6 pl-[26px] text-ink shadow-float backdrop-blur-md mirror:shadow-[inset_0_0_0_2px_var(--color-line-2)]",
                       outline,
                     )}
                   >
@@ -446,6 +482,10 @@ export default function CheckPage() {
             )}
           </div>
 
+          {/* 인식 안내는 목록에서 숨겨도, 카메라 오류와 재시도는 제목줄을 가리지 않게 버튼 위에 남긴다 */}
+          {reason === "error" && (
+            <LiveNote note={note} className="relative inset-x-auto top-auto mx-8 shrink-0" />
+          )}
           <div className="flex shrink-0 items-center gap-2.5 px-8">
             <RoundBack onClick={() => router.push("/preview")} label="미리보기로" />
             <PillButton size="cta" trailing onClick={start} className="min-w-0 flex-1">

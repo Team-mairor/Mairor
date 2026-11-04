@@ -247,9 +247,9 @@ export function VideoPicker({
             다른 영상
           </PillButton>
           {selState === "blocked" ? (
-            <div className="ml-auto flex h-20 min-w-[300px] items-center justify-center rounded-full bg-line px-8 text-[21px] font-bold text-mute">
+            <PillButton size="hero" disabled className="ml-auto min-w-[300px]">
               선택할 수 없는 영상
-            </div>
+            </PillButton>
           ) : (
             <PillButton
               size="hero"

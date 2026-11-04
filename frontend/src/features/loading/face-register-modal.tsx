@@ -9,6 +9,7 @@ import {
   allPassed,
   captureFace,
   CHECKS,
+  DISTANCE_HINT_TEXT,
   eyesClosed,
   saveFacePhoto,
   useCamera,
@@ -18,6 +19,8 @@ import {
 import { useCameraErrorNote } from "@/features/live";
 import { cn } from "@/lib/utils";
 
+import { FaceDemo } from "./face-demo";
+import { FacePosition } from "./face-position";
 import { ProgressBar } from "./progress-bar";
 
 /** 필수 촬영 조건의 이름과 맞지 않을 때 안내 */
@@ -62,7 +65,9 @@ export function FaceRegisterModal({
   /** 마지막 촬영을 다시 하는 이유 */
   const [retake, setRetake] = useState<null | "failed" | "eyes">(null);
   const cameraReady = camera.status === "ready";
-  const { check, frame, passedNow } = useFaceCheck(step === "cam" && cameraReady && !done);
+  const { check, found, hint, frame, passedNow } = useFaceCheck(
+    step === "cam" && cameraReady && !done,
+  );
   const passed = allPassed(check);
   const ok = CHECKS.filter((name) => check[name]).length;
   // 조건을 모두 만족하는 동안만 촬영을 진행하고, 잠깐 흔들리는 정도를 넘어 깨지면 처음부터 다시 잰다
@@ -152,8 +157,10 @@ export function FaceRegisterModal({
           : stage === "scan"
             ? "정면 얼굴을 찍고 조명·색온도를 확인하고 있어요"
             : passed
-              ? "필수 조건 4가지를 통과했어요 · 맨얼굴은 권장이에요"
-              : "";
+              ? "필수 조건 4가지를 통과했어요"
+              : found && !check.distance
+                ? "실선 얼굴이 점선 타원을 채우고 원 가운데에 오면 돼요"
+                : "";
   const cta =
     stage === "ready"
       ? `조건 맞추는 중 · ${ok} / ${CHECKS.length}`
@@ -167,7 +174,14 @@ export function FaceRegisterModal({
       ? null
       : passed
         ? { ok: true, text: "조건 통과 · 그대로 봐 주세요" }
-        : { ok: false, text: CONDITIONS[firstFailed ?? "distance"][1] };
+        : {
+            ok: false,
+            // 거리는 '원 안에 맞춰 주세요' 대신 가까이·뒤로·어느 쪽으로 옮길지 알려 준다
+            text:
+              (firstFailed ?? "distance") === "distance" && hint
+                ? DISTANCE_HINT_TEXT[hint]
+                : CONDITIONS[firstFailed ?? "distance"][1],
+          };
 
   return (
     <Modal
@@ -243,7 +257,7 @@ export function FaceRegisterModal({
             </span>
           </div>
 
-          <FaceRing stage={stage} pct={scan} live={cameraReady} alert={alert} />
+          <FaceRing stage={stage} pct={scan} live={cameraReady} face={found} alert={alert} />
 
           <div className="flex flex-col items-center gap-2 text-center">
             <span className="font-display text-[30px] leading-[1.3] text-ink">{title}</span>
@@ -272,10 +286,6 @@ export function FaceRegisterModal({
                     {CONDITIONS[name][0]}
                   </span>
                 ))}
-                <span className="flex h-10 items-center gap-1.5 rounded-full border-[1.5px] border-dotted border-line-3 bg-white px-3.5 text-[16px] font-semibold whitespace-nowrap text-mute">
-                  <Check className="size-3.5" strokeWidth={2.6} aria-hidden />
-                  맨얼굴 · 권장
-                </span>
               </>
             ) : (
               <span
@@ -321,19 +331,27 @@ export function FaceRegisterModal({
 }
 
 const N = 72;
-const RING = 540;
+/** 눈금 링 지름. 얼굴 원은 안쪽으로 50px씩 들어간다. 튜토리얼에서 얼굴이 화면을 채우는 거리에 맞춰 크게 둔다 */
+const RING = 620;
+const FACE = RING - 100;
+/** 눈금 하나의 길이와 링 중심에서 눈금 바깥 끝까지 거리 */
+const TICK = 22;
+const TICK_R = RING / 2 - 8;
 
 /** 눈금 링 + 얼굴 원 */
 function FaceRing({
   stage,
   pct,
   live,
+  face,
   alert,
 }: {
   stage: Stage;
   pct: number;
   /** 카메라가 켜져 영상을 보여 줄 수 있음 */
   live: boolean;
+  /** 얼굴이 잡혔음. 안 잡혔으면 원 안에 맞추는 예시를 띄운다 */
+  face: boolean;
   alert: { ok: boolean; text: string } | null;
 }) {
   const lit =
@@ -353,10 +371,10 @@ function FaceRing({
           )}
           style={{
             left: RING / 2 - 4.5,
-            top: RING / 2 - 262,
+            top: RING / 2 - TICK_R,
             width: 9,
-            height: 22,
-            transformOrigin: "4.5px 262px",
+            height: TICK,
+            transformOrigin: `4.5px ${TICK_R}px`,
             transform: `rotate(${(i / N) * 360}deg)`,
           }}
         />
@@ -380,11 +398,14 @@ function FaceRing({
           {alert.text}
         </div>
       )}
-      <div className="absolute top-[50px] left-[50px] size-[440px] overflow-hidden rounded-full bg-cream">
+      <div
+        className="absolute top-[50px] left-[50px] overflow-hidden rounded-full bg-cream"
+        style={{ width: FACE, height: FACE }}
+      >
         {live && <FaceVideo />}
-        {stage === "ready" && (
-          <div className="absolute inset-10 rounded-full border-2 border-dashed border-white/90" />
-        )}
+        {stage === "ready" && !face && <FaceDemo />}
+        {/* 촬영하는 동안에도 자리를 지키도록 위치를 계속 보여 준다 */}
+        {stage !== "done" && <FacePosition size={FACE} />}
         {stage === "scan" && (
           <div
             className="absolute inset-x-0 h-0.5 bg-blush shadow-[0_0_12px_2px_color-mix(in_srgb,var(--color-blush)_60%,transparent)]"

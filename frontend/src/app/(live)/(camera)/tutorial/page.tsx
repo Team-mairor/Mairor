@@ -26,9 +26,7 @@ import {
   TutorialTopBar,
 } from "@/features/tutorial";
 import { useQuery } from "@/lib/hooks/use-query";
-import { useSpeech } from "@/lib/hooks/use-speech";
 import { useTimeout } from "@/lib/hooks/use-timeout";
-import { cn } from "@/lib/utils";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
@@ -41,7 +39,7 @@ import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 export default function TutorialPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, update, updateRun, startRun } = useSession();
+  const { state, updateRun, startRun } = useSession();
   const run = state.run;
   const alert = parseAlert(query?.get("alert"));
 
@@ -163,24 +161,6 @@ export default function TutorialPage() {
     router.push("/home");
   };
 
-  // 바르는 동안 화면을 읽기 어려우니, 켜 두면 준비 카드와 지금 할 동작을 읽어 준다
-  const mine = pr.p;
-  const speech = !ready
-    ? [
-        `${step + 1}단계, ${info.title}.`,
-        mine ? `준비할 제품은 ${mine.brand} ${mine.name}.` : "내 파우치에 맞는 제품이 없어요.",
-        `할 일은 ${info.acts.length}가지예요.`,
-      ].join(" ")
-    : shownActs
-        .map((i) => {
-          const a = info.acts[i];
-          const tip = a.tip ? ` ${a.tip.kind === "caution" ? "주의" : "팁"}, ${a.tip.text}.` : "";
-          const done = i === info.acts.length - 1 && info.doneWhen ? ` ${info.doneWhen}.` : "";
-          return `${i + 1}. ${a.text}.${tip}${done}`;
-        })
-        .join(" ");
-  useSpeech(state.voice ? speech : null);
-
   const nextLabel = busy
     ? "저장 중…"
     : !lastAct
@@ -193,22 +173,25 @@ export default function TutorialPage() {
 
   return (
     <main className="relative flex flex-1 flex-col">
-      {/* 가이드는 상단 바·제품 칩과 하단 안내 사이 빈 칸에만 그린다 */}
-      <div className="relative mt-[140px] flex-1">
+      {/*
+        가이드는 상단 바·제품 칩과 하단 안내 사이에 그린다. 하단 안내 높이는 동작·단계마다 150px 가까이 달라서,
+        남은 칸(flex-1)에 맞추면 '했어요'를 누를 때마다 얼굴 배율이 다시 잡혀 가이드가 출렁였다.
+        그래서 하단 안내가 가장 클 때(약 370px)를 비워 둔 고정 칸에 그린다
+      */}
+      <div className="absolute inset-x-0 top-[140px] bottom-[372px]">
         {/* 이 단계에 그릴 가이드가 없어도 윤곽은 띄운다. 알림으로 가이드를 숨기는 동안은 윤곽도 숨긴다 */}
         <GuideOverlay step={canRender ? guideStep : null} fit face={canRender} />
       </div>
+      <div className="flex-1" />
 
       <TutorialTopBar
         steps={GUIDE_STEPS}
         step={step}
-        voice={state.voice}
         onExit={() => {
           // 저장 대기 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 버린다
           cancelTimer();
           setExitAsk(true);
         }}
-        onToggleVoice={() => update({ voice: !state.voice })}
         onGoStep={(i) => goStep(i, i > step)}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
@@ -264,7 +247,7 @@ export default function TutorialPage() {
               if (step > 0) goStep(step - 1, false);
             }}
             label={act > 0 ? "이전 할 일" : "이전 단계"}
-            className={cn((busy || (step === 0 && act === 0)) && "opacity-35")}
+            disabled={busy || (step === 0 && act === 0)}
           />
           <PillButton
             size="cta"

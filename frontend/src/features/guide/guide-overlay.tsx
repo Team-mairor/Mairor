@@ -166,6 +166,11 @@ const FIT_FOLLOW = 0.2;
  * 얼굴 크기가 출렁이지 않게 한다. FACE_FILL 0.85에서 15% 커져도 0.98이라 얼굴이 캔버스를 넘지 않는다.
  */
 const FIT_HOLD = 0.15;
+/**
+ * 점선 굵기·점 크기의 기준인 눈 사이 거리도 같은 방식으로 붙잡는다. 눈 사이 거리는 고개를 조금 돌리거나
+ * 홍채 좌표가 떨리기만 해도 프레임마다 바뀌어, 그대로 쓰면 가만히 있어도 점선이 커졌다 작아졌다 한다
+ */
+const IOD_HOLD = 0.15;
 
 /**
  * CameraProvider 안에서 지금 단계의 가이드를 얼굴 위에 그린다.
@@ -190,6 +195,7 @@ export function GuideOverlay({
   const viewRef = useRef(viewTransform);
   const fitRef = useRef<ViewTransform | null>(null);
   const fitScaleRef = useRef(0);
+  const iodRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -244,6 +250,12 @@ export function GuideOverlay({
           }
         : goal;
     }
+    let iod = frame?.iod ?? 0;
+    if (frame) {
+      const held = iodRef.current;
+      if (!held || Math.abs(iod / held - 1) > IOD_HOLD) iodRef.current = iod;
+      iod = iodRef.current;
+    }
     rendererRef.current?.render({
       frame,
       step: stepRef.current,
@@ -252,7 +264,7 @@ export function GuideOverlay({
       // 지금은 카메라 화면 기준. 하프미러는 거울에 비친 상 위치로 바꿔 넘긴다.
       projection:
         frame && view
-          ? { toPx: (p) => toScreen(p, frame.imageSize, view), unit: frame.iod * view.scale }
+          ? { toPx: (p) => toScreen(p, frame.imageSize, view), unit: iod * view.scale }
           : null,
       now: performance.now(),
     });

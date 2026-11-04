@@ -1,24 +1,20 @@
 "use client";
 
-import { Volume2, VolumeX, X } from "lucide-react";
+import { X } from "lucide-react";
 
 import type { GuideStepInfo } from "@/features/session";
 import { cn } from "@/lib/utils";
 
-/** 튜토리얼 상단: 나가기·음성 안내·단계 진행바. 준비 카드(z-[4]) 위에 둬서 카드가 떠 있어도 누를 수 있다 */
+/** 튜토리얼 상단: 나가기·단계 진행바. 준비 카드(z-[4]) 위에 둬서 카드가 떠 있어도 누를 수 있다 */
 export function TutorialTopBar({
   steps,
   step,
-  voice,
   onExit,
-  onToggleVoice,
   onGoStep,
 }: {
   steps: GuideStepInfo[];
   step: number;
-  voice: boolean;
   onExit: () => void;
-  onToggleVoice: () => void;
   onGoStep: (i: number) => void;
 }) {
   return (
@@ -30,22 +26,6 @@ export function TutorialTopBar({
       >
         <X className="size-[18px]" strokeWidth={2.4} aria-hidden />
         나가기
-      </button>
-      <button
-        type="button"
-        onClick={onToggleVoice}
-        aria-pressed={voice}
-        aria-label={voice ? "음성 안내 끄기" : "음성 안내 켜기"}
-        className={cn(
-          "flex size-12 shrink-0 items-center justify-center rounded-full border border-white/15",
-          voice ? "bg-white text-navy" : "bg-night/80 text-white",
-        )}
-      >
-        {voice ? (
-          <Volume2 className="size-[20px]" strokeWidth={2.2} aria-hidden />
-        ) : (
-          <VolumeX className="size-[20px]" strokeWidth={2.2} aria-hidden />
-        )}
       </button>
       <div className="flex h-12 min-w-0 flex-1 items-center gap-3.5 rounded-full border border-white/15 bg-night/80 px-[18px]">
         <div

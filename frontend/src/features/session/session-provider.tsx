@@ -56,8 +56,6 @@ export interface SessionState {
   onboarded: boolean;
   /** 이 기기에서 튜토리얼 안내를 본 적 있음 */
   tutSeen: boolean;
-  /** 이 기기에서 튜토리얼 음성 안내를 켰음 */
-  voice: boolean;
   pouch: PouchItem[];
   reports: ReportSummary[];
   pendingGuide: PendingGuide | null;
@@ -82,7 +80,6 @@ const EMPTY_STATE: SessionState = {
   sessionExpired: false,
   onboarded: false,
   tutSeen: false,
-  voice: false,
   pouch: [],
   reports: [],
   pendingGuide: null,

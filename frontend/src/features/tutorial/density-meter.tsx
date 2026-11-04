@@ -14,7 +14,7 @@ export function DensityMeter({
     <div className="flex items-center gap-3 text-[13px] font-semibold text-line-2">
       <span>연하게</span>
       <div className="relative h-2.5 flex-1">
-        <div className="absolute inset-0 rounded-full bg-white/10" />
+        <div data-track className="absolute inset-0 rounded-full bg-white/10" />
         <span
           className="absolute top-0 bottom-0 left-0 rounded-full transition-[width,background] duration-400"
           style={{ width: blocked ? "0%" : `${value}%`, background: color }}

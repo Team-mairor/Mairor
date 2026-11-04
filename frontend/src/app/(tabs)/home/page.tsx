@@ -3,8 +3,13 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
+import { MirrorToggle } from "@/components/mirror-toggle";
+import { Modal } from "@/components/ui/modal";
+import { FieldError } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
+import { useLogout } from "@/features/auth";
 import { PouchBoard } from "@/features/pouch";
 import { displayName, useSession } from "@/features/session";
 import { videoThumb } from "@/features/video";
@@ -33,6 +38,8 @@ const MONTHS = [
 export default function HomePage() {
   const router = useRouter();
   const { state, update, startRun } = useSession();
+  const [account, setAccount] = useState(false);
+  const { logout, pending: logoutPending, error: logoutError } = useLogout();
   const query = useQuery();
   // ?empty=1: 리포트·파우치 빈 상태 확인용 (데이터는 지우지 않는다)
   const empty = query?.get("empty") === "1";
@@ -64,14 +71,52 @@ export default function HomePage() {
         <span className="font-serif text-[40px] leading-none tracking-[-.02em] text-navy italic">
           mairor
         </span>
-        <Link
-          href="/my/pouch"
+        <button
+          type="button"
+          onClick={() => setAccount(true)}
           className="ml-auto flex size-11 items-center justify-center rounded-full bg-mint font-serif text-[22px] text-ink italic"
-          aria-label="마이페이지"
+          aria-label="계정 · 로그아웃"
         >
           {(displayName(state).trim()[0] ?? "m").toUpperCase()}
-        </Link>
+        </button>
       </header>
+
+      {/* 잘못 눌러 바로 로그아웃되지 않게 한 번 묻는다. 로그인 뒤 미러필름 모드를 바꿀 곳도 여기다 */}
+      <Modal
+        open={account}
+        onClose={() => !logoutPending && setAccount(false)}
+        labelledBy="account-title"
+        // 하단 탭까지 덮어, 창이 떠 있는 동안 다른 화면으로 가지 않게 한다
+        overlayClassName="fixed z-40"
+        className="flex max-w-[520px] flex-col gap-6 px-[30px] pt-8 pb-6"
+      >
+        <div className="flex flex-col gap-2">
+          <h2 id="account-title" className="font-display text-[30px] leading-[1.25] text-ink">
+            로그아웃할까요?
+          </h2>
+          <p className="text-[17px] text-mute">{state.email}</p>
+        </div>
+        <MirrorToggle className="justify-between" />
+        {logoutError && <FieldError>{logoutError}</FieldError>}
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => setAccount(false)}
+            disabled={logoutPending}
+            className="flex h-[68px] flex-1 items-center justify-center rounded-full border-[1.5px] border-line-2 text-[19px] font-bold text-ink"
+          >
+            취소
+          </button>
+          <PillButton
+            variant="dark"
+            className="h-[68px] flex-1"
+            busy={logoutPending}
+            onClick={logout}
+          >
+            {logoutPending ? "로그아웃 중" : "로그아웃"}
+          </PillButton>
+        </div>
+      </Modal>
 
       <div className="flex min-h-0 flex-1 flex-col gap-[18px] px-10 pt-3 pb-6">
         <div className="flex flex-col gap-2">
