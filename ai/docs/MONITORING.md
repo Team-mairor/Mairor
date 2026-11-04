@@ -76,7 +76,6 @@ guide_job                  작업 하나
 
 ## 정할 것
 
-- 운영 Phoenix: 인프라 서버에 SQLite로 띄웠고 AI는 앱 서버 alloy를 거쳐 보낸다(`infra/README.md`). 로그인(`PHOENIX_ENABLE_AUTH`)과 보관 기간은 아직 정하지 않았고, 화면은 SSH 터널로만 연다.
 - 다시 생성 여부는 S15P31A306-253에서 기록에 더한다.
 - BE 로그: `logging.structured.format.console=logstash`로 JSON을 켜고, 영상 분석 시작부터 `video_id`, AI의 202를 받은 뒤와 콜백을 받을 때 `job_id`를 MDC에 넣는다. 그러면 BE · AI 로그를 같은 값으로 찾을 수 있다.
 - 기록은 5초마다 모아 보낸다. 서버가 정상 종료하면 남은 기록을 보내지만, 강제로 죽으면 마지막 몇 초 기록이 빠진다.

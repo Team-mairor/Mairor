@@ -1,9 +1,10 @@
 # 인프라 서버의 유일한 공개 입구(80 · 443). 인증서는 Let's Encrypt 에서 자동으로 받는다.
-# 앱 서버 Alloy 가 보내는 주소와 phoenix 는 앱 서버 Elastic IP 에서 온 요청만 받는다. 나머지는 Grafana 로 넘기고 Grafana 로그인이 막는다.
-# INFRA_DOMAIN 은 서버 .env 에서 온다(infra/README.md).
+# 앱 서버 Alloy 가 보내는 주소는 앱 서버 Elastic IP 에서 온 요청만 받는다.
+# phoenix 화면(/phoenix)은 모두에게 열고 Phoenix 로그인이 막는다. 나머지는 Grafana 로 넘기고 Grafana 로그인이 막는다.
+# INFRA_DOMAIN · PHOENIX_ADMIN_SECRET 은 서버 .env 에서 온다(infra/README.md).
 {$INFRA_DOMAIN} {
 	@outsider {
-		path /loki/api/v1/push /api/v1/write /v1/traces /phoenix/*
+		path /loki/api/v1/push /api/v1/write /v1/traces /phoenix/v1/traces
 		not remote_ip 54.117.21.39
 	}
 
@@ -20,6 +21,15 @@
 		handle /v1/traces {
 			reverse_proxy tempo:4318
 		}
+		# Phoenix 는 /phoenix 를 뗀 경로를 받고, 화면 속 주소에만 /phoenix 를 붙인다(PHOENIX_HOST_ROOT_PATH)
+		# 로그인을 켜면 기록을 받을 때도 키를 본다. 앱 서버에 비밀값을 두지 않으려고 여기서 붙인다
+		handle /phoenix/v1/traces {
+			uri strip_prefix /phoenix
+			reverse_proxy phoenix:6006 {
+				header_up Authorization "Bearer {$PHOENIX_ADMIN_SECRET}"
+			}
+		}
+		redir /phoenix /phoenix/
 		handle_path /phoenix/* {
 			reverse_proxy phoenix:6006
 		}

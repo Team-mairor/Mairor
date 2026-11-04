@@ -125,6 +125,8 @@ docker compose up -d   # ai/ 에서. http://localhost:6006
 
 `.env`에 `TRACING_ENDPOINT=http://localhost:6006/v1/traces`를 넣고 서버를 다시 띄우면 요청을 보낼 때마다 기록이 남습니다. 기록 항목과 찾는 방법은 [docs/MONITORING.md](docs/MONITORING.md)에 있습니다.
 
+운영 기록은 https://k15a306.p.ssafy.io/phoenix 에서 봅니다. 계정은 Phoenix 관리자가 만들어 줍니다([infra/README.md](../infra/README.md#접속)).
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.
