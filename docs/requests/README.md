@@ -19,8 +19,6 @@
 
 | 문서 | 날짜 | 요청 → 대상 | 상태 |
 |---|---|---|---|
-| [레퍼런스 프레임 전달](2026-10-28-hyeonsoo-jungyoon-reference-frames.md) | 2026-10-28 | 김현수 → 김정윤 | 요청 |
-| [API 명세 v2 도포 정보 대응 확인](2026-10-28-hyeonsoo-jungyoon-api-v2-application.md) | 2026-10-28 | 김현수 → 김정윤 | 요청 |
 | [BE 로그 JSON 형식과 작업 ID 남기기](2026-10-29-hyeongjun-jungyoon-be-logging.md) | 2026-10-29 | 박형준 → 김정윤 | 요청 |
 | [기본 아이섀도 가이드에 눈 아래 안내 추가](2026-11-01-hyeonsoo-seoyun-default-eyeshadow-under-eye.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [바르는 자리가 바뀌면 단계 나누기](2026-11-01-hyeonsoo-jungyoon-split-steps-by-application.md) | 2026-11-01 | 김현수 → 김정윤 | 요청 |

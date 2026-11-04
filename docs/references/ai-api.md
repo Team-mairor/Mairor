@@ -45,7 +45,7 @@ BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본�
 | `items[].url` | string (http · https URL) | Y | 사진 주소. AI가 작업을 시작할 때 GET으로 받는다 |
 | `items[].width` · `items[].height` | integer | Y | 사진 크기. 실제 사진과 다르면 그 사진은 쓰지 않는다 |
 
-- 사진은 JPEG · PNG다. 간격·해상도는 [레퍼런스 프레임 전달 요청](../requests/2026-10-28-hyeonsoo-jungyoon-reference-frames.md)을 따른다.
+- 사진은 JPEG · PNG다. 간격·해상도는 [backend/README.md](../../backend/README.md) "프레임 추출"을 따른다(레퍼런스 프레임 전달 요청을 S15P31A306-310에서 반영하고 닫음).
 - 사진은 16장씩 동시에 받고, 한 장에 30초까지 기다린다. 연결 실패·시간 초과·5xx면 한 번 더 받는다. 그래도 못 받은 사진은 건너뛰고 작업은 계속한다.
 - 받은 사진은 작업 폴더에 두었다가 작업이 끝나면 지운다. 가이드 영역은 CPU를 많이 써서 AI 서버 하나에서 한 작업씩 만든다. 뒤 작업은 앞 작업의 영역이 끝날 때까지 기다린다.
 

@@ -425,6 +425,13 @@ curl https://mairor.co.kr/api/v1/internal/guides/<guideId> -H "X-Internal-Token:
 curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-Internal-Token: $INTERNAL_API_TOKEN"   -H "Content-Type: application/json" -d '{"decision":"APPROVED"}'
 ```
 
+**가이드 조회** (API-ANALYSIS-001, S15P31A306-312)
+
+- `GET /api/v1/guides/{guideId}`(회원). 검수 승인(APPROVED)만 200, 검수 전 · 반려 · 없음은 404.
+- 단계는 가이드 입력 순서대로, `stepId`로 쉬운 설명(`actions` · `doneWhen`)과 영역(`subSteps`, `shared/guide-area` 그대로)을 붙인다. 설명 · 영역이 없는 단계는 빈 목록 · null.
+- `part` = 화장 종류 10종, `partLabel` = 한국어. `other`만 EXCLUDED(진행률 · `stepCount`에서 빠짐), 마스카라는 영역이 없어도 GUIDE. `previewable`은 아이섀도 · 아이라인 · 블러셔 · 하이라이트 · 립.
+- 명세 v2와 다른 곳(`application` → `subSteps`, `coordinateSystem` → `meshVersion`, `instruction` → `summary` · `actions`)은 `docs/references/api-spec.md`의 "로컬 수정 -312".
+
 **worker**
 
 - 로컬: api 를 띄운 채로 두 번째 프로세스를 `./gradlew bootRun --args='--spring.profiles.active=dev,worker --server.port=8081'` 로 띄운다. ffmpeg(ffprobe)가 PATH 에 있어야 한다.

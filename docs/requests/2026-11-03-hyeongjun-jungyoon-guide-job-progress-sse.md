@@ -25,7 +25,7 @@ Gemini 영상 분석과 AI 요청 만들기는 지금 하고 계신 작업이라
 
 ### 1. AI 요청에 더할 칸 (지금 하시는 작업)
 
-- [ ] `frames`: [레퍼런스 프레임 전달 요청](2026-10-28-hyeonsoo-jungyoon-reference-frames.md)의 사진 목록을 `{source: {width, height, fps}, items: [{frameIndex, timestampMs, stepId, url, width, height}]}`로 싣는다. `url`이 서명 주소면 만료 시간은 5번의 콜백 기다리는 시간보다 길어야 한다
+- [ ] `frames`: 레퍼런스 프레임 전달 요청(S15P31A306-310에서 반영하고 닫음, [backend/README.md](../../backend/README.md) "프레임 추출")의 사진 목록을 `{source: {width, height, fps}, items: [{frameIndex, timestampMs, stepId, url, width, height}]}`로 싣는다. `url`이 서명 주소면 만료 시간은 5번의 콜백 기다리는 시간보다 길어야 한다
 - [ ] `progressUrl`: 2번의 진행 알림 받는 주소
 
 ### 2. 콜백·진행 알림 받기
