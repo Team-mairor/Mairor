@@ -9,6 +9,7 @@ import { FieldError, Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
+import { CodeField, useVerificationCode } from "@/features/auth";
 import {
   api,
   ApiError,
@@ -20,7 +21,7 @@ import {
   type SignUpRequest,
   type User,
 } from "@/lib/api";
-import { mmss, useCountdown } from "@/lib/hooks/use-countdown";
+import { useCountdown } from "@/lib/hooks/use-countdown";
 import { useRequest } from "@/lib/hooks/use-request";
 import { cn } from "@/lib/utils";
 import {
@@ -159,10 +160,7 @@ export default function SignupPage() {
   const [okFor, setOkFor] = useState("");
   /** 인증번호를 보낸 이메일 */
   const [sentFor, setSentFor] = useState("");
-  const [code, setCode] = useState("");
-  /** 인증번호가 만료되는 시각 */
-  const [codeUntil, setCodeUntil] = useState<number | null>(null);
-  const [resendUntil, setResendUntil] = useState<number | null>(null);
+  const code = useVerificationCode();
   /** 인증을 마친 이메일과 가입 요청에 실을 토큰 */
   const [verified, setVerified] = useState<{ email: string; token: string } | null>(null);
   const [emailErr, setEmailErr] = useState<EmailError>(null);
@@ -177,8 +175,6 @@ export default function SignupPage() {
   /** 선택 항목별 서버 오류 */
   const [extraErr, setExtraErr] = useState<Partial<Record<ExtraField, string>>>({});
   const { pending, run } = useRequest<Pending>();
-  const resendLeft = useCountdown(resendUntil);
-  const codeLeft = useCountdown(codeUntil);
   /** 중복 확인 요청 제한(429)이 풀리는 시각 */
   const [checkUntil, setCheckUntil] = useState<number | null>(null);
   const checkLeft = useCountdown(checkUntil);
@@ -192,12 +188,12 @@ export default function SignupPage() {
   const allAgreed = AGREEMENTS.every((a) => agree[a.type]);
   const requiredAgreed = AGREEMENTS.every((a) => !a.required || agree[a.type]);
   const profileOk = PROFILE_INPUTS.every((p) => !profileProblem(p.field, profile[p.field]));
-  // 이메일을 바꾸면 중복 확인·인증을 다시 해야 한다
-  const checked = okFor === emN;
+  // 이메일을 바꾸면 중복 확인·인증을 다시 해야 한다. 빈 칸끼리 같다고 확인·발송된 것으로 보지 않는다
+  const checked = emailOk && okFor === emN;
   const sent = checked && sentFor === emN;
   const done = checked && verified?.email === emN;
   const canCheck = emailOk && !checked && !pending && checkLeft === 0;
-  const canVerify = code.length === 6 && !pending && codeLeft > 0;
+  const canVerify = code.ready && !pending;
   const emailReady = EMAIL_VERIFICATION ? done : checked;
   const canSubmit =
     emailOk && emailReady && rule.ok && match && requiredAgreed && profileOk && !pending;
@@ -207,8 +203,7 @@ export default function SignupPage() {
     setOkFor("");
     setSentFor("");
     setVerified(null);
-    setCode("");
-    setCodeUntil(null);
+    code.clear();
   };
 
   const dup = () => {
@@ -250,17 +245,13 @@ export default function SignupPage() {
           signal,
         });
         setSentFor(emN);
-        setCode("");
         setVerified(null);
-        setCodeUntil(Date.now() + res.expiresInSeconds * 1000);
-        setResendUntil(Date.now() + res.resendAvailableInSeconds * 1000);
+        code.sent(res);
       },
       (e) => {
         if (e instanceof ApiError && e.code === "USERS_EMAIL_DUPLICATE") return dup();
         setCodeErr(failText(e));
-        if (e instanceof ApiError && e.retryAfterSeconds) {
-          setResendUntil(Date.now() + e.retryAfterSeconds * 1000);
-        }
+        code.blockResend(e);
       },
     );
   };
@@ -272,7 +263,7 @@ export default function SignupPage() {
       "verify",
       async (signal) => {
         const res = await api.post<EmailVerified>("/v1/users/email-verification/verification", {
-          body: { email: emN, code },
+          body: { email: emN, code: code.code },
           signal,
         });
         setVerified({ email: emN, token: res.verificationToken });
@@ -291,6 +282,10 @@ export default function SignupPage() {
       return setEmailErr({ kind: "msg", text: e.message });
     }
     if (e.code === "USERS_REQUIRED_AGREEMENT_MISSING") {
+      // 필수 약관에 모두 동의해야 보낼 수 있으므로, 그래도 빠졌다고 하면 BE의 약관 버전이 앱보다 새것이다
+      if (requiredAgreed) {
+        return setAgreeErr("약관이 새로 바뀌었어요. 앱을 새로고침한 뒤 다시 가입해 주세요.");
+      }
       return setAgreeErr(e.details[0]?.reason ?? e.message);
     }
     if (e.code !== "VALIDATION_FAILED") return setFormErr(errorMessage(e));
@@ -396,7 +391,7 @@ export default function SignupPage() {
                   setEmailErr(null);
                   setCodeErr(null);
                   // 인증번호 다시 받기 대기는 이메일마다 따로다
-                  setResendUntil(null);
+                  code.resetResend();
                 }}
                 // Enter는 가입이 아니라 이 칸의 다음 동작(중복 확인)으로 보낸다
                 onKeyDown={onEnter(checkEmail)}
@@ -458,67 +453,38 @@ export default function SignupPage() {
               </label>
               {sent ? (
                 <>
-                  <div className="flex gap-2.5">
-                    <TextField
-                      id="su-code"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="인증번호 6자리"
-                      value={code}
-                      invalid={!!codeErr}
-                      disabled={codeLeft === 0}
-                      onChange={(e) => {
-                        setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
-                        setCodeErr(null);
-                      }}
-                      onKeyDown={onEnter(() => canVerify && verifyCode())}
-                      autoComplete="one-time-code"
-                      className="flex-1 tracking-[.2em] tabular"
-                    />
-                    <SideButton
-                      tone={canVerify ? "on" : "off"}
-                      busy={pending === "verify"}
-                      onClick={verifyCode}
-                      disabled={!canVerify}
-                    >
-                      {pending === "verify" ? "확인 중" : "확인"}
-                    </SideButton>
-                  </div>
-                  {codeErr && <FieldError>{codeErr}</FieldError>}
-                  <div className="flex items-center justify-between gap-3 text-[15px] text-mute">
-                    {codeLeft > 0 ? (
-                      <span>
-                        메일로 받은 인증번호를 입력해 주세요{" "}
-                        <b className="text-navy tabular">{mmss(codeLeft)}</b>
-                      </span>
-                    ) : (
-                      <span className="text-error-2">
-                        인증번호 시간이 지났어요. 다시 받아 주세요.
-                      </span>
-                    )}
-                    {resendLeft > 0 ? (
-                      <span className="tabular">{resendLeft}초 후 다시 받기</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="font-bold text-navy"
-                        onClick={sendCode}
-                        disabled={!!pending}
+                  <CodeField
+                    code={code}
+                    id="su-code"
+                    noun="인증번호"
+                    hint="메일로 받은 인증번호를 입력해 주세요"
+                    error={codeErr}
+                    busy={!!pending}
+                    inputClassName="tracking-[.2em]"
+                    onInput={() => setCodeErr(null)}
+                    onResend={sendCode}
+                    onSubmit={verifyCode}
+                    side={
+                      <SideButton
+                        tone={canVerify ? "on" : "off"}
+                        busy={pending === "verify"}
+                        onClick={verifyCode}
+                        disabled={!canVerify}
                       >
-                        다시 받기
-                      </button>
-                    )}
-                  </div>
+                        {pending === "verify" ? "확인 중" : "확인"}
+                      </SideButton>
+                    }
+                  />
                 </>
               ) : (
                 <>
                   <PillButton
                     variant="outline"
                     busy={pending === "send"}
-                    disabled={!!pending || resendLeft > 0}
+                    disabled={!!pending || code.resendLeft > 0}
                     onClick={sendCode}
                   >
-                    {resendLeft > 0 ? `${resendLeft}초 후 다시 받기` : "인증번호 받기"}
+                    {code.resendLeft > 0 ? `${code.resendLeft}초 후 다시 받기` : "인증번호 받기"}
                   </PillButton>
                   {codeErr && <FieldError>{codeErr}</FieldError>}
                 </>

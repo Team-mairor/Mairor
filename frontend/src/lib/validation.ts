@@ -48,5 +48,8 @@ export function profileProblem(field: ProfileField, raw: string) {
   return v !== undefined && !PROFILE_RULES[field].re.test(v) ? PROFILE_RULES[field].hint : null;
 }
 
-/** 가입 때 동의하는 약관 버전. 필수 약관은 BE의 현재 버전(AGREEMENT_*_VERSION)과 같아야 가입된다 */
+/**
+ * 가입 때 동의하는 약관 버전. 필수 약관은 BE의 현재 버전(AGREEMENT_*_VERSION)과 같아야 가입된다.
+ * 바꿀 때는 BE 환경변수와 이 값을 같이 바꿔 함께 배포한다 (frontend/README.md '약관 버전')
+ */
 export const AGREEMENT_VERSION = "2026-10-26";

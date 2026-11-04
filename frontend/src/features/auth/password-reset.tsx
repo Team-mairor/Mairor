@@ -7,9 +7,10 @@ import { FieldError } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { TextField } from "@/components/ui/text-field";
 import { api, ApiError, failText, type CodeSent, type PasswordResetVerified } from "@/lib/api";
-import { mmss, useCountdown } from "@/lib/hooks/use-countdown";
 import { useRequest } from "@/lib/hooks/use-request";
 import { isValidEmail, passwordRule } from "@/lib/validation";
+
+import { CodeField, useVerificationCode } from "./code-field";
 
 export type ResetStep = "email" | "code" | "pw";
 
@@ -35,10 +36,7 @@ export function PasswordReset({
 }) {
   const [step, setStep] = useState<ResetStep>("email");
   const [email, setEmail] = useState(initialEmail);
-  const [code, setCode] = useState("");
-  /** 인증 코드가 만료되는 시각 */
-  const [codeUntil, setCodeUntil] = useState<number | null>(null);
-  const [resendUntil, setResendUntil] = useState<number | null>(null);
+  const code = useVerificationCode();
   const [resetToken, setResetToken] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
@@ -48,8 +46,6 @@ export function PasswordReset({
   /** 서버 상태를 바꾸는 요청(코드 확인·비밀번호 저장) 중에는 끊으면 화면과 서버가 어긋나므로 이전을 막는다 */
   const locked = pending === "verify" || pending === "save";
 
-  const resendLeft = useCountdown(resendUntil);
-  const codeLeft = useCountdown(codeUntil);
   const emailOk = isValidEmail(email);
   const pwRule = passwordRule(pw);
   const pwOk = pwRule.ok;
@@ -72,16 +68,12 @@ export function PasswordReset({
           body: { email },
           signal,
         });
-        setCode("");
+        code.sent(sent);
         setStep("code");
-        setCodeUntil(Date.now() + sent.expiresInSeconds * 1000);
-        setResendUntil(Date.now() + sent.resendAvailableInSeconds * 1000);
       },
       (e) => {
         setErr(failText(e));
-        if (e instanceof ApiError && e.retryAfterSeconds) {
-          setResendUntil(Date.now() + e.retryAfterSeconds * 1000);
-        }
+        code.blockResend(e);
       },
     );
 
@@ -89,7 +81,7 @@ export function PasswordReset({
     run("verify", async (signal) => {
       const verified = await api.post<PasswordResetVerified>(
         "/v1/users/password-reset/verification",
-        { body: { email, code }, signal },
+        { body: { email, code: code.code }, signal },
       );
       setResetToken(verified.resetToken);
       setPw("");
@@ -111,8 +103,7 @@ export function PasswordReset({
         setErr(failText(e));
         // 재설정 시간이 지났으면 인증 코드부터 다시 받는다
         if (e instanceof ApiError && e.code === "USERS_RESET_TOKEN_EXPIRED") {
-          setCode("");
-          setCodeUntil(null);
+          code.clear();
           setStep("code");
         }
       },
@@ -124,8 +115,7 @@ export function PasswordReset({
     setErr(null);
     // 확인에 쓴 인증 코드는 서버에서 지워져 다시 쓸 수 없다. 남은 시간을 지워 다시 받게 한다
     if (step === "pw") {
-      setCode("");
-      setCodeUntil(null);
+      code.clear();
       setStep("code");
     } else if (step === "code") setStep("email");
     else onBack();
@@ -155,7 +145,7 @@ export function PasswordReset({
                 setEmail(e.target.value);
                 setErr(null);
                 // 다시 받기 대기는 이메일마다 따로다
-                setResendUntil(null);
+                code.resetResend();
               }}
               autoComplete="email"
               maxLength={254}
@@ -169,13 +159,13 @@ export function PasswordReset({
               <PillButton
                 className="flex-1"
                 busy={busy}
-                disabled={!emailOk || resendLeft > 0}
+                disabled={!emailOk || code.resendLeft > 0}
                 onClick={send}
               >
                 {busy
                   ? "보내는 중"
-                  : resendLeft > 0
-                    ? `${resendLeft}초 후 다시 받기`
+                  : code.resendLeft > 0
+                    ? `${code.resendLeft}초 후 다시 받기`
                     : "인증 코드 받기"}
               </PillButton>
             </div>
@@ -184,47 +174,22 @@ export function PasswordReset({
 
         {step === "code" && (
           <>
-            <TextField
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="인증 코드 6자리"
-              value={code}
-              disabled={codeLeft === 0}
-              onChange={(e) => {
-                setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
-                setErr(null);
-              }}
-              className="text-[22px] font-semibold tracking-[.3em] tabular"
-              autoComplete="one-time-code"
+            <CodeField
+              code={code}
+              noun="인증 코드"
+              error={err}
+              busy={busy}
+              inputClassName="text-[22px] font-semibold tracking-[.3em]"
+              onInput={() => setErr(null)}
+              onResend={send}
+              onSubmit={verify}
             />
-            {err && <FieldError>{err}</FieldError>}
-            <div className="flex items-center justify-between gap-3 text-[15px] text-mute">
-              {codeLeft > 0 ? (
-                <span>
-                  남은 시간 <b className="text-navy tabular">{mmss(codeLeft)}</b>
-                </span>
-              ) : (
-                <span className="text-error">코드 시간이 지났어요. 다시 받아 주세요.</span>
-              )}
-              {resendLeft > 0 ? (
-                <span className="tabular">{resendLeft}초 후 다시 받기</span>
-              ) : (
-                <button
-                  type="button"
-                  className="font-bold text-navy"
-                  onClick={send}
-                  disabled={busy}
-                >
-                  코드 다시 받기
-                </button>
-              )}
-            </div>
             <div className="mt-1 flex gap-3">
               <IconButton onClick={back} disabled={locked} title="이전" aria-label="이전" />
               <PillButton
                 className="flex-1"
                 busy={pending === "verify"}
-                disabled={code.length !== 6 || busy || codeLeft === 0}
+                disabled={!code.ready || busy}
                 onClick={verify}
               >
                 {pending === "verify" ? "확인 중" : "확인"}

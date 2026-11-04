@@ -31,7 +31,7 @@ type Mode = "pick" | "email" | "reset";
 export default function LoginPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, hydrated, signIn } = useSession();
+  const { state, sessionChecked, signIn } = useSession();
 
   const [mode, setMode] = useState<Mode>("pick");
   const [email, setEmail] = useState("");
@@ -56,7 +56,7 @@ export default function LoginPage() {
   const crowdLeft = useCountdown(crowdUntil);
   const waitLeft = Math.max(lockLeft, crowdLeft);
   // 첫 내 계정 조회가 끝나기 전에 로그인하면 늦게 온 401이 로그인 결과를 덮고, 온보딩 기록도 아직 못 읽었다
-  const canLogin = hydrated && !!email.trim() && !!pw && !busy && waitLeft === 0;
+  const canLogin = sessionChecked && !!email.trim() && !!pw && !busy && waitLeft === 0;
 
   useEffect(() => {
     if (!query) return;
@@ -301,8 +301,20 @@ export default function LoginPage() {
                     title="다른 방법으로 로그인"
                     aria-label="다른 방법으로 로그인"
                   />
-                  <PillButton type="submit" className="flex-1" busy={busy} disabled={!canLogin}>
-                    {busy ? "확인 중" : waitLeft > 0 ? `${waitLeft}초 후 다시 시도` : "로그인"}
+                  {/* 앱을 막 열었으면 내 계정 조회(최대 5초)가 끝날 때까지 기다린다는 걸 보여 준다 */}
+                  <PillButton
+                    type="submit"
+                    className="flex-1"
+                    busy={busy || !sessionChecked}
+                    disabled={!canLogin}
+                  >
+                    {busy
+                      ? "확인 중"
+                      : !sessionChecked
+                        ? "로그인 상태 확인 중"
+                        : waitLeft > 0
+                          ? `${waitLeft}초 후 다시 시도`
+                          : "로그인"}
                   </PillButton>
                 </div>
               </form>

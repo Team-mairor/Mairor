@@ -94,8 +94,10 @@ const STORAGE_KEY = "mairor-session-v2";
 
 interface SessionContextValue {
   state: SessionState;
-  /** 저장된 값과 서버의 로그인 상태를 읽기 전에는 false. 로그인 분기는 이 값이 true일 때 결정한다 */
-  hydrated: boolean;
+  /** 브라우저에 저장된 값(파우치·리포트·실행)을 state에 넣었다. 저장 데이터를 보여 주는 화면은 이 값을 기다린다 */
+  storageLoaded: boolean;
+  /** 내 계정 조회가 끝났다(성공·실패·시간 초과). 로그인 분기는 이 값이 true일 때 결정한다 */
+  sessionChecked: boolean;
   update: (patch: Partial<SessionState> | ((prev: SessionState) => Partial<SessionState>)) => void;
   /** 로그인 성공·세션 확인. 로그인 상태는 이것과 signOut으로만 바꾼다. csrfToken이 없으면(Google 흉내) 토큰은 그대로 */
   signIn: (user: Pick<User, "email" | "nickname">, csrfToken?: string) => void;
@@ -126,7 +128,8 @@ export function SessionProvider({
 }) {
   const [initial] = useState<SessionState>(() => ({ ...EMPTY_STATE, ...seed }));
   const [state, setState] = useState<SessionState>(initial);
-  const [hydrated, setHydrated] = useState(false);
+  const [storageLoaded, setStorageLoaded] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   const signIn = useCallback<SessionContextValue["signIn"]>((user, csrfToken) => {
     if (csrfToken !== undefined) setCsrfToken(csrfToken);
@@ -160,6 +163,7 @@ export function SessionProvider({
     } catch {
       // 깨진 저장값은 기본값으로 시작한다
     }
+    setStorageLoaded(true);
 
     // 앱을 다시 열면 세션 쿠키로 로그인 상태를 확인하고 CSRF 토큰을 받는다 (USERS-004).
     // 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하는 등 그 밖의 실패는 저장된 상태를 그대로 쓴다.
@@ -184,7 +188,7 @@ export function SessionProvider({
       })
       .finally(() => {
         clearTimeout(timer);
-        if (!unmounted) setHydrated(true);
+        if (!unmounted) setSessionChecked(true);
       });
     return () => {
       unmounted = true;
@@ -193,15 +197,15 @@ export function SessionProvider({
     };
   }, [initial, signIn]);
 
-  // hydrated는 저장값을 state에 넣은 다음 렌더부터 true라, 기본값으로 저장값을 덮어쓰지 않는다
+  // storageLoaded는 저장값을 state에 넣은 다음 렌더부터 true라, 기본값으로 저장값을 덮어쓰지 않는다
   useEffect(() => {
-    if (!hydrated) return;
+    if (!storageLoaded) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // 저장 실패는 화면에 영향 없음
     }
-  }, [hydrated, state]);
+  }, [storageLoaded, state]);
 
   const update = useCallback<SessionContextValue["update"]>((patch) => {
     setState((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) }));
@@ -221,8 +225,18 @@ export function SessionProvider({
   const reset = useCallback(() => setState(initial), [initial]);
 
   const value = useMemo(
-    () => ({ state, hydrated, update, signIn, signOut, updateRun, startRun, reset }),
-    [state, hydrated, update, signIn, signOut, updateRun, startRun, reset],
+    () => ({
+      state,
+      storageLoaded,
+      sessionChecked,
+      update,
+      signIn,
+      signOut,
+      updateRun,
+      startRun,
+      reset,
+    }),
+    [state, storageLoaded, sessionChecked, update, signIn, signOut, updateRun, startRun, reset],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

@@ -23,15 +23,15 @@ const snapOf = (m: MatchResult): ReportStep => ({
 export default function ReportPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, hydrated, update } = useSession();
+  const { state, storageLoaded, update } = useSession();
   const [expanded, setExpanded] = useState(true);
   const [del, setDel] = useState<DelState>(null);
   const timer = useTimeout();
 
   // 정확한 id로만 찾는다. 저장값을 읽기 전에는 판단을 미룬다
   const id = query?.get("id");
-  const rep = hydrated && id ? state.reports.find((r) => r.id === id) : undefined;
-  const missing = hydrated && !!query && !rep;
+  const rep = storageLoaded && id ? state.reports.find((r) => r.id === id) : undefined;
+  const missing = storageLoaded && !!query && !rep;
   useEffect(() => {
     if (missing) router.replace("/my/reports");
   }, [missing, router]);

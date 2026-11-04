@@ -33,7 +33,7 @@ const LABELS: [x: number, y: number, label: string, side: "left" | "right", dela
 /** 00 인트로. 약 6초 뒤 또는 탭하면 로그인 상태에 따라 홈·로그인으로 간다 (USERS-003) */
 export default function IntroPage() {
   const router = useRouter();
-  const { state, hydrated } = useSession();
+  const { state, sessionChecked } = useSession();
 
   const dots = useMemo(() => {
     const out: {
@@ -68,17 +68,17 @@ export default function IntroPage() {
 
   // 저장된 세션을 읽기 전에는 loggedIn이 기본값(false)이라 탭해도 기다린다
   const next = () => {
-    if (!hydrated) return;
+    if (!sessionChecked) return;
     if (state.loggedIn) router.replace("/home");
     else router.replace(state.sessionExpired ? "/login?expired=basic" : "/login");
   };
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!sessionChecked) return;
     const t = setTimeout(next, AUTO_MS);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 타이머는 한 번만 건다
-  }, [hydrated]);
+  }, [sessionChecked]);
 
   return (
     <main className="flex flex-1 flex-col bg-white" onClick={next}>
