@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx2
 
+from app.core.tracing import trace_headers
+
 RETRYABLE_STATUS = {408, 429}
 BACKOFF_FACTOR = 5
 
@@ -29,14 +31,16 @@ async def send_callback(
 
     연결 실패·시간 초과·408·429·5xx면 retry_delay_seconds부터 BACKOFF_FACTOR배씩 늘려 기다린 뒤
     max_retries번까지 다시 보낸다. 그 밖의 응답은 다시 보내도 같아서 바로 멈춘다.
+    BE가 콜백 처리를 같은 trace로 남기도록 traceparent를 붙인다.
     """
     last_error: str | None = None
+    headers = trace_headers()
     async with httpx2.AsyncClient(timeout=timeout_seconds) as client:
         for attempt in range(1, max_retries + 2):
             if attempt > 1:
                 await asyncio.sleep(retry_delay_seconds * BACKOFF_FACTOR ** (attempt - 2))
             try:
-                response = await client.post(url, json=body)
+                response = await client.post(url, json=body, headers=headers)
             except httpx2.TransportError as e:
                 last_error = f"연결 실패 ({type(e).__name__})"
                 continue

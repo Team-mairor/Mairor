@@ -27,6 +27,13 @@ guide_job                  작업 하나
 - `explain_step`이 `messages.create`보다 긴 만큼은 동시 호출 자리(`LLM_MAX_CONCURRENCY`)를 기다린 시간이다.
 - 답이 잘리거나 형식이 틀려도 Claude 호출 자체는 성공이라 `messages.create`는 정상이고 `explain_step`이 오류다.
 
+## BE trace 잇기
+
+- 접수 요청(`POST /api/v1/guide-jobs`)에 `traceparent` 헤더가 오면 `guide_job`이 그 BE span 아래에 붙어 trace ID가 BE와 같아진다. 없으면 `guide_job`이 새 trace를 시작한다.
+- 콜백과 진행 알림에 `traceparent`(지금 span)를 붙인다. BE가 받으면 콜백 처리도 같은 trace에 남는다.
+- Phoenix에는 AI span만 가서 `guide_job`의 부모(BE span)가 없지만, Traces 탭에는 `guide_job`이 한 줄로 그대로 보인다(20.26.1에서 확인).
+- Grafana(Tempo)에서는 BE 요청 → `guide_job` → 콜백이 한 그림으로 보인다. 운영 구성은 [infra/README.md](../../infra/README.md).
+
 ## 빼는 것
 
 - Claude 호출의 입력 칸은 통째로 숨긴다. 이미지를 보내면 요청 JSON에 base64가 들어가서다. 보낸 글은 지시문 변수로 남는다.
@@ -60,7 +67,7 @@ guide_job                  작업 하나
 | `stack_trace` | 예외가 있을 때 |
 | `job_id` · `video_id` · `step_id` | 작업 · 단계 처리 중일 때. 기록(`TRACING_ENDPOINT`)을 꺼도 붙는다 |
 | `explanation_prompt` | 확인 로그 줄에만 |
-| `traceId` · `spanId` | 기록을 켰을 때. `traceId`가 Phoenix의 trace ID다 |
+| `traceId` · `spanId` | 기록을 켰거나 BE가 `traceparent`를 보냈을 때. BE가 보냈으면 `traceId`가 BE와 같다 |
 
 ## 비용
 
@@ -69,7 +76,7 @@ guide_job                  작업 하나
 
 ## 정할 것
 
-- 서버 배포: 운영 compose에 Phoenix 추가, DB(Postgres), 로그인(`PHOENIX_ENABLE_AUTH`), 보관 기간. 로그인을 켜면 AI 서버가 API 키를 보내야 하는데 그 설정은 아직 없다.
+- 운영 Phoenix: 인프라 서버에 SQLite로 띄웠고 AI는 앱 서버 alloy를 거쳐 보낸다(`infra/README.md`). 로그인(`PHOENIX_ENABLE_AUTH`)과 보관 기간은 아직 정하지 않았고, 화면은 SSH 터널로만 연다.
 - 다시 생성 여부는 S15P31A306-253에서 기록에 더한다.
 - BE 로그: `logging.structured.format.console=logstash`로 JSON을 켜고, 영상 분석 시작부터 `video_id`, AI의 202를 받은 뒤와 콜백을 받을 때 `job_id`를 MDC에 넣는다. 그러면 BE · AI 로그를 같은 값으로 찾을 수 있다.
 - 기록은 5초마다 모아 보낸다. 서버가 정상 종료하면 남은 기록을 보내지만, 강제로 죽으면 마지막 몇 초 기록이 빠진다.

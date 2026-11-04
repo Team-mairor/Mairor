@@ -1,0 +1,14 @@
+# 앱 서버 지표는 Alloy 가 remote write 로 넣는다. 여기서는 인프라 서버 안의 수집기 상태만 긁는다
+global:
+  scrape_interval: 30s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+  - job_name: loki
+    static_configs:
+      - targets: [loki:3100]
+  - job_name: tempo
+    static_configs:
+      - targets: [tempo:3200]

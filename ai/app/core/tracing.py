@@ -6,6 +6,10 @@ traced() 안의 span과 Claude 호출은 바깥 traced()의 metadata(job_id 등)
 OpenInference는 span을 열 때 문맥의 metadata로 span의 metadata를 덮어써서,
 traced()는 문맥에 metadata를 먼저 넣고 span을 연다.
 
+BE가 traceparent 헤더를 보내면 작업 기록은 BE trace에 이어 붙고, 콜백·진행 알림에도
+traceparent를 붙여 BE · AI 로그와 기록을 traceId 하나로 찾게 한다. 작업은 응답이 나간 뒤에
+돌아서, 접수 때 caller_trace()로 헤더를 꺼내 두었다가 traced(parent=)로 넘긴다.
+
 Claude 호출의 입력 칸은 통째로 숨긴다. 요청 전체를 담는 input.value에 이미지 base64가 들어가고
 hide_input_images로는 그 칸이 지워지지 않아서다. 보낸 글은 using_prompt()의 지시문·변수로 남긴다.
 GMS 키는 요청 헤더에만 있어서 기록되지 않는다.
@@ -20,8 +24,9 @@ from typing import Any
 from openinference.instrumentation import TraceConfig, using_attributes
 from openinference.instrumentation.anthropic import AnthropicInstrumentor
 from openinference.semconv.trace import OpenInferenceSpanKindValues, SpanAttributes
-from opentelemetry import context, trace
+from opentelemetry import context, propagate, trace
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.sampling import ALWAYS_ON
 from opentelemetry.trace import Span, Status, StatusCode, format_span_id, format_trace_id
 from phoenix.otel import register
 
@@ -31,8 +36,14 @@ logger = logging.getLogger(__name__)
 
 tracer = trace.get_tracer("app")
 
+TRACE_HEADERS = ("traceparent", "tracestate")
+
 
 def setup_tracing(settings: Settings) -> TracerProvider | None:
+    """기록을 켠다. BE가 기록하지 않기로 한 요청(traceparent 끝이 -00)이어도 작업은 모두 기록한다.
+
+    기본 sampler는 부모를 따라서, BE가 일부 요청만 기록하면 그만큼 Claude 호출 기록도 빠진다.
+    """
     if not settings.tracing_endpoint:
         return None
     provider = register(
@@ -40,6 +51,7 @@ def setup_tracing(settings: Settings) -> TracerProvider | None:
         endpoint=settings.tracing_endpoint,
         batch=True,
         verbose=False,
+        sampler=ALWAYS_ON,
     )
     instrument_anthropic(provider)
     logger.info(
@@ -56,7 +68,14 @@ def instrument_anthropic(provider: trace.TracerProvider) -> None:
 
 
 @contextmanager
-def traced(name: str, inputs: Mapping[str, Any], **metadata: Any) -> Iterator[Span]:
+def traced(
+    name: str,
+    inputs: Mapping[str, Any],
+    *,
+    parent: Mapping[str, str] | None = None,
+    **metadata: Any,
+) -> Iterator[Span]:
+    """span 하나를 연다. parent는 caller_trace()로 꺼내 둔 헤더다. 있으면 그 trace에 이어 붙는다."""
     merged = _context_metadata() | metadata
     attributes = {
         SpanAttributes.OPENINFERENCE_SPAN_KIND: OpenInferenceSpanKindValues.CHAIN.value,
@@ -64,11 +83,24 @@ def traced(name: str, inputs: Mapping[str, Any], **metadata: Any) -> Iterator[Sp
         SpanAttributes.INPUT_MIME_TYPE: "application/json",
         SpanAttributes.METADATA: _json(merged),
     }
+    parent_context = propagate.extract(parent) if parent else None
     with (
         using_attributes(metadata=merged),
-        tracer.start_as_current_span(name, attributes=attributes) as span,
+        tracer.start_as_current_span(name, parent_context, attributes=attributes) as span,
     ):
         yield span
+
+
+def caller_trace(headers: Mapping[str, str]) -> dict[str, str]:
+    """요청 헤더에서 부른 쪽의 trace 문맥(traceparent · tracestate)만 꺼낸다."""
+    return {key: headers[key] for key in TRACE_HEADERS if key in headers}
+
+
+def trace_headers() -> dict[str, str]:
+    """받는 쪽이 지금 span을 이어받도록 traceparent 헤더를 만든다. 이을 trace가 없으면 비어 있다."""
+    headers: dict[str, str] = {}
+    propagate.inject(headers)
+    return headers
 
 
 def using_prompt(template: str, version: str, variables: Mapping[str, str]) -> using_attributes:
@@ -91,7 +123,8 @@ def set_failed(span: Span, reason: str) -> None:
 def log_fields() -> dict[str, str]:
     """로그 줄에 붙일 지금 작업의 문맥. traced()가 넣은 metadata와 trace ID다.
 
-    기록을 꺼도 metadata는 붙고 traceId·spanId만 빠진다.
+    기록을 꺼도 metadata는 붙는다. traceId·spanId는 기록을 켰거나 BE가 traceparent를 보냈을 때
+    붙는다.
     traceId·spanId는 BE(Micrometer)가 MDC에 넣는 이름과 같다.
     """
     fields = {key: str(value) for key, value in _context_metadata().items()}

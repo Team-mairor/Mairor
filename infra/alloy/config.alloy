@@ -1,0 +1,172 @@
+// 앱 서버(EC2 mairor-app)의 수집기. docker-compose.prod.yml 의 alloy 서비스가 이 파일로 돈다.
+// 모은 것은 인프라 서버 입구(caddy)로 HTTPS 로 보낸다. 입구는 이 서버의 Elastic IP 에서 온 요청만 받는다.
+//   INFRA_HOST  인프라 서버 도메인. docker-compose.prod.yml 에 적혀 있다
+
+// 자기 로그도 loki 로 가므로 경고 이상만 남긴다
+logging {
+	level = "warn"
+}
+
+// ---------- 컨테이너 로그 → loki ----------
+// 운영 로그 드라이버는 awslogs 지만 Docker 가 로컬 캐시를 함께 남겨(dual logging) Docker API 로 읽을 수 있다
+
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+// compose 서비스 이름에서 슬롯을 뗀다: api-a → service_name=api, slot=a
+discovery.relabel "containers" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "(.+?)(?:-(a|b))?"
+		target_label  = "service_name"
+		replacement   = "$1"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = ".+-(a|b)"
+		target_label  = "slot"
+		replacement   = "$1"
+	}
+}
+
+loki.source.docker "containers" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.docker.containers.targets
+	relabel_rules = discovery.relabel.containers.rules
+	forward_to    = [loki.process.fields.receiver]
+}
+
+// BE · AI 의 JSON 로그에서 칸을 꺼낸다. level 은 label, 값이 계속 늘어나는 작업 ID 들은 structured metadata
+loki.process "fields" {
+	stage.json {
+		expressions = {
+			level      = "",
+			job_id     = "",
+			video_id   = "",
+			step_id    = "",
+			traceId    = "",
+			request_id = "",
+			user_id    = "",
+		}
+	}
+
+	stage.labels {
+		values = {
+			level = "",
+		}
+	}
+
+	stage.structured_metadata {
+		values = {
+			job_id     = "",
+			video_id   = "",
+			step_id    = "",
+			traceId    = "",
+			request_id = "",
+			user_id    = "",
+		}
+	}
+
+	forward_to = [loki.write.infra.receiver]
+}
+
+loki.write "infra" {
+	endpoint {
+		url = "https://" + sys.env("INFRA_HOST") + "/loki/api/v1/push"
+	}
+
+	external_labels = {
+		env = "prod",
+	}
+}
+
+// ---------- 서버 · 컨테이너 지표 → prometheus ----------
+// 서버의 /proc · / 는 /host 아래로, /sys 는 cadvisor 가 cgroup 을 읽도록 그대로 /sys 로 붙인다(compose 의 alloy volumes)
+
+prometheus.exporter.unix "host" {
+	procfs_path = "/host/proc"
+	sysfs_path  = "/sys"
+	rootfs_path = "/host/root"
+}
+
+prometheus.exporter.cadvisor "containers" {
+	docker_host      = "unix:///var/run/docker.sock"
+	docker_only      = true
+	storage_duration = "5m"
+}
+
+prometheus.scrape "host" {
+	targets         = array.concat(prometheus.exporter.unix.host.targets, prometheus.exporter.cadvisor.containers.targets)
+	scrape_interval = "30s"
+	forward_to      = [prometheus.remote_write.infra.receiver]
+}
+
+prometheus.remote_write "infra" {
+	endpoint {
+		url = "https://" + sys.env("INFRA_HOST") + "/api/v1/write"
+	}
+
+	external_labels = {
+		env = "prod",
+	}
+}
+
+// ---------- OTLP: 호출 흐름 → tempo(AI 의 Claude 호출은 phoenix 에도), 앱 지표(BE JVM 등) → prometheus ----------
+// BE · AI 는 같은 compose 네트워크에서 http://alloy:4318 로 보낸다
+
+otelcol.receiver.otlp "apps" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		traces  = [otelcol.processor.batch.apps.input]
+		metrics = [otelcol.processor.batch.apps.input]
+	}
+}
+
+otelcol.processor.batch "apps" {
+	output {
+		traces  = [otelcol.exporter.otlphttp.tempo.input, otelcol.processor.filter.phoenix.input]
+		metrics = [otelcol.exporter.prometheus.apps.input]
+	}
+}
+
+otelcol.exporter.prometheus "apps" {
+	forward_to = [prometheus.remote_write.infra.receiver]
+}
+
+// phoenix 는 Claude 호출 화면이라 Phoenix 프로젝트 이름이 붙은 span(AI)만 보낸다
+otelcol.processor.filter "phoenix" {
+	error_mode = "ignore"
+
+	traces {
+		span = [
+			`resource.attributes["openinference.project.name"] == nil`,
+		]
+	}
+
+	output {
+		traces = [otelcol.exporter.otlphttp.phoenix.input]
+	}
+}
+
+otelcol.exporter.otlphttp "tempo" {
+	client {
+		endpoint = "https://" + sys.env("INFRA_HOST")
+	}
+}
+
+otelcol.exporter.otlphttp "phoenix" {
+	client {
+		endpoint = "https://" + sys.env("INFRA_HOST") + "/phoenix"
+	}
+}

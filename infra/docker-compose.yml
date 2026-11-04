@@ -1,0 +1,135 @@
+# 인프라 서버(모니터링) compose. 앱 서버와 다른 AWS 계정의 EC2 /opt/mairor-infra 에서 돈다. 절차는 infra/README.md
+# 직접 고치지 않는다. master 에 머지되면 CI deploy-infra 잡이 infra/ 를 그대로 올리고 다시 띄운다(ci/infra.yml).
+#
+# caddy       공개 입구(80 · 443, HTTPS). 앱 서버 Alloy 가 보내는 것을 받고, 나머지는 grafana 로 넘긴다
+# grafana     화면. 로그(loki) · 호출 흐름(tempo) · 지표(prometheus)를 한곳에서 본다
+# loki        컨테이너 로그
+# tempo       호출 흐름(trace). BE · AI 가 OTLP 로 보낸다
+# prometheus  서버 · 컨테이너 지표. 앱 서버 Alloy 와 tempo 가 remote write 로 넣는다
+# phoenix     AI 의 Claude 호출 기록(토큰 · 비용 · 지시문)
+#
+# caddy 말고는 밖에 열지 않는다. 확인용 화면 포트는 127.0.0.1 에만 연다(Docker 가 연 포트는 ufw 를 건너뛰므로 주소를 꼭 적는다).
+# 값은 서버의 .env 에만 있다(배포가 지우지 않는다): INFRA_DOMAIN, GRAFANA_ADMIN_PASSWORD
+name: mairor-infra
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  caddy:
+    <<: *common
+    image: caddy:2.11.7-alpine
+    environment:
+      INFRA_DOMAIN: ${INFRA_DOMAIN:?서버 .env 에 INFRA_DOMAIN 이 없다}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    # 관리 API(2019)를 부르면 10초마다 접근 로그가 남아 443 이 열렸는지만 본다
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "443"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  grafana:
+    <<: *common
+    image: grafana/grafana:13.2.5
+    environment:
+      GF_SERVER_ROOT_URL: https://${INFRA_DOMAIN}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?서버 .env 에 GRAFANA_ADMIN_PASSWORD 가 없다}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+    volumes:
+      - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  loki:
+    <<: *common
+    image: grafana/loki:3.7.9
+    command: -config.file=/etc/loki/config.yml
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  tempo:
+    <<: *common
+    image: grafana/tempo:3.1.1
+    command: -config.file=/etc/tempo/config.yml
+    volumes:
+      - ./tempo/config.yml:/etc/tempo/config.yml:ro
+      - tempo-data:/var/tempo
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  prometheus:
+    <<: *common
+    image: prom/prometheus:v3.15.1
+    command:
+      - --config.file=/etc/prometheus/config.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./prometheus/config.yml:/etc/prometheus/config.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  phoenix:
+    <<: *common
+    # ai/docker-compose.yml(로컬)과 같은 버전
+    image: arizephoenix/phoenix:version-20.26.1
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    volumes:
+      - phoenix-data:/mnt/data
+    ports:
+      - "127.0.0.1:6006:6006"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+volumes:
+  caddy-data:
+  caddy-config:
+  grafana-data:
+  loki-data:
+  tempo-data:
+  prometheus-data:
+  phoenix-data:

@@ -3,15 +3,15 @@
 - 작성: 박형준
 - 받는 사람: 김정윤
 - 날짜: 2026-10-29
-- 기한: 2026-11-01 (요청 1~3). 요청 4는 관측 스택 작업을 시작할 때
-- 관련 Jira: S15P31A306-255 (AI 호출 기록 · 로그), S15P31A306-203 (배포 · 로그 수집)
-- AI 쪽 기록 항목 전체: [ai/docs/MONITORING.md](../../ai/docs/MONITORING.md)
+- 기한: 2026-11-01 (요청 1~3). 요청 4는 S15P31A306-275 머지와 함께 (11.03 고침)
+- 관련 Jira: S15P31A306-255 (AI 호출 기록 · 로그), S15P31A306-203 (배포), S15P31A306-275 (모니터링)
+- AI 쪽 기록 항목 전체: [ai/docs/MONITORING.md](../../ai/docs/MONITORING.md), 모니터링 구성: [infra/README.md](../../infra/README.md)
 
 ## 요청 배경
 
 가이드 생성은 BE → AI(202) → BE(콜백)로 두 서버를 오갑니다. 문제가 생기면 BE · AI 로그를 같은 값으로 이어 봐야 하는데, 지금은 각자 자기 서버 로그만 볼 수 있습니다.
 
-배포 서버에 Alloy + Loki + Grafana를 붙여 모든 컨테이너 로그를 한 화면에서 보려고 합니다(박형준이 새 티켓으로 맡을 예정). 203 계획상 22번은 러너 IP만 열려 있어서 팀원이 서버에서 `docker logs`를 볼 수 없습니다.
+앱 서버의 `alloy` 컨테이너가 모든 컨테이너 로그 · 지표 · trace를 모아 인프라 서버(`k15a306.p.ssafy.io`)의 Loki · Tempo · Prometheus로 보내고, Grafana 한 화면에서 봅니다(S15P31A306-275).
 
 Loki에서 칸별로 거르려면 BE · AI가 같은 칸 이름의 JSON으로 찍어야 합니다.
 
@@ -69,25 +69,42 @@ try (var ignored = MDC.putCloseable("job_id", body.jobId())) {
 
 - [ ] 요청마다 `request_id`, 로그인 뒤에는 `user_id`(내부 숫자 ID만, 이메일 아님)를 MDC에 넣어 주시면 BE 요청 단위로도 찾을 수 있습니다
 
-### 4. OTLP (관측 스택 작업 때, 지금은 의견만)
+### 4. OTel 스타터 (S15P31A306-275와 함께)
 
-Tempo를 붙이면 BE 요청 → Gemini 호출 → AI 가이드 작업 → 콜백을 한 trace 그림으로 볼 수 있습니다. 그때 BE가 할 일은 아래입니다.
+AI 쪽은 끝났습니다. 접수 요청의 `traceparent`를 받아 작업 기록을 BE trace 아래에 이어 붙이고(trace ID가 BE와 같아짐), 콜백 · 진행 알림에도 `traceparent`를 붙여 보냅니다. BE가 아래를 넣으면 BE 요청 → AI 작업 → 콜백이 Grafana(Tempo)에서 한 그림으로 보이고, BE · AI 로그를 `traceId` 하나로 찾습니다. `traceId` · `spanId`는 MDC에 자동으로 들어갑니다.
 
-- `spring-boot-starter-opentelemetry` 추가
-- `management.opentelemetry.tracing.export.otlp.endpoint`를 Alloy 주소로 지정
-- 그러면 `traceId` · `spanId`가 MDC에 자동으로 들어가 JSON 로그에 찍히고, AI로 보내는 요청에 `traceparent`가 자동으로 붙습니다. AI는 이 값을 받아 자기 작업 기록을 BE trace에 연결(link)합니다
+- [ ] `spring-boot-starter-opentelemetry` 추가
+- [ ] `application-prod.yml`에 아래 (설정 이름은 Spring Boot 4.1.1 기준으로 확인)
 
-- [ ] 관측 스택 작업 때 스타터를 추가해도 되는지 의견 주세요
+```yaml
+management:
+  tracing:
+    sampling:
+      probability: 1.0   # 기본 0.1이면 요청 10%만 남는다
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: http://alloy:4318/v1/traces
+  otlp:
+    metrics:
+      export:
+        url: http://alloy:4318/v1/metrics   # 스타터가 JVM · HTTP 지표 내보내기를 기본으로 켠다. 주소가 없으면 localhost로 보내다 실패한다
+```
+
+- [ ] `application.yml`(로컬)에는 `management.otlp.metrics.export.enabled: false` (로컬에는 alloy가 없다)
+- [ ] AI를 부르는 클라이언트는 Spring이 만들어 주는 `RestClient.Builder`(또는 `WebClient.Builder`)를 주입받아 만들어 주세요. `RestClient.create()` · `new RestTemplate()`로 만들면 `traceparent`가 붙지 않습니다
+- [ ] 헬스체크(`/api/health`)는 컨테이너 · ALB가 10초마다 불러서, 기록에서 빼 주세요(`ObservationPredicate`)
 
 ### 5. 203과 범위
 
-- [ ] 203의 「애플리케이션 · 분석 작업 로그 수집」 중 로그를 모으고 보는 부분(Alloy · Loki · Grafana)은 박형준이 새 티켓으로 맡아도 되는지 확인해 주세요. docker 로그 로테이션은 운영 compose와 함께 203에 둡니다
+- Alloy · Loki · Grafana는 S15P31A306-275(박형준)로 진행합니다. docker 로그 로테이션은 운영 compose와 함께 203에 둡니다
 
 ## 참고: Loki에서 쓸 이름
 
 | 종류 | 이름 |
 | --- | --- |
-| label | `env`, `service_name`(compose 서비스 이름: `backend` · `ai` · `nginx` …), `level` |
+| label | `env`(`prod`), `service_name`(`api` · `nginx` · `ai` · `worker` · `alloy`), `slot`(`a` · `b`, api · nginx만), `level` |
 | structured metadata | `job_id`, `video_id`, `step_id`, `traceId`, `request_id`, `user_id` |
 
 `job_id` 같은 값은 종류가 계속 늘어나서 label이 아니라 structured metadata로 둡니다. 그래서 요청 2의 키 이름이 이 표와 같아야 합니다.

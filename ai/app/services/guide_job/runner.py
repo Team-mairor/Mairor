@@ -34,7 +34,13 @@ async def run_job(job: GuideJob, llm: Llm, settings: Settings) -> None:
         "steps": len(guide_input.steps),
         "frames": len(request.frames.items) if request.frames is not None else 0,
     }
-    with traced("guide_job", inputs, job_id=job.job_id, video_id=guide_input.video_id) as span:
+    with traced(
+        "guide_job",
+        inputs,
+        parent=job.caller_trace,
+        job_id=job.job_id,
+        video_id=guide_input.video_id,
+    ) as span:
         job.status = "RUNNING"
         finished = asyncio.Event()
         reporter = None

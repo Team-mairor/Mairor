@@ -5,6 +5,7 @@
 # ALB 대상 그룹에 8081·8082가 따로 등록되어, 배포 때 한 슬롯을 빼고 바꾸는 동안 다른 슬롯이 요청을 받는다.
 # 네트워크를 슬롯마다 나눠 nginx 는 같은 슬롯의 api 만 api 라는 이름으로 찾는다(frontend/nginx/api.conf 를 그대로 쓴다).
 # ai·worker 는 슬롯 밖 공용(core)이다. core 에서 api 는 두 api 중 하나로 찾힌다(ai 의 콜백용).
+# alloy 는 이 서버의 로그·지표·호출 흐름을 모아 인프라 서버로 보낸다(infra/README.md). 설정은 alloy.alloy(레포 infra/alloy/config.alloy).
 #
 # 값은 두 파일에서 온다. 둘 다 deploy.sh 가 만들고 레포에는 없다.
 #   .env     compose 가 읽는 이미지 주소·태그 (ECR_REGISTRY, IMAGE_TAG)
@@ -106,8 +107,11 @@ services:
     restart: unless-stopped
     logging: *logging
     environment:
-      # CloudWatch Logs Insights 에서 칸으로 읽힌다. 호출 기록(TRACING_ENDPOINT)은 관측 스택이 생기면 켠다
+      # CloudWatch Logs Insights · Loki 에서 칸으로 읽힌다
       LOG_FORMAT: json
+      # 작업 · Claude 호출 기록을 alloy 로 보내면 alloy 가 Tempo · Phoenix 로 나눠 보낸다
+      TRACING_ENDPOINT: http://alloy:4318/v1/traces
+      OTEL_SERVICE_NAME: ai
     healthcheck:
       test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -137,7 +141,42 @@ services:
     networks:
       - core
 
+  # 수집기. 슬롯 밖에서 배포 마지막에 바꾸고, 실패해도 앱 배포는 성공으로 둔다(deploy.sh)
+  # 인프라 서버 입구는 이 서버의 Elastic IP 만 받아서 비밀값이 없다. app.env 도 붙이지 않는다
+  alloy:
+    image: grafana/alloy:v1.21.3
+    environment:
+      INFRA_HOST: k15a306.p.ssafy.io
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --storage.path=/var/lib/alloy/data
+    # cadvisor 가 서버의 cgroup 으로 컨테이너별 CPU · 메모리를 읽는다
+    cgroup: host
+    volumes:
+      - ./alloy.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/containerd/containerd.sock:/run/containerd/containerd.sock:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /run/udev/data:/run/udev/data:ro
+      - /proc:/host/proc:ro
+      - /sys:/sys:ro
+      - /:/host/root:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - core
+
 networks:
   slot-a:
   slot-b:
   core:
+
+volumes:
+  alloy-data:

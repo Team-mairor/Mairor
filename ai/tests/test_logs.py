@@ -108,6 +108,19 @@ def test_job_id_is_logged_even_when_tracing_is_off(json_log, monkeypatch):
     assert "traceId" not in line
 
 
+def test_trace_id_follows_backend_even_when_tracing_is_off(json_log, monkeypatch):
+    monkeypatch.setattr(tracing, "tracer", NoOpTracer())
+    backend_trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    parent = {"traceparent": f"00-{backend_trace_id}-00f067aa0ba902b7-01"}
+
+    with tracing.traced("guide_job", {}, parent=parent, job_id="j1"):
+        json_log.logger.info("설명")
+
+    (line,) = json_log.lines()
+    assert line["job_id"] == "j1"
+    assert line["traceId"] == backend_trace_id
+
+
 def test_text_format_stays_one_readable_line():
     captured = Captured("text")
     try:

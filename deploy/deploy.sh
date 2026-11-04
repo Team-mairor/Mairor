@@ -203,6 +203,10 @@ main() {
 
   record ok
   write_compose_env "$TAG"
+  # 수집기는 앱이 다 바뀐 뒤 한 번에 바꾼다. 실패하면 모니터링만 끊기므로 배포는 성공으로 둔다
+  # 이미지는 Docker Hub 에 있어 위 받기에 넣지 않는다. up 이 서버에 없는 버전일 때만 받는다
+  compose_at "$TAG" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" alloy ||
+    log "alloy 교체 실패(배포는 성공). docker compose logs alloy 로 원인을 본다"
   # 쓰지 않는 이미지 중 7일 지난 것을 지운다. 되돌릴 때는 ECR 에서 다시 받는다
   docker image prune -af --filter "until=168h" >/dev/null || log "이미지 정리 실패(배포는 성공)"
   log "$ACTION 완료: $TAG"

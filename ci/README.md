@@ -39,6 +39,7 @@ master에 머지되면 검사가 끝난 뒤 운영 배포가 이어진다(`ci/de
 | `build-images` | 이미지 4개(`mairor-nginx` · `mairor-backend` · `mairor-ai` · `mairor-deploy`)를 빌드해 ECR에 올린다. 태그는 커밋 해시 8자리 |
 | `deploy` | EC2에서 `deploy.sh <태그>`를 돌린다(SSM Run Command). 슬롯 a → b → ai 순서로 바꿔 배포 중에도 사이트가 끊기지 않는다. 실패하면 서버가 이전 버전으로 되돌리고 잡이 빨강이 된다 |
 | `rollback` (수동) | 이전 버전으로 되돌린다. 아래 방법 |
+| `deploy-infra` | `infra/`가 바뀌었을 때만 돈다. 인프라 서버에 SSH로 `infra/`를 올리고 `infra/deploy.sh`를 돌린다(`ci/infra.yml`, 박형준 관리). 되돌리기는 예전 파이프라인의 이 잡을 다시 실행 |
 
 **되돌리기:** master 파이프라인 화면에서 `rollback` 잡 **이름**을 누른다. 열린 화면의 변수 칸에 키 `ROLLBACK_TAG`, 값에 되돌릴 태그(예전 `deploy` 잡 로그의 `deploy 완료: <태그>`)를 넣고 **Run job**. 서버에서 성공했던 태그만 받는다. ▶ 버튼을 바로 누르면 변수 없이 돌아 안내만 찍고 실패한다.
 

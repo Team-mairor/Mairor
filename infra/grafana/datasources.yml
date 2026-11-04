@@ -1,0 +1,41 @@
+# Grafana 데이터 소스. 로그의 traceId 를 누르면 Tempo 로, Tempo 의 trace 에서는 같은 traceId 로그로 넘어간다
+# 이 파일은 $ 를 환경변수로 읽으므로 Grafana 변수는 $$ 로 적는다
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: true
+    jsonData:
+      derivedFields:
+        - name: traceId
+          matcherType: label
+          matcherRegex: traceId
+          datasourceUid: tempo
+          url: $${__value.raw}
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        customQuery: true
+        query: '{service_name=~".+"} | traceId="$${__trace.traceId}"'
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090

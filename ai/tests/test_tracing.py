@@ -7,7 +7,7 @@ import httpx2
 import pytest
 from openinference.instrumentation import TracerProvider as OpenInferenceTracerProvider
 from openinference.instrumentation.anthropic import AnthropicInstrumentor
-from opentelemetry import trace
+from opentelemetry import propagate, trace
 from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -132,6 +132,66 @@ def test_area_stages_are_recorded_in_job_trace(backend, provider):
         assert spans[name].context.trace_id == job.context.trace_id
     assert output(spans["download_frames"]) == {"missing": 0}
     assert output(spans["face_landmarks"]) == {"noFace": 3}
+
+
+BE_TRACE = "0af7651916cd43dd8448eb211c80319c"
+BE_SPAN = "b7ad6b7169203331"
+BE_TRACEPARENT = f"00-{BE_TRACE}-{BE_SPAN}-01"
+
+
+def traceparent(span: ReadableSpan) -> str:
+    return f"00-{span.context.trace_id:032x}-{span.context.span_id:016x}-01"
+
+
+def test_job_continues_be_trace_and_passes_it_to_callback(backend, provider):
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
+
+    make_client(llm).post(
+        JOBS, json=guide_request(backend), headers={"traceparent": BE_TRACEPARENT}
+    )
+
+    spans = finished(provider)
+    job = spans["guide_job"]
+    assert f"{job.context.trace_id:032x}" == BE_TRACE
+    assert f"{job.parent.span_id:016x}" == BE_SPAN
+    assert {f"{span.context.trace_id:032x}" for span in spans.values()} == {BE_TRACE}
+    assert backend.callback_headers[0]["traceparent"] == traceparent(spans["callback"])
+
+
+def test_job_without_be_trace_starts_its_own(backend, provider):
+    llm = FakeLlm(explanation("펴 발라요"), PASSED, explanation("발라요"), PASSED)
+
+    make_client(llm).post(JOBS, json=guide_request(backend))
+
+    job = finished(provider)["guide_job"]
+    assert job.parent is None
+    sent_trace = backend.callback_headers[0]["traceparent"].split("-")[1]
+    assert sent_trace == f"{job.context.trace_id:032x}"
+
+
+def test_job_is_recorded_even_when_be_did_not_record_request(monkeypatch):
+    def fake_register(**kwargs):
+        return OpenInferenceTracerProvider(sampler=kwargs["sampler"])
+
+    monkeypatch.setattr(tracing, "register", fake_register)
+    monkeypatch.setattr(tracing, "instrument_anthropic", lambda provider: None)
+    provider = tracing.setup_tracing(make_settings(tracing_endpoint="http://alloy:4318/v1/traces"))
+    not_recorded = propagate.extract({"traceparent": f"00-{BE_TRACE}-{BE_SPAN}-00"})
+
+    with provider.get_tracer("test").start_as_current_span("guide_job", not_recorded) as span:
+        assert span.is_recording()
+        assert f"{span.get_span_context().trace_id:032x}" == BE_TRACE
+
+
+def test_progress_notice_carries_job_trace(backend, provider):
+    backend.frame_delay = 0.05
+    client = make_client(passing_llm(), progress_interval_seconds=0.01)
+
+    client.post(JOBS, json=frames_request(backend), headers={"traceparent": BE_TRACEPARENT})
+
+    job = finished(provider)["guide_job"]
+    assert backend.progress_headers
+    assert {headers["traceparent"] for headers in backend.progress_headers} == {traceparent(job)}
 
 
 def test_frame_and_progress_urls_are_not_recorded(backend, provider):

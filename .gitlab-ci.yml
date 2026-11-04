@@ -1,6 +1,7 @@
 # MAIROR CI. 사용법과 규칙은 ci/README.md
 # 파이프라인은 MR과 master에서만 돈다. 파트별 검사는 ci/<파트>.yml에 있고, 각 파트가 자기 파일을 고친다.
 # master에서는 검사가 통과하면 이미지 빌드 · 운영 배포가 이어진다(ci/deploy.yml, BE 관리).
+# infra/ 가 바뀌면 인프라 서버 배포도 돈다(ci/infra.yml).
 
 workflow:
   rules:
@@ -22,6 +23,7 @@ include:
   - local: ci/frontend.yml
   - local: ci/ai.yml
   - local: ci/deploy.yml
+  - local: ci/infra.yml
 
 # 모든 파이프라인에서 돈다. 문서만 바뀐 MR에도 파이프라인이 생기게 하고,
 # 커밋되면 안 되는 비밀 파일(.env, *.pem, *.key, *.keystore)이 있으면 실패한다. .env.example 은 허용.

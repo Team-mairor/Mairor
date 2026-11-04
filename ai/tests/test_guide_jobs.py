@@ -42,14 +42,16 @@ class FakeBackend:
     """BE 콜백 주소와 사진 저장소 역할을 하는 로컬 서버.
 
     /progress로 온 POST는 progress에, 나머지 POST는 callbacks에 모으고 각각의 statuses 순서대로
-    응답한다 (다 쓰면 200). GET은 files에 넣어 둔 경로면 그 내용을 frame_delay초 뒤에 주고,
-    없으면 404를 준다.
+    응답한다 (다 쓰면 200). 받은 헤더는 같은 순서로 progress_headers · callback_headers에 모은다.
+    GET은 files에 넣어 둔 경로면 그 내용을 frame_delay초 뒤에 주고, 없으면 404를 준다.
     """
 
     def __init__(self) -> None:
         self.callbacks: list[dict] = []
+        self.callback_headers: list[dict] = []
         self.callback_statuses: list[int] = []
         self.progress: list[dict] = []
+        self.progress_headers: list[dict] = []
         self.progress_statuses: list[int] = []
         self.files: dict[str, bytes] = {}
         self.frame_delay = 0.0
@@ -59,11 +61,14 @@ class FakeBackend:
             def do_POST(self) -> None:
                 length = int(self.headers["Content-Length"])
                 body = json.loads(self.rfile.read(length))
+                headers = {key.lower(): value for key, value in self.headers.items()}
                 if self.path == "/progress":
                     backend.progress.append(body)
+                    backend.progress_headers.append(headers)
                     statuses = backend.progress_statuses
                 else:
                     backend.callbacks.append(body)
+                    backend.callback_headers.append(headers)
                     statuses = backend.callback_statuses
                 self.send_response(statuses.pop(0) if statuses else 200)
                 self.send_header("Content-Length", "0")

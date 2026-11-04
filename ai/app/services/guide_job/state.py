@@ -28,11 +28,15 @@ KEEP_SECONDS = 60 * 60
 
 @dataclass
 class GuideJob:
-    """작업 하나. 결과(guide·area·error), 진행 숫자, 콜백을 보낸 기록을 들고 있다."""
+    """작업 하나. 결과(guide·area·error), 진행 숫자, 콜백을 보낸 기록을 들고 있다.
+
+    caller_trace는 접수 때 받은 traceparent 헤더다. 작업 기록을 BE trace에 이어 붙일 때 쓴다.
+    """
 
     job_id: str
     request: GuideJobRequest
     created_at: float
+    caller_trace: dict[str, str] = field(default_factory=dict)
     status: GuideJobStatus = "QUEUED"
     guide: ExplainedGuide | None = None
     area: GuideArea | None = None
@@ -75,9 +79,16 @@ class GuideJobStore:
     def __init__(self) -> None:
         self._jobs: dict[str, GuideJob] = {}
 
-    def create(self, request: GuideJobRequest) -> GuideJob:
+    def create(
+        self, request: GuideJobRequest, caller_trace: dict[str, str] | None = None
+    ) -> GuideJob:
         self._drop_old()
-        job = GuideJob(job_id=uuid.uuid4().hex, request=request, created_at=time.time())
+        job = GuideJob(
+            job_id=uuid.uuid4().hex,
+            request=request,
+            created_at=time.time(),
+            caller_trace=caller_trace or {},
+        )
         self._jobs[job.job_id] = job
         return job
 

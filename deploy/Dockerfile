@@ -3,4 +3,5 @@
 # EC2 는 이 이미지를 받아 /deploy/ 를 /opt/mairor 로 꺼낸 뒤 deploy.sh 를 실행한다(deploy/README.md).
 FROM busybox:1.37
 COPY docker-compose.prod.yml /deploy/
+COPY infra/alloy/config.alloy /deploy/alloy.alloy
 COPY --chmod=755 deploy/deploy.sh deploy/rollback.sh /deploy/

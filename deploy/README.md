@@ -9,7 +9,7 @@
 | 자리 | 무엇 |
 |---|---|
 | ALB `mairor-alb` | 443에서 TLS를 풀고 대상 그룹 `mairor-app-tg`로 보낸다. 80과 `www`는 301로 `https://mairor.co.kr` |
-| EC2 `mairor-app` | `docker-compose.prod.yml`의 컨테이너 5개: `nginx-a` · `api-a`(슬롯 a, 8081), `nginx-b` · `api-b`(슬롯 b, 8082), `ai`(내부 전용). `worker`는 5B에서 켠다 |
+| EC2 `mairor-app` | `docker-compose.prod.yml`의 컨테이너 5개: `nginx-a` · `api-a`(슬롯 a, 8081), `nginx-b` · `api-b`(슬롯 b, 8082), `ai`(내부 전용), `alloy`(로그 · 지표 · trace를 인프라 서버로, [infra/README.md](../infra/README.md)). `worker`는 5B에서 켠다 |
 | RDS `mairor-db` | PostgreSQL 17, 프라이빗 서브넷 |
 | ECR `mairor-nginx` · `mairor-backend` · `mairor-ai` · `mairor-deploy` | 이미지. 태그는 커밋 해시 8자리 하나로 4개가 묶인다. 저장소마다 최근 10개만 남는다 |
 | Parameter Store `/mairor/prod/*` | 비밀값과 운영 설정. `deploy.sh`가 `/opt/mairor/app.env`로 만든다 |
@@ -22,9 +22,9 @@
 | 파일 | 어디서 돈다 | 하는 일 |
 |---|---|---|
 | `../docker-compose.prod.yml` | EC2 | 운영 컨테이너 정의(슬롯 2개, 자원 상한, 헬스, 로그) |
-| `deploy.sh` | EC2(root) | `app.env` 만들기 → 이미지 받기 → 슬롯 a → b → ai 롤링 → 실패하면 이전 태그로 되돌리기 → `releases.log` 기록 |
+| `deploy.sh` | EC2(root) | `app.env` 만들기 → 이미지 받기 → 슬롯 a → b → ai 롤링 → 실패하면 이전 태그로 되돌리기 → `releases.log` 기록 → `alloy` 교체(실패해도 배포는 성공) |
 | `rollback.sh` | EC2(root) | `releases.log`에 성공으로 남은 태그만 받아 `deploy.sh`와 같은 롤링 |
-| `Dockerfile` | CI | 위 세 파일만 담은 배포 파일 이미지 `mairor-deploy`. EC2는 레포 없이 이 이미지에서 파일을 꺼낸다 |
+| `Dockerfile` | CI | 위 세 파일과 alloy 설정(`infra/alloy/config.alloy` → `alloy.alloy`)만 담은 배포 파일 이미지 `mairor-deploy`. EC2는 레포 없이 이 이미지에서 파일을 꺼낸다 |
 | `run-on-ec2.sh` | CI | EC2에 "배포 파일 꺼내기 → `deploy.sh` 또는 `rollback.sh`"를 보내고 끝날 때까지 기다린다 |
 
 ## 배포 · 되돌리기

@@ -1,0 +1,38 @@
+# 인프라 서버(모니터링) 배포: master 에서 infra/ 가 바뀌면 infra/ 를 서버에 올리고 infra/deploy.sh 를 돌린다. 담당 박형준.
+# 인프라 서버는 앱 서버와 다른 AWS 계정이라 SSM 을 못 쓰고 SSH 로 들어간다. 서버 쪽 준비는 infra/README.md.
+# CI 변수(모두 Protected라 master 파이프라인에서만 보인다):
+#   INFRA_SSH_HOST         서버 IP 또는 도메인
+#   INFRA_SSH_USER         접속 사용자(docker 그룹)
+#   INFRA_SSH_KEY          Type=File. pem 파일 내용을 그대로 붙여 넣는다
+#   INFRA_SSH_KNOWN_HOSTS  ssh-keyscan <INFRA_SSH_HOST> 출력 전부. 접속한 곳이 그 서버가 맞는지 CI 가 확인한다
+# 되돌리기는 예전 master 파이프라인의 deploy-infra 잡을 다시 실행한다(그 커밋의 infra/ 가 올라간다).
+
+deploy-infra:
+  stage: deploy
+  image: alpine:3.22
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - infra/**/*
+        - ci/infra.yml
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true
+  # 앱 이미지 빌드 · 배포와 상관없이 비밀 파일 검사만 통과하면 돈다
+  needs: [repo-guard]
+  resource_group: infra
+  interruptible: false
+  variables:
+    INFRA_DIR: /opt/mairor-infra
+  before_script:
+    - apk add --no-cache openssh-client rsync > /dev/null
+    - install -d -m 700 ~/.ssh
+    # File 변수라 $INFRA_SSH_KEY 는 내용이 든 파일 경로다. 윈도우 줄바꿈(CR)이 섞이거나 끝 줄바꿈이 빠지면 ssh 가 못 읽어서 다시 쓴다
+    - awk '{ sub(/\r$/, ""); print }' "$INFRA_SSH_KEY" > ~/.ssh/id_infra
+    - chmod 600 ~/.ssh/id_infra
+    - printf '%s\n' "$INFRA_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+  script:
+    - export RSYNC_RSH="ssh -i $HOME/.ssh/id_infra -o BatchMode=yes"
+    # 서버에만 있는 .env(비밀값)는 지우지 않는다
+    - rsync -rlt --delete --chmod=D755,F644 --exclude=/.env infra/ "$INFRA_SSH_USER@$INFRA_SSH_HOST:$INFRA_DIR/"
+    - $RSYNC_RSH "$INFRA_SSH_USER@$INFRA_SSH_HOST" "bash $INFRA_DIR/deploy.sh"
