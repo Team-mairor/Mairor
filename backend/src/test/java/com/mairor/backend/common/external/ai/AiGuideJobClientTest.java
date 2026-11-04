@@ -9,8 +9,14 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
 import java.net.ConnectException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -29,18 +35,60 @@ class AiGuideJobClientTest {
 
   @BeforeEach
   void setUp() {
-    AiProperties properties =
-        new AiProperties(
-            "http://ai:8000",
-            "http://api:8080/api",
-            Duration.ofSeconds(1),
-            Duration.ofSeconds(1),
-            Duration.ofHours(24),
-            Duration.ofMinutes(60),
-            Duration.ofSeconds(60));
     RestClient.Builder builder = RestClient.builder();
     server = MockRestServiceServer.bindTo(builder).build();
-    client = new AiGuideJobClient(properties, builder.build(), JsonMapper.builder().build());
+    client =
+        new AiGuideJobClient(
+            properties("http://ai:8000"), builder.build(), JsonMapper.builder().build());
+  }
+
+  private static AiProperties properties(String baseUrl) {
+    return new AiProperties(
+        baseUrl,
+        "http://api:8080/api",
+        Duration.ofSeconds(1),
+        Duration.ofSeconds(1),
+        Duration.ofHours(24),
+        Duration.ofMinutes(60),
+        Duration.ofSeconds(60));
+  }
+
+  /**
+   * 실제 HTTP 로 보낸다(위 테스트들은 HTTP 를 거치지 않는다). AI 서버(uvicorn)는 {@code Upgrade: h2c} 가 붙은 요청의 본문을 읽지 않아
+   * 400(본문 없음)으로 거절했다(11.04 운영 E2E). 운영과 같은 생성자로 만든 클라이언트가 업그레이드 없이 본문을 보내는지 본다.
+   */
+  @Test
+  void sendsTheBodyOverPlainHttp11WithoutAnH2cUpgrade() throws IOException {
+    AtomicReference<String> upgrade = new AtomicReference<>("not received");
+    AtomicReference<String> body = new AtomicReference<>();
+    HttpServer http =
+        HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+    http.createContext(
+        "/api/v1/guide-jobs",
+        exchange -> {
+          upgrade.set(exchange.getRequestHeaders().getFirst("Upgrade"));
+          body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+          byte[] response =
+              "{\"jobId\": \"real-1\", \"status\": \"QUEUED\"}".getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().set("Content-Type", "application/json");
+          exchange.sendResponseHeaders(202, response.length);
+          exchange.getResponseBody().write(response);
+          exchange.close();
+        });
+    http.start();
+    try {
+      String baseUrl = "http://127.0.0.1:" + http.getAddress().getPort();
+      AiGuideJobClient real =
+          new AiGuideJobClient(
+              properties(baseUrl), RestClient.builder(), JsonMapper.builder().build());
+      String requestJson = "{\"callbackUrl\": \"http://api:8080/api/cb\"}";
+
+      assertThat(real.submit(requestJson)).isEqualTo("real-1");
+      assertThat(upgrade.get()).as("Upgrade 헤더").isNull();
+      assertThat(body.get()).isEqualTo(requestJson);
+    } finally {
+      http.stop(0);
+    }
   }
 
   @Test

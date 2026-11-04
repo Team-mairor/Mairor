@@ -42,10 +42,17 @@ public class AiGuideJobClient {
     this.objectMapper = objectMapper;
   }
 
+  /**
+   * HTTP/1.1 로 고정한다. JDK HttpClient 기본값(HTTP/2)은 {@code http://} 요청에 {@code Upgrade: h2c} 를 붙이는데,
+   * AI 서버(uvicorn)는 이 요청의 본문을 읽지 않아 400(본문 없음)으로 거절한다(11.04 운영 E2E).
+   */
   private static JdkClientHttpRequestFactory requestFactory(AiProperties properties) {
     JdkClientHttpRequestFactory factory =
         new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build());
+            HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(properties.connectTimeout())
+                .build());
     factory.setReadTimeout(properties.readTimeout());
     return factory;
   }
