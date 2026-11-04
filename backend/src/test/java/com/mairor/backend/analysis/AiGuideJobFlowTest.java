@@ -177,15 +177,33 @@ class AiGuideJobFlowTest extends AnalysisIntegrationTest {
         .isEqualTo("NOT_READY");
   }
 
+  /**
+   * AI 는 202 를 보낸 직후 작업을 시작해, BE 가 {@code ai_job_id}를 커밋하기 전에 콜백이 올 수 있다(서연 후속 요청 2번). 그때는 503 으로
+   * 답해 AI 가 다시 보내게 하고(1 · 5 · 25초), 다시 온 콜백은 반영한다.
+   */
   @Test
-  void unknownJobIs404AndBrokenBodyIs400WithoutAnyToken() throws Exception {
+  void callbackBeforeTheAiJobIdIsSavedIs503AndTheRetryIsApplied() throws Exception {
     mockMvc
         .perform(
             post(CALLBACK)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(callbackFor("ai-nobody")))
-        .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+                .content(callbackFor("ai-early-1")))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("SERVICE_UNAVAILABLE"));
+
+    UUID jobId = awaitingJob("earlyCallbk", "ai-early-1");
+    mockMvc
+        .perform(
+            post(CALLBACK)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(callbackFor("ai-early-1")))
+        .andExpect(status().isNoContent());
+
+    assertThat(jobs.findById(jobId).orElseThrow().getStatus()).isEqualTo(AnalysisStatus.COMPLETED);
+  }
+
+  @Test
+  void brokenBodyIs400WithoutAnyToken() throws Exception {
     mockMvc
         .perform(
             post(CALLBACK)

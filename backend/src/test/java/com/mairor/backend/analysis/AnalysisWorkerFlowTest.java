@@ -3,6 +3,7 @@ package com.mairor.backend.analysis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -230,6 +231,42 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     assertThat(job.getFailureCode()).isEqualTo("AI_UNAVAILABLE");
     assertThat(job.isRetryable()).isTrue();
     assertThat(job.getAiJobId()).isNull();
+  }
+
+  /**
+   * AI 가 요청을 거절하면(형식 400, 너무 큼 413 등) 같은 입력으로 다시 해도 같은 결과라 재시도 불가로 끝낸다(서연 후속 요청 5번). 408 · 429 ·
+   * 5xx 는 잠깐의 문제라 지금처럼 재시도 가능.
+   */
+  @Test
+  void aiServerThatRejectsTheRequestFailsWithoutRetry() {
+    record Case(String videoId, int status, String failureCode, boolean retryable) {}
+    List<Case> cases =
+        List.of(
+            new Case("aiReject400", 400, "AI_REQUEST_REJECTED", false),
+            new Case("aiReject413", 413, "AI_REQUEST_REJECTED", false),
+            new Case("aiBusy00408", 408, "AI_UNAVAILABLE", true),
+            new Case("aiBusy00429", 429, "AI_UNAVAILABLE", true),
+            new Case("aiDown00503", 503, "AI_UNAVAILABLE", true));
+    when(ffprobe.probe(any())).thenReturn(PROBE);
+    when(llm.generate(any())).thenReturn(answer(GEMINI_STEPS));
+    framesExtractNormally();
+
+    for (Case c : cases) {
+      putObject("videos/" + c.videoId() + "/source.mp4");
+      doThrow(
+              new AiServerException(
+                  "AI 서버가 요청을 받지 않았습니다(HTTP " + c.status() + ")", c.status(), null))
+          .when(ai)
+          .submit(any());
+      AnalysisJobReceipt receipt = service.register(request(c.videoId()));
+
+      runner.runNext();
+
+      AnalysisJob job = jobs.findById(receipt.jobId()).orElseThrow();
+      assertThat(job.getStatus()).as("HTTP %d", c.status()).isEqualTo(AnalysisStatus.FAILED);
+      assertThat(job.getFailureCode()).as("HTTP %d", c.status()).isEqualTo(c.failureCode());
+      assertThat(job.isRetryable()).as("HTTP %d", c.status()).isEqualTo(c.retryable());
+    }
   }
 
   @Test

@@ -56,16 +56,14 @@ public class AiResultService {
   }
 
   /**
-   * @throws BusinessException NOT_FOUND(모르는 AI 작업), VALIDATION_FAILED(필수 칸 없음)
+   * @throws BusinessException SERVICE_UNAVAILABLE(아직 모르는 AI 작업, {@link #unknownJob}),
+   *     VALIDATION_FAILED(필수 칸 없음)
    */
   @Transactional
   public Outcome apply(AiGuideJobCallbackRequest result) {
     validate(result);
     AnalysisJob job =
-        jobs.lockByAiJobId(result.jobId())
-            .orElseThrow(
-                () ->
-                    new BusinessException(ErrorCode.NOT_FOUND, "모르는 AI 작업입니다: " + result.jobId()));
+        jobs.lockByAiJobId(result.jobId()).orElseThrow(() -> unknownJob(result.jobId()));
     if (!job.isAwaitingAi()) {
       log.info("이미 끝난 작업의 AI 결과라 무시 jobId={} aiJobId={}", job.getId(), result.jobId());
       return Outcome.ALREADY_FINISHED;
@@ -124,6 +122,16 @@ public class AiResultService {
   }
 
   /** 실행 중에는 처리에 필요한 칸만 본다. 전체 형식은 테스트가 공유 스키마로 확인한다. */
+  /**
+   * 모르는 AI 작업. AI 는 202 를 보낸 직후 작업을 시작해, BE 가 {@code ai_job_id}를 커밋하기 전에 콜백이 오면 이렇게 보인다. 503 이면 AI
+   * 가 1 · 5 · 25초 뒤 다시 보내므로({@code docs/references/ai-api.md} "콜백 재시도") 그사이 커밋된 작업에 반영된다. 정말 없는
+   * 작업이면 AI 가 네 번 보내고 멈춘다.
+   */
+  private static BusinessException unknownJob(String aiJobId) {
+    log.warn("모르는 AI 작업의 콜백이라 503 으로 답함(AI 가 다시 보냄) aiJobId={}", aiJobId);
+    return new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "아직 모르는 AI 작업입니다: " + aiJobId);
+  }
+
   private static void validate(AiGuideJobCallbackRequest result) {
     if (result == null || result.jobId() == null || result.jobId().isBlank()) {
       throw new BusinessException(ErrorCode.VALIDATION_FAILED, "jobId 가 없습니다.");

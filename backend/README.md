@@ -385,7 +385,8 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 | `LLM_UNAVAILABLE` | Gemini 를 부르지 못했다(키 없음·거절, 429·5xx·시간 초과를 재시도까지 다 씀). `llm_calls.error_code` 에 종류·HTTP 상태 | 예 |
 | `LLM_INVALID_RESPONSE` | Gemini 답을 쓸 수 없다(JSON 아님·잘림·차단) | 예 |
 | `NO_VALID_STEPS` | 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모두 틀림) | 아니오 |
-| `AI_UNAVAILABLE` | AI 서버에 가이드 생성을 맡기지 못했다(연결 실패·5xx 재시도까지, 400 형식 거절) | 예 |
+| `AI_UNAVAILABLE` | AI 서버에 가이드 생성을 맡기지 못했다(연결 실패·5xx 재시도까지, 408·429, 202 인데 작업 ID 없음) | 예 |
+| `AI_REQUEST_REJECTED` | AI 서버가 요청을 거절했다(400 형식·413 크기 등 4xx). 같은 입력이면 같은 결과 | 아니오 |
 | `AI_GENERATION_FAILED` · `AI_INTERNAL_ERROR` | AI 콜백이 FAILED(`GENERATION_FAILED` · 그 밖). `failureMessage` 는 AI 의 `error.message` | 예 |
 | `ANALYSIS_TIMEOUT` | AI 콜백이 오지 않았다(AI 재시작으로 작업이 사라짐, 너무 오래 걸림) | 예 |
 | `FRAME_EXTRACTION_FAILED` | ffmpeg 가 프레임을 뽑지 못했다(실행 실패·시간 초과·장수가 계획과 다름). 프레임 업로드 실패는 `STORAGE_UNAVAILABLE` | 아니오 |
@@ -413,7 +414,8 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 - worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, progressUrl, guideInput, frames}` 를 보내고 AI 작업 ID 와 맡긴 시각을 `analysis_jobs.ai_job_id`·`ai_requested_at` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다.
 - 프레임 URL 은 저장소 키로 그때 사전 서명한다(24시간, 운영은 역할 자격 증명이라 더 일찍 끝날 수 있음).
 - **콜백 `POST /api/v1/internal/ai/guide-jobs/callback` 은 공유 토큰을 받지 않는다**(AI 가 헤더를 못 붙임). 대신 `frontend/nginx/api.conf` 가 바깥에서 `/api/v1/internal/ai/` 를 404 로 막고, AI 는 `core` 망으로 `api:8080` 에 바로 붙는다. 이 줄이 빠지면 `NginxInternalRouteTest` 가 실패한다.
-- 같은 작업의 콜백이 다시 오면(AI 재전송) 바꾸지 않고 204. 모르는 AI 작업은 404, 필수 칸이 없으면 400(AI 는 다시 보내지 않는다).
+- 같은 작업의 콜백이 다시 오면(AI 재전송) 바꾸지 않고 204. 필수 칸이 없으면 400(AI 는 다시 보내지 않는다).
+- 모르는 AI 작업의 콜백은 **503**(S15P31A306-311 추가 작업). AI 는 202 를 보낸 직후 작업을 시작해 BE 가 `ai_job_id` 를 커밋하기 전에 콜백이 올 수 있는데, 503 이면 AI 가 1·5·25초 뒤 다시 보내 반영된다. 정말 없는 작업이면 AI 가 네 번 보내고 멈춘다.
 - **진행 알림 `POST /api/v1/internal/ai/guide-jobs/progress`** (S15P31A306-296): AI 가 1초에 한 번까지 보내는 진행 숫자(설명·사진·얼굴 점·영역)를 `analysis_jobs.ai_progress` 에 저장한다. 콜백과 같은 경로 아래라 공유 토큰 없이 받고 nginx 가 막는다. 받을 수 없는 알림(모르는 작업·끝난 작업·형식·숫자 오류)은 저장하지 않고 204 로 답한다(AI 는 진행 알림을 다시 보내지 않는다). DB 장애 같은 서버 오류는 예외로 5xx 가 날 수 있다.
 - 콜백이 AI 에 맡긴 시각(`ai_requested_at`)부터 `AI_CALLBACK_TIMEOUT` 안에 오지 않으면 worker 가 1분마다 AI 에 상태를 묻는다: 끝났으면 콜백처럼 반영, AI 에 작업이 없으면(재시작·만료) 또는 두 배가 지나면 `ANALYSIS_TIMEOUT`. 진행 알림이 와도 이 기준은 밀리지 않는다(`updated_at` 이 아니라 맡긴 시각 기준).
 - 검수(운영자, 공유 토큰):
@@ -448,6 +450,7 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 
 - 로컬: api 를 띄운 채로 두 번째 프로세스를 `./gradlew bootRun --args='--spring.profiles.active=dev,worker --server.port=8081'` 로 띄운다. ffmpeg(ffprobe)가 PATH 에 있어야 한다.
 - 운영: compose 의 `worker` 서비스(같은 이미지, `SPRING_PROFILES_ACTIVE=prod,worker`)는 기본으로 꺼져 있다. 처음 한 번만 EC2 에서 `docker compose --profile worker up -d worker` 로 켠다. 그 뒤로는 배포 스크립트가 떠 있는 worker 를 같이 교체한다(`deploy/deploy.sh`).
+- worker 의 주기 작업(대기 작업 처리 `poll` · AI 콜백 감시 `check`)은 worker 전용 스케줄러(`WorkerSchedulingConfig`, 스레드 2개)에서 돈다. 가상 스레드 설정의 Boot 기본 스케줄러는 fixed-delay 작업을 스레드 하나에서 차례로 돌려, 긴 작업 동안 감시가 멈췄다(S15P31A306-311 추가 작업).
 - **worker 는 하나만 띄운다.** 기동할 때 RUNNING 으로 남은 작업(처리 중에 죽은 작업)을 PENDING 으로 되돌리는데, 둘이면 다른 worker 가 처리 중인 작업까지 되돌린다.
 - 단계 처리기(`AnalysisStepHandler`)는 처음 단계부터 다시 돌아도 같은 결과를 내야 하고, 긴 일(내려받기·외부 호출)을 트랜잭션 안에서 하지 않는다. 처리기가 없는 단계는 건너뛴다.
 

@@ -19,8 +19,10 @@ public enum AnalysisFailureCode {
   LLM_INVALID_RESPONSE(true, "영상 분석 모델의 답을 쓸 수 없습니다."),
   /** ffmpeg 로 프레임을 뽑지 못했다(실행 실패·시간 초과·장수 불일치). 같은 파일이면 같은 결과다. */
   FRAME_EXTRACTION_FAILED(false, "영상에서 프레임을 뽑지 못했습니다."),
-  /** AI 서버에 가이드 생성을 맡기지 못했다(연결 실패, 5xx, 형식 거절). */
+  /** AI 서버에 가이드 생성을 맡기지 못했다(연결 실패, 5xx · 408 · 429, 202 인데 작업 ID 없음). 잠깐의 문제라 다시 하면 된다. */
   AI_UNAVAILABLE(true, "가이드 생성 서버에 요청하지 못했습니다."),
+  /** AI 서버가 요청을 거절했다(형식 400, 너무 큼 413 등 4xx). 같은 입력이면 같은 결과라 재시도해도 실패한다. */
+  AI_REQUEST_REJECTED(false, "가이드 생성 요청이 거절되었습니다."),
   /** AI 서버가 쉬운 설명을 만들지 못했다(콜백 {@code GENERATION_FAILED}). */
   AI_GENERATION_FAILED(true, "가이드 설명을 만들지 못했습니다."),
   /** AI 서버의 예기치 않은 오류(콜백 {@code INTERNAL_ERROR}). */

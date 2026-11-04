@@ -80,7 +80,7 @@ class BuildGuideStep implements AnalysisStepHandler {
     try {
       aiJobId = client.submit(body);
     } catch (AiServerException e) {
-      throw new AnalysisStepException(AnalysisFailureCode.AI_UNAVAILABLE, e.getMessage(), e);
+      throw new AnalysisStepException(failureCode(e), e.getMessage(), e);
     }
     store.awaitAi(context.jobId(), aiJobId);
     log.info(
@@ -90,6 +90,17 @@ class BuildGuideStep implements AnalysisStepHandler {
         guideInput.steps().size(),
         context.frames() == null ? 0 : context.frames().items().size(),
         body.length());
+  }
+
+  /**
+   * AI 가 요청을 거절한 4xx(408 · 429 제외)는 같은 입력이면 다시 해도 같은 결과라 재시도 불가({@code AI_REQUEST_REJECTED}), 연결 실패
+   * · 5xx · 408 · 429 는 재시도 가능({@code AI_UNAVAILABLE}).
+   */
+  static AnalysisFailureCode failureCode(AiServerException e) {
+    Integer status = e.status();
+    boolean rejected =
+        status != null && status >= 400 && status < 500 && status != 408 && status != 429;
+    return rejected ? AnalysisFailureCode.AI_REQUEST_REJECTED : AnalysisFailureCode.AI_UNAVAILABLE;
   }
 
   /**

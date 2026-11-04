@@ -53,7 +53,10 @@ public class AiCallbackController {
           """)
   @ApiResponse(responseCode = "204", description = "반영(또는 이미 반영됨)")
   @ApiResponse(responseCode = "400", description = "필수 칸이 없음. (VALIDATION_FAILED)")
-  @ApiResponse(responseCode = "404", description = "모르는 AI 작업. (NOT_FOUND)")
+  @ApiResponse(
+      responseCode = "503",
+      description =
+          "아직 모르는 AI 작업. AI 접수 직후라 작업 ID 를 저장하기 전일 수 있어 AI 가 다시 보낸다. (SERVICE_UNAVAILABLE)")
   @PostMapping("/callback")
   public ResponseEntity<Void> callback(@RequestBody AiGuideJobCallbackRequest request) {
     aiResultService.apply(request);
