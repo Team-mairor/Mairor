@@ -853,7 +853,7 @@
           "order": 1,
           "status": "template",
           "reasons": [
-            "noUsableFrame"
+            "notAnalyzed"
           ],
           "templateId": "mascara",
           "guideSets": []

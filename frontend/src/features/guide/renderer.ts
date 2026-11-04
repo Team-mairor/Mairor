@@ -11,6 +11,7 @@ import {
 } from "@/features/face";
 import { resolveAnchor, type FaceMesh } from "@/features/overlay";
 
+import { isThinArea } from "./thin-area";
 import type { GuideItem, GuideStep } from "./types";
 
 type Px = { x: number; y: number };
@@ -50,6 +51,8 @@ const STYLE = {
   face: { alpha: 0.2, size: 0.012, min: 1.5 },
   /** 점선의 점 지름, 점 사이 간격(점 지름 대비) */
   dot: { size: 0.032, min: 3, gap: 0.8 },
+  /** 얇은 띠 영역(isThinArea)의 점 지름(점 지름 대비). 멀어져도 dot.min은 지킨다 */
+  thinDot: { scale: 0.5 },
   /** 실선(화살표) 두께 */
   line: { size: 0.035, min: 3 },
   /** 경로의 점선이 흐르는 속도 (점 지름/초). 방향만 알 수 있게 느리게 */
@@ -81,7 +84,8 @@ export function isStepVisible(
 
 /**
  * 얼굴 위에 튜토리얼 가이드를 그린다. 도형마다 모양을 달리해 한 단계 안에서 겹쳐도 구분되게 한다.
- * - 영역(polygon): 둥근 점선 테두리 (멈춤). 빼는 부위(exclude)는 안쪽을 지우고 그 테두리를 구멍으로 그린다
+ * - 영역(polygon): 둥근 점선 테두리 (멈춤). 아이라인처럼 얇은 띠는 작은 점.
+ *   빼는 부위(exclude)는 안쪽을 지우고 그 테두리를 구멍으로 그린다
  * - 경로(polyline): 진행 방향으로 천천히 흐르는 점선. 점 지름은 도형의 width와 기본값 중 큰 쪽
  * - 붓 자국(polyline, brush): 양 끝이 가는 결 방향 자국 (눈썹 결·속눈썹)
  * - 방향(arrow): 굵은 실선과 화살촉
@@ -160,10 +164,13 @@ export class GuideRenderer {
     const yaw = frame.pose.yaw;
     const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
     for (const guide of ordered) {
+      const areaDot = isThinArea(guide, mesh)
+        ? Math.max(STYLE.dot.min, dot * STYLE.thinDot.scale)
+        : dot;
       const draw = () => {
         if (guide.type === "polygon" && guide.exclude?.length)
-          this.drawPolygonWithHoles(guide, guide.exclude.map(holeOf), at, dot);
-        else this.drawGuide(guide, at, projection.unit, dashOffset);
+          this.drawPolygonWithHoles(guide, guide.exclude.map(holeOf), at, areaDot);
+        else this.drawGuide(guide, at, projection.unit, dashOffset, areaDot);
       };
       // 얼굴 윤곽처럼 양쪽 끝까지 걸친 도형은 먼 쪽 절반만 옅게 한다
       if (spans(guide, mesh)) {
@@ -265,6 +272,7 @@ export class GuideRenderer {
     at: (anchor: Parameters<typeof resolveAnchor>[0]) => Px,
     unit: number,
     dashOffset: number,
+    areaDot: number,
   ) {
     const ctx = this.ctx;
     const dot = sized(unit, STYLE.dot);
@@ -274,7 +282,7 @@ export class GuideRenderer {
         const points = guide.outline.map(at);
         if (points.length < 3) return;
         traceSmooth(ctx, points, true);
-        this.dotted(dot, 0, AREA_INK);
+        this.dotted(areaDot, 0, AREA_INK);
         return;
       }
       case "polyline": {

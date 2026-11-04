@@ -565,6 +565,305 @@
           ],
           "templateId": "eyeliner",
           "guideSets": []
+        },
+        {
+          "subStepId": "s6-2",
+          "order": 2,
+          "status": "extracted",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": [
+            {
+              "region": "rightEye",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 0,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 0,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 39,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 165,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 163,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 163,
+                      "bary": [
+                        0.35,
+                        0.65,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 165,
+                      "bary": [
+                        0.65,
+                        0.35,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 95,
+                      "bary": [
+                        0.35,
+                        0.65,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 97,
+                      "bary": [
+                        0.65,
+                        0.35,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 653,
+                      "bary": [
+                        0.35,
+                        0.65,
+                        0
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 93,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 1,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 1,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 551,
+                      "bary": [
+                        0.35,
+                        0,
+                        0.65
+                      ]
+                    },
+                    {
+                      "triangle": 169,
+                      "bary": [
+                        0.65,
+                        0,
+                        0.35
+                      ]
+                    },
+                    {
+                      "triangle": 93,
+                      "bary": [
+                        0.65,
+                        0,
+                        0.35
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "exclude": []
+            },
+            {
+              "region": "leftEye",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 2,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 2,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 38,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 164,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 162,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 162,
+                      "bary": [
+                        0.35,
+                        0,
+                        0.65
+                      ]
+                    },
+                    {
+                      "triangle": 164,
+                      "bary": [
+                        0.65,
+                        0,
+                        0.35
+                      ]
+                    },
+                    {
+                      "triangle": 94,
+                      "bary": [
+                        0.35,
+                        0,
+                        0.65
+                      ]
+                    },
+                    {
+                      "triangle": 96,
+                      "bary": [
+                        0.65,
+                        0,
+                        0.35
+                      ]
+                    },
+                    {
+                      "triangle": 652,
+                      "bary": [
+                        0.35,
+                        0,
+                        0.65
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 92,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 3,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 3,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 550,
+                      "bary": [
+                        0.35,
+                        0.65,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 168,
+                      "bary": [
+                        0.65,
+                        0.35,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 92,
+                      "bary": [
+                        0.65,
+                        0.35,
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "exclude": []
+            }
+          ]
         }
       ]
     }

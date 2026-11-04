@@ -423,6 +423,52 @@ const EYE_RINGS = {
   leftEye: [446, 261, 448, 449, 450, 451, 452, 453, 464, 413, 441, 442, 443, 444, 445, 342],
 };
 const ring = (indices) => indices.map(vertexAnchor);
+/** 꼭짓점 a에서 b 쪽으로 t만큼 간 점. a와 b는 한 삼각형에 있어야 한다 */
+const edgeAnchor = (a, b, t) => {
+  const triangle = triangles.findIndex((tri) => tri.includes(a) && tri.includes(b));
+  if (triangle < 0) throw new Error(`${a}와 ${b}가 한 삼각형에 없습니다`);
+  const bary = [0, 0, 0];
+  bary[triangles[triangle].indexOf(a)] = 1 - t;
+  bary[triangles[triangle].indexOf(b)] = t;
+  return { triangle, bary };
+};
+/** 윗눈꺼풀 선 점과 그 위 점 [선, 위] 쌍을 받아, 선에서 위쪽으로 얇게 올린 띠 */
+const lidBand = (pairs, t) => [
+  ...pairs.map(([lid]) => vertexAnchor(lid)),
+  ...pairs.map(([lid, above]) => edgeAnchor(lid, above, t)).reverse(),
+];
+// 떨어져 그린 얇은 아이라인: 눈 하나에 앞머리 쪽 띠와 눈꼬리 띠 두 도형
+const EYELINER_DEPTH = 0.35;
+const EYELINER_BANDS = {
+  rightEye: [
+    [
+      [133, 243],
+      [173, 190],
+      [157, 56],
+      [158, 28],
+      [159, 27],
+    ],
+    [
+      [161, 30],
+      [246, 247],
+      [33, 130],
+    ],
+  ],
+  leftEye: [
+    [
+      [362, 463],
+      [398, 414],
+      [384, 286],
+      [385, 258],
+      [386, 257],
+    ],
+    [
+      [388, 260],
+      [466, 467],
+      [263, 359],
+    ],
+  ],
+};
 const areaSet = (region, outline, exclude) => ({
   region,
   source: "extracted",
@@ -464,6 +510,17 @@ writeJson("guide-areas/sample.json", {
     areaStep(5, "blush", [sub("s5", 1, "failed", { reasons: ["FRAME_UNREADABLE"] })]),
     areaStep(6, "eyeliner", [
       sub("s6", 1, "template", { reasons: ["noUsableFrame"], templateId: "eyeliner" }),
+      sub("s6", 2, "extracted", {
+        guideSets: Object.entries(EYELINER_BANDS).map(([region, bands]) => ({
+          region,
+          source: "extracted",
+          guides: bands.map((band) => ({
+            type: "polygon",
+            outline: lidBand(band, EYELINER_DEPTH),
+          })),
+          exclude: [],
+        })),
+      }),
     ]),
   ],
 });
@@ -498,6 +555,10 @@ const eyeshadowSubSteps = [
 const aiArea = JSON.parse(
   readFileSync(join(frontendDir, "../ai/samples/local_01/guide_area.json"), "utf8"),
 );
+// 마스카라는 기본 가이드로 안내하기로 해, AI 샘플이 바뀌기 전까지 template으로 덮어쓴다
+const mascaraSubSteps = (stepId) => [
+  sub(stepId, 1, "template", { reasons: ["notAnalyzed"], templateId: "mascara" }),
+];
 writeJson("guide-areas/local_01.json", {
   ...aiArea,
   steps: aiArea.steps.map((step) => ({
@@ -505,13 +566,15 @@ writeJson("guide-areas/local_01.json", {
     subSteps:
       step.stepId === "s10"
         ? eyeshadowSubSteps
-        : step.subSteps.map((s) => ({
-            ...s,
-            guideSets: s.guideSets.map((set) => ({
-              ...set,
-              guides: [{ type: "polygon", outline: ring(REGIONS[set.region].indices) }],
+        : step.makeup === "mascara"
+          ? mascaraSubSteps(step.stepId)
+          : step.subSteps.map((s) => ({
+              ...s,
+              guideSets: s.guideSets.map((set) => ({
+                ...set,
+                guides: [{ type: "polygon", outline: ring(REGIONS[set.region].indices) }],
+              })),
             })),
-          })),
   })),
 });
 
