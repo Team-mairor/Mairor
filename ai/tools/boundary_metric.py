@@ -1,0 +1,297 @@
+"""찾은 영역이 입술·눈썹·눈 경계를 넘거나 덜 덮는지 분할 모델로 재 output/boundary.json에 둔다.
+
+개발용이다. 얼굴 분할 모델은 BiSeNet(CelebAMask-HQ로 학습, 19개 부위)을 쓴다. 저장소에 두지 않으므로
+MODEL_URL에서 받아 경로를 넘기고, 파일 지문이 MODEL_SHA256과 같은지 먼저 확인한다.
+실제로 바른 단계마다 서비스 찾기 함수로 영역을 찾고, 같은 직후 사진들을 분할해
+얼굴 지도에 펴서 견준다.
+립·눈썹은 덮음(실제 부위 중 찾은 영역이 덮은 비율)과 넘침(찾은 영역 중 실제 부위 밖 비율)을,
+섀도·아이라인은 침범(찾은 영역 중 눈 안 비율)을 잰다. 블러셔는 볼 경계가 모델에 없어 재지 않는다.
+점 테두리(REGION_POINTS)가 실제 부위와 얼마나 맞는지도 같이 적는다.
+사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
+실행 (ai/ 폴더에서): uv run python tools/boundary_metric.py samples/local_03_seq <모델 파일>
+"""
+
+import hashlib
+import json
+import sys
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+import cv2
+import numpy as np
+
+AI_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(AI_ROOT))
+
+from app.schemas.guide_area import RegionName
+from app.schemas.landmarks import Face, FrameLandmarks, LandmarksResult
+from app.tasks.area.common.face_map import MAP_SIZE, flatten, map_points
+from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.parts import brow_area, eyeliner_area, eyeshadow_area, lip_area
+from app.tasks.area.parts.area_preparation import PhotoLoader, usable_rows
+
+CHECKED_FILE = Path("output") / "frames_checked.json"
+OUTPUT_FILE = Path("output") / "boundary.json"
+MODEL_URL = "https://github.com/yakhyo/face-parsing/releases/download/weights/resnet18.onnx"
+MODEL_SHA256 = "0d9bd318e46987c3bdbfacae9e2c0f461cae1c6ac6ea6d43bbe541a91727e33f"
+INPUT_SIZE = 512
+MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+CROP_SCALE = 1.4
+LABELS = {"brows": (2, 3), "eyes": (4, 5), "lips": (12, 13)}
+POINT_REGIONS = {
+    "brows": ("leftBrow", "rightBrow"),
+    "eyes": ("leftEye", "rightEye"),
+    "lips": ("lipsOuter",),
+}
+
+Parser = Callable[[np.ndarray, Face], np.ndarray]
+
+
+@dataclass(frozen=True)
+class Part:
+    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽)으로 찾은 영역(없으면 None)을 낸다.
+
+    label은 견줄 실제 부위(LABELS의 키), kind는 "cover"(덮음·넘침) 또는 "intrude"(침범)다.
+    regions는 직후 사진을 고를 때 화면 안에 있어야 하는 부위다.
+    """
+
+    name: str
+    makeup: str
+    sides: tuple[RegionName, ...]
+    after_ms: int
+    label: str
+    kind: str
+    regions: Callable[[RegionName], list[RegionName]]
+    find: Callable[[LandmarksResult, int, int, PhotoLoader, RegionName], np.ndarray | None]
+
+
+PARTS = (
+    Part(
+        "brow",
+        "brow",
+        brow_area.BROWS,
+        brow_area.AFTER_WINDOW_MS,
+        "brows",
+        "cover",
+        lambda side: [side],
+        lambda r, s, e, load, side: brow_area.find_brow_area(r, s, e, load, side).mask,
+    ),
+    Part(
+        "eyeshadow",
+        "eyeshadow",
+        eyeshadow_area.EYES,
+        eyeshadow_area.AFTER_WINDOW_MS,
+        "eyes",
+        "intrude",
+        lambda side: [side, eyeshadow_area.EYE_BROWS[side]],
+        lambda r, s, e, load, side: eyeshadow_area.find_eyeshadow_area(r, s, e, load, side).mask,
+    ),
+    Part(
+        "eyeliner",
+        "eyeliner",
+        eyeliner_area.EYES,
+        eyeliner_area.AFTER_WINDOW_MS,
+        "eyes",
+        "intrude",
+        lambda side: [side],
+        lambda r, s, e, load, side: eyeliner_area.find_eyeliner_area(r, s, e, load, side).mask,
+    ),
+    Part(
+        "lip",
+        "lip",
+        ("lipsOuter",),
+        lip_area.AFTER_WINDOW_MS,
+        "lips",
+        "cover",
+        lambda side: [side],
+        lambda r, s, e, load, side: lip_area.find_lip_area(r, e, load).mask,
+    ),
+)
+
+
+def check_model(path: Path) -> None:
+    """모델 파일 지문이 MODEL_SHA256과 다르면 ValueError를 낸다."""
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != MODEL_SHA256:
+        raise ValueError(
+            f"모델 파일 지문이 다릅니다: {digest} (기대 {MODEL_SHA256}, 출처 {MODEL_URL})"
+        )
+
+
+def crop_box(face: Face, width: int, height: int) -> tuple[int, int, int, int]:
+    """얼굴 점을 감싸는 네모를 CROP_SCALE배로 넓힌 정사각형 (x0, y0, x1, y1). 사진 밖은 잘라낸다."""
+    xs = [p.x * width for p in face.landmarks]
+    ys = [p.y * height for p in face.landmarks]
+    cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
+    half = max(max(xs) - min(xs), max(ys) - min(ys)) * CROP_SCALE / 2
+    x0, y0 = max(0, round(cx - half)), max(0, round(cy - half))
+    x1, y1 = min(width, round(cx + half)), min(height, round(cy + half))
+    return x0, y0, x1, y1
+
+
+def onnx_parser(model_path: Path) -> Parser:
+    """BiSeNet ONNX로 사진의 픽셀마다 부위 번호(0~18)를 매기는 함수를 만든다.
+
+    얼굴만 잘라 INPUT_SIZE로 줄여 넣고, 결과를 잘라 낸 크기로 되돌려 사진 크기 표에 놓는다.
+    잘라 낸 곳 밖은 0(배경)이다.
+    """
+    import onnxruntime
+
+    session = onnxruntime.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+    name = session.get_inputs()[0].name
+
+    def parse(rgb: np.ndarray, face: Face) -> np.ndarray:
+        height, width = rgb.shape[:2]
+        x0, y0, x1, y1 = crop_box(face, width, height)
+        crop = rgb[y0:y1, x0:x1]
+        x = cv2.resize(crop, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_LINEAR)
+        x = ((x.astype(np.float32) / 255 - MEAN) / STD).transpose(2, 0, 1)[None]
+        labels = session.run(None, {name: x})[0][0].argmax(0).astype(np.uint8)
+        out = np.zeros((height, width), dtype=np.uint8)
+        out[y0:y1, x0:x1] = cv2.resize(labels, (x1 - x0, y1 - y0), interpolation=cv2.INTER_NEAREST)
+        return out
+
+    return parse
+
+
+def mask_to_map(mask: np.ndarray, face: Face) -> np.ndarray:
+    """사진 크기 흑백 표(True가 부위)를 얼굴 지도에 펴서 지도 크기 흑백 표로 바꾼다.
+
+    빨강 칸에 부위를 담아 flatten으로 펴고, 얼굴 밖(흰색) 칸은 부위가 아닌 것으로 본다.
+    """
+    image = np.zeros((*mask.shape, 3), dtype=np.uint8)
+    image[mask, 0] = 255
+    flat = flatten(image, face)
+    return (flat[..., 0] > 127) & (flat[..., 2] < 128)
+
+
+def majority(masks: Sequence[np.ndarray]) -> np.ndarray:
+    """여러 장의 흑백 표에서 절반 넘게 True인 칸만 True로 둔다."""
+    return np.mean(np.stack(masks), axis=0) > 0.5
+
+
+def side_half(side: RegionName) -> np.ndarray:
+    """짝 부위의 한쪽이 놓인 얼굴 지도 반쪽. 가운데 부위(lipsOuter)는 지도 전체다."""
+    if side == "lipsOuter":
+        return np.ones((MAP_SIZE, MAP_SIZE), dtype=bool)
+    xs = [x for x, _ in map_points(REGION_POINTS[side])]
+    half = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    if np.mean(xs) < MAP_SIZE / 2:
+        half[:, : MAP_SIZE // 2] = True
+    else:
+        half[:, MAP_SIZE // 2 :] = True
+    return half
+
+
+def ratio(numerator: np.ndarray, denominator: np.ndarray) -> float | None:
+    """True 칸 수의 비. 분모가 비어 있으면 None이다."""
+    total = int(denominator.sum())
+    return None if total == 0 else round(float(numerator.sum() / total), 3)
+
+
+def boundary_scores(area: np.ndarray, part: np.ndarray, kind: str) -> dict:
+    """찾은 영역과 실제 부위를 견준다. cover는 덮음·넘침, intrude는 침범이다."""
+    if kind == "cover":
+        return {"cover": ratio(area & part, part), "overflow": ratio(area & ~part, area)}
+    return {"intrude": ratio(area & part, area)}
+
+
+def point_outline(side: RegionName) -> np.ndarray:
+    """점 테두리(REGION_POINTS)를 지도에 칠한 흑백 표."""
+    return polygon_mask(map_points(REGION_POINTS[side]), MAP_SIZE, MAP_SIZE)
+
+
+def iou(a: np.ndarray, b: np.ndarray) -> float | None:
+    """겹친 칸 수 / 합친 칸 수. 둘 다 비어 있으면 None이다."""
+    return ratio(a & b, a | b)
+
+
+def measure_part(
+    part: Part,
+    result: LandmarksResult,
+    steps: Sequence,
+    load_photo: PhotoLoader,
+    label_map: Callable[[FrameLandmarks, str], np.ndarray],
+) -> list[dict]:
+    """부위 하나의 실제로 바른 단계마다, 쪽마다 경계 점수를 낸다."""
+    out = []
+    for step in steps:
+        if step.makeup != part.makeup:
+            continue
+        start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
+        for side in part.sides:
+            row = {"part": part.name, "stepId": step.step_id, "side": side}
+            area = part.find(result, start, end, load_photo, side)
+            rows = usable_rows(result, end, end + part.after_ms, part.regions(side))
+            if area is None or not rows:
+                out.append(row | {"found": area is not None, "photos": len(rows)})
+                continue
+            real = majority([label_map(r, part.label) for r in rows]) & side_half(side)
+            row |= {"found": True, "photos": len(rows), "areaCells": int(area.sum())}
+            row |= {"realCells": int(real.sum())}
+            row |= boundary_scores(area, real, part.kind)
+            if part.kind == "cover":
+                row["pointOutlineIoU"] = iou(point_outline(side), real)
+            out.append(row)
+    return out
+
+
+def main() -> None:
+    if len(sys.argv) != 3:
+        print("사용법: uv run python tools/boundary_metric.py <샘플 폴더> <모델 파일>")
+        sys.exit(1)
+
+    folder, model_path = Path(sys.argv[1]), Path(sys.argv[2])
+    checked_path = folder / CHECKED_FILE
+    if not checked_path.is_file():
+        print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
+        sys.exit(1)
+    check_model(model_path)
+
+    reference = load_reference_input(folder)
+    frames = {frame.frame_index: frame for frame in reference.manifest.frames}
+    result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
+    rows_by_index = {row.frame_index: row for row in result.frames}
+    parse = onnx_parser(model_path)
+
+    def load_photo(row: FrameLandmarks) -> np.ndarray:
+        return read_frame_rgb(reference, frames[row.frame_index])
+
+    @lru_cache(maxsize=64)
+    def labels_of(index: int) -> np.ndarray:
+        row = rows_by_index[index]
+        return parse(load_photo(row), row.face)
+
+    def label_map(row: FrameLandmarks, label: str) -> np.ndarray:
+        return mask_to_map(np.isin(labels_of(row.frame_index), LABELS[label]), row.face)
+
+    out = []
+    for part in PARTS:
+        rows = measure_part(part, result, reference.manifest.steps, load_photo, label_map)
+        out += rows
+        for row in rows:
+            scores = {
+                k: row[k] for k in ("cover", "overflow", "intrude", "pointOutlineIoU") if k in row
+            }
+            print(
+                f"{row['part']:9} {row['stepId']:4} {row['side']:10} 찾음 {row['found']}  {scores}"
+            )
+
+    path = folder / OUTPUT_FILE
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {"videoId": reference.manifest.video_id, "steps": out}, ensure_ascii=False, indent=1
+        ),
+        encoding="utf-8",
+    )
+    print(f"저장: {path}")
+
+
+if __name__ == "__main__":
+    main()
