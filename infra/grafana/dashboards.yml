@@ -1,0 +1,12 @@
+# Grafana 대시보드. dashboards/ 의 JSON 을 MAIROR 폴더에 올린다
+# 화면에서 고친 것은 저장되지 않는다. JSON 을 고쳐 master 에 머지하면 deploy-infra 가 올린다
+apiVersion: 1
+
+providers:
+  - name: mairor
+    folder: MAIROR
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

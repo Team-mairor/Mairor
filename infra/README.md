@@ -18,6 +18,7 @@ SSAFY가 준 EC2 `k15a306.p.ssafy.io`(앱 서버와 다른 AWS 계정). 앱 서�
 | `docker-compose.yml` | 인프라 서버 | caddy · grafana · loki · tempo · prometheus · phoenix |
 | `caddy/Caddyfile` | 인프라 서버 | HTTPS 인증서 자동 발급, alloy가 보내는 주소와 phoenix는 앱 서버 Elastic IP만, 나머지는 grafana |
 | `grafana/datasources.yml` | 인프라 서버 | 로그의 `traceId` → Tempo, trace → 같은 `traceId` 로그 |
+| `grafana/dashboards/` | 인프라 서버 | 대시보드 JSON(서버 · 컨테이너, 로그). Grafana 화면에서 고친 것은 저장되지 않는다 |
 | `deploy.sh` | 인프라 서버 | 설정 검사 → 이미지 받기 → 띄우기 → 모두 준비될 때까지 확인 |
 | `alloy/config.alloy` | **앱 서버** | 로그 · 지표 · trace 수집. `mairor-deploy` 이미지에 담겨 앱 배포 때 함께 바뀐다 |
 
