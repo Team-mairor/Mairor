@@ -60,6 +60,7 @@ npm run dev:https
 | `npm run typecheck`    | TypeScript 타입 검사                   |
 | `npm run format`       | Prettier로 전체 포맷                   |
 | `npm run format:check` | 포맷 검사만                            |
+| `npm run test`         | 단위 테스트 (vitest)                   |
 
 ## 확인 화면과 DevNav
 
@@ -308,4 +309,4 @@ try {
 - **정적 내보내기(`output: 'export'`)** 로 배포한다. API 라우트, 서버 액션, 쿠키 등 서버 기능은 쓰지 않는다. API는 BE 서버를 호출한다.
 - 카메라·MediaPipe·캔버스처럼 브라우저에서만 동작하는 코드는 `src/features/`에 두고 `'use client'`로 작성한다.
 - UI 컴포넌트는 `npx shadcn@latest add <컴포넌트>` 로 추가한다.
-- 커밋 전에 `npm run lint`, `npm run typecheck`, `npm run format:check` 를 통과시킨다.
+- 커밋 전에 `npm run lint`, `npm run typecheck`, `npm run format:check`, `npm run test` 를 통과시킨다.

@@ -20,7 +20,6 @@
 | 문서 | 날짜 | 요청 → 대상 | 상태 |
 |---|---|---|---|
 | [BE 로그 JSON 형식과 작업 ID 남기기](2026-10-29-hyeongjun-jungyoon-be-logging.md) | 2026-10-29 | 박형준 → 김정윤 | 요청 |
-| [기본 아이섀도 가이드에 눈 아래 안내 추가](2026-11-01-hyeonsoo-seoyun-default-eyeshadow-under-eye.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [바르는 자리가 바뀌면 단계 나누기](2026-11-01-hyeonsoo-jungyoon-split-steps-by-application.md) | 2026-11-01 | 김현수 → 김정윤 | 요청 |
 | [마스카라 단계 영역 없음 반영](2026-11-01-hyeonsoo-seoyun-mascara-no-area.md) | 2026-11-01 | 김현수 → 한서윤 | 요청 |
 | [Google 최초 로그인 추가 정보·약관 입력 흐름](2026-11-02-juyeon-seoyeon-google-signup.md) | 2026-11-02 | 최주연 → 김서연 | 요청 |
@@ -28,3 +27,4 @@
 | [가이드 작업 진행 알림·SSE 회신과 진행 알림 보완 제안](2026-11-04-seoyeon-hyeongjun-guide-job-progress-reply.md) | 2026-11-04 | 김서연 → 박형준 | 요청 |
 | [분석 상태 SSE 머지 전 확인과 AI 가이드 요청(!85) 후속 확인](2026-11-04-seoyeon-jungyoon-analysis-job-followups.md) | 2026-11-04 | 김서연 → 김정윤 | 요청 |
 | [분석 로딩 화면을 분석 상태 SSE 로 연결](2026-11-04-seoyeon-juyeon-analysis-status-sse.md) | 2026-11-04 | 김서연 → 최주연 | 요청 |
+| [아이섀도 기본 가이드를 바른 자리별로 보내기](2026-11-04-seoyun-hyeonsoo-eyeshadow-template-by-area.md) | 2026-11-04 | 한서윤 → 김현수 | 요청 |

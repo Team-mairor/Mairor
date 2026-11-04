@@ -446,7 +446,7 @@
           "order": 2,
           "status": "template",
           "reasons": [
-            "notAnalyzed"
+            "noUsableFrame"
           ],
           "templateId": "eyeshadow",
           "guideSets": []
@@ -454,6 +454,26 @@
         {
           "subStepId": "s10-3",
           "order": 3,
+          "status": "template",
+          "reasons": [
+            "eyeshadowColorNotFound"
+          ],
+          "templateId": "eyeshadowUpper",
+          "guideSets": []
+        },
+        {
+          "subStepId": "s10-4",
+          "order": 4,
+          "status": "template",
+          "reasons": [
+            "eyeshadowColorNotFound"
+          ],
+          "templateId": "eyeshadowUnder",
+          "guideSets": []
+        },
+        {
+          "subStepId": "s10-5",
+          "order": 5,
           "status": "extracted",
           "reasons": [],
           "templateId": null,

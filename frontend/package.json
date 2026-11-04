@@ -18,7 +18,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.1",
@@ -44,6 +45,7 @@
     "serve": "^14.2.6",
     "shadcn": "^4.22.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

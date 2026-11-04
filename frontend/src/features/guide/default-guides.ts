@@ -91,6 +91,10 @@ const EYELINER = {
   },
 };
 
+// 애교살 띠 두께: 아래 속눈썹 선에서 눈 밑 고리까지 거리 대비.
+// 영상에서 찾은 영역은 바른 곳 전체지만, 기본 가이드는 얇게 얹으라는 안내라 절반만 쓴다
+const UNDER_EYE_DEPTH = 0.5;
+
 const unit = (v: Uv): Uv => {
   const len = Math.hypot(v.x, v.y) || 1;
   return { x: v.x / len, y: v.y / len };
@@ -132,6 +136,50 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     type: "polygon",
     outline: [...lid.map(at), ...toBrow.map(([i, j]) => between(i, j, 0.4))],
   });
+  /** 아래 속눈썹 선(바깥 → 안쪽)과, 그 점들을 눈 밑 고리 쪽으로 UNDER_EYE_DEPTH만큼 내린 선(안쪽 → 바깥) 사이의 띠 */
+  const underBand = (lash: number[], ring: number[]): GuideShape => ({
+    type: "polygon",
+    outline: [
+      ...lash.map(at),
+      ...lash.map((i, k) => between(i, ring[k], UNDER_EYE_DEPTH)).reverse(),
+    ],
+  });
+  // 눈두덩이 띠와 화살표 (윗눈꺼풀 ~ 눈썹까지의 아래쪽 40%, 쌍꺼풀 라인 높이)
+  const upperLid = [
+    lidBand(
+      [33, 246, 161, 160, 159, 158, 157, 173, 133],
+      [
+        [133, 55],
+        [158, 65],
+        [159, 52],
+        [161, 53],
+        [33, 46],
+      ],
+    ),
+    lidBand(
+      [263, 466, 388, 387, 386, 385, 384, 398, 362],
+      [
+        [362, 285],
+        [385, 295],
+        [386, 282],
+        [388, 283],
+        [263, 276],
+      ],
+    ),
+    arrow(between(157, 65, 0.2), between(161, 53, 0.2)),
+    arrow(between(384, 295, 0.2), between(388, 283, 0.2)),
+  ];
+  // 애교살 띠: 아래 속눈썹 선 → 눈 밑 고리
+  const underEye = [
+    underBand(
+      [33, 7, 163, 144, 145, 153, 154, 155, 133],
+      [226, 31, 228, 229, 230, 231, 232, 233, 244],
+    ),
+    underBand(
+      [263, 249, 390, 373, 374, 380, 381, 382, 362],
+      [446, 261, 448, 449, 450, 451, 452, 453, 464],
+    ),
+  ];
 
   /**
    * 눈썹 결: [아래 선 점, 위 선 점] 쌍을 앞머리 → 꼬리 순서로 받아 결 방향의 짧은 붓 자국을 만든다.
@@ -303,34 +351,23 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       ],
     },
     {
-      // 윗눈꺼풀 ~ 눈썹까지의 아래쪽 40% (쌍꺼풀 라인 높이)
+      // 바른 자리를 모를 때의 기본값. 아이섀도는 눈두덩이와 애교살 어느 쪽에도 바르므로 둘 다 안내한다
       stepId: "eyeshadow",
+      title: "아이섀도: 눈두덩이는 쌍꺼풀 라인까지 펴 바르고 애교살은 얇게 얹어요",
+      regions: ["rightEye", "leftEye"],
+      guides: [...upperLid, ...underEye],
+    },
+    {
+      stepId: "eyeshadowUpper",
       title: "아이섀도: 쌍꺼풀 라인 높이까지 안쪽에서 바깥쪽으로 펴 발라요",
       regions: ["rightEye", "leftEye"],
-      guides: [
-        lidBand(
-          [33, 246, 161, 160, 159, 158, 157, 173, 133],
-          [
-            [133, 55],
-            [158, 65],
-            [159, 52],
-            [161, 53],
-            [33, 46],
-          ],
-        ),
-        lidBand(
-          [263, 466, 388, 387, 386, 385, 384, 398, 362],
-          [
-            [362, 285],
-            [385, 295],
-            [386, 282],
-            [388, 283],
-            [263, 276],
-          ],
-        ),
-        arrow(between(157, 65, 0.2), between(161, 53, 0.2)),
-        arrow(between(384, 295, 0.2), between(388, 283, 0.2)),
-      ],
+      guides: upperLid,
+    },
+    {
+      stepId: "eyeshadowUnder",
+      title: "애교살: 아래 속눈썹 선을 따라 얇게 얹어요",
+      regions: ["rightEye", "leftEye"],
+      guides: underEye,
     },
     {
       stepId: "eyeliner",

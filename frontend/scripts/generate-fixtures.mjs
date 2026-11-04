@@ -470,7 +470,7 @@ writeJson("guide-areas/sample.json", {
 
 // 목업 가이드(lib/mock-guide.ts)와 같은 AI 샘플 영상의 가이드 영역. 튜토리얼이 단계 ID로 찾는다.
 // 샘플의 extracted 좌표는 형식을 보이기 위한 예시라, 같은 부위의 랜드마크 테두리로 바꿔 화면에서 알아볼 수 있게 한다.
-// 하위 단계 전환을 보려고 아이섀도 단계(s10)는 눈두덩 → 기본 영역 → 애교살 세 하위 단계로 나눈다.
+// 하위 단계 전환을 보려고 아이섀도 단계(s10)는 눈두덩 → 기본 영역(위아래 · 위 · 아래) → 애교살 다섯 하위 단계로 나눈다.
 // 애교살 띠: 아래 눈꺼풀(눈꼬리 → 눈앞머리) → 눈 밑 고리(눈앞머리 → 눈꼬리)
 const UNDER_EYE = {
   rightEye: [33, 7, 163, 144, 145, 153, 154, 155, 133, 244, 233, 232, 231, 230, 229, 228, 31, 226],
@@ -485,8 +485,10 @@ const eyeshadowSubSteps = [
       areaSet("leftEye", ring(EYE_RINGS.leftEye), ["leftEye"]),
     ],
   }),
-  sub("s10", 2, "template", { reasons: ["notAnalyzed"], templateId: "eyeshadow" }),
-  sub("s10", 3, "extracted", {
+  sub("s10", 2, "template", { reasons: ["noUsableFrame"], templateId: "eyeshadow" }),
+  sub("s10", 3, "template", { reasons: ["eyeshadowColorNotFound"], templateId: "eyeshadowUpper" }),
+  sub("s10", 4, "template", { reasons: ["eyeshadowColorNotFound"], templateId: "eyeshadowUnder" }),
+  sub("s10", 5, "extracted", {
     guideSets: [
       areaSet("rightEye", ring(UNDER_EYE.rightEye)),
       areaSet("leftEye", ring(UNDER_EYE.leftEye)),
