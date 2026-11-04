@@ -1,0 +1,48 @@
+{
+  "contractVersion": 1,
+  "itemKey": "000001",
+  "source": "OFFICIAL:romand.co.kr",
+  "sourceProductId": "9001",
+  "sourceUrl": "https://romand.co.kr/product/detail.html?product_no=9001",
+  "sourceLanguage": "ko",
+  "collectedAt": "2026-11-05T10:30:00+09:00",
+  "brand": "롬앤",
+  "name": "예시 쥬시 틴트",
+  "sourceCategoryPath": ["립"],
+  "categoryHint": "LIP",
+  "typeHint": "LIP_TINT",
+  "imageUrl": "https://example.com/images/9001/main.jpg",
+  "saleStatus": "ON_SALE",
+  "shades": [
+    {
+      "sourceOptionId": "01 예시 베어",
+      "name": "01 예시 베어",
+      "sortOrder": 1,
+      "slotOrderBasis": "GRID",
+      "colorStatus": "EXTRACTED",
+      "variantHints": {"volume": null, "composition": null, "formulation": null, "optionAttributes": null, "listPrice": null},
+      "colors": [
+        {
+          "sortOrder": 1,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": "#C9707A",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "UNVERIFIED",
+          "colorQuality": 0.82,
+          "evidenceKey": "9001/01 예시 베어/1"
+        }
+      ]
+    },
+    {
+      "sourceOptionId": "02 예시 코랄",
+      "name": "02 예시 코랄",
+      "sortOrder": 2,
+      "slotOrderBasis": "UNKNOWN",
+      "colorStatus": "NOT_FOUND",
+      "variantHints": {"volume": null, "composition": null, "formulation": null, "optionAttributes": null, "listPrice": null},
+      "colors": []
+    }
+  ],
+  "warnings": []
+}

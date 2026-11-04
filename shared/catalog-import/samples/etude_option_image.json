@@ -1,0 +1,59 @@
+{
+  "contractVersion": 1,
+  "itemKey": "000003",
+  "source": "OFFICIAL:etude.com",
+  "sourceProductId": "example-curl-fix-mascara",
+  "sourceUrl": "https://www.etude.com/shop/category/eye/example-curl-fix-mascara/",
+  "sourceLanguage": "ko",
+  "collectedAt": "2026-11-05T10:32:00+09:00",
+  "brand": "에뛰드",
+  "name": "예시 컬 픽스 마스카라",
+  "sourceCategoryPath": ["eye"],
+  "categoryHint": "EYE",
+  "typeHint": "MASCARA",
+  "imageUrl": "https://example.com/images/etude/main.png",
+  "saleStatus": "ON_SALE",
+  "shades": [
+    {
+      "sourceOptionId": "01-black",
+      "name": "01 블랙",
+      "sortOrder": 1,
+      "slotOrderBasis": "GRID",
+      "colorStatus": "EXTRACTED",
+      "variantHints": {"volume": null, "composition": null, "formulation": null, "optionAttributes": null, "listPrice": null},
+      "colors": [
+        {
+          "sortOrder": 1,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": "#1E1B1C",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "OPTION_IMAGE",
+          "colorQuality": 0.93,
+          "evidenceKey": "example-curl-fix-mascara/01-black/1"
+        }
+      ]
+    },
+    {
+      "sourceOptionId": "02-brown",
+      "name": "02 브라운",
+      "sortOrder": 2,
+      "slotOrderBasis": "GRID",
+      "colorStatus": "EXTRACTED",
+      "variantHints": {"volume": null, "composition": null, "formulation": null, "optionAttributes": null, "listPrice": null},
+      "colors": [
+        {
+          "sortOrder": 1,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": "#4A3427",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "OPTION_IMAGE",
+          "colorQuality": 0.91,
+          "evidenceKey": "example-curl-fix-mascara/02-brown/1"
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

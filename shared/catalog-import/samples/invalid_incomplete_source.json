@@ -1,0 +1,36 @@
+{
+  "contractVersion": 1,
+  "itemKey": "000004",
+  "source": "OFFICIAL:romand.co.kr",
+  "sourceUrl": "https://romand.co.kr/product/detail.html?product_no=9004",
+  "sourceLanguage": "ko",
+  "collectedAt": "2026-11-05T10:33:00+09:00",
+  "brand": "롬앤",
+  "name": "예시 깨진 상품",
+  "sourceCategoryPath": ["립"],
+  "categoryHint": "LIP",
+  "typeHint": "LIP_TINT",
+  "saleStatus": "ON_SALE",
+  "shades": [
+    {
+      "sourceOptionId": "01 예시",
+      "name": "01 예시",
+      "sortOrder": 1,
+      "slotOrderBasis": "GRID",
+      "colorStatus": "EXTRACTED",
+      "colors": [
+        {
+          "sortOrder": 1,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": "C9707A",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "UNVERIFIED",
+          "colorQuality": 0.8,
+          "evidenceKey": "9004/01 예시/1"
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

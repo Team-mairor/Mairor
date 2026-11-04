@@ -281,6 +281,8 @@ API-POUCH-001 · GET /api/v1/products
 - <b>오류 필드 (로컬 수정 -297)</b>: 형식 오류는 필드마다 details에 모두 담는다. 코드 검사는 카테고리가 없으면 field=category(종류가 있어도), 종류가 없거나 다른 카테고리 소속이면 field=type.
 - <b>공백·길이 (로컬 수정 -297)</b>: 빈 값 판정과 앞뒤 공백 제거는 PouchWrite 정규화와 같은 유니코드 공백 기준(NBSP·전각 공백 포함)이다. 길이는 앞뒤 공백을 지운 원문을 NFC 전 String.length()로 센다(카탈로그 엔티티와 같은 단위). <b>name 상한은 200자</b>(카탈로그 저장 상한과 같게, 기존 100자), brand는 100자.
 - <b>응답 (로컬 수정 -297)</b>: brand·name은 카탈로그 원문. shades는 sort\_order, 이름 순. color.source는 항상 CATALOG(내부 출처값 비노출), 색을 모르면 color=null.
+- <b>색 칸 (로컬 수정 -292)</b>: 각 호수는 `colors:ShadeColor[]`(칸마다 colorId·name·sortOrder·color)를 함께 준다. 칸은 sortOrder 순. 서버는 사람의 승인을 기다리지 않고 자동 판정(연결 근거·품질 기준)으로 색을 채우며, 못 넘으면 그 칸의 color=null이다. 호수 선택이 없는 카테고리는 shades=\[\].
+- <b>공백 무시 비교 (로컬 수정 -292)</b>: 정확 일치가 없으면 정규화한 이름에서 공백을 모두 뺀 값으로 한 번 더 찾는다(FE `sameName`과 같은 기준). 이렇게 찾은 제품이 **둘 이상이면 0건**(`items=[]`)으로 응답해 0~1건 계약을 유지하고, 어느 쪽을 고를지는 서버가 추측하지 않는다. 정확 일치 결과는 지금과 같다.
 </toggle>
 
 <toggle>
@@ -289,6 +291,7 @@ API-POUCH-002 · GET /api/v1/products/\{productId\}
 관련 기능: POUCH-002 제품 찾기
 
 - 회원 GET. Path productId:string 필수. 200 Product. 404 NOT\_FOUND면 직접 입력으로 복귀.
+- <b>색 칸 (로컬 수정 -292)</b>: 응답 모양은 API-POUCH-001과 같고 호수마다 colors(ShadeColor\[\])를 준다.
 - shades=\[\]는 등록된 호수 정보 없음. 임의 호수·색상 생성 금지. 실제 피부 발색 보장 안 함.
 - <b>로컬 수정 -297</b>: productId가 UUID 형식이 아니면 400 VALIDATION\_FAILED(field=productId). 응답은 API-POUCH-001 검색 결과 항목과 같은 모양이다. FE 등록 흐름은 검색만 쓰며, 이 API는 저장된 productId로 호수를 다시 띄울 때(예: CATALOG 파우치 항목 수정) 쓸 수 있다.
 </toggle>
@@ -310,9 +313,9 @@ API-POUCH-004 · POST /api/v1/users/me/pouch-items
 - 회원·CSRF 필요. Body는 아래 PouchWrite 계약. 201 \{item:PouchItem,pouchVersion:integer\}.
 - 400 POUCH\_INVALID\_PRODUCT(조건부 필드·제품/호수 조합), 409 POUCH\_DUPLICATE(정규화 브랜드·제품명·호수 중복). 공통 필드 형식 오류는 400 VALIDATION\_FAILED.
 - <b>등록 계약 (로컬 수정 -211 · 구현 전 명세 반영)</b>: CATALOG는 서버에서 기존 제품·호수를 검증하고 표시 정보·색상을 개인 항목에 복사하며 연결 ID도 보관한다. MANUAL은 개인 항목에만 저장한다. 이 요청은 공용 카탈로그를 생성·수정하거나 크롤링을 시작하지 않는다.
-- MANUAL의 colorHex 생략/null은 color=null·colorSource=NONE이고, 입력한 색은 color.source=USER\_INPUT·estimated=true다. CATALOG는 요청 colorHex가 아니라 선택 호수의 색을 사용하며, 색이 있으면 source=CATALOG·estimated는 카탈로그 값을 보존한다. 어느 방식이든 색이 없으면 color=null·colorSource=NONE이고 대체 후보에서 제외한다.
+- MANUAL의 colorHex 생략/null은 color=null·colorSource=NONE이고, 입력한 색은 color.source=USER\_INPUT·estimated=true다. CATALOG는 요청 colorHex가 아니라 선택 호수의 색을 사용하며, 색이 있으면 source=CATALOG·estimated는 카탈로그 값을 보존한다. 어느 방식이든 색이 없으면 color=null·colorSource=NONE이다. <b>로컬 수정 -292</b>: 대체 후보 제외는 `color`가 없고 `colors[]`에도 사용 가능한 칸이 없을 때다(팔레트는 사용 가능한 칸이 하나라도 있으면 대상). 자동 연결된 CATALOG 항목은 사용자 입력 색을 유지해 colorSource=USER\_INPUT일 수 있다(아래 자동 연결).
 - 본인 항목 저장과 pouchVersion 증가는 원자적으로 처리한다. 초기 pouchVersion=0, 등록 성공마다 +1이며 실패·중복·롤백 시 증가하지 않는다. 시작 전 매칭은 변경된 버전으로 재계산 대상이 되고, 이미 시작한 실행·완료 리포트의 당시 제품 스냅샷은 변경하지 않는다.
-- 카탈로그 복사본·정규화 중복키와 표시값은 등록 시점 기준이다. 이후 카탈로그 이름·색상 변경은 기존 개인 항목이나 pouchVersion에 자동 반영하지 않는다. 개인 목록·상세·매칭 입력도 이 복사본을 사용한다. 카탈로그 연결 ID만으로 조회 때 최신값으로 치환하지 않는다.
+- 카탈로그 복사본·정규화 중복키와 표시값은 등록 시점 기준이다. 이후 카탈로그 이름·색상 변경은 기존 개인 항목이나 pouchVersion에 자동 반영하지 않는다. 개인 목록·상세·매칭 입력도 이 복사본을 사용한다. 카탈로그 연결 ID만으로 조회 때 최신값으로 치환하지 않는다. <b>로컬 수정 -292</b>: 예외는 색 칸 목록 `colors[]`뿐이며 shadeId로 카탈로그를 읽는다(재수집 보강 반영, 기준이 바뀌면 referenceVersion으로 stale 처리).
 - 중복 범위는 같은 회원의 정규화 brand·name·shadeName이다. type·category·registrationMode·productId·shadeId·color는 제외하므로 다른 종류 및 CATALOG/MANUAL 간에도 같은 비교값이면 409 POUCH\_DUPLICATE다. 다른 회원의 동일 제품 등록은 허용한다. 호수 없음(null·생략·공백)은 같은 값으로 취급하며 DB 유니크 제약으로 동시 중복도 차단한다.
 - shadeSelectable=true인데 해당 제품에 선택할 유효 호수가 없으면 CATALOG 등록은 400 POUCH\_INVALID\_PRODUCT다. NAIL\_FILE도 이 규칙을 따르며, 화면은 호수·색상을 생략할 수 있는 MANUAL 등록을 안내한다. 임의 호수 생성이나 분류·기초 데이터 변경은 하지 않는다.
 
@@ -368,6 +371,7 @@ API-POUCH-004 · POST /api/v1/users/me/pouch-items
 ```
 
 색상을 모르면 MANUAL 요청의 colorHex를 생략/null로 보내며 응답은 color=null·colorSource=NONE이다. TOOL 등 shadeSelectable=false 분류는 shadeName·colorHex를 모두 생략/null로 보낸다. 예시는 API 동작 검증 결과가 아니며 구현·테스트는 후속 단계다.
+- <b>자동 연결 (로컬 수정 -292)</b>: MANUAL로 등록한 항목은 응답에 변화가 없지만, 서버가 뒤에서 같은 제품을 외부 공식 홈에서 찾아 **조건이 모두 맞을 때만** 그 항목을 CATALOG로 바꿀 수 있다(소분류 정확 일치·제품 후보 1개·호수 일치·사용자가 그사이 수정·삭제하지 않음·같은 제품·호수 중복 없음·**바뀐 정규화 brand·name·shadeName이 본인 다른 항목과 겹치지 않음**). 이때 productId·shadeId가 채워지고 brand·name·shadeName이 카탈로그 값(앞뒤 공백 제거)으로 바뀐다. 사용자가 직접 넣은 색은 버리지 않고 `color`·`colorSource=USER_INPUT`으로 유지하며(단색·팔레트 모두) 특정 칸에 붙이지 않는다. 그래서 등록(-211)이 만드는 CATALOG는 colorSource=CATALOG뿐이지만 자동 연결이 만든 CATALOG는 USER\_INPUT일 수 있다(저장 제약은 구현 때 맞춘다). `colors[]`는 shadeId로 카탈로그의 칸 목록을 읽는다(-211 복사 원칙의 예외). pouchVersion은 **연결로 매칭 입력(제품·호수·색·칸)이 바뀔 때만** 오르며, 보던 매칭은 stale이 되어 실행 시작 때 409 GUIDE\_MATCH\_STALE이 나고 FE는 재매칭을 안내한다. 사용자 화면·알림은 없다. 조건이 안 맞으면 항목은 그대로다.
 </toggle>
 
 <toggle>
@@ -420,6 +424,7 @@ API-RECOMMEND-001 · POST /api/v1/users/me/guide-matches
 - 회원·CSRF 필요. Body guideId:string 필수. 201 GuideMatch. 미검수·없는 가이드는 404 NOT\_FOUND.
 - GUIDE 단계마다 SAME/SUBSTITUTE/NONE 결과 1개. 5개 메이크업 카테고리만 제품 매칭. SAME은 동일 productId·shadeId가 검증된 경우이며 색상 없어도 가능. 대체는 색상 있는 같은 용도·부위 후보 최대3개.
 - 추천 외 같은 카테고리 제품 수동 선택 가능, 유사도 수치 응답 없음. 기준 색은 DB 호수 색→목표 발색, 없으면 comparisonAvailable=false. 빈 파우치는 NO\_ITEMS.
+- <b>선택 칸 (로컬 수정 -292)</b>: 후보의 `matchedColorId`는 서버가 정한다. 팔레트면 원본 기준색에 가장 가까운 사용 가능한 칸, 단색이면 그 1칸이다. **기준색이 없으면(comparisonAvailable=false) 칸을 정할 수 없으므로 `matchedColorId=null`**이다. 같은 제품·호수 보유(SAME)는 제품·호수 ID로 판정하며 팔레트의 특정 칸 확정을 요구하지 않는다(원본에서 쓴 칸이 연결돼 있으면 그 칸, 없으면 null).
 - 매칭 알고리즘·동점·최소 기준은 미결. 임의 추천 점수를 정상 결과로 만들지 않는다.
 </toggle>
 
@@ -429,7 +434,7 @@ API-RECOMMEND-002 · GET /api/v1/users/me/guide-matches/\{matchId\}
 관련 기능: RECOMMEND-001 · RECOMMEND-002 · GUIDE-001 · GUIDE-004
 
 - 회원 GET. Path matchId:string 필수. 200 GuideMatch & \{stale:boolean\}. 404 NOT\_FOUND.
-- 현재 pouchVersion 또는 guideVersion이 다르면 stale=true. 새 매칭 생성·재확인 후 시작. 실행 시작 시 서버도 같은 기준으로 409 GUIDE\_MATCH\_STALE 반환.
+- 현재 pouchVersion 또는 guideVersion이 다르면 stale=true. <b>예고 (로컬 수정 -292)</b>: 원본 제품 기준색이 바뀐 경우를 위해 가이드에 referenceVersion을 두고 GuideMatch가 생성 때 값을 저장해, 셋 중 하나라도 다르면 stale이 되도록 확장한다(구현 S15P31A306-325). 대체 후보의 소분류 호환 묶음을 정하는 서버 설정에도 버전을 두고, 이 설정이 바뀌어 버전이 달라져도 기존 매칭은 stale이다(클라이언트는 stale 응답만 보면 되고 설정 값은 노출하지 않는다). 새 매칭 생성·재확인 후 시작. 실행 시작 시 서버도 같은 기준으로 409 GUIDE\_MATCH\_STALE 반환.
 </toggle>
 
 <toggle>
@@ -442,6 +447,7 @@ API-GUIDE-001 · POST /api/v1/users/me/executions
 - 201 Execution(status=IN\_PROGRESS,photoConsent=null,recordId=null). 가이드·파우치·매칭 최신성과 등록 이미지 본인 소유·같은 영상·REGISTERED 상태를 검증한 후 제품·가이드 스냅샷과 얼굴 등록 연결을 원자적으로 생성한다.
 - 404 NOT\_FOUND, 400 VALIDATION\_FAILED, 400 GUIDE\_SELECTION\_INVALID(다른 카테고리·무색상 대체·잘못된 선택), 409 GUIDE\_MATCH\_STALE, 409 FACE\_REGISTRATION\_ALREADY\_USED, 409 GUIDE\_MISSING\_PRODUCTS\_NOT\_ACKNOWLEDGED. 타인 리소스는 상세 사유 노출 없이 404 우선.
 - 검증 성공 후 같은 로그인 세션 이전 실행을 종료하고 새 실행 생성·등록 LINKED 전환을 함께 처리. 실패 시 이전 실행·등록 상태 유지. 같은 faceRegistrationId를 쓴 중복 POST는 두 번째 실행을 만들지 않고 409. 응답 유실 시 무조건 재시작하지 말고 API-CAMERA-002의 executionId를 확인해 API-GUIDE-002 조회.
+- <b>선택 칸 (로컬 수정 -292)</b>: 선택 칸은 요청에서 받지 않고 서버가 시작 때 확정해 `selectedColorId`·`selectedColor`(그때의 색)로 저장한다. 추천 후보는 매칭 때 정한 `matchedColorId`를 그대로 쓰고, 추천 밖에서 직접 고른 팔레트 항목은 서버가 이 시점에 원본 기준색과 가장 가까운 사용 가능한 칸을 정한다. **기준색이 없으면 칸·색은 null로 두고 제품·호수 선택은 저장한다.** SAME 제품은 원본에서 쓴 칸이 연결돼 있으면 그 칸, 없으면 null이다.
 - 제품 선택은 실행 중 불변. 최종 null은 result=NONE·skipped=true, 원래 추천/동일이었으면 noneReason=NOT\_SELECTED. 수동 대체는 result=SUBSTITUTE로 기록하되 추천 candidates(최대3개)에 임의 추가하지 않는다.
 </toggle>
 
@@ -900,29 +906,30 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | EmailAvailability <b>v2</b> | email:string(정규화 값), available:boolean. |
 | PasswordResetVerification <b>v2</b> | resetToken:string, expiresAt:datetime. |
 | ColorInfo | colorSpace:'sRGB', hex:string(#RRGGBB), source:string, estimated:boolean. 보유 제품 source=CATALOG\|USER\_INPUT, 목표 발색은 VIDEO\_ESTIMATE\|CATALOG\|MANUAL\_REVIEW. 색상이 없으면 객체 자체를 null. |
-| Shade | shadeId:string, name:string, color:ColorInfo\|null. |
+| Shade | shadeId:string, name:string, colors:ShadeColor\[\]. <b>로컬 수정 -292</b>: 기존 `color:ColorInfo\|null` 한 칸을 `colors`(한 호수 안의 색을 모두 담는 목록)로 바꾼다. 듀오·팔레트도 대표색 하나로 줄이지 않으며 단색 호수는 칸 1개다. FE는 아직 목 데이터라 호환 칸을 따로 두지 않는다. |
+| ShadeColor <b>신규(로컬 수정 -292)</b> | colorId:string(칸의 영구 ID, 칸 순서가 바뀌어도 그대로), name:string\|null(칸 이름, 모르면 null), sortOrder:integer(표시 순서), color:ColorInfo\|null. 칸은 순서 번호가 아니라 `colorId`로 가리킨다. `color`는 서버가 자동 판정으로 쓸 수 있다고 본 색만 채우고(근거 부족·품질 미달이면 null), ColorInfo.source는 항상 CATALOG, estimated는 저장값(사진·추정에서 얻은 색은 true). |
 | Product <b>v2</b> | productId:string, brand:string, name:string, category:string, type:string, shades:Shade\[\]. 호수 선택이 없는 카테고리는 shades=\[\]. type은 카탈로그 제품마다 필수(로컬 수정 -209, 기존 string\|null). |
 | ProductCategory <b>v2</b> | code:string, label:string, matchable:boolean, shadeSelectable:boolean, types:ProductType\[\], compatibleParts:string\[\]. ProductType = code:string, label:string. 9개 카테고리·종류 목록은 기능명세 POUCH-004 기준. |
-| PouchItem <b>v2</b> | pouchItemId:string, registrationMode:CATALOG\|MANUAL, productId:string\|null, shadeId:string\|null, brand:string, name:string, category:string, type:string, shadeName:string\|null, color:ColorInfo\|null, colorSource:CATALOG\|USER\_INPUT\|NONE, createdAt:datetime, updatedAt:datetime. MANUAL의 productId·shadeId는 null. <b>로컬 수정 -211</b>: 표시값·색상은 개인 저장 복사본이며 카탈로그를 실시간 참조하지 않는다. brand/name/shadeName은 앞뒤 유니코드 공백 제거 후 최대 100/200/100자, shadeName 공백은 null. 색이 없으면 color=null·colorSource=NONE. |
+| PouchItem <b>v2</b> | pouchItemId:string, registrationMode:CATALOG\|MANUAL, productId:string\|null, shadeId:string\|null, brand:string, name:string, category:string, type:string, shadeName:string\|null, color:ColorInfo\|null, colorSource:CATALOG\|USER\_INPUT\|NONE, createdAt:datetime, updatedAt:datetime. MANUAL의 productId·shadeId는 null. <b>로컬 수정 -211</b>: 표시값·색상은 개인 저장 복사본이며 카탈로그를 실시간 참조하지 않는다(-292의 `colors[]`만 예외). brand/name/shadeName은 앞뒤 유니코드 공백 제거 후 최대 100/200/100자, shadeName 공백은 null. 색이 없으면 color=null·colorSource=NONE. <b>로컬 수정 -292</b>: `colors:ShadeColor\[\]`를 더한다. 역할을 나눈다: `colors[]`는 카탈로그 칸과 그 색(CATALOG 항목은 shadeId로 읽은 칸 목록, 단색은 1칸, MANUAL은 \[\]), `color`는 **실제로 쓰는 색**, `colorSource`는 그 색의 출처다. 사용자 입력 색이 있으면(MANUAL, 또는 자동 연결된 단색·팔레트 항목) `color`=사용자 색·`colorSource=USER_INPUT`이고 특정 칸에 붙이지 않는다. 사용자 색이 없으면 단색은 `color`=그 칸의 색·`CATALOG`, 칸이 2개 이상인 팔레트는 `color=null`·`colorSource=NONE`이며 칸별 색은 `colors`에 있다. 대체 후보 제외는 `color`도 없고 `colors[]`에 사용 가능한 칸도 없을 때다. 매칭·실행의 기준색은 단색 항목이면 `color`(사용자 색 우선), 팔레트면 서버가 정한 칸의 색이다. |
 | ReferenceProduct | productId:string\|null, shadeId:string\|null, name:string\|null, shadeName:string\|null, matchStatus:MATCHED\|CANDIDATE\|UNMATCHED, verification:CONFIRMED\|ESTIMATED\|UNKNOWN, sources:string\[\], videoConfirmed:boolean\|null. 화면 라벨: ESTIMATED='추정', videoConfirmed=false='설명란에만 있음', UNMATCHED='이름만 확인'. 임의 제품 연결 금지. |
 | Application | coordinateSystem:string(버전 포함), side:LEFT\|RIGHT\|BOTH\|CENTER, region:object \{ templateId:string\|null, polygon:number\[2\]\[\] \}, strokes:Stroke\[\], isFallback:boolean. templateId 또는 3점 이상 polygon 중 하나 필수. |
 | Stroke | motion:SWEEP\|BACK\_AND\_FORTH\|DAB\|CIRCLE, direction:FORWARD\|BIDIRECTIONAL\|CLOCKWISE\|COUNTERCLOCKWISE\|NONE, points:number\[2\]\[\]. 쓸기 2점 이상, 두드리기 1점 이상. 픽셀 좌표가 아님. |
 | GuideStep <b>v2</b> | stepId:string, order:integer(1부터), type:GUIDE\|EXCLUDED, part:string, instruction:string, tools:string\[\], referenceProduct:ReferenceProduct\|null, targetColor:ColorInfo\|null, videoRange:object \{ startSeconds:number, endSeconds:number \}\|null, application:Application\|null, previewable:boolean, matchCategory:string\|null. previewable은 색 있는 단계(아이섀도·아이라이너·블러셔·하이라이터·립)만 true, 피부 표현은 false. <b>로컬 수정 -312</b>: <code>application</code> 대신 <code>subSteps</code>(shared/guide-area 의 하위 단계 그대로: subStepId·order·status extracted\|template\|notApplicable\|failed·reasons·templateId·guideSets), <code>instruction</code> 대신 <code>summary</code>·<code>actions[{text, tip:{kind:tip\|caution, text}\|null}]</code>·<code>doneWhen</code>, <code>part</code>는 화장 종류 10종(foundation·eyeshadow·eyeliner·blush·lip·brow·mascara·contour·highlight·other)이고 한국어는 <code>partLabel</code>. <code>other</code>만 EXCLUDED(mascara는 영역이 없어도 GUIDE). matchCategory: foundation→BASE, eyeshadow·eyeliner·mascara→EYE, brow→BROW, blush·highlight·contour→CHEEK, lip→LIP. 1차 targetColor=null, referenceProduct는 영상 속 이름만(UNMATCHED·UNKNOWN). |
 | Guide <b>v2</b> | guideId:string, guideVersion:integer, videoId:string, title:string, channelTitle:string, thumbnailUrl:string\|null, youtubeVideoId:string, coordinateSystem:string, referenceImageUrl:string\|null, stepCount:integer, previewableStepCount:integer, steps:GuideStep\[\]. 검수 승인된 원본만 조회 가능. stepCount는 GUIDE 단계 수. <b>로컬 수정 -312</b>: <code>coordinateSystem</code> 대신 <code>meshVersion</code>(가이드 영역의 얼굴 메시 판, 영역이 없으면 null), 1차 referenceImageUrl=null. |
-| MatchCandidate <b>v2</b> | pouchItemId:string, rank:integer(1\~3), product:PouchItem. similarityScore는 응답에서 제외(서버 정렬에만 사용). product.color 필수. |
+| MatchCandidate <b>v2</b> | pouchItemId:string, rank:integer(1\~3), product:PouchItem, matchedColorId:string\|null. similarityScore는 응답에서 제외(서버 정렬에만 사용). product.color 필수. <b>로컬 수정 -292</b>: `matchedColorId`는 **서버가 정한 칸**이다. 원본 기준색이 있으면 그 색에 가장 가까운 사용 가능한 칸이고(단색 호수는 그 1칸), 팔레트면 `product.color`를 그 칸의 색으로 채워 '선택 칸의 색'을 화면에 보인다(필수 유지). 같은 팔레트 항목은 한 번만 후보가 된다. |
 | MatchStep <b>v2</b> | stepId:string, category:string\|null, result:SAME\|SUBSTITUTE\|NONE, samePouchItemId:string\|null, candidates:MatchCandidate\[\], noneReason:NO\_ITEMS\|NO\_SUITABLE\_ITEM\|COMPARISON\_UNAVAILABLE\|NOT\_SELECTED\|null, comparisonAvailable:boolean. SAME은 동일 ID 필수·후보 없음, SUBSTITUTE는 후보 1\~3개, NONE은 noneReason 필수. category는 수동 선택 목록 필터용. |
-| GuideMatch | matchId:string, guideId:string, guideVersion:integer, pouchVersion:integer, createdAt:datetime, steps:MatchStep\[\]. 조회는 stale:boolean 추가. GUIDE 단계마다 한 결과. |
-| StartSelection | 요청 전용: stepId:string, selectedPouchItemId:string\|null. API-GUIDE-001 selections에서 GUIDE 단계별 1개 필수. 값은 SAME 제품·추천 후보·같은 카테고리의 대표 색상 있는 본인 보유 제품 또는 null. |
+| GuideMatch | matchId:string, guideId:string, guideVersion:integer, pouchVersion:integer, createdAt:datetime, steps:MatchStep\[\]. 조회는 stale:boolean 추가. GUIDE 단계마다 한 결과. <b>예고 (로컬 수정 -292)</b>: `referenceVersion:integer`를 더하고 stale 판정에 포함한다(S15P31A306-325). 같은 제품·호수 보유(SAME)는 제품·호수 ID로 판단하고 색이 없어도 SAME이다. noneReason은 기준색이 있는데 호환 후보가 없으면 NO\_SUITABLE\_ITEM(적합 후보 없음), 기준색이 없으면 COMPARISON\_UNAVAILABLE(비교 불가)로 구분한다. |
+| StartSelection | 요청 전용: stepId:string, selectedPouchItemId:string\|null. API-GUIDE-001 selections에서 GUIDE 단계별 1개 필수. 값은 SAME 제품·추천 후보·같은 카테고리의 대표 색상 있는 본인 보유 제품 또는 null. <b>로컬 수정 -292</b>: 칸은 요청에 넣지 않는다(서버가 정해 저장). '대표 색상 있는'은 팔레트면 **사용 가능한 색이 있는 칸이 하나라도 있는** 항목이다. |
 | FaceChecks <b>v2</b> | lighting:boolean, distance:boolean, frontal:boolean, unobstructed:boolean, makeupDetected:boolean. 앞 4개는 등록 시 모두 true. |
 | FaceRegistration <b>v2</b> | faceRegistrationId:string, videoId:string, guideId:string\|null, executionId:string\|null, status:REGISTERED\|LINKED\|RETAINED, photo:Photo, checks:FaceChecks, noticeVersion:string, agreedAt:datetime, createdAt:datetime. 분석 대기에는 guideId=null 가능. 실행 연결 시 같은 videoId의 승인 guideId를 연결한다. |
 | Photo <b>v2</b> | photoId:string, kind:STEP\|FACE\_REGISTRATION, stepId:string\|null(STEP만), contentType:image/jpeg\|image/png, byteSize:integer, width:integer, height:integer, url:string(인증 필요 상대 경로), createdAt:datetime. |
-| ExecutionStep | GuideStep·MatchStep의 모든 필드 + selectedPouchItemId:string\|null, selectedProduct:PouchItem\|null, skipped:boolean, photo:Photo\|null. 시작 시 확정 후 고정. 최종 미선택은 result=NONE·skipped=true, 원래 SAME/SUBSTITUTE였다면 noneReason=NOT\_SELECTED. |
+| ExecutionStep | GuideStep·MatchStep의 모든 필드 + selectedPouchItemId:string\|null, selectedProduct:PouchItem\|null, selectedColorId:string\|null, selectedColor:ColorInfo\|null, skipped:boolean, photo:Photo\|null. 시작 시 확정 후 고정. <b>로컬 수정 -292</b>: `selectedColorId`·`selectedColor`는 시작 때 서버가 정해 저장한 **선택 칸과 그때의 색 스냅샷**이다. 기준색이 없어 칸을 정할 수 없으면 둘 다 null이고 제품·호수 선택은 그대로 저장한다. 최종 미선택은 result=NONE·skipped=true, 원래 SAME/SUBSTITUTE였다면 noneReason=NOT\_SELECTED. |
 | Execution <b>v2</b> | executionId:string, guideId:string, guideVersion:integer, matchId:string, faceRegistrationId:string, status:IN\_PROGRESS\|COMPLETED\|ABANDONED, photoConsent:boolean\|null, consentPolicyVersion:string\|null, createdAt:datetime, recordId:string\|null, steps:ExecutionStep\[\]. photoConsent=null은 동의 카드 미응답이며 '저장 안 함'으로 취급. |
 | PhotoConsent | executionId:string, photoConsent:boolean, consentPolicyVersion:string, consentedAt:datetime\|null. consentPolicyVersion은 서버 고정값 v1, 요청은 enabled만 전달. false면 consentedAt=null. |
 | ExecutionCompletion | executionId:string, status:COMPLETED, recordId:string, completedAt:datetime. |
 | ReportSummary <b>v2</b> | recordId:string, guideId:string, videoId:string, youtubeVideoId:string, videoTitle:string, channelTitle:string, thumbnailUrl:string\|null, completedAt:datetime, completedPhoto:Photo\|null, stepCount:integer, substituteCount:integer. |
 | ReportRecord <b>v2</b> | recordId:string, executionId:string, videoId:string, videoTitle:string, channelTitle:string, guideId:string, guideVersion:integer, completedAt:datetime, completedPhoto:Photo\|null, stepCount:integer, substituteCount:integer, steps:ReportStep\[\]. 진하기 측정값·얼굴 등록 이미지는 포함하지 않음. |
-| ReportStep | GuideStep의 모든 필드 + matchingResult:SAME\|SUBSTITUTE\|NONE, selectedProduct:PouchItem\|null, skipped:boolean, photo:Photo\|null. 모두 실행 당시 정보. photo=null은 '미촬영'. |
+| ReportStep | GuideStep의 모든 필드 + matchingResult:SAME\|SUBSTITUTE\|NONE, selectedProduct:PouchItem\|null, selectedColorId:string\|null, selectedColor:ColorInfo\|null, skipped:boolean, photo:Photo\|null. 모두 실행 당시 정보(<b>로컬 수정 -292</b>: 선택 칸·색 포함). photo=null은 '미촬영'. |
 | VideoChapter <b>v2</b> | startSeconds:integer, label:string. 설명란 챕터. ANALYSIS-001 단계 경계 교차 확인에도 사용. |
 | VideoSelection <b>v2</b> | videoId:string, youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, chapters:VideoChapter\[\], guideId:string\|null, guideAvailable:boolean, analysisJobId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED\|null. embeddable 칸 없음 (로컬 수정 -307). |
 | AnalysisJobReceipt <b>v2</b> | jobId:string\|null, videoId:string, receiptType:REUSED\_GUIDE\|JOINED\_JOB\|NEW\_JOB, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:string, guideId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, pollAfterSeconds:integer\|null. REUSED\_GUIDE면 jobId=null·status=COMPLETED·reviewStatus=APPROVED·guideId 필수. |

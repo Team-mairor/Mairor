@@ -1,0 +1,49 @@
+{
+  "contractVersion": 1,
+  "itemKey": "000002",
+  "source": "OFFICIAL:romand.co.kr",
+  "sourceProductId": "9002",
+  "sourceUrl": "https://romand.co.kr/product/detail.html?product_no=9002",
+  "sourceLanguage": "ko",
+  "collectedAt": "2026-11-05T10:31:00+09:00",
+  "brand": "롬앤",
+  "name": "예시 립 앤 치크",
+  "sourceCategoryPath": ["립&치크"],
+  "categoryHint": "CHEEK",
+  "typeHint": "BLUSHER",
+  "imageUrl": "https://example.com/images/9002/main.jpg",
+  "saleStatus": "ON_SALE",
+  "shades": [
+    {
+      "sourceOptionId": "01 예시 듀오 브라운",
+      "name": "01 예시 듀오 브라운",
+      "sortOrder": 1,
+      "slotOrderBasis": "GRID",
+      "colorStatus": "EXTRACTED",
+      "variantHints": {"volume": null, "composition": null, "formulation": null, "optionAttributes": null, "listPrice": null},
+      "colors": [
+        {
+          "sortOrder": 1,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": "#B8636B",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "UNVERIFIED",
+          "colorQuality": 0.78,
+          "evidenceKey": "9002/01 예시 듀오 브라운/1"
+        },
+        {
+          "sortOrder": 2,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": "#E49A8E",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "UNVERIFIED",
+          "colorQuality": 0.74,
+          "evidenceKey": "9002/01 예시 듀오 브라운/2"
+        }
+      ]
+    }
+  ],
+  "warnings": ["SHADE_COLOR_NAMES_NOT_FOUND"]
+}
