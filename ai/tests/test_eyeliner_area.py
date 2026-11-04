@@ -119,6 +119,13 @@ def test_whole_face_getting_redder_is_lighting_not_eyeliner():
         assert check_eyeliner_area(changed, eye).reason == "eyelinerColorNotFound"
 
 
+def test_eye_hidden_in_every_photo_gives_no_usable_frame():
+    changed = eyeliner_color_change(skin_map(), drawn_on([lash_line("leftEye")]))
+    found = check_eyeliner_area(changed, "leftEye", unknown=eyeliner_range("leftEye"))
+    assert found.mask is None
+    assert found.reason == "noUsableFrame"
+
+
 def test_short_line_below_the_found_minimum_gives_reason_instead_of_a_tiny_area():
     """FOUND_MIN_CELLS(150칸)는 실제로 그린 눈의 가장 적은 칸 수(432)와 화장 없는 곳에서
     나온 가장 많은 칸 수(79) 사이에서 고른 값이라, 그보다 짧은 선은 못 찾음으로 간다."""

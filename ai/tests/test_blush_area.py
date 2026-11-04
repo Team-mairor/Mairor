@@ -30,6 +30,7 @@ RED_LIGHT = (1.02, 1.0, 1.0)
 BRIGHT_LIGHT = (1.1, 1.1, 1.1)
 SKIN = (232, 192, 172)
 PINK = (235, 170, 165)
+PUFF = (240, 240, 240)
 PHOTO_SIZE = (800, 600)
 START_MS, END_MS = 10000, 20000
 
@@ -137,6 +138,72 @@ def test_photos_right_before_and_after_the_step_are_compared():
     found = find_blush_area(result, START_MS, END_MS, load_photo, "rightCheek")
     assert found.reason is None
     assert found_ratio(found.mask, "rightCheek") > 0.9
+
+
+def finds_puff(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
+    """흰 퍼프 색 픽셀을 가린 곳으로 찾는 가짜 가림 찾기."""
+    return np.all(photo == PUFF, axis=2)
+
+
+def test_puff_over_the_cheek_in_most_photos_is_left_out_with_occlusion():
+    """직후 사진 3장 중 2장에서 퍼프가 볼 아래를 가려도, 가린 칸을 빼면 남은 1장의 블러셔가 보인다.
+
+    가린 칸을 빼지 않으면 중앙값이 퍼프 색이 되어 볼 아래가 덜 붉어진 것으로 보인다.
+    """
+    cheek = np.asarray(Image.fromarray(cheek_range("rightCheek")).resize(PHOTO_SIZE))
+    rows = np.nonzero(cheek.any(axis=1))[0]
+    puff = cheek.copy()
+    puff[: (rows[0] + rows[-1]) // 2] = False
+    blushed = photo_of(SKIN, pink_cheek="rightCheek")
+    covered = blushed.copy()
+    covered[puff] = PUFF
+    photos = {
+        START_MS - 500: photo_of(SKIN),
+        END_MS + 200: covered,
+        END_MS + 500: covered,
+        END_MS + 800: blushed,
+    }
+
+    def load_photo(row: FrameLandmarks) -> np.ndarray:
+        return photos[row.timestamp_ms]
+
+    result = LandmarksResult(video_id="test_01", frames=[make_row(time) for time in photos])
+    plain = find_blush_area(result, START_MS, END_MS, load_photo, "rightCheek")
+    found = find_blush_area(
+        result, START_MS, END_MS, load_photo, "rightCheek", occlusion=finds_puff
+    )
+    assert found.reason is None
+    assert found_ratio(found.mask, "rightCheek") > 0.9
+    assert plain.mask is None or found_ratio(plain.mask, "rightCheek") < 0.9
+
+
+def cheek_cells(start: float, end: float) -> np.ndarray:
+    """왼쪽 볼 범위 칸을 위에서부터 줄 세워 start~end 비율에 드는 칸."""
+    cells = np.argwhere(cheek_range("leftCheek"))
+    out = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    out[tuple(cells[round(len(cells) * start) : round(len(cells) * end)].T)] = True
+    return out
+
+
+def test_hidden_cells_are_left_out_of_the_found_ratio():
+    """볼 범위의 40%를 찾고 30%가 모름 칸이면, 모름 칸을 빼고 40 ÷ 70 = 57%라 블러셔로 본다."""
+    top = cheek_cells(0.0, 0.4)
+    assert check_blush_area(top, "leftCheek").reason == "blushColorNotFound"
+    found = check_blush_area(top, "leftCheek", unknown=cheek_cells(0.4, 0.7))
+    assert found.mask is top
+
+
+def test_cheek_more_than_half_hidden_gives_no_usable_frame():
+    """볼 범위의 60%가 모름 칸이면 남은 40%로는 판정하지 않는다."""
+    area = cheek_range("leftCheek")
+    found = check_blush_area(area, "leftCheek", unknown=cheek_cells(0.0, 0.6))
+    assert found.reason == "noUsableFrame"
+
+
+def test_cheek_hidden_in_every_photo_gives_no_usable_frame():
+    for cheek in CHEEKS:
+        found = check_blush_area(cheek_range(cheek), cheek, unknown=cheek_range(cheek))
+        assert found.reason == "noUsableFrame"
 
 
 def test_whole_face_getting_redder_is_not_blush():

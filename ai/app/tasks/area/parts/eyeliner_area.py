@@ -24,11 +24,15 @@ from app.schemas.landmarks import LandmarksResult
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
+    known_cells,
+    match_sizes,
+    mostly_unknown,
     remove_lighting,
     rgb_to_lab,
-    rows_to_map,
+    rows_to_known_map,
     usable_rows,
 )
 
@@ -51,7 +55,7 @@ OUTLINE_GROW_CELLS = 1
 EYES: tuple[RegionName, RegionName] = ("leftEye", "rightEye")
 EYE_BROWS: dict[RegionName, RegionName] = {"leftEye": "leftBrow", "rightEye": "rightBrow"}
 
-EyelinerAreaReason = Literal["noUsableFrame", "eyelinerColorNotFound"]
+EyelinerAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "eyelinerColorNotFound"]
 
 
 @dataclass(frozen=True)
@@ -59,7 +63,8 @@ class EyelinerArea:
     """눈 하나의 아이라인 찾기 결과. 찾으면 mask에 얼굴 지도 크기 표(그린 칸이 True)가 든다.
 
     못 찾으면 mask는 None이고 reason에 이유가 든다. reason은 가이드 영역 하위 단계의 reasons에 쓴다.
-    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없음,
+    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없거나 울타리의 절반 넘게 모름 칸임,
+    faceSizeMismatch는 직전·직후 얼굴 크기를 맞출 사진이 없음(match_sizes),
     eyelinerColorNotFound는 다듬은 뒤 남은 칸이 FOUND_MIN_CELLS보다 적음이다.
     """
 
@@ -73,20 +78,29 @@ def find_eyeliner_area(
     step_end_ms: int,
     load_photo: PhotoLoader,
     eye: RegionName,
+    occlusion: OcclusionFinder | None = None,
 ) -> EyelinerArea:
     """아이라인 단계 직전과 직후 사진으로 눈 하나(leftEye 또는 rightEye)의 그린 곳을 찾는다.
 
-    직전 BEFORE_WINDOW_MS와 직후 AFTER_WINDOW_MS 안에서 그 눈이 다 보이는 사진을 고른다.
+    직전 BEFORE_WINDOW_MS와 직후 AFTER_WINDOW_MS 안에서 그 눈이 다 보이고 뜬 사진을 고르고,
+    두 묶음의 얼굴 크기를 맞춘다(match_sizes).
     어느 한쪽이라도 쓸 사진이 없으면 사진을 읽지 않고 noUsableFrame을 돌려준다.
     load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
+    occlusion이 있으면 사진마다 가린 칸을 빼고, 울타리를 많이 가린 사진은 통째로 빼며,
+    직전이나 직후 어느 한쪽에서라도 모든 사진에 가려진 칸(모름 칸)은 보지 않는다.
     """
     before_rows = usable_rows(result, step_start_ms - BEFORE_WINDOW_MS, step_start_ms, [eye])
     after_rows = usable_rows(result, step_end_ms, step_end_ms + AFTER_WINDOW_MS, [eye])
     if not before_rows or not after_rows:
         return EyelinerArea(mask=None, reason="noUsableFrame")
-    before = rows_to_map(before_rows, load_photo)
-    after = rows_to_map(after_rows, load_photo)
-    return check_eyeliner_area(eyeliner_color_change(before, after), eye)
+    before_rows, after_rows = match_sizes(before_rows, after_rows)
+    if not before_rows or not after_rows:
+        return EyelinerArea(mask=None, reason="faceSizeMismatch")
+    zone = eyeliner_range(eye)
+    before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
+    after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)
+    unknown = before_unknown | after_unknown
+    return check_eyeliner_area(eyeliner_color_change(before, after, unknown), eye, unknown)
 
 
 @lru_cache
@@ -101,27 +115,35 @@ def eyeliner_range(eye: RegionName) -> np.ndarray:
     return outside & (near | (_corner_distance(eye) <= WING_CELLS))
 
 
-def eyeliner_color_change(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+def eyeliner_color_change(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
     """직전·직후 얼굴 지도(RGB)에서 아이라인 색으로 바뀐 칸을 낸다. 지도 크기 표(바뀐 칸이 True)다.
 
     붉은 기(a)가 REDDENING_MIN보다 늘어난 칸과, 밝기(L)가 DARKENING_MIN보다 어두워지면서
     붉은 기가 REDNESS_DROP_MIN보다 준 칸이다.
-    붉어진 양과 어두워진 양은 _change_without_lighting으로 낸다.
+    붉어진 양과 어두워진 양은 _change_without_lighting으로 내고, unknown(모름 칸)은 0으로 둔다.
     """
     before_lab, after_lab = rgb_to_lab(before), rgb_to_lab(after)
-    reddening = _change_without_lighting(after_lab[..., 1] - before_lab[..., 1])
-    darkening = _change_without_lighting(before_lab[..., 0] - after_lab[..., 0])
+    reddening = _change_without_lighting(after_lab[..., 1] - before_lab[..., 1], unknown)
+    darkening = _change_without_lighting(before_lab[..., 0] - after_lab[..., 0], unknown)
     darker = (darkening > DARKENING_MIN) & (reddening < -REDNESS_DROP_MIN)
     return (reddening > REDDENING_MIN) | darker
 
 
-def check_eyeliner_area(changed: np.ndarray, eye: RegionName) -> EyelinerArea:
+def check_eyeliner_area(
+    changed: np.ndarray, eye: RegionName, unknown: np.ndarray | None = None
+) -> EyelinerArea:
     """아이라인 색으로 바뀐 칸 지도에서 눈 하나의 그린 곳을 고르고, 가이드로 써도 되는지 본다.
 
     울타리 안의 바뀐 칸을 eyeliner_shape로 다듬는다.
     남은 칸이 FOUND_MIN_CELLS보다 적으면 eyelinerColorNotFound다.
+    unknown(모름 칸)은 울타리에서 빼고 보고, 울타리의 절반 넘게 모름 칸이면 noUsableFrame이다
+    (mostly_unknown).
     """
-    cells = eyeliner_range(eye)
+    if mostly_unknown(eyeliner_range(eye), unknown):
+        return EyelinerArea(mask=None, reason="noUsableFrame")
+    cells = known_cells(eyeliner_range(eye), unknown)
     shape = eyeliner_shape(changed & cells, cells)
     if int(shape.sum()) < FOUND_MIN_CELLS:
         return EyelinerArea(mask=None, reason="eyelinerColorNotFound")
@@ -178,13 +200,13 @@ def symmetric_eyeliner(
     return result if picked else None
 
 
-def _change_without_lighting(change: np.ndarray) -> np.ndarray:
+def _change_without_lighting(change: np.ndarray, unknown: np.ndarray | None) -> np.ndarray:
     """칸마다 색 값이 바뀐 양에서 조명이 바뀐 만큼을 빼고, BLUR_SIGMA만큼 살짝 흐린다.
 
-    조명 변화는 눈 둘레·눈썹 둘레·얼굴 바깥을 뺀 피부의 변화로 잰다.
+    조명 변화는 눈 둘레·눈썹 둘레·얼굴 바깥과 unknown(모름 칸)을 뺀 피부의 변화로 잰다.
     선이 몇 칸 두께로 얇아서 조금만 흐린다.
     """
-    corrected = remove_lighting(change, _light_exclude())
+    corrected = remove_lighting(change, _light_exclude(), unknown)
     return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), BLUR_SIGMA)
 
 

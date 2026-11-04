@@ -21,7 +21,7 @@ from app.tasks.area.parts.brow_area import (
     find_brow_area,
     symmetric_brows,
 )
-from tests.test_area_preparation import DARK_SKIN, make_row
+from tests.test_area_preparation import DARK_SKIN, make_row, sized
 from tests.test_lip_area import iou
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
@@ -86,6 +86,22 @@ def test_no_photo_right_before_the_step_gives_reason_without_reading_photos():
     assert found.reason == "noUsableFrame"
 
 
+def test_no_photo_of_matching_face_size_gives_its_own_reason():
+    """직후 ÷ 직전 얼굴 크기가 300 ÷ 400 = 0.75다.
+
+    직전에 맞출 사진이 없으면 faceSizeMismatch다.
+    """
+
+    def never(row: FrameLandmarks) -> np.ndarray:
+        raise AssertionError("크기를 맞출 사진이 없으면 사진을 읽지 않아야 합니다")
+
+    rows = [sized(START_MS - 600, 400), sized(START_MS - 300, 400), sized(END_MS + 500, 300)]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+    found = find_brow_area(result, START_MS, END_MS, never, "leftBrow")
+    assert found.mask is None
+    assert found.reason == "faceSizeMismatch"
+
+
 def test_photos_around_the_step_are_compared_after_removing_lighting():
     colors = {START_MS - 500: SKIN, 15000: (90, 60, 50), END_MS + 500: DARK_SKIN}
     rows = [make_row(time) for time in colors]
@@ -99,6 +115,13 @@ def test_photos_around_the_step_are_compared_after_removing_lighting():
     found = find_brow_area(result, START_MS, END_MS, load_photo, "leftBrow")
     assert sorted(seen) == [START_MS - 500, END_MS + 500]
     assert found.reason == "browColorNotFound"
+
+
+def test_brow_hidden_in_every_photo_gives_no_usable_frame():
+    darkening = brow_darkening(skin_map(), drawn_on(["leftBrow"]))
+    found = check_brow_area(darkening, "leftBrow", unknown=brow_range("leftBrow"))
+    assert found.mask is None
+    assert found.reason == "noUsableFrame"
 
 
 def test_brow_shape_makes_one_smooth_piece():

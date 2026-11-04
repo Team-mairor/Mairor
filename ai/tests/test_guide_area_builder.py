@@ -56,7 +56,7 @@ def never(row: FrameLandmarks) -> np.ndarray:
     raise AssertionError("립 분석을 바꿔 끼웠으니 사진을 읽지 않아야 합니다")
 
 
-def lips_found(result: LandmarksResult, step_end_ms: int, load_photo) -> LipArea:
+def lips_found(result: LandmarksResult, step_end_ms: int, load_photo, occlusion=None) -> LipArea:
     return LipArea(mask=polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE))
 
 
@@ -87,7 +87,7 @@ def test_each_kind_of_step_gets_its_status(monkeypatch):
 def test_lip_step_end_is_passed_in_milliseconds(monkeypatch):
     seen = []
 
-    def remember(result, step_end_ms, load_photo):
+    def remember(result, step_end_ms, load_photo, occlusion=None):
         seen.append(step_end_ms)
         return lips_found(result, step_end_ms, load_photo)
 
@@ -96,13 +96,13 @@ def test_lip_step_end_is_passed_in_milliseconds(monkeypatch):
 
 
 def test_lip_not_found_uses_default_lip_guide_with_its_reason(monkeypatch):
-    area = build(monkeypatch, lambda *_: LipArea(mask=None, reason="lipColorNotFound"))
+    area = build(monkeypatch, lambda *_, **__: LipArea(mask=None, reason="lipColorNotFound"))
     lip = area.steps[2].sub_steps[0]
     assert (lip.status, lip.template_id, lip.reasons) == ("template", "lip", ["lipColorNotFound"])
 
 
 def test_error_in_one_step_fails_only_that_step(monkeypatch, caplog):
-    def broken(*_):
+    def broken(*_, **__):
         raise OSError("사진 파일이 깨짐")
 
     with caplog.at_level(logging.ERROR):
@@ -132,7 +132,7 @@ def test_failed_area_fails_only_analyzed_steps():
 
 def test_sample_lip_becomes_a_valid_guide_area(monkeypatch):
     after = np.asarray(Image.open(GOLDEN / "after_s10.png").convert("RGB"))
-    area = build(monkeypatch, lambda *_: check_lip_area(lip_area_on_map(after)))
+    area = build(monkeypatch, lambda *_, **__: check_lip_area(lip_area_on_map(after)))
     outline = area.steps[2].sub_steps[0].guide_sets[0].guides[0].outline
     assert 3 <= len(outline) <= 200
     assert all(abs(sum(anchor.bary) - 1) <= 0.001 for anchor in outline)
@@ -148,7 +148,7 @@ def build_blush(monkeypatch, find_blush_area):
 
 
 def test_blush_step_gets_one_area_on_each_cheek(monkeypatch):
-    sub_step = build_blush(monkeypatch, lambda *args: BlushArea(mask=cheek_range(args[-1])))
+    sub_step = build_blush(monkeypatch, lambda *args, **_: BlushArea(mask=cheek_range(args[-1])))
     assert (sub_step.status, sub_step.reasons) == ("extracted", [])
     assert [s.region for s in sub_step.guide_sets] == ["leftCheek", "rightCheek"]
     assert all(len(s.guides[0].outline) >= 3 for s in sub_step.guide_sets)
@@ -165,7 +165,7 @@ def test_blush_step_gets_one_area_on_each_cheek(monkeypatch):
 def test_blush_step_start_and_end_are_passed_in_milliseconds(monkeypatch):
     seen = []
 
-    def remember(result, step_start_ms, step_end_ms, load_photo, cheek):
+    def remember(result, step_start_ms, step_end_ms, load_photo, cheek, occlusion=None):
         seen.append((step_start_ms, step_end_ms, cheek))
         return BlushArea(mask=cheek_range(cheek))
 
@@ -176,16 +176,16 @@ def test_blush_step_start_and_end_are_passed_in_milliseconds(monkeypatch):
 def test_blush_not_found_on_both_cheeks_uses_default_blush_guide_with_reasons(monkeypatch):
     reasons = {"leftCheek": "noUsableFrame", "rightCheek": "blushColorNotFound"}
     sub_step = build_blush(
-        monkeypatch, lambda *args: BlushArea(mask=None, reason=reasons[args[-1]])
+        monkeypatch, lambda *args, **_: BlushArea(mask=None, reason=reasons[args[-1]])
     )
     assert (sub_step.status, sub_step.template_id) == ("template", "blush")
     assert sub_step.reasons == ["noUsableFrame", "blushColorNotFound"]
-    same = build_blush(monkeypatch, lambda *_: BlushArea(mask=None, reason="noUsableFrame"))
+    same = build_blush(monkeypatch, lambda *_, **__: BlushArea(mask=None, reason="noUsableFrame"))
     assert same.reasons == ["noUsableFrame"]
 
 
 def test_blush_found_on_one_cheek_logs_the_other_cheek_and_its_reason(monkeypatch, caplog):
-    def right_only(*args):
+    def right_only(*args, **_):
         cheek = args[-1]
         if cheek == "rightCheek":
             return BlushArea(mask=cheek_range(cheek))
@@ -208,7 +208,7 @@ def build_one(monkeypatch, name, finder, makeup):
 def test_brow_step_gets_one_area_on_each_brow_without_exclude(monkeypatch):
     seen = []
 
-    def found(result, step_start_ms, step_end_ms, load_photo, brow):
+    def found(result, step_start_ms, step_end_ms, load_photo, brow, occlusion=None):
         seen.append((step_start_ms, step_end_ms, brow))
         return BrowArea(mask=brow_range(brow), darkening=3.0)
 
@@ -222,7 +222,7 @@ def test_brow_step_gets_one_area_on_each_brow_without_exclude(monkeypatch):
 
 
 def test_eyeshadow_step_leaves_out_each_eye_from_its_own_area(monkeypatch):
-    def found(result, step_start_ms, step_end_ms, load_photo, eye):
+    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
         return EyeshadowArea(mask=eyeshadow_range(eye), strength=2.0)
 
     sub_step = build_one(monkeypatch, "find_eyeshadow_area", found, "eyeshadow")
@@ -238,7 +238,7 @@ def test_brow_and_eyeshadow_not_found_use_default_guide_with_reasons(monkeypatch
     brow = build_one(
         monkeypatch,
         "find_brow_area",
-        lambda *_: BrowArea(mask=None, reason="browColorNotFound"),
+        lambda *_, **__: BrowArea(mask=None, reason="browColorNotFound"),
         "brow",
     )
     assert (brow.status, brow.template_id, brow.reasons) == (
@@ -250,7 +250,7 @@ def test_brow_and_eyeshadow_not_found_use_default_guide_with_reasons(monkeypatch
     eyeshadow = build_one(
         monkeypatch,
         "find_eyeshadow_area",
-        lambda *args: EyeshadowArea(mask=None, reason=reasons[args[-1]]),
+        lambda *args, **_: EyeshadowArea(mask=None, reason=reasons[args[-1]]),
         "eyeshadow",
     )
     assert (eyeshadow.status, eyeshadow.template_id) == ("template", "eyeshadow")
@@ -273,7 +273,7 @@ def test_eyeliner_step_gets_one_polygon_per_line_on_each_eye_without_exclude(mon
     """앞머리 아래와 눈꼬리 트임처럼 떨어져 그린 선은 덩어리마다 도형 하나씩 나가야 한다."""
     seen = []
 
-    def found(result, step_start_ms, step_end_ms, load_photo, eye):
+    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
         seen.append((step_start_ms, step_end_ms, eye))
         return EyelinerArea(mask=with_gap(lash_line(eye, upper=False), 20))
 
@@ -290,7 +290,7 @@ def test_eyeliner_step_gets_one_polygon_per_line_on_each_eye_without_exclude(mon
 
 def test_next_eyeliner_step_leaves_out_lines_the_earlier_step_guided(monkeypatch):
     area = build_eyeliner(
-        monkeypatch, lambda *args: EyelinerArea(mask=lash_line(args[-1])), eyeliner_steps(1, 2)
+        monkeypatch, lambda *args, **_: EyelinerArea(mask=lash_line(args[-1])), eyeliner_steps(1, 2)
     )
     first, second = (step.sub_steps[0] for step in area.steps)
     assert first.status == "extracted"
@@ -305,7 +305,7 @@ def test_eyeliner_not_found_uses_default_eyeliner_guide_with_reasons(monkeypatch
     reasons = {"leftEye": "noUsableFrame", "rightEye": "eyelinerColorNotFound"}
     area = build_eyeliner(
         monkeypatch,
-        lambda *args: EyelinerArea(mask=None, reason=reasons[args[-1]]),
+        lambda *args, **_: EyelinerArea(mask=None, reason=reasons[args[-1]]),
         eyeliner_steps(1),
     )
     sub_step = area.steps[0].sub_steps[0]
@@ -314,7 +314,7 @@ def test_eyeliner_not_found_uses_default_eyeliner_guide_with_reasons(monkeypatch
 
 
 def test_error_in_one_eyeliner_step_fails_only_that_step(monkeypatch, caplog):
-    def broken_first(result, step_start_ms, step_end_ms, load_photo, eye):
+    def broken_first(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
         if step_start_ms == 1000:
             raise OSError("사진 파일이 깨짐")
         return EyelinerArea(mask=lash_line(eye))
@@ -325,6 +325,40 @@ def test_error_in_one_eyeliner_step_fails_only_that_step(monkeypatch, caplog):
     assert (first.status, first.reasons) == ("failed", [ANALYSIS_ERROR])
     assert second.status == "extracted"
     assert "s1" in caplog.text
+
+
+def hides_nothing(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
+    return np.zeros(photo.shape[:2], dtype=bool)
+
+
+def test_occlusion_finder_reaches_every_part_analysis(monkeypatch):
+    not_found = {
+        "find_lip_area": LipArea(mask=None, reason="lipColorNotFound"),
+        "find_blush_area": BlushArea(mask=None, reason="blushColorNotFound"),
+        "find_brow_area": BrowArea(mask=None, reason="browColorNotFound"),
+        "find_eyeshadow_area": EyeshadowArea(mask=None, reason="eyeshadowColorNotFound"),
+        "find_eyeliner_area": EyelinerArea(mask=None, reason="eyelinerColorNotFound"),
+    }
+    seen = {name: [] for name in not_found}
+
+    def remember(name):
+        def finder(*args, occlusion=None):
+            seen[name].append(occlusion)
+            return not_found[name]
+
+        return finder
+
+    for name in not_found:
+        monkeypatch.setattr(guide_area_builder, name, remember(name))
+    makeups = ["lip", "blush", "brow", "eyeshadow", "eyeliner"]
+    steps = [
+        Step(step_id=f"s{i}", order=i, start_seconds=i, end_seconds=i + 1, makeup=makeup)
+        for i, makeup in enumerate(makeups, 1)
+    ]
+    build_guide_area("test_01", steps, RESULT, never, occlusion=hides_nothing)
+    assert seen["find_lip_area"] == [hides_nothing]
+    for name in ("find_blush_area", "find_brow_area", "find_eyeshadow_area", "find_eyeliner_area"):
+        assert seen[name] == [hides_nothing, hides_nothing]
 
 
 @pytest.mark.parametrize("makeup", ["foundation", "contour"])

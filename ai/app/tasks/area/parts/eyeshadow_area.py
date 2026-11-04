@@ -23,11 +23,15 @@ from app.schemas.landmarks import LandmarksResult
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import fill_holes, largest_piece, open_close, polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
+    known_cells,
+    match_sizes,
+    mostly_unknown,
     remove_lighting,
     rgb_to_lab,
-    rows_to_map,
+    rows_to_known_map,
     usable_rows,
 )
 
@@ -46,7 +50,7 @@ MIN_PIECE_CELLS = 300
 EYES: tuple[RegionName, RegionName] = ("leftEye", "rightEye")
 EYE_BROWS: dict[RegionName, RegionName] = {"leftEye": "leftBrow", "rightEye": "rightBrow"}
 
-EyeshadowAreaReason = Literal["noUsableFrame", "eyeshadowColorNotFound"]
+EyeshadowAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "eyeshadowColorNotFound"]
 
 
 @dataclass(frozen=True)
@@ -55,7 +59,8 @@ class EyeshadowArea:
 
     strength는 울타리 안 붉어진 양의 TOP_PERCENTILE 백분위 값이고, 대칭으로 쓸 눈을 고를 때 쓴다.
     못 찾으면 mask는 None이고 reason에 이유가 든다. reason은 가이드 영역 하위 단계의 reasons에 쓴다.
-    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없음,
+    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없거나 울타리의 절반 넘게 모름 칸임,
+    faceSizeMismatch는 직전·직후 얼굴 크기를 맞출 사진이 없음(match_sizes),
     eyeshadowColorNotFound는 붉어진 양이 기준에 못 미침이다.
     """
 
@@ -70,23 +75,31 @@ def find_eyeshadow_area(
     step_end_ms: int,
     load_photo: PhotoLoader,
     eye: RegionName,
+    occlusion: OcclusionFinder | None = None,
 ) -> EyeshadowArea:
     """섀도 단계 직전과 직후 사진으로 눈 하나(leftEye 또는 rightEye)의 바른 곳을 찾는다.
 
     직전 BEFORE_WINDOW_MS와 직후 AFTER_WINDOW_MS 안에서
-    그 눈과 같은 쪽 눈썹이 다 보이는 사진을 고른다.
+    그 눈과 같은 쪽 눈썹이 다 보이는 사진을 고르고, 두 묶음의 얼굴 크기를 맞춘다(match_sizes).
     울타리가 눈썹 밑까지 닿아서 눈썹도 화면 안에 있어야 한다.
     어느 한쪽이라도 쓸 사진이 없으면 사진을 읽지 않고 noUsableFrame을 돌려준다.
     load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
+    occlusion이 있으면 사진마다 가린 칸을 빼고, 울타리를 많이 가린 사진은 통째로 빼며,
+    직전이나 직후 어느 한쪽에서라도 모든 사진에 가려진 칸(모름 칸)은 보지 않는다.
     """
     regions = [eye, EYE_BROWS[eye]]
     before_rows = usable_rows(result, step_start_ms - BEFORE_WINDOW_MS, step_start_ms, regions)
     after_rows = usable_rows(result, step_end_ms, step_end_ms + AFTER_WINDOW_MS, regions)
     if not before_rows or not after_rows:
         return EyeshadowArea(mask=None, reason="noUsableFrame")
-    before = rows_to_map(before_rows, load_photo)
-    after = rows_to_map(after_rows, load_photo)
-    return check_eyeshadow_area(eyeshadow_reddening(before, after), eye)
+    before_rows, after_rows = match_sizes(before_rows, after_rows)
+    if not before_rows or not after_rows:
+        return EyeshadowArea(mask=None, reason="faceSizeMismatch")
+    zone = eyeshadow_range(eye)
+    before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
+    after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)
+    unknown = before_unknown | after_unknown
+    return check_eyeshadow_area(eyeshadow_reddening(before, after, unknown), eye, unknown)
 
 
 def eyeshadow_range(eye: RegionName) -> np.ndarray:
@@ -102,26 +115,35 @@ def eyeshadow_range(eye: RegionName) -> np.ndarray:
     return grown & ~hole & ~_brows()
 
 
-def eyeshadow_reddening(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+def eyeshadow_reddening(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
     """직전·직후 얼굴 지도(RGB)에서 칸마다 붉어진 양을 조명을 빼고 낸다. 지도 크기 표다.
 
     붉은 기(a)가 바르기 전보다 늘어난 만큼이고, 눈 둘레·눈썹 둘레·얼굴 바깥을 뺀 피부의 변화로
     조명 변화를 빼고, BLUR_SIGMA로 흐려 속눈썹·결 같은 잡음을 줄인다.
+    unknown(모름 칸)은 조명 변화를 잴 때 빼고 붉어진 양을 0으로 둔다.
     """
     change = rgb_to_lab(after)[..., 1] - rgb_to_lab(before)[..., 1]
-    corrected = remove_lighting(change, _light_exclude())
+    corrected = remove_lighting(change, _light_exclude(), unknown)
     return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), BLUR_SIGMA)
 
 
-def check_eyeshadow_area(reddening: np.ndarray, eye: RegionName) -> EyeshadowArea:
+def check_eyeshadow_area(
+    reddening: np.ndarray, eye: RegionName, unknown: np.ndarray | None = None
+) -> EyeshadowArea:
     """붉어진 양 지도에서 눈 하나의 바른 곳을 고르고, 가이드로 써도 되는지 본다.
 
     울타리 안 TOP_PERCENTILE 백분위 값이 FOUND_TOP_MIN보다 작으면 가장 붉어진 곳도 거의 그대로라
     eyeshadowColorNotFound다.
     아니면 REDDENING_MIN보다 붉어진 칸을 eyeshadow_shape로 다듬어 돌려주고,
     다듬은 뒤 남은 칸이 없어도 eyeshadowColorNotFound다.
+    unknown(모름 칸)은 울타리에서 빼고 보고, 울타리의 절반 넘게 모름 칸이면 noUsableFrame이다
+    (mostly_unknown).
     """
-    cells = eyeshadow_range(eye)
+    if mostly_unknown(eyeshadow_range(eye), unknown):
+        return EyeshadowArea(mask=None, reason="noUsableFrame")
+    cells = known_cells(eyeshadow_range(eye), unknown)
     strength = float(np.percentile(reddening[cells], TOP_PERCENTILE))
     if strength < FOUND_TOP_MIN:
         return EyeshadowArea(mask=None, strength=strength, reason="eyeshadowColorNotFound")

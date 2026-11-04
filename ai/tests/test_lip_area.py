@@ -97,6 +97,33 @@ def test_found_area_under_min_ratio_of_lips_is_not_found():
     assert check_lip_area(short).reason == "lipColorNotFound"
 
 
+def lip_cells(start: float, end: float) -> np.ndarray:
+    """입술 칸을 위에서부터 줄 세워 start~end 비율에 드는 칸."""
+    lips = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
+    cells = np.argwhere(lips)
+    out = np.zeros_like(lips)
+    out[tuple(cells[round(len(cells) * start) : round(len(cells) * end)].T)] = True
+    return out
+
+
+def test_hidden_lip_cells_are_left_out_of_the_found_ratio():
+    """입술의 40%를 찾고 30%가 모름 칸이면, 모름 칸을 빼고 40 ÷ 70 = 57%라 립으로 본다."""
+    found = lip_cells(0.0, 0.4)
+    assert check_lip_area(found).reason == "lipColorNotFound"
+    assert check_lip_area(found, unknown=lip_cells(0.4, 0.7)).mask is found
+
+
+def test_lips_more_than_half_hidden_give_no_usable_frame():
+    """입술의 60%가 모름 칸이면 남은 40%로는 판정하지 않는다."""
+    lips = lip_cells(0.0, 1.0)
+    assert check_lip_area(lips, unknown=lip_cells(0.0, 0.6)).reason == "noUsableFrame"
+
+
+def test_lips_hidden_in_every_photo_give_no_usable_frame():
+    lips = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
+    assert check_lip_area(lips, unknown=lips).reason == "noUsableFrame"
+
+
 def test_red_lips_are_found():
     outer = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
     after = np.full((MAP_SIZE, MAP_SIZE, 3), SKIN, dtype=np.uint8)

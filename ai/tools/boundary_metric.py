@@ -8,7 +8,10 @@ MODEL_URL에서 받아 경로를 넘기고, 파일 지문이 MODEL_SHA256과 같
 섀도·아이라인은 침범(찾은 영역 중 눈 안 비율)을 잰다. 블러셔는 볼 경계가 모델에 없어 재지 않는다.
 점 테두리(REGION_POINTS)가 실제 부위와 얼마나 맞는지도 같이 적는다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
-실행 (ai/ 폴더에서): uv run python tools/boundary_metric.py samples/local_03_seq <모델 파일>
+--occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 영역을 찾는다
+(tools/occlusion_tables.py).
+실행 (ai/ 폴더에서):
+uv run python tools/boundary_metric.py samples/local_03_seq <모델 파일> [--occlusion <이름>]
 """
 
 import hashlib
@@ -30,12 +33,14 @@ from app.schemas.landmarks import Face, FrameLandmarks, LandmarksResult
 from app.tasks.area.common.face_map import MAP_SIZE, flatten, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import PhotoLoader, usable_rows
+from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
-OUTPUT_FILE = Path("output") / "boundary.json"
+OUTPUT_FILE = "boundary.json"
 MODEL_URL = "https://github.com/yakhyo/face-parsing/releases/download/weights/resnet18.onnx"
 MODEL_SHA256 = "0d9bd318e46987c3bdbfacae9e2c0f461cae1c6ac6ea6d43bbe541a91727e33f"
 INPUT_SIZE = 512
@@ -54,7 +59,8 @@ Parser = Callable[[np.ndarray, Face], np.ndarray]
 
 @dataclass(frozen=True)
 class Part:
-    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽)으로 찾은 영역(없으면 None)을 낸다.
+    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로
+    찾은 영역(없으면 None)을 낸다.
 
     label은 견줄 실제 부위(LABELS의 키), kind는 "cover"(덮음·넘침) 또는 "intrude"(침범)다.
     regions는 직후 사진을 고를 때 화면 안에 있어야 하는 부위다.
@@ -67,7 +73,10 @@ class Part:
     label: str
     kind: str
     regions: Callable[[RegionName], list[RegionName]]
-    find: Callable[[LandmarksResult, int, int, PhotoLoader, RegionName], np.ndarray | None]
+    find: Callable[
+        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None],
+        np.ndarray | None,
+    ]
 
 
 PARTS = (
@@ -79,7 +88,7 @@ PARTS = (
         "brows",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side: brow_area.find_brow_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ).mask,
     ),
     Part(
         "eyeshadow",
@@ -89,7 +98,9 @@ PARTS = (
         "eyes",
         "intrude",
         lambda side: [side, eyeshadow_area.EYE_BROWS[side]],
-        lambda r, s, e, load, side: eyeshadow_area.find_eyeshadow_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: (
+            eyeshadow_area.find_eyeshadow_area(r, s, e, load, side, occ).mask
+        ),
     ),
     Part(
         "eyeliner",
@@ -99,7 +110,9 @@ PARTS = (
         "eyes",
         "intrude",
         lambda side: [side],
-        lambda r, s, e, load, side: eyeliner_area.find_eyeliner_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: (
+            eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ).mask
+        ),
     ),
     Part(
         "lip",
@@ -109,7 +122,7 @@ PARTS = (
         "lips",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side: lip_area.find_lip_area(r, e, load).mask,
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ).mask,
     ),
 )
 
@@ -217,8 +230,9 @@ def measure_part(
     steps: Sequence,
     load_photo: PhotoLoader,
     label_map: Callable[[FrameLandmarks, str], np.ndarray],
+    occlusion: OcclusionFinder | None = None,
 ) -> list[dict]:
-    """부위 하나의 실제로 바른 단계마다, 쪽마다 경계 점수를 낸다."""
+    """부위 하나의 실제로 바른 단계마다, 쪽마다 경계 점수를 낸다. occlusion은 영역 찾기에 넘긴다."""
     out = []
     for step in steps:
         if step.makeup != part.makeup:
@@ -226,7 +240,7 @@ def measure_part(
         start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
         for side in part.sides:
             row = {"part": part.name, "stepId": step.step_id, "side": side}
-            area = part.find(result, start, end, load_photo, side)
+            area = part.find(result, start, end, load_photo, side, occlusion)
             rows = usable_rows(result, end, end + part.after_ms, part.regions(side))
             if area is None or not rows:
                 out.append(row | {"found": area is not None, "photos": len(rows)})
@@ -242,11 +256,12 @@ def measure_part(
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        print("사용법: uv run python tools/boundary_metric.py <샘플 폴더> <모델 파일>")
+    args, occlusion_name = split_occlusion(sys.argv[1:])
+    if len(args) != 2:
+        print(f"사용법: uv run python tools/boundary_metric.py <샘플 폴더> <모델 파일> {USAGE}")
         sys.exit(1)
 
-    folder, model_path = Path(sys.argv[1]), Path(sys.argv[2])
+    folder, model_path = Path(args[0]), Path(args[1])
     checked_path = folder / CHECKED_FILE
     if not checked_path.is_file():
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
@@ -258,6 +273,7 @@ def main() -> None:
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     rows_by_index = {row.frame_index: row for row in result.frames}
     parse = onnx_parser(model_path)
+    occlusion = table_finder(folder, occlusion_name)
 
     def load_photo(row: FrameLandmarks) -> np.ndarray:
         return read_frame_rgb(reference, frames[row.frame_index])
@@ -272,7 +288,9 @@ def main() -> None:
 
     out = []
     for part in PARTS:
-        rows = measure_part(part, result, reference.manifest.steps, load_photo, label_map)
+        rows = measure_part(
+            part, result, reference.manifest.steps, load_photo, label_map, occlusion
+        )
         out += rows
         for row in rows:
             scores = {
@@ -282,8 +300,8 @@ def main() -> None:
                 f"{row['part']:9} {row['stepId']:4} {row['side']:10} 찾음 {row['found']}  {scores}"
             )
 
-    path = folder / OUTPUT_FILE
-    path.parent.mkdir(exist_ok=True)
+    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {"videoId": reference.manifest.video_id, "steps": out}, ensure_ascii=False, indent=1

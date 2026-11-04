@@ -21,11 +21,15 @@ from app.schemas.landmarks import LandmarksResult
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import largest_piece, open_close, polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
+    known_cells,
+    match_sizes,
+    mostly_unknown,
     remove_lighting,
     rgb_to_lab,
-    rows_to_map,
+    rows_to_known_map,
     usable_rows,
 )
 
@@ -42,7 +46,7 @@ MIN_COLUMN_CELLS = 3
 MIN_CURVE_COLUMNS = 10
 BROWS: tuple[RegionName, RegionName] = ("leftBrow", "rightBrow")
 
-BrowAreaReason = Literal["noUsableFrame", "browColorNotFound"]
+BrowAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "browColorNotFound"]
 
 
 @dataclass(frozen=True)
@@ -52,7 +56,8 @@ class BrowArea:
     darkening은 눈썹 범위 안에서 조명을 뺀 어두워진 양의 가운데 값이고,
     대칭으로 쓸 눈썹을 고를 때 쓴다.
     못 찾으면 mask는 None이고 reason에 이유가 든다. reason은 가이드 영역 하위 단계의 reasons에 쓴다.
-    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없음,
+    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없거나 눈썹 범위의 절반 넘게 모름 칸임,
+    faceSizeMismatch는 직전·직후 얼굴 크기를 맞출 사진이 없음(match_sizes),
     browColorNotFound는 어두워진 양이 기준에 못 미침이다.
     """
 
@@ -67,20 +72,29 @@ def find_brow_area(
     step_end_ms: int,
     load_photo: PhotoLoader,
     brow: RegionName,
+    occlusion: OcclusionFinder | None = None,
 ) -> BrowArea:
     """눈썹 단계 직전과 직후 사진으로 눈썹 하나(leftBrow 또는 rightBrow)의 그린 곳을 찾는다.
 
-    직전 BEFORE_WINDOW_MS와 직후 AFTER_WINDOW_MS 안에서 그 눈썹이 다 보이는 사진을 고른다.
+    직전 BEFORE_WINDOW_MS와 직후 AFTER_WINDOW_MS 안에서 그 눈썹이 다 보이는 사진을 고르고,
+    두 묶음의 얼굴 크기를 맞춘다(match_sizes).
     어느 한쪽이라도 쓸 사진이 없으면 사진을 읽지 않고 noUsableFrame을 돌려준다.
     load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
+    occlusion이 있으면 사진마다 가린 칸을 빼고, 범위를 많이 가린 사진은 통째로 빼며,
+    직전이나 직후 어느 한쪽에서라도 모든 사진에 가려진 칸(모름 칸)은 보지 않는다.
     """
     before_rows = usable_rows(result, step_start_ms - BEFORE_WINDOW_MS, step_start_ms, [brow])
     after_rows = usable_rows(result, step_end_ms, step_end_ms + AFTER_WINDOW_MS, [brow])
     if not before_rows or not after_rows:
         return BrowArea(mask=None, reason="noUsableFrame")
-    before = rows_to_map(before_rows, load_photo)
-    after = rows_to_map(after_rows, load_photo)
-    return check_brow_area(brow_darkening(before, after), brow)
+    before_rows, after_rows = match_sizes(before_rows, after_rows)
+    if not before_rows or not after_rows:
+        return BrowArea(mask=None, reason="faceSizeMismatch")
+    zone = brow_range(brow)
+    before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
+    after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)
+    unknown = before_unknown | after_unknown
+    return check_brow_area(brow_darkening(before, after, unknown), brow, unknown)
 
 
 def brow_range(brow: RegionName) -> np.ndarray:
@@ -92,25 +106,34 @@ def brow_range(brow: RegionName) -> np.ndarray:
     return polygon_mask(map_points(REGION_POINTS[brow]), MAP_SIZE, MAP_SIZE, band=MARGIN_CELLS)
 
 
-def brow_darkening(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+def brow_darkening(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
     """직전·직후 얼굴 지도(RGB)에서 칸마다 어두워진 양을 조명을 빼고 낸다. 지도 크기 표다.
 
     밝기(L)가 바르기 전보다 낮아진 만큼이고, 눈썹·눈·얼굴 바깥을 뺀 피부의 변화로 조명 변화를 빼고,
     BLUR_SIGMA로 흐려 머리카락·결 같은 잡음을 줄인다.
+    unknown(모름 칸)은 조명 변화를 잴 때 빼고 어두워진 양을 0으로 둔다.
     """
     change = rgb_to_lab(before)[..., 0] - rgb_to_lab(after)[..., 0]
-    corrected = remove_lighting(change, _light_exclude())
+    corrected = remove_lighting(change, _light_exclude(), unknown)
     return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), BLUR_SIGMA)
 
 
-def check_brow_area(darkening: np.ndarray, brow: RegionName) -> BrowArea:
+def check_brow_area(
+    darkening: np.ndarray, brow: RegionName, unknown: np.ndarray | None = None
+) -> BrowArea:
     """어두워진 양 지도에서 눈썹 하나의 그린 곳을 고르고, 가이드로 써도 되는지 본다.
 
     범위 안 가운데 값이 FOUND_MEDIAN_MIN보다 작으면 거의 바뀌지 않은 것이라 browColorNotFound다.
     아니면 DARKENING_MIN보다 많이 어두워진 칸을 brow_shape로 눈썹 모양으로 다듬어 돌려주고,
     다듬은 뒤 남은 칸이 없어도 browColorNotFound다.
+    unknown(모름 칸)은 범위에서 빼고 보고, 범위의 절반 넘게 모름 칸이면 noUsableFrame이다
+    (mostly_unknown).
     """
-    cells = brow_range(brow)
+    if mostly_unknown(brow_range(brow), unknown):
+        return BrowArea(mask=None, reason="noUsableFrame")
+    cells = known_cells(brow_range(brow), unknown)
     median = float(np.median(darkening[cells]))
     if median < FOUND_MEDIAN_MIN:
         return BrowArea(mask=None, darkening=median, reason="browColorNotFound")

@@ -1,12 +1,19 @@
 import numpy as np
 
-from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
-from app.tasks.area.common.face_map import MAP_SIZE
+from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult, Point
+from app.tasks.area.common.face_map import MAP_SIZE, flatten, median_map
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.frame_checker import outside_count_name
+from app.tasks.area.parts import area_preparation
 from app.tasks.area.parts.area_preparation import (
+    EYE_OPEN_POINTS,
+    eye_openness,
+    known_median_map,
+    match_sizes,
+    mostly_unknown,
     remove_lighting,
     rgb_to_lab,
+    rows_to_known_map,
     rows_to_map,
     usable_rows,
 )
@@ -89,6 +96,16 @@ def test_lighting_change_on_skin_is_removed_and_makeup_stays():
     assert abs(corrected[100, 100] - 6.0) < 0.01
 
 
+def test_unknown_cells_are_left_out_of_lighting_and_count_as_no_change():
+    exclude = np.zeros((200, 200), dtype=bool)
+    unknown = np.zeros((200, 200), dtype=bool)
+    unknown[80:120, 80:120] = True
+    change = np.full((200, 200), 4.0, dtype=np.float32)
+    change[unknown] = 40.0
+    corrected = remove_lighting(change, exclude, unknown)
+    assert np.abs(corrected).max() < 0.01
+
+
 def test_lighting_is_removed_place_by_place():
     exclude = np.zeros((200, 400), dtype=bool)
     change = np.zeros((200, 400), dtype=np.float32)
@@ -96,3 +113,201 @@ def test_lighting_is_removed_place_by_place():
     corrected = remove_lighting(change, exclude)
     assert np.abs(corrected[:, :50]).max() < 0.1
     assert np.abs(corrected[:, 350:]).max() < 0.1
+
+
+def hand_over(index: int, half: int = 40) -> np.ndarray:
+    """가짜 얼굴 사진(800 × 600)에서 얼굴 점 index 둘레 half픽셀을 손이 가린 자리(사진 크기 표)."""
+    x, y = round(UV[index, 0] * 800), round(UV[index, 1] * 600)
+    mask = np.zeros((600, 800), dtype=bool)
+    mask[y - half : y + half, x - half : x + half] = True
+    return mask
+
+
+def finds_hand_color(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
+    """손 색 픽셀을 가린 곳으로 찾는 가짜 가림 찾기."""
+    return np.all(photo == HAND, axis=2)
+
+
+def cell(index: int) -> tuple[int, int]:
+    """얼굴 점 index가 놓인 지도 칸(행, 열)."""
+    return round(UV[index, 1] * MAP_SIZE), round(UV[index, 0] * MAP_SIZE)
+
+
+def photos_with_hands(hands: dict[int, np.ndarray | None]):
+    """사진 시각마다 손 자리(없으면 None)를 받아 (사진 정보들, 사진 읽기 함수)를 만든다."""
+    rows = [make_row(time) for time in hands]
+
+    def load_photo(row: FrameLandmarks) -> np.ndarray:
+        photo = np.full((600, 800, 3), SKIN, dtype=np.uint8)
+        hand = hands[row.timestamp_ms]
+        if hand is not None:
+            photo[hand] = HAND
+        return photo
+
+    return rows, load_photo
+
+
+def test_map_stays_as_before_when_nothing_is_found_hidden():
+    rows, load_photo = photos_with_hands({1000: None, 2000: hand_over(13), 3000: hand_over(13)})
+    before = median_map([flatten(load_photo(row), row.face) for row in rows])
+    for occlusion in (None, lambda row, photo: np.zeros(photo.shape[:2], dtype=bool)):
+        out, unknown = rows_to_known_map(rows, load_photo, occlusion)
+        assert np.array_equal(out, before)
+        assert not unknown.any()
+
+
+def test_hand_held_over_most_photos_is_left_out_when_one_photo_shows_skin():
+    rows, load_photo = photos_with_hands({1000: None, 2000: hand_over(13), 3000: hand_over(13)})
+    assert tuple(rows_to_map(rows, load_photo)[cell(13)]) == HAND
+    out, unknown = rows_to_known_map(rows, load_photo, finds_hand_color)
+    assert tuple(out[cell(13)]) == SKIN
+    assert not unknown.any()
+
+
+def test_cells_hidden_in_every_photo_are_unknown():
+    rows, load_photo = photos_with_hands({1000: hand_over(13), 2000: hand_over(13)})
+    out, unknown = rows_to_known_map(rows, load_photo, finds_hand_color)
+    assert unknown[cell(13)]
+    assert not unknown[cell(9)]
+    assert tuple(out[cell(13)]) == HAND
+
+
+def test_margin_widens_hidden_cells(monkeypatch):
+    rows, load_photo = photos_with_hands({1000: hand_over(13), 2000: hand_over(13)})
+    _, tight = rows_to_known_map(rows, load_photo, finds_hand_color)
+    monkeypatch.setattr(area_preparation, "OCCLUSION_MARGIN_CELLS", 10)
+    _, wide = rows_to_known_map(rows, load_photo, finds_hand_color)
+    assert not (tight & ~wide).any()
+    assert wide.sum() > tight.sum()
+
+
+def test_known_median_map_uses_only_photos_that_show_each_cell():
+    skin = np.full((2, 2, 3), SKIN, dtype=np.uint8)
+    hand = np.full((2, 2, 3), HAND, dtype=np.uint8)
+    corner = np.zeros((2, 2), dtype=bool)
+    corner[0, 0] = True
+    maps = [skin, hand, hand]
+
+    plain, none_hidden = known_median_map(maps)
+    out, unknown = known_median_map(maps, [np.zeros_like(corner), corner, corner])
+
+    assert np.array_equal(plain, median_map(maps)) and not none_hidden.any()
+    assert tuple(out[0, 0]) == SKIN and tuple(out[1, 1]) == HAND
+    assert not unknown.any()
+    assert known_median_map(maps, [corner, corner, corner])[1][0, 0]
+
+
+def with_eyes(row: FrameLandmarks, openness: float) -> FrameLandmarks:
+    """두 눈의 점 6개를 가로 80px, 세로 openness × 80px로 다시 놓은 사진.
+
+    눈 뜬 정도가 openness다.
+    """
+    width, height = row.image_size.width, row.image_size.height
+    points = list(row.face.landmarks)
+    for left, top_a, top_b, right, bottom_b, bottom_a in EYE_OPEN_POINTS:
+        x0, y = points[left].x, points[left].y
+        dx, dy = 80 / width, openness * 80 / height
+        points[left] = Point(x=x0, y=y, z=0.0)
+        points[right] = Point(x=x0 + dx, y=y, z=0.0)
+        for top, bottom, at in ((top_a, bottom_a, 1 / 3), (top_b, bottom_b, 2 / 3)):
+            points[top] = Point(x=x0 + dx * at, y=y - dy / 2, z=0.0)
+            points[bottom] = Point(x=x0 + dx * at, y=y + dy / 2, z=0.0)
+    face = row.face.model_copy(update={"landmarks": points})
+    return row.model_copy(update={"face": face})
+
+
+def test_eye_openness_is_height_over_width_of_the_smaller_eye():
+    assert abs(eye_openness(with_eyes(make_row(1000), 0.35)) - 0.35) < 1e-6
+
+
+def test_half_closed_eyes_are_left_out_only_for_eye_parts():
+    """눈 뜬 정도 0.15는 반쯤 감은 눈이라 섀도·아이라인에서 빼고, 0.25는 뜬 눈이라 쓴다."""
+    rows = [with_eyes(make_row(1000), 0.15), with_eyes(make_row(2000), 0.25)]
+
+    assert picked(rows, 0, 3000, ["leftEye"]) == [2000]
+    assert picked(rows, 0, 3000, ["leftEye", "leftBrow"]) == [2000]
+    assert picked(rows, 0, 3000, ["leftCheek"]) == [1000, 2000]
+
+
+def sized(timestamp_ms: int, width_px: float) -> FrameLandmarks:
+    row = make_row(timestamp_ms)
+    return row.model_copy(update={"measures": {**row.measures, "faceWidthPx": width_px}})
+
+
+def test_sizes_inside_the_range_are_kept_as_they_are():
+    before = [sized(1000, 400), sized(2000, 420)]
+    after = [sized(5000, 380)]
+
+    assert match_sizes(before, after) == (before, after)
+
+
+def test_bigger_group_keeps_only_photos_close_to_the_other_size():
+    """직후 ÷ 직전이 300 ÷ 400 = 0.75라 범위 밖이다.
+
+    사진이 많은 직전에서 300의 1.25배(375px) 이하만 남는다.
+    """
+    before = [sized(1000, 400), sized(2000, 400), sized(3000, 400), sized(4000, 370)]
+    after = [sized(5000, 300), sized(6000, 300)]
+
+    kept_before, kept_after = match_sizes(before, after)
+
+    assert [row.timestamp_ms for row in kept_before] == [4000]
+    assert kept_after == after
+
+
+def test_no_photo_close_enough_leaves_the_group_empty():
+    before = [sized(1000, 400), sized(2000, 400)]
+    after = [sized(5000, 300)]
+
+    assert match_sizes(before, after) == ([], after)
+
+
+def test_sizes_are_not_matched_without_face_width():
+    before, after = [make_row(1000)], [sized(5000, 300)]
+
+    assert match_sizes(before, after) == (before, after)
+
+
+def zone_and_cover(hidden_rows: int) -> tuple[np.ndarray, np.ndarray]:
+    """10줄짜리 범위와, 그 범위의 위 hidden_rows줄을 가린 표."""
+    zone = np.zeros((10, 4), dtype=bool)
+    zone[:, :2] = True
+    cover = np.zeros_like(zone)
+    cover[:hidden_rows, :2] = True
+    return zone, cover
+
+
+def test_photo_hiding_more_than_a_fifth_of_the_zone_is_left_out():
+    """범위를 30% 가린 사진은 보이는 칸까지 통째로 빼고, 10% 가린 사진은 보이는 칸을 쓴다."""
+    skin = np.full((10, 4, 3), SKIN, dtype=np.uint8)
+    red = np.full((10, 4, 3), RED, dtype=np.uint8)
+    clear = np.zeros((10, 4), dtype=bool)
+
+    zone, most = zone_and_cover(3)
+    out, unknown = known_median_map([red, skin], [most, clear], zone)
+    assert tuple(out[9, 0]) == SKIN and not unknown.any()
+
+    zone, few = zone_and_cover(1)
+    out, _ = known_median_map([red, red, skin], [few, clear, clear], zone)
+    assert tuple(out[9, 0]) == RED
+
+
+def test_every_photo_hiding_too_much_makes_every_cell_unknown():
+    zone, most = zone_and_cover(3)
+    skin = np.full((10, 4, 3), SKIN, dtype=np.uint8)
+
+    _, unknown = known_median_map([skin, skin], [most, most], zone)
+
+    assert unknown.all()
+
+
+def test_range_is_mostly_unknown_past_half():
+    cells = np.zeros((10, 4), dtype=bool)
+    cells[:, :2] = True
+    six, four = np.zeros_like(cells), np.zeros_like(cells)
+    six[:6] = True
+    four[:4] = True
+
+    assert mostly_unknown(cells, six)
+    assert not mostly_unknown(cells, four)
+    assert not mostly_unknown(cells, None)

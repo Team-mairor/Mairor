@@ -22,12 +22,24 @@ def flatten(rgb: np.ndarray, face: Face) -> np.ndarray:
     정해져 있다. 사진에서 같은 조각의 같은 위치를 찾아 그 색을 가져온다.
     """
     height, width = rgb.shape[:2]
-    points = np.array([[p.x * width, p.y * height] for p in face.landmarks[:VERTEX_COUNT]])
-    rows, cols, pieces, ratios = _cells()
-    corners = points[_triangles()[pieces]]
-    source = np.einsum("nk,nkd->nd", ratios, corners)
+    rows, cols = _cells()[:2]
+    source = _source(face, width, height)
     out = np.full((MAP_SIZE, MAP_SIZE, 3), 255, dtype=np.uint8)
     out[rows, cols] = _sample(rgb, source[:, 0], source[:, 1])
+    return out
+
+
+def flatten_mask(mask: np.ndarray, face: Face) -> np.ndarray:
+    """사진 크기 참·거짓 표(mask)를 얼굴 지도 크기 표로 편다. 얼굴 밖 칸은 False다.
+
+    flatten과 같은 자리를 보고, flatten이 색을 섞는 둘레 네 픽셀 중 하나라도 True면 칸도 True다.
+    가린 픽셀이 조금이라도 섞인 칸을 놓치지 않으려는 것이다.
+    """
+    height, width = mask.shape[:2]
+    rows, cols = _cells()[:2]
+    source = _source(face, width, height)
+    out = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    out[rows, cols] = _touches(mask, source[:, 0], source[:, 1])
     return out
 
 
@@ -102,6 +114,14 @@ def _cells() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     return rows, cols, pieces, ratios
 
 
+def _source(face: Face, width: int, height: int) -> np.ndarray:
+    """얼굴 안 지도 칸마다 사진에서 볼 자리(x, y). 칸이 속한 조각의 같은 비율 위치다."""
+    points = np.array([[p.x * width, p.y * height] for p in face.landmarks[:VERTEX_COUNT]])
+    _, _, pieces, ratios = _cells()
+    corners = points[_triangles()[pieces]]
+    return np.einsum("nk,nkd->nd", ratios, corners)
+
+
 def _nearest_piece(col: int, row: int) -> int:
     """조각이 없는 칸에서 가장 가까운, 조각이 있는 칸의 조각 번호."""
     rows, cols, pieces, _ = _cells()
@@ -132,3 +152,13 @@ def _sample(rgb: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     top = image[y0, x0] * (1 - fx) + image[y0, x1] * fx
     bottom = image[y1, x0] * (1 - fx) + image[y1, x1] * fx
     return np.round(top * (1 - fy) + bottom * fy).astype(np.uint8)
+
+
+def _touches(mask: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """사진에서 소수점 위치를 둘러싼 네 픽셀(_sample이 섞는 픽셀) 중 True가 하나라도 있는지."""
+    height, width = mask.shape[:2]
+    x = np.clip(x, 0, width - 1)
+    y = np.clip(y, 0, height - 1)
+    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+    x1, y1 = np.minimum(x0 + 1, width - 1), np.minimum(y0 + 1, height - 1)
+    return mask[y0, x0] | mask[y0, x1] | mask[y1, x0] | mask[y1, x1]

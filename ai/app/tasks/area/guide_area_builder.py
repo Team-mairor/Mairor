@@ -2,6 +2,7 @@
 
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
 아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 해서, 단계 순서대로 따로 부른다.
+가림 찾기 함수를 받으면 모든 부위 분석에 그대로 넘겨 사진마다 가린 칸을 빼고 보게 한다.
 """
 
 import logging
@@ -23,6 +24,7 @@ from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
 from app.tasks.area.common.face_map import points_to_anchors
 from app.tasks.area.common.mask_outline import mask_outline, mask_outlines, simplify_outline
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import (
@@ -44,7 +46,9 @@ logger = logging.getLogger(__name__)
 NOT_ANALYZED = "notAnalyzed"
 ANALYSIS_ERROR = "analysisError"
 
-AreaFinder = Callable[[LandmarksResult, int, int, PhotoLoader, str], AreaSubStep]
+AreaFinder = Callable[
+    [LandmarksResult, int, int, PhotoLoader, str, OcclusionFinder | None], AreaSubStep
+]
 
 
 def build_guide_area(
@@ -53,6 +57,7 @@ def build_guide_area(
     result: LandmarksResult,
     load_photo: PhotoLoader,
     on_step: Callable[[], None] | None = None,
+    occlusion: OcclusionFinder | None = None,
 ) -> GuideArea:
     """단계마다 하위 단계 하나를 채워 영상 하나의 가이드 영역을 돌려준다.
 
@@ -63,15 +68,17 @@ def build_guide_area(
     아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
     나머지(베이스처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로 기본 가이드(template)를 쓴다.
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
+    occlusion은 사진에서 얼굴을 가린 픽셀을 찾는 함수이고, 있으면 부위 분석마다 넘긴다.
+    None이면 가림을 따로 빼지 않고 사진 여러 장의 중앙값에만 맡긴다.
     """
     ordered = sorted(steps, key=lambda step: step.order)
     drawn: np.ndarray | None = None
     area_steps = []
     for step in ordered:
         if step.makeup == "eyeliner":
-            sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn)
+            sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
         else:
-            sub_step = _sub_step(step, result, load_photo)
+            sub_step = _sub_step(step, result, load_photo, occlusion)
         area_steps.append(
             AreaStep(
                 step_id=step.step_id,
@@ -104,7 +111,10 @@ def failed_guide_area(video_id: str, steps: Sequence[Step | GuideInputStep]) -> 
 
 
 def _sub_step(
-    step: Step | GuideInputStep, result: LandmarksResult, load_photo: PhotoLoader
+    step: Step | GuideInputStep,
+    result: LandmarksResult,
+    load_photo: PhotoLoader,
+    occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
     """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다."""
     sub_step_id = f"{step.step_id}-1"
@@ -119,6 +129,7 @@ def _sub_step(
             round(step.end_seconds * 1000),
             load_photo,
             sub_step_id,
+            occlusion,
         )
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
@@ -130,6 +141,7 @@ def _eyeliner_step(
     result: LandmarksResult,
     load_photo: PhotoLoader,
     drawn: np.ndarray | None,
+    occlusion: OcclusionFinder | None,
 ) -> tuple[AreaSubStep, np.ndarray | None]:
     """아이라인 단계의 하위 단계와, 이 단계까지 아이라인 가이드로 안내한 칸(양쪽 눈 합)을 돌려준다.
 
@@ -146,6 +158,7 @@ def _eyeliner_step(
                 round(step.end_seconds * 1000),
                 load_photo,
                 eye,
+                occlusion=occlusion,
             )
             for eye in EYES
         }
@@ -259,13 +272,14 @@ def _lip_sub_step(
     step_end_ms: int,
     load_photo: PhotoLoader,
     sub_step_id: str,
+    occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
     """립을 바른 곳의 바깥선을 얼굴 주소로 바꿔 lipsOuter 영역 하나로 적는다.
 
     립은 단계 끝 직후 사진만 쓰므로 step_start_ms는 쓰지 않는다.
     립 색을 못 찾으면 그 이유로 기본 립 가이드(template)를 쓴다.
     """
-    found = find_lip_area(result, step_end_ms, load_photo)
+    found = find_lip_area(result, step_end_ms, load_photo, occlusion=occlusion)
     if found.mask is None:
         return _template(sub_step_id, "lip", [found.reason])
     outline = points_to_anchors(simplify_outline(mask_outline(found.mask)))
@@ -293,10 +307,13 @@ def _blush_sub_step(
     step_end_ms: int,
     load_photo: PhotoLoader,
     sub_step_id: str,
+    occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
     """블러셔를 볼마다 찾아 symmetric_blush로 좌우 같은 모양을 만들고, 볼마다 영역 하나씩 적는다."""
     areas = {
-        cheek: find_blush_area(result, step_start_ms, step_end_ms, load_photo, cheek)
+        cheek: find_blush_area(
+            result, step_start_ms, step_end_ms, load_photo, cheek, occlusion=occlusion
+        )
         for cheek in CHEEKS
     }
     return _pair_sub_step(
@@ -310,10 +327,14 @@ def _brow_sub_step(
     step_end_ms: int,
     load_photo: PhotoLoader,
     sub_step_id: str,
+    occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
     """눈썹을 눈썹마다 찾아 symmetric_brows로 좌우 같은 모양을 만들고, 눈썹마다 영역을 적는다."""
     areas = {
-        brow: find_brow_area(result, step_start_ms, step_end_ms, load_photo, brow) for brow in BROWS
+        brow: find_brow_area(
+            result, step_start_ms, step_end_ms, load_photo, brow, occlusion=occlusion
+        )
+        for brow in BROWS
     }
     return _pair_sub_step(
         sub_step_id, "brow", areas, symmetric_brows(areas), "browColorNotFound", False
@@ -326,6 +347,7 @@ def _eyeshadow_sub_step(
     step_end_ms: int,
     load_photo: PhotoLoader,
     sub_step_id: str,
+    occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
     """섀도를 눈마다 찾아 symmetric_eyeshadow로 좌우 같은 모양을 만들고, 눈마다 영역 하나씩 적는다.
 
@@ -333,7 +355,9 @@ def _eyeshadow_sub_step(
     FE가 눈 구멍을 뚫고 그리게 한다.
     """
     areas = {
-        eye: find_eyeshadow_area(result, step_start_ms, step_end_ms, load_photo, eye)
+        eye: find_eyeshadow_area(
+            result, step_start_ms, step_end_ms, load_photo, eye, occlusion=occlusion
+        )
         for eye in EYES
     }
     return _pair_sub_step(

@@ -1,6 +1,7 @@
 """BE가 넘긴 레퍼런스 사진으로 단계마다 가이드 영역을 만든다.
 
 얼굴 점 찾기 → 사진 판정 → 가이드 영역 순서다. 사진 받기는 clients/frames.py가 먼저 한다.
+가이드 영역은 사진마다 손·붓·자막 같은 것이 가린 칸을 빼고 만든다.
 """
 
 from collections import Counter
@@ -20,7 +21,11 @@ from app.tasks.area.guide_area_builder import build_guide_area
 from app.tasks.area.landmarks.face_finder import find_faces
 from app.tasks.area.landmarks.frame_checker import check_frames
 from app.tasks.area.landmarks.landmarks_builder import FaceFinder, build_landmarks
+from app.tasks.area.landmarks.occlusion import OcclusionFinder, remember_by_frame
+from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.landmarks.reference_input import ReferenceInput, read_frame_rgb
+
+OCCLUSION_KEEP = 64
 
 
 def reference_manifest(guide_input: GuideInput, frames: ReferenceFrames) -> Manifest:
@@ -69,6 +74,7 @@ def build_reference_area(
     on_landmarks: Callable[[], None] | None = None,
     on_area_step: Callable[[], None] | None = None,
     finder: FaceFinder = find_faces,
+    occlusion: OcclusionFinder = find_occlusion,
 ) -> GuideArea:
     """folder에 받아 둔 사진으로 가이드 영역을 만든다.
 
@@ -76,7 +82,10 @@ def build_reference_area(
     받지 못한 사진은 파일이 없어 얼굴 점 결과에서 error가 된다.
     on_landmarks는 사진 1장의 얼굴 점을 찾아 볼 때마다, on_area_step은 단계 하나의 영역을
     끝낼 때마다 부른다.
-    finder는 시험할 때 가짜로 바꿔 끼우는 자리다.
+    finder·occlusion은 시험할 때 가짜로 바꿔 끼우는 자리다.
+    occlusion은 작업마다 remember_by_frame으로 감싸, 좌우 짝 부위가 같은 사진을
+    두 번 찾지 않게 한다. 직전·직후 창 사진이 한 단계에 수십 장이라
+    최근 OCCLUSION_KEEP장을 기억한다.
     """
     manifest = reference_manifest(guide_input, frames)
     reference = ReferenceInput(folder, manifest)
@@ -100,7 +109,12 @@ def build_reference_area(
         set_output(span, dict(Counter(row.status for row in checked.frames)))
     with traced("build_guide_area", {"steps": len(guide_input.steps)}) as span:
         area = build_guide_area(
-            guide_input.video_id, guide_input.steps, checked, load_row, on_step=on_area_step
+            guide_input.video_id,
+            guide_input.steps,
+            checked,
+            load_row,
+            on_step=on_area_step,
+            occlusion=remember_by_frame(occlusion, OCCLUSION_KEEP),
         )
         statuses = Counter(sub.status for step in area.steps for sub in step.sub_steps)
         set_output(span, dict(statuses))

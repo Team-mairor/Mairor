@@ -10,6 +10,7 @@ from app.tasks.area.common.face_map import (
     MAP_SIZE,
     MESH_DIR,
     flatten,
+    flatten_mask,
     map_points,
     median_map,
     points_to_anchors,
@@ -62,6 +63,29 @@ def test_median_keeps_the_majority_color():
     red = np.full((2, 2, 3), (200, 50, 50), dtype=np.uint8)
     hand = np.full((2, 2, 3), (230, 180, 160), dtype=np.uint8)
     assert np.array_equal(median_map([red, hand, red]), red)
+
+
+def test_mask_marks_face_cells_only():
+    black = np.zeros((600, 800, 3), dtype=np.uint8)
+    face_cells = np.any(flatten(black, face_on_map()) != WHITE, axis=2)
+    marked = flatten_mask(np.ones((600, 800), dtype=bool), face_on_map())
+    assert marked.shape == (MAP_SIZE, MAP_SIZE)
+    assert np.array_equal(marked, face_cells)
+
+
+def test_mask_marks_every_cell_that_takes_color_from_masked_pixels():
+    """flatten이 가린 픽셀 색을 조금이라도 섞어 온 칸은 모두 가린 칸으로 잡혀야 한다."""
+    skin, hand = (10, 200, 30), (200, 50, 50)
+    mask = np.zeros((600, 800), dtype=bool)
+    mask[250:350, 350:450] = True
+    photo = np.full((600, 800, 3), skin, dtype=np.uint8)
+    photo[mask] = hand
+    out = flatten(photo, face_on_map())
+    touched = np.any(out != WHITE, axis=2) & np.any(out != skin, axis=2)
+    marked = flatten_mask(mask, face_on_map())
+    assert touched.sum() > 1000
+    assert not (touched & ~marked).any()
+    assert marked.sum() <= touched.sum() * 1.1
 
 
 def back_to_map(anchor: MeshAnchor) -> np.ndarray:

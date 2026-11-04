@@ -5,4 +5,5 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1]
 AI_DIR = APP_DIR.parent
 PROMPTS_DIR = APP_DIR / "prompts"
+WEIGHTS_DIR = APP_DIR / "weights"
 FACE_MESH_DIR = AI_DIR.parent / "shared" / "face-mesh"

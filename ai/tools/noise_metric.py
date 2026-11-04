@@ -5,7 +5,8 @@
 나온 값은 모두 잡음이다. 립은 전후 비교가 아니라 바른 뒤 사진 한 장을 보므로,
 맨입술 순간의 사진만 쓴다. 조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
-실행 (ai/ 폴더에서): uv run python tools/noise_metric.py samples/local_03_seq
+--occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
+실행 (ai/ 폴더에서): uv run python tools/noise_metric.py samples/local_03_seq [--occlusion <이름>]
 """
 
 import json
@@ -24,16 +25,23 @@ sys.path.insert(0, str(AI_ROOT))
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Step
-from app.tasks.area.common.face_map import MAP_SIZE, flatten, map_points, median_map
+from app.tasks.area.common.face_map import MAP_SIZE, flatten, flatten_mask, map_points
 from app.tasks.area.common.region_mask import polygon_mask, span
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
-from app.tasks.area.parts.area_preparation import remove_lighting, rgb_to_lab, usable_rows
+from app.tasks.area.parts.area_preparation import (
+    known_cells,
+    known_median_map,
+    remove_lighting,
+    rgb_to_lab,
+    usable_rows,
+)
+from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 CAUTION_FILE = "caution_ranges.json"
-OUTPUT_FILE = Path("output") / "noise.json"
+OUTPUT_FILE = "noise.json"
 GAPS_SECONDS = (1, 10, 30, 60, 120)
 STRIDE_MS = 4000
 MAP_CACHE = 300
@@ -48,7 +56,7 @@ UNTOUCHED_STEPS: dict[str, tuple[str, ...]] = {
 }
 
 Span = tuple[int, int]
-MapLoader = Callable[[Sequence[FrameLandmarks]], np.ndarray]
+MapLoader = Callable[[Sequence[FrameLandmarks]], tuple[np.ndarray, np.ndarray]]
 
 
 @dataclass(frozen=True)
@@ -67,9 +75,10 @@ class Measure:
 
 @dataclass(frozen=True)
 class Part:
-    """잴 부위 하나. measure는 (직전 지도, 직후 지도, 쪽)으로 Measure를 낸다.
+    """잴 부위 하나. measure는 (직전 지도, 직후 지도, 쪽, 모름 칸)으로 Measure를 낸다.
 
-    립은 직전 지도가 None이다.
+    립은 직전 지도가 None이다. 살펴볼 범위가 모두 모름 칸이면 measure는 None을 내고
+    그 쌍은 건너뛴다.
     """
 
     name: str
@@ -79,7 +88,9 @@ class Part:
     threshold: float
     gate_threshold: float | None
     regions: Callable[[RegionName], list[RegionName]]
-    measure: Callable[[np.ndarray | None, np.ndarray, RegionName], Measure]
+    measure: Callable[
+        [np.ndarray | None, np.ndarray, RegionName, np.ndarray | None], Measure | None
+    ]
 
 
 @dataclass
@@ -151,52 +162,91 @@ def hist_percentile(hist: np.ndarray, q: float) -> float | None:
     return round(float(HIST_EDGES[min(index, len(HIST_EDGES) - 1)]), 3)
 
 
-def measure_brow(before: np.ndarray | None, after: np.ndarray, brow: RegionName) -> Measure:
-    darkening = brow_area.brow_darkening(before, after)
-    values = darkening[brow_area.brow_range(brow)]
-    found = brow_area.check_brow_area(darkening, brow).mask is not None
+def measure_brow(
+    before: np.ndarray | None,
+    after: np.ndarray,
+    brow: RegionName,
+    unknown: np.ndarray | None = None,
+) -> Measure | None:
+    cells = known_cells(brow_area.brow_range(brow), unknown)
+    if not cells.any():
+        return None
+    darkening = brow_area.brow_darkening(before, after, unknown)
+    values = darkening[cells]
+    found = brow_area.check_brow_area(darkening, brow, unknown).mask is not None
     return Measure(
         values, float((values > brow_area.DARKENING_MIN).mean()), float(np.median(values)), found
     )
 
 
-def measure_eyeshadow(before: np.ndarray | None, after: np.ndarray, eye: RegionName) -> Measure:
-    reddening = eyeshadow_area.eyeshadow_reddening(before, after)
-    values = reddening[eyeshadow_area.eyeshadow_range(eye)]
+def measure_eyeshadow(
+    before: np.ndarray | None,
+    after: np.ndarray,
+    eye: RegionName,
+    unknown: np.ndarray | None = None,
+) -> Measure | None:
+    cells = known_cells(eyeshadow_area.eyeshadow_range(eye), unknown)
+    if not cells.any():
+        return None
+    reddening = eyeshadow_area.eyeshadow_reddening(before, after, unknown)
+    values = reddening[cells]
     gate = float(np.percentile(values, eyeshadow_area.TOP_PERCENTILE))
-    found = eyeshadow_area.check_eyeshadow_area(reddening, eye).mask is not None
+    found = eyeshadow_area.check_eyeshadow_area(reddening, eye, unknown).mask is not None
     return Measure(values, float((values > eyeshadow_area.REDDENING_MIN).mean()), gate, found)
 
 
-def measure_eyeliner(before: np.ndarray | None, after: np.ndarray, eye: RegionName) -> Measure:
-    changed = eyeliner_area.eyeliner_color_change(before, after)
-    found = eyeliner_area.check_eyeliner_area(changed, eye).mask is not None
-    return Measure(None, float(changed[eyeliner_area.eyeliner_range(eye)].mean()), None, found)
+def measure_eyeliner(
+    before: np.ndarray | None,
+    after: np.ndarray,
+    eye: RegionName,
+    unknown: np.ndarray | None = None,
+) -> Measure | None:
+    cells = known_cells(eyeliner_area.eyeliner_range(eye), unknown)
+    if not cells.any():
+        return None
+    changed = eyeliner_area.eyeliner_color_change(before, after, unknown)
+    found = eyeliner_area.check_eyeliner_area(changed, eye, unknown).mask is not None
+    return Measure(None, float(changed[cells].mean()), None, found)
 
 
-def blush_reddening(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+def blush_reddening(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
     """blush_area_on_maps와 같은 계산으로, 기준값과 견주기 전의 붉어진 양 지도를 낸다."""
     change = rgb_to_lab(after)[..., 1] - rgb_to_lab(before)[..., 1]
-    corrected = remove_lighting(change, blush_area.light_exclude())
+    corrected = remove_lighting(change, blush_area.light_exclude(), unknown)
     return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), blush_area.BLUR_SIGMA)
 
 
-def measure_blush(before: np.ndarray | None, after: np.ndarray, cheek: RegionName) -> Measure:
-    reddening = blush_reddening(before, after)
-    cells = blush_area.cheek_range(cheek)
+def measure_blush(
+    before: np.ndarray | None,
+    after: np.ndarray,
+    cheek: RegionName,
+    unknown: np.ndarray | None = None,
+) -> Measure | None:
+    cells = known_cells(blush_area.cheek_range(cheek), unknown)
+    if not cells.any():
+        return None
+    reddening = blush_reddening(before, after, unknown)
     values = reddening[cells]
     area = cells & (reddening > blush_area.REDDENING_MIN)
-    found = blush_area.check_blush_area(area, cheek).mask is not None
+    found = blush_area.check_blush_area(area, cheek, unknown).mask is not None
     return Measure(
         values,
         float((values > blush_area.REDDENING_MIN).mean()),
-        blush_area.found_ratio(area, cheek),
+        blush_area.found_ratio(area, cheek, unknown),
         found,
     )
 
 
-def lip_redness(after: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """lip_area_on_map과 같은 계산으로 (입 주변 피부보다 붉은 양 지도, 살펴볼 범위)를 낸다."""
+def lip_redness(
+    after: np.ndarray, unknown: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """lip_area_on_map과 같은 계산으로 (입 주변 피부보다 붉은 양 지도, 살펴볼 범위)를 낸다.
+
+    unknown(모름 칸)은 범위와 입 주변 피부에서 뺀다.
+    입 주변 피부가 모두 모름 칸이면 붉은 양은 0이다.
+    """
     lab = rgb_to_lab(after)
     outline = map_points(REGION_POINTS["lipsOuter"])
     width = span(outline)
@@ -205,16 +255,29 @@ def lip_redness(after: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     ring = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=far) & ~polygon_mask(
         outline, MAP_SIZE, MAP_SIZE, band=near
     )
+    ring, cells = known_cells(ring, unknown), known_cells(cells, unknown)
+    if not ring.any():
+        return np.zeros((MAP_SIZE, MAP_SIZE)), cells
     return lab[..., 1] - np.median(lab[..., 1][ring]), cells
 
 
-def measure_lip(before: np.ndarray | None, after: np.ndarray, side: RegionName) -> Measure:
-    redness, cells = lip_redness(after)
+def measure_lip(
+    before: np.ndarray | None,
+    after: np.ndarray,
+    side: RegionName,
+    unknown: np.ndarray | None = None,
+) -> Measure | None:
+    redness, cells = lip_redness(after, unknown)
+    if not cells.any():
+        return None
     values = redness[cells]
     area = cells & (redness > lip_area.REDNESS_MIN)
-    found = lip_area.check_lip_area(area).mask is not None
+    found = lip_area.check_lip_area(area, unknown).mask is not None
     return Measure(
-        values, float((values > lip_area.REDNESS_MIN).mean()), lip_area.found_ratio(area), found
+        values,
+        float((values > lip_area.REDNESS_MIN).mean()),
+        lip_area.found_ratio(area, unknown),
+        found,
     )
 
 
@@ -304,8 +367,15 @@ def measure_part(
                     if not after_rows or (part.before_ms and not before_rows):
                         tally.skipped += 1
                         continue
-                    before = load_map(before_rows) if part.before_ms else None
-                    m = part.measure(before, load_map(after_rows), side)
+                    after, unknown = load_map(after_rows)
+                    before = None
+                    if part.before_ms:
+                        before, before_unknown = load_map(before_rows)
+                        unknown = unknown | before_unknown
+                    m = part.measure(before, after, side, unknown)
+                    if m is None:
+                        tally.skipped += 1
+                        continue
                     tally.pairs += 1
                     tally.found += m.found
                     tally.overs.append(m.over)
@@ -357,11 +427,12 @@ def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("사용법: uv run python tools/noise_metric.py <샘플 폴더>")
+    args, occlusion_name = split_occlusion(sys.argv[1:])
+    if len(args) != 1:
+        print(f"사용법: uv run python tools/noise_metric.py <샘플 폴더> {USAGE}")
         sys.exit(1)
 
-    folder = Path(sys.argv[1])
+    folder = Path(args[0])
     checked_path = folder / CHECKED_FILE
     if not checked_path.is_file():
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
@@ -372,14 +443,19 @@ def main() -> None:
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     rows_by_index = {row.frame_index: row for row in result.frames}
     cautions = caution_spans(json.loads((folder / CAUTION_FILE).read_text(encoding="utf-8")))
+    occlusion = table_finder(folder, occlusion_name)
 
     @lru_cache(maxsize=MAP_CACHE)
-    def flat(index: int) -> np.ndarray:
+    def flat(index: int) -> tuple[np.ndarray, np.ndarray | None]:
         row = rows_by_index[index]
-        return flatten(read_frame_rgb(reference, frames[index]), row.face)
+        photo = read_frame_rgb(reference, frames[index])
+        covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
+        return flatten(photo, row.face), covered
 
-    def load_map(rows: Sequence[FrameLandmarks]) -> np.ndarray:
-        return median_map([flat(row.frame_index) for row in rows])
+    def load_map(rows: Sequence[FrameLandmarks]) -> tuple[np.ndarray, np.ndarray]:
+        flats = [flat(row.frame_index) for row in rows]
+        covered = None if occlusion is None else [mask for _, mask in flats]
+        return known_median_map([face_map for face_map, _ in flats], covered)
 
     summary, records = [], []
     for part in PARTS:
@@ -395,8 +471,8 @@ def main() -> None:
                 f"  헛것 {row['falsePositives']}/{row['pairs']}"
             )
 
-    path = folder / OUTPUT_FILE
-    path.parent.mkdir(exist_ok=True)
+    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {"videoId": reference.manifest.video_id, "summary": summary, "pairs": records},

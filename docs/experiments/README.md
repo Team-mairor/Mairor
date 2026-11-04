@@ -8,3 +8,4 @@
 | [단계 설명 이미지 비교](STEP_EXPLANATION_IMAGE_COMPARISON.md) | 2026-11-02 | 대표 장면 이미지를 넣을 때와 뺄 때 비교 (S15P31A306-277) |
 | [필수 정보 Gemini 추출](GEMINI_REQUIRED_FACTS.md) | 2026-11-03 | 바르는 곳·팔레트 색을 Gemini가 뽑을 수 있는지 (S15P31A306-278) |
 | [가이드 영역 검증 지표와 합격선](GUIDE_AREA_METRICS.md) | 2026-11-03 | 정답 그림 없이 가이드 영역을 재는 지표·합격선과 지금 코드 성적 (S15P31A306-286) |
+| [가림 빼기와 분석 사진 고르기](OCCLUSION_REMOVAL_AND_FRAME_SELECTION.md) | 2026-11-04 | 손·붓·자막이 가린 칸을 찾는 모델 학습·비교와 사진 고르기 기준값 (S15P31A306-287) |

@@ -99,6 +99,13 @@ def test_unchanged_eye_gives_reason_instead_of_a_tiny_area():
     assert found.reason == "eyeshadowColorNotFound"
 
 
+def test_eye_hidden_in_every_photo_gives_no_usable_frame():
+    reddening = eyeshadow_reddening(skin_map(), painted_on(["leftEye"]))
+    found = check_eyeshadow_area(reddening, "leftEye", unknown=eyeshadow_range("leftEye"))
+    assert found.mask is None
+    assert found.reason == "noUsableFrame"
+
+
 def test_no_photo_right_after_the_step_gives_reason_without_reading_photos():
     def never(row: FrameLandmarks) -> np.ndarray:
         raise AssertionError("쓸 사진이 없으면 사진을 읽지 않아야 합니다")

@@ -7,7 +7,9 @@
 서비스 그대로의 영역을 몇 칸 옮겨야 같은 겹침이 되는지(흔들린 칸)와
 그 칸 ÷ 영역 세로(흔들림 비율)도 낸다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
-실행 (ai/ 폴더에서): uv run python tools/stability_metric.py samples/local_03_seq
+--occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
+실행 (ai/ 폴더에서):
+uv run python tools/stability_metric.py samples/local_03_seq [--occlusion <이름>]
 """
 
 import json
@@ -24,12 +26,14 @@ sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import LandmarksResult
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import PhotoLoader
+from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
-OUTPUT_FILE = Path("output") / "stability.json"
+OUTPUT_FILE = "stability.json"
 SHIFTS_MS = (0, 1000, 2000)
 MAX_SHIFT_CELLS = 60
 
@@ -38,7 +42,8 @@ Finder = Callable[[int, int], tuple[np.ndarray | None, str | None]]
 
 @dataclass(frozen=True)
 class Part:
-    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽)으로 (영역, 못 찾은 이유)를 낸다.
+    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로
+    (영역, 못 찾은 이유)를 낸다.
 
     before_shift가 False면 직전 창을 쓰지 않는 부위(립)라 직후 창만 옮긴다.
     """
@@ -48,7 +53,8 @@ class Part:
     sides: tuple[RegionName, ...]
     before_shift: bool
     find: Callable[
-        [LandmarksResult, int, int, PhotoLoader, RegionName], tuple[np.ndarray | None, str | None]
+        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None],
+        tuple[np.ndarray | None, str | None],
     ]
 
 
@@ -62,35 +68,41 @@ PARTS = (
         "brow",
         brow_area.BROWS,
         True,
-        lambda r, s, e, load, side: _pair(brow_area.find_brow_area(r, s, e, load, side)),
+        lambda r, s, e, load, side, occ: _pair(brow_area.find_brow_area(r, s, e, load, side, occ)),
     ),
     Part(
         "eyeshadow",
         "eyeshadow",
         eyeshadow_area.EYES,
         True,
-        lambda r, s, e, load, side: _pair(eyeshadow_area.find_eyeshadow_area(r, s, e, load, side)),
+        lambda r, s, e, load, side, occ: _pair(
+            eyeshadow_area.find_eyeshadow_area(r, s, e, load, side, occ)
+        ),
     ),
     Part(
         "eyeliner",
         "eyeliner",
         eyeliner_area.EYES,
         True,
-        lambda r, s, e, load, side: _pair(eyeliner_area.find_eyeliner_area(r, s, e, load, side)),
+        lambda r, s, e, load, side, occ: _pair(
+            eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ)
+        ),
     ),
     Part(
         "blush",
         "blush",
         blush_area.CHEEKS,
         True,
-        lambda r, s, e, load, side: _pair(blush_area.find_blush_area(r, s, e, load, side)),
+        lambda r, s, e, load, side, occ: _pair(
+            blush_area.find_blush_area(r, s, e, load, side, occ)
+        ),
     ),
     Part(
         "lip",
         "lip",
         ("lipsOuter",),
         False,
-        lambda r, s, e, load, side: _pair(lip_area.find_lip_area(r, e, load)),
+        lambda r, s, e, load, side, occ: _pair(lip_area.find_lip_area(r, e, load, occ)),
     ),
 )
 
@@ -184,11 +196,12 @@ def measure_step(
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("사용법: uv run python tools/stability_metric.py <샘플 폴더>")
+    args, occlusion_name = split_occlusion(sys.argv[1:])
+    if len(args) != 1:
+        print(f"사용법: uv run python tools/stability_metric.py <샘플 폴더> {USAGE}")
         sys.exit(1)
 
-    folder = Path(sys.argv[1])
+    folder = Path(args[0])
     checked_path = folder / CHECKED_FILE
     if not checked_path.is_file():
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
@@ -197,6 +210,7 @@ def main() -> None:
     reference = load_reference_input(folder)
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
+    occlusion = table_finder(folder, occlusion_name)
 
     def load_photo(row):
         return read_frame_rgb(reference, frames[row.frame_index])
@@ -211,7 +225,7 @@ def main() -> None:
             for side in part.sides:
 
                 def finder(s: int, e: int, part=part, side=side):
-                    return part.find(result, s, e, load_photo, side)
+                    return part.find(result, s, e, load_photo, side, occlusion)
 
                 row = {"part": part.name, "stepId": step.step_id, "side": side}
                 row |= measure_step(finder, start, end, combos)
@@ -222,8 +236,8 @@ def main() -> None:
                     f"  흔들림 {row['shiftCells']}칸 / 세로 {row['sizeCells']}칸"
                 )
 
-    path = folder / OUTPUT_FILE
-    path.parent.mkdir(exist_ok=True)
+    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {"videoId": reference.manifest.video_id, "steps": out}, ensure_ascii=False, indent=1

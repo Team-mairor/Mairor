@@ -109,7 +109,7 @@ def test_measure_part_reports_scores_only_for_found_areas(monkeypatch):
         "lips",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side: found if e == 20000 else None,
+        lambda r, s, e, load, side, occ: found if e == 20000 else None,
     )
     steps = [
         SimpleNamespace(step_id="s1", makeup="lip", start_seconds=10.0, end_seconds=20.0),

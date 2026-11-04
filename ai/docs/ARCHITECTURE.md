@@ -21,7 +21,7 @@ ai/
 │  │  ├─ explanation/      쉬운 설명. 입구 guide_explainer.py
 │  │  ├─ area/             가이드 영역. 입구 area_work.py (사진 받기 → 작업 폴더 → 스레드에서 영역 계산, 동시 실행 수 제한)
 │  │  │  ├─ reference_area.py · guide_area_builder.py   받은 사진으로 단계별 영역 만들기
-│  │  │  ├─ landmarks/     얼굴 점 찾기 · 사진 판정 · 사진 읽기
+│  │  │  ├─ landmarks/     얼굴 점 찾기 · 사진 판정 · 사진 읽기 · 가림 찾기
 │  │  │  ├─ parts/         부위마다 한 파일 (립 · 블러셔 · 눈썹 · 아이섀도 · 아이라인)
 │  │  │  └─ common/        부위 분석이 함께 쓰는 계산 (얼굴 지도 · 마스크 · 점 번호)
 │  │  └─ template_guide/   LLM 없이 문장 틀로 만드는 가이드. 입구 guide_builder.py (개발 도구에서만 씀)
@@ -29,9 +29,10 @@ ai/
 │  ├─ schemas/             요청·응답 모델
 │  │  └─ common.py         CamelModel, ErrorResponse
 │  ├─ prompts/             LLM 지시문 (txt)
+│  ├─ weights/             학습한 모델 파일 (가림 찾기 onnx). 출처·지문·만든 방법은 README.md
 │  └─ core/                앱 전체 공통
 │     ├─ config.py         환경변수 설정
-│     ├─ paths.py          코드 밖 파일 위치 (지시문 · 얼굴 메시 · .env). 모듈을 옮겨도 경로가 그대로다
+│     ├─ paths.py          코드 밖 파일 위치 (지시문 · 얼굴 메시 · 모델 파일 · .env). 모듈을 옮겨도 경로가 그대로다
 │     ├─ errors.py         공통 오류 형식, AppError
 │     ├─ logs.py           로그 형식(text · json), json이면 작업 문맥(job_id 등)을 붙임
 │     └─ tracing.py        호출 기록(Phoenix): 작업·단계·콜백 기록, Claude 호출 기록 켜기

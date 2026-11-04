@@ -121,7 +121,7 @@ def test_measure_step_finds_when_the_inside_changed_and_keeps_the_outside_flat(m
         level = min(max((t - 20000) / 20000, 0.0), 1.0) * 10
         photo = np.zeros((100, 100), dtype=np.float32)
         photo[area] = level
-        return photo
+        return photo, np.zeros((100, 100), dtype=bool)
 
     part = timing_metric.Part(
         "brow",
@@ -131,7 +131,7 @@ def test_measure_step_finds_when_the_inside_changed_and_keeps_the_outside_flat(m
         1000,
         lambda side: [side],
         lambda *args: None,
-        lambda before, after: after - before,
+        lambda before, after, unknown: after - before,
     )
 
     rows = timing_metric.measure_step(
@@ -145,6 +145,38 @@ def test_measure_step_finds_when_the_inside_changed_and_keeps_the_outside_flat(m
     assert left["strongShare"] == 1.0
     assert [p["ms"] for p in left["points"]] == timing_metric.time_points(20000, 40000, 1000)
     assert right == {"part": "brow", "side": "rightBrow", "found": False, "reason": "areaNotFound"}
+
+
+def test_measure_step_leaves_cells_hidden_in_every_photo_out_of_the_means(monkeypatch):
+    """손이 늘 가린 칸은 색이 크게 바뀐 것처럼 보여도 영역 안·바깥 띠 평균에 넣지 않아야 한다."""
+    area = block(slice(40, 60), slice(40, 60))
+    hand = block(slice(40, 60), slice(40, 50)) | block(slice(70, 80), slice(0, 100))
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+    monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+
+    def load_map(rows):
+        level = 10.0 if rows[0] > 30000 else 0.0
+        photo = np.zeros((100, 100), dtype=np.float32)
+        photo[area] = level
+        photo[hand] = 100.0 if rows[0] > 30000 else 0.0
+        return photo, hand
+
+    part = timing_metric.Part(
+        "brow",
+        "brow",
+        ("leftBrow",),
+        1000,
+        1000,
+        lambda side: [side],
+        lambda *args: None,
+        lambda before, after, unknown: after - before,
+    )
+
+    (row,) = timing_metric.measure_step(part, None, 20000, 40000, load_map, lambda side: area)
+
+    assert row["insideFinal"] == 10.0
+    assert row["outsideFinal"] == 0.0
+    assert row["strongShare"] == 1.0
 
 
 def test_measure_step_reports_a_missing_before_photo(monkeypatch):
@@ -183,3 +215,25 @@ def test_change_is_zero_when_nothing_changed():
 
     assert not timing_metric.eyeliner_change(photo, photo).any()
     assert np.allclose(timing_metric.lip_change(photo, photo), 0)
+
+
+def test_parts_pass_the_occlusion_finder_to_the_part_code(monkeypatch):
+    seen = []
+
+    def found(*args):
+        seen.append(args[-1])
+        return SimpleNamespace(mask=None)
+
+    for module, name in [
+        (brow_area, "find_brow_area"),
+        (eyeshadow_area, "find_eyeshadow_area"),
+        (eyeliner_area, "find_eyeliner_area"),
+        (blush_area, "find_blush_area"),
+        (lip_area, "find_lip_area"),
+    ]:
+        monkeypatch.setattr(module, name, found)
+
+    for part in timing_metric.PARTS:
+        part.find(None, 0, 1000, None, part.sides[0], "occlusion")
+
+    assert seen == ["occlusion"] * 5

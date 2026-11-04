@@ -11,7 +11,8 @@
 진한 칸 비율이 낮으면 너무 넓게 잡은 것이다.
 바깥 띠는 부위 코드의 흐림이 번지는 거리(흐림 폭 × BLUR_GAP_RATIO) 밖에서 시작한다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
-실행 (ai/ 폴더에서): uv run python tools/timing_metric.py samples/local_03_seq
+--occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
+실행 (ai/ 폴더에서): uv run python tools/timing_metric.py samples/local_03_seq [--occlusion <이름>]
 """
 
 import json
@@ -29,16 +30,23 @@ sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.tasks.area.common.face_map import MAP_SIZE, flatten, map_points, median_map
+from app.tasks.area.common.face_map import MAP_SIZE, flatten, flatten_mask, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
-from app.tasks.area.parts.area_preparation import PhotoLoader, usable_rows
+from app.tasks.area.parts.area_preparation import (
+    PhotoLoader,
+    known_cells,
+    known_median_map,
+    usable_rows,
+)
 from tools.noise_metric import blush_reddening, lip_redness
+from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
-OUTPUT_FILE = Path("output") / "timing.json"
+OUTPUT_FILE = "timing.json"
 STEP_MS = 2000
 PAD_MS = 10000
 RING_GAP_MIN_CELLS = 5
@@ -50,14 +58,14 @@ STRONG_LEVEL = 0.5
 LIP_BEFORE_MS = 1000
 MAP_CACHE = 64
 
-MapLoader = Callable[[Sequence[FrameLandmarks]], np.ndarray]
+MapLoader = Callable[[Sequence[FrameLandmarks]], tuple[np.ndarray, np.ndarray]]
 AreaFinder = Callable[[RegionName], np.ndarray | None]
 
 
 @dataclass(frozen=True)
 class Part:
-    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽)으로 찾은 영역(못 찾으면 None)을,
-    change는 (직전 지도, 그 시각 지도)로 칸마다 색 값 지도를 낸다.
+    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로 찾은 영역
+    (못 찾으면 None)을, change는 (직전 지도, 그 시각 지도, 모름 칸)으로 칸마다 색 값 지도를 낸다.
     blur_sigma는 부위 코드가 색 값 지도를 흐리는 폭(칸)이고, 흐리지 않으면 0이다.
 
     립은 서비스에 직전 창이 없어 before_ms로 LIP_BEFORE_MS를 쓴다.
@@ -69,19 +77,26 @@ class Part:
     before_ms: int
     after_ms: int
     regions: Callable[[RegionName], list[RegionName]]
-    find: Callable[[LandmarksResult, int, int, PhotoLoader, RegionName], np.ndarray | None]
-    change: Callable[[np.ndarray, np.ndarray], np.ndarray]
+    find: Callable[
+        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None],
+        np.ndarray | None,
+    ]
+    change: Callable[[np.ndarray, np.ndarray, np.ndarray | None], np.ndarray]
     blur_sigma: float = 0.0
 
 
-def eyeliner_change(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+def eyeliner_change(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
     """아이라인 색으로 바뀐 칸을 1, 아닌 칸을 0으로 낸다. 평균이 바뀐 칸 비율이 된다."""
-    return eyeliner_area.eyeliner_color_change(before, after).astype(np.float32)
+    return eyeliner_area.eyeliner_color_change(before, after, unknown).astype(np.float32)
 
 
-def lip_change(before: np.ndarray, after: np.ndarray) -> np.ndarray:
+def lip_change(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
     """입 주변 피부보다 붉은 양(립 코드와 같은 계산)이 직전보다 늘어난 만큼."""
-    return lip_redness(after)[0] - lip_redness(before)[0]
+    return lip_redness(after, unknown)[0] - lip_redness(before, unknown)[0]
 
 
 PARTS = (
@@ -92,7 +107,7 @@ PARTS = (
         brow_area.BEFORE_WINDOW_MS,
         brow_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side: brow_area.find_brow_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ).mask,
         brow_area.brow_darkening,
         brow_area.BLUR_SIGMA,
     ),
@@ -103,7 +118,9 @@ PARTS = (
         eyeshadow_area.BEFORE_WINDOW_MS,
         eyeshadow_area.AFTER_WINDOW_MS,
         lambda side: [side, eyeshadow_area.EYE_BROWS[side]],
-        lambda r, s, e, load, side: eyeshadow_area.find_eyeshadow_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: (
+            eyeshadow_area.find_eyeshadow_area(r, s, e, load, side, occ).mask
+        ),
         eyeshadow_area.eyeshadow_reddening,
         eyeshadow_area.BLUR_SIGMA,
     ),
@@ -114,7 +131,9 @@ PARTS = (
         eyeliner_area.BEFORE_WINDOW_MS,
         eyeliner_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side: eyeliner_area.find_eyeliner_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: (
+            eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ).mask
+        ),
         eyeliner_change,
         eyeliner_area.BLUR_SIGMA,
     ),
@@ -125,7 +144,7 @@ PARTS = (
         blush_area.BEFORE_WINDOW_MS,
         blush_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side: blush_area.find_blush_area(r, s, e, load, side).mask,
+        lambda r, s, e, load, side, occ: blush_area.find_blush_area(r, s, e, load, side, occ).mask,
         blush_reddening,
         blush_area.BLUR_SIGMA,
     ),
@@ -136,7 +155,7 @@ PARTS = (
         LIP_BEFORE_MS,
         lip_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side: lip_area.find_lip_area(r, e, load).mask,
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ).mask,
         lip_change,
     ),
 )
@@ -273,11 +292,12 @@ def measure_step(
     """한 단계를 쪽마다 잰다. find는 쪽을 받아 부위 코드가 찾은 영역(못 찾으면 None)을 낸다.
 
     쪽마다 직전 지도와 바깥 띠를 먼저 만들고, 시각 순서로 지도를 만들어 두 쪽을 같이 잰다.
+    직전이나 그 시각 사진 모두에서 가려진 칸(모름 칸)은 영역 안·바깥 띠 평균에서 뺀다.
     """
     final_ms = end_ms + part.after_ms
     times = time_points(start_ms, end_ms, part.after_ms)
     rows: dict[RegionName, dict] = {}
-    ready: dict[RegionName, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+    ready: dict[RegionName, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
     for side in part.sides:
         rows[side] = {"part": part.name, "side": side}
         area = find(side)
@@ -288,7 +308,7 @@ def measure_step(
             rows[side] |= {"found": True, "reason": "noBeforePhoto"}
         else:
             ring = ring_around(area, not_skin(), ring_gap(part))
-            ready[side] = (load_map(before_rows), area, ring)
+            ready[side] = (*load_map(before_rows), area, ring)
             rows[side] |= {
                 "found": True,
                 "areaCells": int(area.sum()),
@@ -298,20 +318,23 @@ def measure_step(
 
     points: dict[RegionName, list[dict]] = {side: [] for side in ready}
     for t in times:
-        for side, (before, area, ring) in ready.items():
+        for side, (before, before_unknown, area, ring) in ready.items():
             photos = usable_rows(result, t - part.after_ms, t, part.regions(side))
             if not photos:
                 points[side].append({"ms": t, "inside": None, "outside": None})
                 continue
-            change = part.change(before, load_map(photos))
+            after, after_unknown = load_map(photos)
+            unknown = before_unknown | after_unknown
+            change = part.change(before, after, unknown)
+            inside, outside = known_cells(area, unknown), known_cells(ring, unknown)
             if t == final_ms:
-                share = strong_share(change, area)
+                share = strong_share(change, inside)
                 rows[side]["strongShare"] = None if share is None else round(share, 3)
             points[side].append(
                 {
                     "ms": t,
-                    "inside": float(change[area].mean()),
-                    "outside": float(change[ring].mean()) if ring.any() else None,
+                    "inside": float(change[inside].mean()) if inside.any() else None,
+                    "outside": float(change[outside].mean()) if outside.any() else None,
                 }
             )
 
@@ -329,11 +352,12 @@ def measure_step(
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("사용법: uv run python tools/timing_metric.py <샘플 폴더>")
+    args, occlusion_name = split_occlusion(sys.argv[1:])
+    if len(args) != 1:
+        print(f"사용법: uv run python tools/timing_metric.py <샘플 폴더> {USAGE}")
         sys.exit(1)
 
-    folder = Path(sys.argv[1])
+    folder = Path(args[0])
     checked_path = folder / CHECKED_FILE
     if not checked_path.is_file():
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
@@ -343,19 +367,25 @@ def main() -> None:
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     rows_by_index = {row.frame_index: row for row in result.frames}
+    occlusion = table_finder(folder, occlusion_name)
 
     def load_photo(row: FrameLandmarks) -> np.ndarray:
         return read_frame_rgb(reference, frames[row.frame_index])
 
     @lru_cache(maxsize=MAP_CACHE)
-    def flat(index: int) -> np.ndarray:
-        return flatten(load_photo(rows_by_index[index]), rows_by_index[index].face)
+    def flat(index: int) -> tuple[np.ndarray, np.ndarray | None]:
+        row = rows_by_index[index]
+        photo = load_photo(row)
+        covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
+        return flatten(photo, row.face), covered
 
     @lru_cache(maxsize=4)
-    def median_of(indices: tuple[int, ...]) -> np.ndarray:
-        return median_map([flat(index) for index in indices])
+    def median_of(indices: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]:
+        flats = [flat(index) for index in indices]
+        covered = None if occlusion is None else [mask for _, mask in flats]
+        return known_median_map([face_map for face_map, _ in flats], covered)
 
-    def load_map(rows: Sequence[FrameLandmarks]) -> np.ndarray:
+    def load_map(rows: Sequence[FrameLandmarks]) -> tuple[np.ndarray, np.ndarray]:
         return median_of(tuple(row.frame_index for row in rows))
 
     out = []
@@ -366,7 +396,7 @@ def main() -> None:
             start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
 
             def find(side: RegionName, part=part, start=start, end=end) -> np.ndarray | None:
-                return part.find(result, start, end, load_photo, side)
+                return part.find(result, start, end, load_photo, side, occlusion)
 
             for row in measure_step(part, result, start, end, load_map, find):
                 record = {"stepId": step.step_id, **row}
@@ -379,8 +409,8 @@ def main() -> None:
                     f"  {record.get('reason') or ''}"
                 )
 
-    path = folder / OUTPUT_FILE
-    path.parent.mkdir(exist_ok=True)
+    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {

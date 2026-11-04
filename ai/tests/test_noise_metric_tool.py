@@ -108,6 +108,53 @@ def test_lip_redness_matches_the_service_before_the_threshold():
     assert np.array_equal(cells & (redness > lip_area.REDNESS_MIN), lip_area.lip_area_on_map(after))
 
 
+@pytest.mark.parametrize(
+    ("measure", "side"),
+    [
+        (noise_metric.measure_brow, "leftBrow"),
+        (noise_metric.measure_eyeshadow, "leftEye"),
+        (noise_metric.measure_eyeliner, "leftEye"),
+        (noise_metric.measure_blush, "leftCheek"),
+        (noise_metric.measure_lip, "lipsOuter"),
+    ],
+)
+def test_pair_whose_range_is_hidden_in_every_photo_is_skipped(measure, side):
+    hidden = np.ones((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    assert measure(skin_map(), skin_map(), side, hidden) is None
+
+
+def test_blush_reddening_with_hidden_cells_matches_the_service():
+    cheek = blush_area.cheek_range("leftCheek")
+    before = skin_map()
+    after = with_red(before, cheek, 12)
+    hidden = np.zeros_like(cheek)
+    hidden[: int(np.nonzero(cheek.any(axis=1))[0].mean())] = True
+
+    tool_area = (cheek & ~hidden) & (
+        noise_metric.blush_reddening(before, after, hidden) > blush_area.REDDENING_MIN
+    )
+
+    assert tool_area.any()
+    assert np.array_equal(
+        tool_area, blush_area.blush_area_on_maps(before, after, "leftCheek", hidden)
+    )
+
+
+def test_lip_redness_with_hidden_cells_matches_the_service():
+    lips = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
+    after = with_red(skin_map(), lips, 30)
+    hidden = np.zeros_like(lips)
+    hidden[:, : MAP_SIZE // 2] = True
+
+    redness, cells = noise_metric.lip_redness(after, hidden)
+
+    assert not (cells & hidden).any()
+    assert np.array_equal(
+        cells & (redness > lip_area.REDNESS_MIN), lip_area.lip_area_on_map(after, hidden)
+    )
+
+
 def test_parts_use_each_service_threshold():
     by_name = {part.name: part for part in noise_metric.PARTS}
 

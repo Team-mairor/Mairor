@@ -1,9 +1,15 @@
+import inspect
+
+import numpy as np
 from PIL import Image
 
 from app.clients.frames import frame_file_name
 from app.schemas.guide import GuideInput
 from app.schemas.guide_job import ReferenceFrames
+from app.tasks.area import reference_area
+from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.reference_area import build_reference_area, reference_manifest
+from tests.test_area_preparation import make_row
 
 GUIDE_INPUT = GuideInput.model_validate(
     {
@@ -88,3 +94,34 @@ def test_area_counts_frames_and_steps_and_skips_missing_files(tmp_path):
     assert counts == {"landmarks": 2, "area": 2}
     assert [step.step_id for step in area.steps] == ["s1", "s2"]
     assert [step.sub_steps[0].status for step in area.steps] == ["template", "notApplicable"]
+
+
+def test_area_removes_occluded_cells_with_the_occlusion_model():
+    default = inspect.signature(build_reference_area).parameters["occlusion"].default
+
+    assert default is find_occlusion
+
+
+def test_same_photo_goes_to_the_occlusion_model_once_per_job(monkeypatch, tmp_path):
+    """좌우 짝 부위가 같은 사진을 두 번 보내도 가림 찾기는 사진마다 한 번만 돈다."""
+    seen = {}
+    calls = []
+    real_build = reference_area.build_guide_area
+
+    def build(*args, **kwargs):
+        seen.update(kwargs)
+        return real_build(*args, **kwargs)
+
+    def finds_nothing(row, photo):
+        calls.append(row.frame_index)
+        return np.zeros(photo.shape[:2], dtype=bool)
+
+    monkeypatch.setattr(reference_area, "build_guide_area", build)
+    build_reference_area(
+        GUIDE_INPUT, frames(1), tmp_path, finder=lambda rgb: [], occlusion=finds_nothing
+    )
+    photo = np.zeros((600, 800, 3), dtype=np.uint8)
+    for row in (make_row(1000), make_row(1000), make_row(2000)):
+        seen["occlusion"](row, photo)
+
+    assert calls == [1000, 2000]

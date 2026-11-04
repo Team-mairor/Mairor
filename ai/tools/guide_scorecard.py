@@ -1,6 +1,7 @@
 """지표 도구 네 개의 결과를 합격선과 견줘 부위·단계·쪽마다 합격 여부를 낸다(개발용).
 
-결과는 output/scorecard.json에 둔다.
+결과는 output/scorecard.json에 둔다. --occlusion <이름>을 주면 같은 이름으로 가린 칸을 빼고 잰
+지표 결과(output/occlusion/<이름>/)를 읽어 그 폴더에 둔다(tools/occlusion_tables.py).
 
 output/noise.json, stability.json, boundary.json, timing.json을 읽으므로 먼저 tools/noise_metric.py,
 stability_metric.py, boundary_metric.py, timing_metric.py를 실행해 둔다.
@@ -9,7 +10,8 @@ stability_metric.py, boundary_metric.py, timing_metric.py를 실행해 둔다.
 서비스 그대로의 창에서 영역을 못 찾은 쪽은 notFound로 따로 센다.
 진한 칸 비율은 아이라인에 쓰지 않는다. 아이라인 색 값은 바뀜/안 바뀜 두 값이라 늘 1에 가깝다.
 지표마다 선까지의 배수(gap)도 낸다. 1 이하면 합격 쪽이고 클수록 선에서 멀다.
-실행 (ai/ 폴더에서): uv run python tools/guide_scorecard.py samples/local_03_seq
+실행 (ai/ 폴더에서):
+uv run python tools/guide_scorecard.py samples/local_03_seq [--occlusion <이름>]
 """
 
 import json
@@ -18,9 +20,13 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-OUTPUT_DIR = Path("output")
+AI_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(AI_ROOT))
+
+from tools.occlusion_tables import USAGE, output_dir, split_occlusion
+
 INPUT_FILES = ("noise.json", "stability.json", "boundary.json", "timing.json")
-OUTPUT_FILE = OUTPUT_DIR / "scorecard.json"
+OUTPUT_FILE = "scorecard.json"
 PARTS = ("brow", "eyeshadow", "eyeliner", "blush", "lip")
 
 StepKey = tuple[str, str, str]
@@ -163,20 +169,18 @@ def describe(checks: Sequence[dict]) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("사용법: uv run python tools/guide_scorecard.py <샘플 폴더>")
+    args, occlusion_name = split_occlusion(sys.argv[1:])
+    if len(args) != 1:
+        print(f"사용법: uv run python tools/guide_scorecard.py <샘플 폴더> {USAGE}")
         sys.exit(1)
 
-    folder = Path(sys.argv[1])
-    missing = [name for name in INPUT_FILES if not (folder / OUTPUT_DIR / name).is_file()]
+    folder = output_dir(Path(args[0]), occlusion_name)
+    missing = [name for name in INPUT_FILES if not (folder / name).is_file()]
     if missing:
-        print(f"{', '.join(missing)}가 없습니다. 먼저 지표 도구를 실행하세요.")
+        print(f"{folder}에 {', '.join(missing)}가 없습니다. 먼저 지표 도구를 실행하세요.")
         sys.exit(1)
 
-    docs = {
-        name: json.loads((folder / OUTPUT_DIR / name).read_text(encoding="utf-8"))
-        for name in INPUT_FILES
-    }
+    docs = {name: json.loads((folder / name).read_text(encoding="utf-8")) for name in INPUT_FILES}
     result = score(docs)
     for row in result["noise"]:
         status = "합격" if row["passed"] else "불합격"
