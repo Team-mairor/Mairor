@@ -155,6 +155,31 @@ class ProductSearchServiceTest {
   }
 
   @Test
+  void ignoresWhitespaceWhenTheExactNameDoesNotMatch() {
+    assertThat(searchTint(BRAND, "WaterGelTint"))
+        .extracting(ProductResponse::productId)
+        .containsExactly(tint.getId().toString());
+  }
+
+  @Test
+  void exactMatchWinsWhenAnotherProductHasTheSameCompactName() {
+    em.persist(new Product(em.getReference(ProductType.class, "LIP_TINT"), BRAND, "WaterGelTint"));
+    em.flush();
+
+    assertThat(searchTint(BRAND, NAME))
+        .extracting(ProductResponse::productId)
+        .containsExactly(tint.getId().toString());
+  }
+
+  @Test
+  void ambiguousCompactMatchesReturnNoProducts() {
+    em.persist(new Product(em.getReference(ProductType.class, "LIP_TINT"), BRAND, "WaterGelTint"));
+    em.flush();
+
+    assertThat(searchTint(BRAND, "Water GelTint")).isEmpty();
+  }
+
+  @Test
   void nothingMatchesUnlessTypeBrandAndNameAreAllTheSame() {
     assertThat(searchTint(BRAND, "Other Tint")).isEmpty();
     assertThat(searchTint("Other Brand", NAME)).isEmpty();
@@ -333,11 +358,11 @@ class ProductSearchServiceTest {
   }
 
   @Test
-  void searchWithoutAMatchRunsTwoQueries() {
+  void searchWithoutAMatchRunsThreeQueries() {
     long queries =
         countQueries(() -> searchTint(BRAND, "Other Tint"), items -> assertThat(items).isEmpty());
 
-    assertThat(queries).isEqualTo(2);
+    assertThat(queries).isEqualTo(3);
   }
 
   @Test

@@ -61,6 +61,7 @@ class ProductsSchemaSqlTest {
             "name",
             "brand_normalized",
             "name_normalized",
+            "name_compact",
             "category_code",
             "type_code",
             "source",

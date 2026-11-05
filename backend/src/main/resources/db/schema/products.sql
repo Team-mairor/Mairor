@@ -53,6 +53,7 @@ CREATE TABLE products (
     name              varchar(200)                NOT NULL,
     brand_normalized  varchar(200)                NOT NULL,
     name_normalized   varchar(400)                NOT NULL,
+    name_compact      varchar(400) GENERATED ALWAYS AS (replace(name_normalized, ' ', '')) STORED,
     category_code     varchar(20)                 NOT NULL,
     type_code         varchar(40)                 NOT NULL,
     source            varchar(100),
@@ -72,6 +73,7 @@ CREATE TABLE products (
 -- 같은 출처의 같은 상품 번호는 한 제품이다 (재수집이 같은 제품을 찾는 키). 직접 넣은 데이터(source NULL)는 제외한다.
 -- 부분 유니크 인덱스는 JPA 로 표현할 수 없어 SQL 에만 있다.
 CREATE UNIQUE INDEX uk_products_source_product ON products (source, source_product_id) WHERE source IS NOT NULL;
+CREATE INDEX idx_products_type_brand_name_compact ON products (type_code, brand_normalized, name_compact);
 
 -- 호수. 정렬은 sort_order, name_normalized 순이다 (제품 안에서 name_normalized 가 유니크라 순서가 하나로 정해진다).
 -- 색상 세 컬럼은 모두 NULL(색상 없음)이거나 모두 값이 있어야 하고, HEX 는 #RRGGBB 대문자만 허용한다.

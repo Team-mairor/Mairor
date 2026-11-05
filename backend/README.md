@@ -299,6 +299,8 @@ Google 계정으로 로그인·가입한다(S15P31A306-208). 로그인 시작과
 
 ## DB 스키마
 
+S15P31A306-326: 기존 DB에는 배포 전에 `psql -f db/upgrade/326-product-name-compact.sql`을 적용한다. `products.name_compact`는 `name_normalized`에서 공백을 제거해 DB가 자동 계산하는 파생 검색 키다. 생성 컬럼이므로 구버전 앱과 기존 샘플 SQL의 제품명 입력·수정에도 값이 자동 반영된다. 이 변경은 기존 제품 행의 파생 키 보강만 하며 제품 레코드 추가, 시드, 수집은 포함하지 않는다.
+
 dev 는 `ddl-auto=update` 라 Hibernate 가 테이블을 만들지만, **운영(prod)은 `ddl-auto=validate`** 라 테이블이 먼저 있어야 앱이 기동한다. 없으면 `missing table [users]` 로 실패한다.
 
 Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로 둔다.

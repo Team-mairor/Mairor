@@ -68,10 +68,18 @@ public class ProductSearchService {
    */
   public List<ProductResponse> search(ProductSearchQuery query) {
     requireTypeInCategory(query.category(), query.type());
-    return productRepository
-        .findExact(query.type(), query.brand(), query.name())
-        .map(product -> List.of(toResponse(product)))
-        .orElse(List.of());
+    Optional<Product> exact =
+        productRepository.findExact(query.type(), query.brand(), query.name());
+    if (exact.isPresent()) {
+      return List.of(toResponse(exact.get()));
+    }
+
+    List<Product> compactMatches =
+        productRepository.findCompact(query.type(), query.brand(), query.name());
+    if (compactMatches.size() != 1) {
+      return List.of();
+    }
+    return List.of(toResponse(compactMatches.get(0)));
   }
 
   /**

@@ -2,6 +2,7 @@ package com.mairor.backend.products.repository;
 
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.support.CatalogTextNormalizer;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -28,4 +29,14 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   @EntityGraph(attributePaths = {"category", "type"})
   Optional<Product> findByTypeCodeAndBrandNormalizedAndNameNormalized(
       String typeCode, String brandNormalized, String nameNormalized);
+
+  /** 제품명 공백을 무시한 후보를 모두 찾는다. 다중 결과는 호출부에서 모호한 검색으로 처리한다. */
+  @EntityGraph(attributePaths = {"category", "type"})
+  List<Product> findAllByTypeCodeAndBrandNormalizedAndNameCompact(
+      String typeCode, String brandNormalized, String nameCompact);
+
+  default List<Product> findCompact(String typeCode, String brand, String name) {
+    return findAllByTypeCodeAndBrandNormalizedAndNameCompact(
+        typeCode, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.compact(name));
+  }
 }

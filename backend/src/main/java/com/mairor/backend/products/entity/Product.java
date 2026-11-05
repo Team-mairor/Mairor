@@ -77,6 +77,14 @@ public class Product {
   @Column(name = "name_normalized", nullable = false, length = NAME_MAX_LENGTH * 2)
   private String nameNormalized;
 
+  /** 공백을 무시한 제품명 비교 키. DB generated column이 name_normalized에서 계산한다. */
+  @Column(
+      name = "name_compact",
+      insertable = false,
+      updatable = false,
+      length = NAME_MAX_LENGTH * 2)
+  private String nameCompact;
+
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(
       name = "category_code",
@@ -221,6 +229,10 @@ public class Product {
 
   public String getNameNormalized() {
     return nameNormalized;
+  }
+
+  public String getNameCompact() {
+    return nameCompact;
   }
 
   public ProductCategory getCategory() {

@@ -39,6 +39,11 @@ public final class CatalogTextNormalizer {
     return collapsed.toLowerCase(Locale.ROOT);
   }
 
+  /** 이름 비교용 키. 기존 정규화 결과에서 공백을 모두 제거한다. */
+  public static String compact(String text) {
+    return normalize(text).replace(" ", "");
+  }
+
   /**
    * 앞뒤의 유니코드 공백만 지운 원문. 입력 검증에서 빈 값 판정과 길이 검사에 쓴다.
    *
