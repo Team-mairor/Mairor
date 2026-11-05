@@ -33,6 +33,7 @@ class Extraction:
     sale_status: SaleStatus | None = None
     raw: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    sole_variant: RawShade | None = None
 
 
 def sale_status_of(shades: list[RawShade]) -> SaleStatus | None:

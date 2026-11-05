@@ -172,7 +172,7 @@ def test_cafe24_page_becomes_a_product_without_any_colors() -> None:
     assert [s.sort_order for s in product.shades] == [0, 1]
     assert all(s.color_status is ColorStatus.NOT_FOUND and s.colors == [] for s in product.shades)
     assert raw["method"] == "generic.chips"
-    assert raw["shadeImages"] == {"01 쥬시": "//s.example/c1.jpg", "02 레드": "//s.example/c2.jpg"}
+    assert [link["option_id"] for link in raw["links"]] == ["01 쥬시", "02 레드"]
     assert product.to_wire()["shades"][0]["variantHints"] is None
 
 

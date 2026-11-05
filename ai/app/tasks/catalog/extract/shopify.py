@@ -68,7 +68,16 @@ def parse_shopify_product(text: str) -> Extraction | None:
     shades: list[RawShade] = []
     for variant in variants:
         title = clean_text(variant.get("title"))
-        if title is None or (len(variants) == 1 and title.lower() == DEFAULT_TITLE):
+        if len(variants) == 1 and (title is None or title.lower() == DEFAULT_TITLE):
+            available = variant.get("available")
+            result.sole_variant = RawShade(
+                option_id=str(variant.get("id")),
+                name=result.name or "",
+                image_url=_image_of(variant, images),
+                sold_out=None if available is None else not available,
+            )
+            continue
+        if title is None:
             continue
         values = [clean_text(variant.get(f"option{n}")) for n in (1, 2, 3)]
         attributes = {

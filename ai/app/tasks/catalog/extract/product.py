@@ -5,7 +5,7 @@
 상품 이름은 사이트가 보여 주는 원문 그대로 두고, 호수가 하나도 없으면 warnings에 NO_SHADES를 남긴다.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from html.parser import HTMLParser
 from typing import Any
@@ -18,11 +18,12 @@ from app.tasks.catalog.contract import (
 )
 from app.tasks.catalog.discover.registry import BrandSite, Platform
 from app.tasks.catalog.extract.generic import parse_generic_options
-from app.tasks.catalog.extract.model import Extraction, RawShade, clean_text
+from app.tasks.catalog.extract.model import MAX_SHADE_NAME, Extraction, RawShade, clean_text
 from app.tasks.catalog.extract.schema_org import parse_schema_org
 from app.tasks.catalog.extract.shopify import parse_shopify_product
 from app.tasks.catalog.extract.woocommerce import parse_woocommerce_variations
 from app.tasks.catalog.find.urls import product_id
+from app.tasks.catalog.link.shade_link import link_shades
 
 
 class ExtractError(Exception):
@@ -97,6 +98,7 @@ def extract_shades(
         if parsed is not None:
             attempts.append(parsed)
     chosen = next((a for a in attempts if a.shades), None)
+    chosen = chosen or next((a for a in attempts if a.sole_variant), None)
     return chosen or Extraction(method="none"), attempts
 
 
@@ -142,7 +144,12 @@ def build_product(
     if name is None:
         raise ExtractError("NO_PRODUCT_NAME", "상품 이름을 찾지 못했다")
     warnings = [w for a in attempts for w in a.warnings]
-    if not chosen.shades:
+    raw_shades = list(chosen.shades)
+    sole = chosen.sole_variant
+    if not raw_shades and sole is not None and len(name) <= MAX_SHADE_NAME:
+        raw_shades = [replace(sole, name=name)]
+        warnings.append("SINGLE_SHADE")
+    elif not raw_shades:
         warnings.append("NO_SHADES")
     shades = [
         Shade(
@@ -153,10 +160,17 @@ def build_product(
             color_status=ColorStatus.NOT_FOUND,
             variant_hints=_hints(raw),
         )
-        for index, raw in enumerate(chosen.shades)
+        for index, raw in enumerate(raw_shades)
     ]
     sale_status = next((a.sale_status for a in [chosen, *attempts] if a.sale_status), None)
     image_url = next((i for i in (chosen.image_url, meta.og_image) if i), None)
+    links = link_shades(
+        raw_shades,
+        chosen.method,
+        product_image=image_url,
+        page_url=url,
+        single_known=sole is not None and not chosen.shades,
+    )
     product = CollectedProduct(
         item_key=item_key,
         source=site.source,
@@ -175,7 +189,7 @@ def build_product(
         "method": chosen.method,
         "tried": [a.method for a in attempts],
         "pageTitle": meta.title,
-        "shadeImages": {s.option_id: s.image_url for s in chosen.shades if s.image_url},
+        "links": [link.model_dump(mode="json") for link in links],
         **chosen.raw,
     }
     return product, raw
