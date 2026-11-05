@@ -1,0 +1,90 @@
+"""받은 응답을 글자로 바꾸고 링크를 뽑는다. EUC-KR 같은 한국 쇼핑몰 인코딩을 다룬다."""
+
+import re
+from dataclasses import dataclass
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlsplit
+
+import httpx2
+
+CHARSET_IN_HEADER = re.compile(r"charset=([\w-]+)", re.IGNORECASE)
+CHARSET_IN_META = re.compile(rb"""<meta[^>]+charset=["']?\s*([\w-]+)""", re.IGNORECASE)
+FALLBACK_ENCODINGS = ("utf-8", "cp949", "euc-kr")
+MAX_HTML_BYTES = 3_000_000
+
+
+def decode_html(response: httpx2.Response) -> str:
+    """헤더의 charset, 없으면 meta의 charset, 없으면 UTF-8, 깨지면 cp949 순서로 읽는다."""
+    content = response.content[:MAX_HTML_BYTES]
+    declared = CHARSET_IN_HEADER.search(response.headers.get("content-type", ""))
+    if declared is None:
+        declared = CHARSET_IN_META.search(content[:4096])
+        label = declared.group(1).decode("ascii", "ignore") if declared else None
+    else:
+        label = declared.group(1)
+    for encoding in (label, *FALLBACK_ENCODINGS):
+        if not encoding:
+            continue
+        try:
+            return content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return content.decode("utf-8", errors="replace")
+
+
+@dataclass(frozen=True)
+class Link:
+    url: str
+    text: str
+
+
+class _Anchors(HTMLParser):
+    def __init__(self, base_url: str) -> None:
+        super().__init__(convert_charrefs=True)
+        self._base = base_url
+        self.links: list[Link] = []
+        self._href: str | None = None
+        self._parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "a":
+            return
+        self._flush()
+        values = dict(attrs)
+        href = values.get("href")
+        if href and not href.startswith(("#", "javascript:", "mailto:", "tel:")):
+            self._href = urljoin(self._base, href.strip())
+            self._parts = [values.get("title") or ""]
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a":
+            self._flush()
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._parts.append(data)
+
+    def close(self) -> None:
+        self._flush()
+        super().close()
+
+    def _flush(self) -> None:
+        if self._href is not None:
+            text = " ".join(" ".join(self._parts).split())
+            self.links.append(Link(self._href, text))
+        self._href = None
+        self._parts = []
+
+
+def extract_links(html: str, base_url: str) -> list[Link]:
+    """a 태그의 주소와 글자. 같은 사이트의 http(s) 링크만 돌려준다."""
+    parser = _Anchors(base_url)
+    parser.feed(html)
+    parser.close()
+    host = urlsplit(base_url).netloc.lower()
+    return [
+        link
+        for link in parser.links
+        if urlsplit(link.url).scheme in ("http", "https")
+        and urlsplit(link.url).netloc.lower() == host
+    ]

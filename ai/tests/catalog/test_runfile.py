@@ -202,3 +202,16 @@ def test_cleanup_removes_only_old_run_files(tmp_path: Path) -> None:
 
 def test_cleanup_of_a_missing_folder_does_nothing(tmp_path: Path) -> None:
     assert cleanup_old_files(tmp_path / "none", keep_days=30) == []
+
+
+def test_cleanup_also_removes_old_checkpoint_files(tmp_path: Path) -> None:
+    now = time.time()
+    old = tmp_path / "20261001-000000-old.checkpoint.json"
+    fresh = tmp_path / "20261104-000000-fresh.checkpoint.json"
+    for path in (old, fresh):
+        path.write_text("{}", encoding="utf-8")
+    stale = now - 31 * 86400
+    os.utime(old, (stale, stale))
+
+    assert cleanup_old_files(tmp_path, keep_days=30, now=now) == [old]
+    assert fresh.exists()

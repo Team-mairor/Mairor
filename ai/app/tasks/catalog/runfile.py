@@ -20,6 +20,7 @@ from app.tasks.catalog.contract import RunHeader, RunItem
 FILE_SUFFIX = ".jsonl"
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$")
 FILE_PATTERN = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9][A-Za-z0-9._-]{0,59}\.jsonl$")
+CHECKPOINT_PATTERN = re.compile(r"^\d{8}-\d{6}-[A-Za-z0-9][A-Za-z0-9._-]{0,59}\.checkpoint\.json$")
 ITEM_KEY_WIDTH = 6
 
 
@@ -147,14 +148,15 @@ def read_run_file(path: Path) -> tuple[RunHeader, Iterator[RunItem]]:
 def cleanup_old_files(directory: Path, *, keep_days: int, now: float | None = None) -> list[Path]:
     """수정한 지 keep_days일이 지난 실행 결과 파일을 지우고 지운 파일을 돌려준다.
 
-    이름 형식이 맞는 파일만 대상이라 폴더에 있는 다른 파일은 건드리지 않는다.
+    이름 형식이 맞는 파일(체크포인트 포함)만 대상이라 폴더에 있는 다른 파일은 건드리지 않는다.
     """
     if not directory.is_dir():
         return []
     limit = (time.time() if now is None else now) - keep_days * 86400
     removed: list[Path] = []
     for path in sorted(directory.iterdir()):
-        if path.is_file() and FILE_PATTERN.fullmatch(path.name) and path.stat().st_mtime < limit:
+        matches = FILE_PATTERN.fullmatch(path.name) or CHECKPOINT_PATTERN.fullmatch(path.name)
+        if path.is_file() and matches and path.stat().st_mtime < limit:
             path.unlink()
             removed.append(path)
     return removed
