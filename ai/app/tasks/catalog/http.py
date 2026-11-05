@@ -172,6 +172,10 @@ class PoliteClient:
         )
 
     @property
+    def config(self) -> HttpConfig:
+        return self._config
+
+    @property
     def blocked_hosts(self) -> dict[str, str]:
         return {host: state.blocked for host, state in self._hosts.items() if state.blocked}
 
@@ -192,6 +196,36 @@ class PoliteClient:
                 continue
             return response
         raise HttpError(_host_of(url), "리다이렉트가 너무 많다")
+
+    async def run_guarded(
+        self, url: str, fetch: Callable[[], Awaitable[httpx2.Response]]
+    ) -> httpx2.Response:
+        """다른 수단(브라우저)으로 받을 때도 같은 규칙을 지킨다.
+
+        robots.txt, 호스트별 간격과 동시 1건, 차단 응답 감지를 적용한 뒤 fetch를 한 번만 부른다.
+        재시도하지 않고 리다이렉트도 따라가지 않는다. 비용이 큰 요청이라서다.
+        """
+        host = _host_of(url)
+        state = self._state(host)
+        async with state.lock:
+            if state.blocked:
+                raise BlockedError(host, state.blocked)
+            if host not in self._config.robots_exempt_hosts:
+                await self._ensure_robots(url, host, state)
+                if state.robots is not None and not state.robots.can_fetch(PRODUCT_TOKEN, url):
+                    raise RobotsDisallowedError(host, url)
+            await self._pace(state)
+            try:
+                response = await fetch()
+            except (httpx2.TimeoutException, httpx2.TransportError, TimeoutError) as error:
+                state.last_finished = self._monotonic()
+                raise HttpError(host, f"요청 실패({type(error).__name__})") from error
+            state.last_finished = self._monotonic()
+            reason = detect_block(response)
+            if reason:
+                state.blocked = reason
+                raise BlockedError(host, reason)
+            return response
 
     async def aclose(self) -> None:
         await self._client.aclose()

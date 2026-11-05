@@ -1,12 +1,13 @@
-"""화장품 수집기 명령줄. 지금은 사이트 목록 보기, 상품 주소 찾기, 상품 목록 모으기까지다.
+"""화장품 수집기 명령줄. 사이트 목록, 상품 주소 찾기, 상품 목록 모으기, 상품 한 건 수집이다.
 
-호수·색 추출은 이어지는 단계에서 붙는다. 운영 수집은 목록에서 켜진(enabled) 사이트에만 한다.
+색 추출은 이어지는 단계에서 붙는다. 운영 수집은 목록에서 켜진(enabled) 사이트에만 한다.
 켜지지 않은 사이트는 구조를 확인하는 소량 요청에 한해 --allow-disabled 로만 접근한다.
 
     uv run python tools/collect_catalog.py sites
     uv run python tools/collect_catalog.py find --brand 롬앤 --name "쥬시 틴트" --allow-disabled
     uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --allow-disabled
     uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --resume
+    uv run python tools/collect_catalog.py product --brand 롬앤 --url https://... --render
 """
 
 import argparse
@@ -27,10 +28,13 @@ from app.tasks.catalog.discover.registry import (  # noqa: E402
     SiteRegistry,
     load_registry,
 )
+from app.tasks.catalog.extract.collect import collect_product  # noqa: E402
+from app.tasks.catalog.extract.product import ExtractError  # noqa: E402
 from app.tasks.catalog.find.category import crawl_categories  # noqa: E402
 from app.tasks.catalog.find.finder import FindStatus, find_product, resolve_platform  # noqa: E402
 from app.tasks.catalog.find.urls import Candidate, is_supported  # noqa: E402
 from app.tasks.catalog.http import HttpConfig, HttpFailure, PoliteClient  # noqa: E402
+from app.tasks.catalog.render.browser import PlaywrightRenderer, Renderer  # noqa: E402
 
 EXIT_OK = 0
 EXIT_NOT_FOUND = 1
@@ -48,6 +52,16 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument("--brand", required=True)
     find.add_argument("--name", required=True, help="제품 이름")
     find.add_argument(
+        "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
+    )
+
+    product = commands.add_parser("product", help="상품 상세 주소 하나를 수집해 JSON으로 보기")
+    product.add_argument("--brand", required=True)
+    product.add_argument("--url", required=True, help="상품 상세 주소")
+    product.add_argument(
+        "--render", action="store_true", help="정적 HTML에 호수가 없으면 브라우저로 그려서 다시"
+    )
+    product.add_argument(
         "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
     )
 
@@ -100,6 +114,25 @@ async def run_find(client: PoliteClient, site: BrandSite, name: str) -> int:
     for alternative in result.alternatives:
         print(f"후보\t{alternative.product_id}\t{alternative.url}\t{alternative.title}")
     return EXIT_NOT_FOUND
+
+
+async def run_product(
+    client: PoliteClient, site: BrandSite, url: str, renderer: Renderer | None
+) -> int:
+    platform = await resolve_platform(client, site)
+    try:
+        product, raw = await collect_product(
+            client, site, platform, url, item_key="000001", renderer=renderer
+        )
+    except ExtractError as error:
+        print(f"{error.code}: {error}", file=sys.stderr)
+        return EXIT_NOT_FOUND
+    print(
+        json.dumps(
+            {"collected": product.to_wire(), "raw": raw}, ensure_ascii=False, indent=2, default=str
+        )
+    )
+    return EXIT_OK
 
 
 async def run_list(
@@ -155,13 +188,20 @@ async def run_list(
     return EXIT_OK if not failed else EXIT_NOT_FOUND
 
 
-async def _run(args: argparse.Namespace, registry: SiteRegistry, client: PoliteClient) -> int:
+async def _run(
+    args: argparse.Namespace,
+    registry: SiteRegistry,
+    client: PoliteClient,
+    renderer: Renderer | None,
+) -> int:
     site = _site_for(registry, args.brand, args.allow_disabled)
     if site is None:
         return EXIT_USAGE
     try:
         if args.command == "find":
             return await run_find(client, site, args.name)
+        if args.command == "product":
+            return await run_product(client, site, args.url, renderer)
         return await run_list(
             client,
             site,
@@ -183,6 +223,7 @@ def main(
     *,
     registry: SiteRegistry | None = None,
     client: PoliteClient | None = None,
+    renderer: Renderer | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -195,9 +236,14 @@ def main(
 
     async def go() -> int:
         owned = client or PoliteClient(HttpConfig.from_settings(get_settings()))
+        browser = renderer
+        if browser is None and getattr(args, "render", False):
+            browser = PlaywrightRenderer(owned)
         try:
-            return await _run(args, loaded, owned)
+            return await _run(args, loaded, owned, browser)
         finally:
+            if browser is not None and renderer is None:
+                await browser.close()
             if client is None:
                 await owned.aclose()
 

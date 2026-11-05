@@ -10,6 +10,7 @@ from app.tasks.catalog.extract.product import ExtractError, build_product
 from app.tasks.catalog.find.urls import product_id
 from app.tasks.catalog.html import decode_html
 from app.tasks.catalog.http import HttpError, HttpFailure, PoliteClient, RobotsDisallowedError
+from app.tasks.catalog.render.browser import Renderer
 
 
 async def _shopify_json(client: PoliteClient, url: str, handle: str) -> str | None:
@@ -30,6 +31,7 @@ async def collect_product(
     *,
     item_key: str,
     now: datetime | None = None,
+    renderer: Renderer | None = None,
 ) -> tuple[CollectedProduct, dict[str, Any]]:
     """페이지를 받아 상품을 만든다. 차단·robots 거부는 그대로 올린다."""
     source_id = product_id(platform, url)
@@ -41,12 +43,27 @@ async def collect_product(
     product_json = None
     if platform is Platform.SHOPIFY:
         product_json = await _shopify_json(client, url, source_id)
-    return build_product(
-        site,
-        platform,
-        url,
-        decode_html(response),
-        item_key=item_key,
-        now=now or datetime.now(UTC),
-        product_json=product_json,
-    )
+    moment = now or datetime.now(UTC)
+    html = decode_html(response)
+
+    def build(source_html: str) -> tuple[CollectedProduct, dict[str, Any]]:
+        return build_product(
+            site,
+            platform,
+            url,
+            source_html,
+            item_key=item_key,
+            now=moment,
+            product_json=product_json,
+        )
+
+    product, raw = build(html)
+    if product.shades or renderer is None:
+        return product, raw
+    rendered = await renderer.render(url)
+    if rendered.status_code != 200:
+        return product, raw
+    product, raw = build(decode_html(rendered))
+    product.warnings.append("RENDERED")
+    raw["rendered"] = True
+    return product, raw
