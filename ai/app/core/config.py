@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     catalog_retry_base_delay_seconds: float = Field(default=1, ge=0)
     catalog_max_interval_seconds: float = Field(default=30, gt=0)
     catalog_robots_exempt_hosts: frozenset[str] = frozenset()
+    catalog_llm_model: str = "claude-sonnet-4-6"
+    catalog_llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
 
     tracing_endpoint: str | None = None
     tracing_project: str = "ai-guide"

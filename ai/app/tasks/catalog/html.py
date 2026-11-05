@@ -88,3 +88,32 @@ def extract_links(html: str, base_url: str) -> list[Link]:
         if urlsplit(link.url).scheme in ("http", "https")
         and urlsplit(link.url).netloc.lower() == host
     ]
+
+
+class _Text(HTMLParser):
+    SKIPPED = frozenset({"script", "style", "noscript", "template", "svg"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self.SKIPPED:
+            self._skip += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self.SKIPPED and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip and data.strip():
+            self.parts.append(data.strip())
+
+
+def visible_text(html: str, limit: int = 20_000) -> str:
+    """화면에 보이는 글자만 이어 붙인다(스크립트·스타일 제외). limit자에서 자른다."""
+    parser = _Text()
+    parser.feed(html)
+    parser.close()
+    return " ".join(" ".join(parser.parts).split())[:limit]

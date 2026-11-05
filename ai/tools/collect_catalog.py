@@ -1,4 +1,4 @@
-"""화장품 수집기 명령줄. 사이트 목록, 상품 주소 찾기, 상품 목록 모으기, 상품 한 건 수집이다.
+"""화장품 수집기 명령줄. 사이트 목록, 상품 주소·목록, 상품 한 건 수집, 새 브랜드 홈 찾기다.
 
 색 추출은 이어지는 단계에서 붙는다. 운영 수집은 목록에서 켜진(enabled) 사이트에만 한다.
 켜지지 않은 사이트는 구조를 확인하는 소량 요청에 한해 --allow-disabled 로만 접근한다.
@@ -7,6 +7,7 @@
     uv run python tools/collect_catalog.py find --brand 롬앤 --name "쥬시 틴트" --allow-disabled
     uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --allow-disabled
     uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --resume
+    uv run python tools/collect_catalog.py discover --brand 새브랜드 --alias NewBrand
     uv run python tools/collect_catalog.py product --brand 롬앤 --url https://... --render
 """
 
@@ -20,8 +21,10 @@ from pathlib import Path
 AI_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_DIR))
 
+from app.clients.llm import Llm, LlmError, get_catalog_llm  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.tasks.catalog.checkpoint import Checkpoint, CheckpointError  # noqa: E402
+from app.tasks.catalog.discover.official import DiscoverStatus, discover_site  # noqa: E402
 from app.tasks.catalog.discover.registry import (  # noqa: E402
     BrandSite,
     RegistryError,
@@ -54,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     find.add_argument(
         "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
     )
+
+    discover = commands.add_parser("discover", help="목록에 없는 브랜드의 공식 홈 찾기")
+    discover.add_argument("--brand", required=True)
+    discover.add_argument("--alias", action="append", default=[], help="다른 이름(여러 번)")
+    discover.add_argument("--hint", help="모델에게 줄 참고 한 줄")
 
     product = commands.add_parser("product", help="상품 상세 주소 하나를 수집해 JSON으로 보기")
     product.add_argument("--brand", required=True)
@@ -114,6 +122,34 @@ async def run_find(client: PoliteClient, site: BrandSite, name: str) -> int:
     for alternative in result.alternatives:
         print(f"후보\t{alternative.product_id}\t{alternative.url}\t{alternative.title}")
     return EXIT_NOT_FOUND
+
+
+async def run_discover(
+    client: PoliteClient, llm: Llm, registry: SiteRegistry, args: argparse.Namespace
+) -> int:
+    known = registry.find(args.brand)
+    if known is not None:
+        print(f"이미 목록에 있다: {known.brand} {known.domain or '-'}")
+        return EXIT_OK
+    result = await discover_site(client, llm, args.brand, aliases=tuple(args.alias), hint=args.hint)
+    print(f"status={result.status}")
+    for host, reason in result.rejected:
+        print("제외", host, reason, sep="\t")
+    for accepted in result.accepted:
+        print("후보", accepted.host, accepted.site.platform, accepted.reason, sep="\t")
+    if result.status is not DiscoverStatus.FOUND or result.site is None:
+        return EXIT_NOT_FOUND
+    site = result.site
+    lines = [
+        "brand_sites.yaml에 더할 항목(정책 확인 전이라 꺼 둔다):",
+        f"- brand: {site.brand}",
+        f"  domain: {site.domain}",
+        f"  language: {site.language}",
+        f"  platform: {site.platform}",
+        '  technical: "UNKNOWN"',
+    ]
+    print(*lines, sep=chr(10))
+    return EXIT_OK
 
 
 async def run_product(
@@ -193,7 +229,17 @@ async def _run(
     registry: SiteRegistry,
     client: PoliteClient,
     renderer: Renderer | None,
+    llm: Llm | None,
 ) -> int:
+    if args.command == "discover":
+        try:
+            return await run_discover(client, llm or get_catalog_llm(), registry, args)
+        except HttpFailure as error:
+            print(f"{error.code}: {error}", file=sys.stderr)
+            return EXIT_STOPPED
+        except LlmError as error:
+            print(f"모델 호출 실패({error.kind}): {error}", file=sys.stderr)
+            return EXIT_STOPPED
     site = _site_for(registry, args.brand, args.allow_disabled)
     if site is None:
         return EXIT_USAGE
@@ -224,6 +270,7 @@ def main(
     registry: SiteRegistry | None = None,
     client: PoliteClient | None = None,
     renderer: Renderer | None = None,
+    llm: Llm | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -240,7 +287,7 @@ def main(
         if browser is None and getattr(args, "render", False):
             browser = PlaywrightRenderer(owned)
         try:
-            return await _run(args, loaded, owned, browser)
+            return await _run(args, loaded, owned, browser, llm)
         finally:
             if browser is not None and renderer is None:
                 await browser.close()

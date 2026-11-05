@@ -20,6 +20,7 @@ from app.core.config import Settings, get_settings
 
 RETRYABLE_STATUS = {408, 409, 429}
 
+LlmEffort = Literal["low", "medium", "high", "xhigh", "max"]
 LlmErrorKind = Literal["config", "retryable", "request", "refused", "truncated", "invalid_output"]
 
 
@@ -88,10 +89,15 @@ class ClaudeLlm:
     """
 
     def __init__(
-        self, settings: Settings, http_client: anthropic.DefaultAsyncHttpxClient | None = None
+        self,
+        settings: Settings,
+        http_client: anthropic.DefaultAsyncHttpxClient | None = None,
+        *,
+        model: str | None = None,
+        effort: LlmEffort | None = None,
     ) -> None:
-        self._model = settings.llm_model
-        self._effort = settings.llm_effort
+        self._model = model or settings.llm_model
+        self._effort = effort or settings.llm_effort
         self._max_tokens = settings.llm_max_tokens
         self._slots = asyncio.Semaphore(settings.llm_max_concurrency)
         self._client = None
@@ -178,3 +184,10 @@ def _read[T: BaseModel](message: Message, output: type[T]) -> LlmResult[T]:
 @lru_cache
 def get_llm() -> Llm:
     return ClaudeLlm(get_settings())
+
+
+@lru_cache
+def get_catalog_llm() -> Llm:
+    """화장품 수집기용. 가이드 설명과 모델·생각 강도를 따로 정하고 키·주소·동시 호출 설정은 같다."""
+    settings = get_settings()
+    return ClaudeLlm(settings, model=settings.catalog_llm_model, effort=settings.catalog_llm_effort)
