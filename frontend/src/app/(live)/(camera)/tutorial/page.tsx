@@ -6,37 +6,187 @@ import { useEffect, useMemo, useState } from "react";
 import { PillButton } from "@/components/ui/pill-button";
 import { useHiddenVideo } from "@/features/face";
 import {
+  checkGuideArea,
   GuideOverlay,
   loadDefaultGuideSet,
   loadGuideArea,
   resolveStep,
+  toGuideArea,
+  useGuide,
   useStepInView,
   type GuideArea,
+  type GuideModel,
   type GuideSet,
+  type Makeup,
 } from "@/features/guide";
 import { LiveNote, parseAlert, RoundBack, useLiveState } from "@/features/live";
-import { matchFor, useSession } from "@/features/session";
+import { matchFor, useSession, type GuideAction, type RefProduct } from "@/features/session";
 import {
   ActCard,
   DensityMeter,
   ExitModal,
+  GuideStatus,
   PrepCard,
   ProductChip,
   templateOf,
   TutorialTopBar,
+  type StepProduct,
 } from "@/features/tutorial";
 import { useQuery } from "@/lib/hooks/use-query";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
+/** 튜토리얼 한 단계에 필요한 것. 샘플과 가이드 조회 응답을 같은 모양으로 맞춘다 */
+interface TutorialStep {
+  stepId: string;
+  makeup: Makeup;
+  short: string;
+  title: string;
+  acts: GuideAction[];
+  doneWhen: string | null;
+  /** 레퍼런스 진하기(0~100). 기준이 없으면 null이고 게이지를 띄우지 않는다 */
+  target: number | null;
+  product: StepProduct | null;
+  /** 샘플 매칭용 제품. 가이드 조회 응답은 아직 내 파우치와 맞춰 보지 않아 null */
+  ref: RefProduct | null;
+}
+
+const SAMPLE_STEPS: TutorialStep[] = GUIDE_STEPS.map((s, i) => {
+  const r = REF_PRODUCTS[i];
+  return {
+    stepId: s.stepId,
+    makeup: s.makeup,
+    short: s.short,
+    title: s.title,
+    acts: s.acts,
+    doneWhen: s.doneWhen,
+    target: s.target,
+    product: {
+      name: r.name,
+      full: `${r.brand} ${r.name}`,
+      shade: r.shade,
+      color: r.color,
+      state: r.refState ?? null,
+    },
+    ref: r,
+  };
+});
+
+/** 가이드 조회 응답의 단계. 동작이 비면 요약 한 줄을 동작처럼 보여 준다 */
+function stepsOf(guide: GuideModel): TutorialStep[] {
+  return guide.steps.map((s) => {
+    const name = s.product?.name ?? s.product?.shade ?? null;
+    return {
+      stepId: s.stepId,
+      makeup: s.makeup,
+      short: s.label,
+      title: s.label,
+      acts: s.actions.length ? s.actions : s.summary ? [{ text: s.summary, tip: null }] : [],
+      doneWhen: s.doneWhen,
+      target: null,
+      product: name
+        ? {
+            name,
+            full: name,
+            shade: s.product?.name ? s.product.shade : null,
+            color: null,
+            state: "unreg",
+          }
+        : null,
+      ref: null,
+    };
+  });
+}
+
 /**
  * 10 튜토리얼 (GUIDE-003 · 006 · 007 · 008 · 011 · 013).
- * ?alert=cover 등은 측정 불가 상태 확인용.
+ * ?guideId=승인된 가이드 ID 면 가이드 조회 API의 단계·설명·영역으로, 없으면 샘플 영상으로 돈다.
+ * ?area=경로 는 샘플일 때만 다른 영역 파일을 본다. ?alert=cover 등은 측정 불가 상태 확인용.
+ */
+export default function TutorialPage() {
+  const query = useQuery();
+  if (!query) return null;
+  const guideId = query.get("guideId");
+  // guideId가 바뀌면 화면을 새로 만들어 이전 가이드의 조회 결과·영역이 남지 않게 한다
+  return guideId ? (
+    <GuideTutorial key={guideId} guideId={guideId} />
+  ) : (
+    <SampleTutorial area={query.get("area")} />
+  );
+}
+
+function SampleTutorial({ area: areaUrl }: { area: string | null }) {
+  const [area, setArea] = useState<GuideArea | null>(null);
+  useEffect(() => {
+    loadGuideArea(areaUrl ?? MOCK_GUIDE_AREA_URL)
+      .then(setArea)
+      .catch((e) => console.warn("가이드 영역을 불러오지 못해 기본 가이드로 보여 줍니다", e));
+  }, [areaUrl]);
+  return <TutorialRun steps={SAMPLE_STEPS} area={area} />;
+}
+
+function GuideTutorial({ guideId }: { guideId: string }) {
+  const router = useRouter();
+  const { load, retry } = useGuide(guideId);
+  const guide = load.status === "ready" ? load.guide : null;
+  const steps = useMemo(() => (guide ? stepsOf(guide) : []), [guide]);
+  const [area, setArea] = useState<GuideArea | null>(null);
+
+  useEffect(() => {
+    const raw = guide && toGuideArea(guide);
+    if (!raw) return;
+    let alive = true;
+    // 영역을 쓸 수 없으면(지원하지 않는 메시 판 등) 설명과 기본 가이드로 진행한다
+    checkGuideArea(raw, `guide ${guide.guideId}`)
+      .then((checked) => alive && setArea(checked))
+      .catch((e) => console.warn("가이드 영역을 쓸 수 없어 기본 가이드로 보여 줍니다", e));
+    return () => {
+      alive = false;
+    };
+  }, [guide]);
+
+  const home = { label: "홈으로", onClick: () => router.push("/home") };
+  switch (load.status) {
+    case "loading":
+      return <GuideStatus title="가이드를 불러오고 있어요" />;
+    case "invalidId":
+      return <GuideStatus title="가이드 주소가 올바르지 않아요" action={home} />;
+    case "notFound":
+      return (
+        <GuideStatus
+          title="가이드가 없거나 아직 이용할 수 없어요"
+          body="검수가 끝난 가이드만 따라 할 수 있어요."
+          action={home}
+        />
+      );
+    case "login":
+      return (
+        <GuideStatus
+          title="로그인이 필요해요"
+          action={{ label: "로그인하기", onClick: () => router.push("/login") }}
+        />
+      );
+    case "error":
+      return (
+        <GuideStatus
+          title="가이드를 불러오지 못했어요"
+          body={load.message}
+          action={{ label: "다시 시도", onClick: retry }}
+        />
+      );
+    case "ready":
+      if (!steps.length)
+        return <GuideStatus title="따라 할 단계가 없는 가이드예요" action={home} />;
+      return <TutorialRun steps={steps} area={area} />;
+  }
+}
+
+/**
  * 사진 저장에 동의했으면 단계를 넘길 때 확인 창 없이 사진을 남긴다 (동의는 튜토리얼 안내에서 받는다).
  * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. GUIDE-013 측정이 생기면 gauge를 측정값으로 바꾼다.
  */
-export default function TutorialPage() {
+function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea | null }) {
   const router = useRouter();
   const query = useQuery();
   const { state, updateRun, startRun } = useSession();
@@ -44,7 +194,6 @@ export default function TutorialPage() {
   const alert = parseAlert(query?.get("alert"));
 
   const [defaults, setDefaults] = useState<GuideSet | null>(null);
-  const [area, setArea] = useState<GuideArea | null>(null);
   const [step, setStep] = useState(0);
   // 지금 하는 동작. '했어요'로 하나씩 넘긴다
   const [act, setAct] = useState(0);
@@ -55,26 +204,25 @@ export default function TutorialPage() {
   const [exitAsk, setExitAsk] = useState(false);
   const timer = useTimeout();
 
-  // API 연동 전까지는 목업 가이드와 같은 샘플 영상의 가이드 영역을 쓰고, ?area=경로 로 다른 파일을 본다.
   useEffect(() => {
-    if (!query) return;
     loadDefaultGuideSet()
       .then(setDefaults)
       .catch((e) => console.warn("기본 가이드를 불러오지 못했습니다", e));
-    loadGuideArea(query.get("area") ?? MOCK_GUIDE_AREA_URL)
-      .then(setArea)
-      .catch((e) => console.warn("가이드 영역을 불러오지 못해 기본 가이드로 보여 줍니다", e));
-  }, [query]);
+  }, []);
 
   // 카메라는 추적에만 쓰고 영상은 보여 주지 않는다. 얼굴 자리에는 가이드만 뜬다
   useHiddenVideo();
 
-  const info = GUIDE_STEPS[step];
-  const ref = REF_PRODUCTS[step];
-  const pr = matchFor(REF_PRODUCTS[step], run, state.pouch);
-  const hasProduct = pr.kind !== "none";
-  const last = step >= GUIDE_STEPS.length - 1;
-  // 설명·제품(GUIDE_STEPS)과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다.
+  const info = steps[step];
+  // 샘플은 내 파우치와 맞춰 본다. 가이드 조회 응답은 아직 맞춰 보지 않아(제품 매칭 전) null
+  const pr = info.ref ? matchFor(info.ref, run, state.pouch) : null;
+  const hasProduct = !!pr && pr.kind !== "none";
+  // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다 (GUIDE-003)
+  const paced = hasProduct || !pr;
+  // 진하기 기준이 있고 제품을 쓰는 단계만 게이지를 띄운다
+  const target = hasProduct ? info.target : null;
+  const last = step >= steps.length - 1;
+  // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다.
   // 영역에 없는 단계는 화장 종류의 기본 가이드를 쓰고, 그릴 것이 없으면 설명만 보여 준다
   const subs = useMemo(
     () => area?.steps.find((s) => s.stepId === info.stepId)?.subSteps ?? [templateOf(info)],
@@ -92,18 +240,18 @@ export default function TutorialPage() {
   const blocked = !canMeasure;
 
   useEffect(() => {
-    if (!ready || blocked || busy || exitAsk || !hasProduct) return;
+    if (!ready || blocked || busy || exitAsk || target === null) return;
     const t = setInterval(() => {
       setGauge((g) => {
-        if (g >= info.target) return g;
+        if (g >= target) return g;
         return Math.min(
-          info.target,
-          g + Math.max(0.12, (info.target - g) * 0.02) * (0.6 + Math.random() * 0.8),
+          target,
+          g + Math.max(0.12, (target - g) * 0.02) * (0.6 + Math.random() * 0.8),
         );
       });
     }, 160);
     return () => clearInterval(t);
-  }, [ready, blocked, busy, exitAsk, hasProduct, info.target]);
+  }, [ready, blocked, busy, exitAsk, target]);
 
   const gv = Math.round(gauge);
   // 변수 이름을 그대로 적어야 Tailwind가 테마 변수를 CSS에 넣는다
@@ -117,10 +265,9 @@ export default function TutorialPage() {
   // 잴 수 없을 때는 이유를 위쪽 알림이 알려 주므로 판정 문구를 띄우지 않는다
   const gaugeLabel =
     gv > 62 ? "레퍼런스보다 진해요" : gv < 45 ? "레퍼런스보다 연해요" : "레퍼런스와 비슷해요";
-  // 제품 없는 단계는 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다 (GUIDE-003)
-  const lastAct = !hasProduct || act >= info.acts.length - 1;
-  // 화면에 띄우고 읽어 줄 동작. AI 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
-  const shownActs = hasProduct ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
+  const lastAct = !paced || act >= info.acts.length - 1;
+  // 화면에 띄우고 읽어 줄 동작. 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
+  const shownActs = paced ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
 
   // 진행바·이전 버튼으로 옮기면 촬영 대기 타이머는 버린다. 예전 step으로 advance가 실행되지 않게
   const cancelTimer = () => {
@@ -167,7 +314,7 @@ export default function TutorialPage() {
       ? "했어요 · 다음 할 일"
       : last
         ? "완성하기"
-        : hasProduct
+        : paced
           ? "다음 스텝"
           : "건너뛰기";
 
@@ -185,7 +332,7 @@ export default function TutorialPage() {
       <div className="flex-1" />
 
       <TutorialTopBar
-        steps={GUIDE_STEPS}
+        steps={steps}
         step={step}
         onExit={() => {
           // 저장 대기 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 버린다
@@ -195,7 +342,9 @@ export default function TutorialPage() {
         onGoStep={(i) => goStep(i, i > step)}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
-      {!note && <ProductChip refProduct={ref} mine={hasProduct ? pr.p : null} />}
+      {!note && info.product && (
+        <ProductChip refProduct={info.product} mine={hasProduct ? pr.p : null} pending={!pr} />
+      )}
       <LiveNote note={note} />
 
       {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
@@ -205,12 +354,12 @@ export default function TutorialPage() {
             {String(step + 1).padStart(2, "0")}
           </span>
           <h1 className="font-display text-[26px] leading-[1.15] text-white">{info.title}</h1>
-          {hasProduct && info.acts.length > 1 && (
+          {paced && info.acts.length > 1 && (
             <span className="shrink-0 text-[15px] text-line-2 tabular">
               할 일 {act + 1}/{info.acts.length}
             </span>
           )}
-          {hasProduct && !blocked && (
+          {target !== null && !blocked && (
             <span
               className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
               style={{ color: meterColor }}
@@ -219,7 +368,7 @@ export default function TutorialPage() {
             </span>
           )}
         </div>
-        {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. 제품 없는 단계는 동작 전부 */}
+        {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. 제품 없는 샘플 단계는 동작 전부 */}
         <div className="flex flex-col gap-2">
           {shownActs.map((i) => (
             <ActCard
@@ -229,14 +378,14 @@ export default function TutorialPage() {
               doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
             />
           ))}
-          {hasProduct && act < info.acts.length - 1 && (
+          {paced && act < info.acts.length - 1 && (
             <span className="truncate px-2 text-[16px] text-ash">
               다음 {act + 2}. {info.acts[act + 1].text}
             </span>
           )}
         </div>
 
-        {hasProduct && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
+        {target !== null && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
 
         <div className="flex items-center gap-3">
           <RoundBack
@@ -264,9 +413,9 @@ export default function TutorialPage() {
       {!ready && (
         <PrepCard
           step={step}
-          total={GUIDE_STEPS.length}
+          total={steps.length}
           info={info}
-          refProduct={ref}
+          refProduct={info.product}
           match={pr}
           onStart={() => setReady(true)}
         />

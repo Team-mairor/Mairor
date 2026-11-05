@@ -6,9 +6,21 @@ import {
   REF_STATE_LABEL,
   type GuideStepInfo,
   type MatchResult,
-  type RefProduct,
+  type RefState,
 } from "@/features/session";
 import { cn } from "@/lib/utils";
+
+/** 단계에 보여 줄 영상 속 제품 */
+export interface StepProduct {
+  /** 짧은 이름 (제품 칩) */
+  name: string;
+  /** 브랜드까지 붙인 이름 (준비 카드) */
+  full: string;
+  shade: string | null;
+  /** 제품 색. 모르면 null */
+  color: string | null;
+  state: RefState | null;
+}
 
 /** 튜토리얼 동작 한 장. 팁·주의와 끝내는 기준이 있으면 그 아래 붙인다 */
 export function ActCard({
@@ -70,12 +82,14 @@ export function PrepCard({
   step: number;
   /** 전체 단계 수 */
   total: number;
-  info: GuideStepInfo;
-  refProduct: RefProduct;
-  match: MatchResult;
+  info: Pick<GuideStepInfo, "title" | "acts" | "doneWhen">;
+  /** 영상 속 제품. 없으면 제품 줄을 띄우지 않는다 */
+  refProduct: StepProduct | null;
+  /** 내 파우치와 맞춰 본 결과. 아직 맞춰 보지 않은 가이드면 null */
+  match: MatchResult | null;
   onStart: () => void;
 }) {
-  const mine = match.p;
+  const mine = match?.p ?? null;
   return (
     <Modal
       open
@@ -105,11 +119,13 @@ export function PrepCard({
           />
           <div className="flex min-w-0 flex-col gap-0.5">
             <span className="text-[14px] font-semibold text-navy">
-              {match.kind === "same"
-                ? "이 제품을 준비해 주세요 · 내 파우치"
-                : match.kind === "sub"
-                  ? "이 제품을 준비해 주세요 · 대체 제품"
-                  : "내 파우치에 맞는 제품이 없어요"}
+              {!match
+                ? "제품 매칭 전이에요"
+                : match.kind === "same"
+                  ? "이 제품을 준비해 주세요 · 내 파우치"
+                  : match.kind === "sub"
+                    ? "이 제품을 준비해 주세요 · 대체 제품"
+                    : "내 파우치에 맞는 제품이 없어요"}
             </span>
             {mine ? (
               <>
@@ -120,24 +136,29 @@ export function PrepCard({
               </>
             ) : (
               <span className="text-[17px] leading-[1.45] text-pretty text-mute">
-                설명을 보고 따라 하거나 건너뛸 수 있어요
+                {match
+                  ? "설명을 보고 따라 하거나 건너뛸 수 있어요"
+                  : "영상 속 제품을 참고해 준비해 주세요"}
               </span>
             )}
           </div>
         </div>
-        {match.kind !== "same" && (
+        {refProduct && match?.kind !== "same" && (
           <div className="flex items-center gap-2 border-t border-line pt-3 text-[15px] text-mute">
             <span
-              className="size-5 shrink-0 rounded-full ring-1 ring-line"
-              style={{ background: refProduct.color }}
+              className={cn(
+                "size-5 shrink-0 rounded-full",
+                refProduct.color ? "ring-1 ring-line" : "border border-dashed border-ash",
+              )}
+              style={refProduct.color ? { background: refProduct.color } : undefined}
             />
             <span className="min-w-0 truncate">
-              영상 속 제품 · {refProduct.brand} {refProduct.name}
+              영상 속 제품 · {refProduct.full}
               {refProduct.shade && ` ${refProduct.shade}`}
             </span>
-            {refProduct.refState && (
+            {refProduct.state && (
               <span className="shrink-0 rounded-full border border-dashed border-navy px-2 text-[13px] text-navy">
-                {REF_STATE_LABEL[refProduct.refState]}
+                {REF_STATE_LABEL[refProduct.state]}
               </span>
             )}
           </div>

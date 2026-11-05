@@ -123,7 +123,7 @@ npm run dev:https
 
 ## 튜토리얼 가이드
 
-앱 화면 `/tutorial`은 AI가 넘기는 가이드 영역(`shared/guide-area`, 단계 → 하위 단계 → 부위별 묶음)을 단계 ID로 찾아 지금 단계의 영역을 얼굴 위에 그린다. API 연동 전에는 목업 가이드와 같은 샘플 영상의 영역(`/fixtures/guide-areas/local_01.json`)을 쓰고, `?area=경로`로 다른 파일을 본다.
+앱 화면 `/tutorial`은 AI가 넘기는 가이드 영역(`shared/guide-area`, 단계 → 하위 단계 → 부위별 묶음)을 단계 ID로 찾아 지금 단계의 영역을 얼굴 위에 그린다. `/tutorial?guideId=<UUID>`면 가이드 조회 API(`GET /v1/guides/{guideId}`) 응답의 단계별 `subSteps`를 쓴다. `guideId`가 없으면 목업 가이드와 같은 샘플 영상의 영역(`/fixtures/guide-areas/local_01.json`)을 쓰고, 이 샘플 모드에서만 `?area=경로`로 다른 파일을 본다.
 
 | 하위 단계 상태             | 화면                                                                                                                             |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -201,7 +201,7 @@ src/
 │  └─ auth/ · select/ · loading/ · check/ · tutorial/ · my/   # 화면 전용 조각
 ├─ lib/                       # validation · 공통 유틸 · hooks/(여러 화면이 쓰는 훅. 파일 이름은 use-*.ts)
 │  └─ api/                    # BE API 클라이언트·모의 응답
-├─ mocks/                     # API 연동 전 샘플 데이터. 화면(app/)·layout·개발용 dev-nav만 가져온다
+├─ mocks/                     # API 연동 전 샘플 데이터. 화면(app/)·layout·개발용 dev-nav만 가져온다(예외: lib/api/mock.ts)
 scripts/
 ├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
 └─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
@@ -214,8 +214,10 @@ public/
 - import 기준: 모든 `features/<이름>/`에 `index.ts`를 두고, 폴더 밖에서는 `@/features/<이름>`으로만 가져온다. 폴더 안에서는 `./파일`로 가져오고 자기 barrel은 쓰지 않는다. `lib`는 `features`를 가져오지 않는다. import 순서(패키지 / `@/` / 상대 경로, 묶음 안은 경로 알파벳순)는 eslint `import/order`가 검사하고 `npx eslint src --fix`로 맞춘다
 - 얼굴 등록(로딩 화면 모달)은 실시간으로 조명(얼굴 가운데 밝기)·거리(얼굴 폭 비율과 가운데 위치)·정면(yaw·pitch·roll)·가림(핵심 부위와 얼굴 윤곽이 화면 안에 정면으로 보임)을 판정하고, 4개를 1.5초 유지하면 정면 1장을 찍는다. 찍는 순간 눈을 감았으면 버리고 다시 잰다. 표정은 판정하지 않고 안내 문구로만 요청한다. 기준값은 `features/face/face-register.ts`에 있다. 밝기·좌우·기울기는 갤럭시탭 S6 Lite에서 재서 정했고, 거리·가운데·위아래는 원 표시 방식과 하프미러 보정이 정해지면 확정한다. 손 가림은 아직 판정하지 못하고, 사진은 업로드 API 전까지 메모리에만 둔다
 - 등록에 쓴 카메라는 미리보기에서 그대로 이어 쓴다. 등록 전에 '나중에'를 누르면 카메라를 끈다
-- 회원(로그인·가입·비밀번호 재설정·로그아웃)만 BE API를 쓰고, 나머지는 API 연동 전이라 데이터는 `mocks/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `mocks/mock-guide.ts`에서 만들고, 가이드 대상이 아닌 단계(스킨케어 등)는 뺀다. 단계 수가 영상마다 다르므로 화면은 이 목록 길이대로 돈다.
+- 회원(로그인·가입·비밀번호 재설정·로그아웃)과 튜토리얼 가이드 조회(`GET /v1/guides/{guideId}`)는 BE API를 쓴다. `/tutorial?guideId=<UUID>`면 조회 응답의 단계·설명·영상 제품·영역을 사용한다. 나머지는 API 연동 전이라 데이터는 `mocks/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. `guideId` 없는 샘플 튜토리얼의 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `mocks/mock-guide.ts`에서 만든다. 가이드 대상이 아닌 단계(스킨케어 등)는 빼고, 단계 수가 영상마다 다르므로 화면은 목록 길이대로 돈다.
 - 샘플은 화면(app/)과 layout에서만 가져와 features에 props·인자로 넘긴다(파우치·리포트 기본값은 `SessionProvider`의 `seed`, 영상 상태는 `VideoPicker`의 `stateOf`, 영상 속 제품은 `matchFor` 등의 인자). 그래서 mocks를 지우면 화면·layout과 개발용 `dev-nav`만 깨지고 features·lib는 그대로다. API가 붙으면 그 자리에 응답을 넣는다.
+- 예외로 모의 응답 계층 `lib/api/mock.ts`는 가이드 조회의 모의 응답을 만들려고 `mocks/mock-guide-api.ts`를 가져온다. 모의 가이드가 샘플 단계(`mocks/mock-guide.ts`)로 만들어져 lib로 옮기면 샘플 데이터까지 lib에 들어가므로, 가이드 조회를 부를 때만 동적으로 불러온다. mocks를 지울 때는 `mock.ts`의 가이드 조회 경로도 함께 지운다.
+- 모의 가이드 ID(`NEXT_PUBLIC_API_MOCK=success`): `a0000000-0000-4000-8000-000000000001`은 샘플 영상 가이드, `…0002`는 9가지 화장 종류(마스카라는 설명 없이 요약만), `…0003`은 로그인 필요(401)다. 그 밖의 ID는 404다.
 - 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`, `/my/pouch?demo=shade-fail`
 
 ## MediaPipe 파일

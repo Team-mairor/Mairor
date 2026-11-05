@@ -70,22 +70,26 @@ export async function loadGuideSet(url: string): Promise<GuideSet> {
   return { ...set, steps };
 }
 
-/**
- * AI가 넘기는 단계별 도포 영역을 불러온다. 쓸 수 없는 부위별 묶음은 경고만 남기고 빼고,
- * 그 때문에 영역이 하나도 남지 않은 extracted 하위 단계는 failed로 바꾼다.
- */
+/** AI가 넘기는 단계별 도포 영역 파일을 불러와 checkGuideArea로 검사한다. */
 export async function loadGuideArea(url: string): Promise<GuideArea> {
   const response = await fetch(url);
   if (!response.ok)
     throw new Error(`가이드 영역 파일을 불러오지 못했습니다: ${url} (${response.status})`);
-  const area = (await response.json()) as GuideArea;
+  return checkGuideArea((await response.json()) as GuideArea, url);
+}
+
+/**
+ * 단계별 도포 영역을 검사한다. 쓸 수 없는 부위별 묶음은 경고만 남기고 빼고,
+ * 그 때문에 영역이 하나도 남지 않은 extracted 하위 단계는 failed로 바꾼다.
+ * source는 오류 문구에 붙일 출처(파일 경로 등)다.
+ */
+export async function checkGuideArea(area: GuideArea, source: string): Promise<GuideArea> {
   if (area.meshVersion !== MESH_VERSION) {
     throw new Error(
-      `가이드 영역 파일의 meshVersion(${area.meshVersion})이 ${MESH_VERSION}이 아닙니다: ${url}`,
+      `가이드 영역의 meshVersion(${area.meshVersion})이 ${MESH_VERSION}이 아닙니다: ${source}`,
     );
   }
-  if (!Array.isArray(area.steps))
-    throw new Error(`가이드 영역 파일에 steps 배열이 없습니다: ${url}`);
+  if (!Array.isArray(area.steps)) throw new Error(`가이드 영역에 steps 배열이 없습니다: ${source}`);
   const mesh = await loadFaceMesh();
   const checkSub = (sub: AreaSubStep): AreaSubStep => {
     if (sub.status !== "extracted") return sub;

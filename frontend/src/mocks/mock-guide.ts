@@ -14,6 +14,10 @@ export interface MockGuideStep {
   makeup: Makeup;
   /** 한국어 부위 이름 */
   part: string;
+  /** 이 단계에서 하는 일 한 문장(영상 그대로) */
+  summary: string;
+  /** 쓰는 도구. 영상에서 못 찾으면 null */
+  tool: string | null;
   /** 화면에 보여 줄 동작. 제품 이름은 따로 보여 주므로 넣지 않는다 */
   actions: GuideAction[];
   /** 끝내는 기준 */
@@ -33,6 +37,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "EXCLUDED",
     makeup: "other",
     part: "스킨케어 패드",
+    summary:
+      "세안 후 마다가스카르 센텔라 퀵 카밍패드를 얼굴에 붙이고 머리를 말리는 동안 수분을 공급하고 피부 열감을 낮춰줍니다.",
+    tool: "손",
     actions: [
       { text: "세안 후 얼굴에 패드를 붙여요", tip: null },
       {
@@ -51,6 +58,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "EXCLUDED",
     makeup: "other",
     part: "스킨케어 토너",
+    summary: "헤브블루 살몬 케어링 센텔라 토너를 손으로 흡토하여 피부에 흡수시켜줍니다.",
+    tool: "손",
     actions: [{ text: "토너를 피부에 흡수시켜요", tip: null }],
     doneWhen: "토너가 90% 정도 흡수되면 다음으로 넘어가요",
     product: { brand: "헤브블루", name: "살몬 케어링 센텔라 토너", shade: null },
@@ -62,6 +71,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "EXCLUDED",
     makeup: "other",
     part: "스킨케어 앰플",
+    summary: "엘라쥬 리얼 히알루로닉 블루 100 앰플을 두 번 정도 레이어링하여 피부에 발라줍니다.",
+    tool: "손",
     actions: [
       {
         text: "손으로 앰플을 피부에 발라요",
@@ -79,6 +90,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "EXCLUDED",
     makeup: "other",
     part: "선 앰플",
+    summary:
+      "프롬리 비건 이지 에프 시카 워터 선앰플을 얼굴에 얇게 코팅하듯이 바르고 퍼프로 두드려 흡수시켜줍니다.",
+    tool: "손",
     actions: [
       {
         text: "얼굴에 얇게 코팅하듯 발라요",
@@ -100,6 +114,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "foundation",
     part: "파운데이션",
+    summary:
+      "바닐라코 커버리셔스 파워 핏 파운데이션 19 라이트를 스패출러로 얹고 퍼프로 톡톡 두드려 발라줍니다.",
+    tool: "스패출러",
     actions: [
       { text: "스패출러로 파운데이션을 얹어요", tip: null },
       { text: "퍼프로 톡톡 두드려 발라요", tip: null },
@@ -114,6 +131,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "EXCLUDED",
     makeup: "other",
     part: "컨실러",
+    summary: "마루빌츠 캐머플라지 크림 컨실러 19호를 퍼프에 묻혀 눈가를 밝혀줍니다.",
+    tool: "퍼프",
     actions: [
       {
         text: "눈가에 발라 밝혀요",
@@ -130,6 +149,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "blush",
     part: "크림 블러셔",
+    summary: "하밍 젤리 에어 치크 02 베리피치를 퍼프로 중앙 위주로 발라줍니다.",
+    tool: "퍼프",
     actions: [
       { text: "중앙 위주로 발라요", tip: { kind: "tip", text: "진하게 발라도 파우더로 연해져요" } },
     ],
@@ -143,6 +164,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "EXCLUDED",
     makeup: "other",
     part: "파우더",
+    summary: "루나 프로 포토 피니셔 02 파우더를 퍼프로 얼굴에 발라줍니다.",
+    tool: "퍼프",
     actions: [{ text: "퍼프로 파우더를 얼굴에 발라요", tip: null }],
     doneWhen: null,
     product: { brand: "루나", name: "프로 포토 피니셔", shade: "02" },
@@ -154,6 +177,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "blush",
     part: "파우더 블러셔",
+    summary:
+      "컬러그램 틴토리 솜 블러셔 04 베리베일을 블러셔 브러시로 크림 블러셔 위에 레이어링 해줍니다.",
+    tool: "블러셔 브러시",
     actions: [{ text: "브러시로 크림 블러셔 위에 겹쳐 발라요", tip: null }],
     doneWhen: "색이 자연스럽게 섞이면 끝나요",
     product: { brand: "컬러그램", name: "틴토리 솜 블러셔", shade: "04 베리베일" },
@@ -165,6 +191,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "eyeshadow",
     part: "눈두덩이 베이스 섀도우",
+    summary:
+      "웨이크메이크 소프트 블러링 아이팔레트 03 선셋블러링의 베이스 색상으로 눈두덩이와 애교살에 베이스 섀도우를 깔아줍니다.",
+    tool: "아이섀도우 브러시",
     actions: [
       { text: "눈두덩이에 베이스 색을 깔아요", tip: null },
       { text: "애교살에도 같은 색을 발라요", tip: null },
@@ -179,6 +208,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "eyeliner",
     part: "언더 아이라인",
+    summary:
+      "웨이크메이크 소프트 블러링 아이팔레트 03 선셋블러링의 가장 진한 브라운 색상으로 눈 점막에서 살짝 띄워 언더 아이라인을 일자로 빼고 경계가 똑 떨어지지 않게 퍼뜨려줍니다.",
+    tool: "아이섀도우 브러시",
     actions: [
       {
         text: "눈 점막에서 살짝 띄워 일자로 그려요",
@@ -196,6 +228,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "eyeliner",
     part: "점막 아이라인",
+    summary:
+      "캔메이크 크리미 터치 라이너 15 카푸치노 핑크로 눈 점막에서 살짝 0.1mm 띄워 아이라인을 그리고 뒷트임 부분은 조금 더 잡아줍니다.",
+    tool: "아이라이너 펜슬",
     actions: [
       {
         text: "점막에서 살짝 0.1mm 띄워 그려요",
@@ -213,6 +248,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "eyeshadow",
     part: "애교살 하이라이트",
+    summary:
+      "투쿨포스쿨 워터프루프 슬림 라이너 도화살몬 밀크 색상으로 눈 점막 바로 밑에 선을 살짝 그려 깔끔하고 뽀용한 애교살을 만들어줍니다.",
+    tool: "아이라이너 펜슬",
     actions: [
       { text: "눈 점막 바로 밑에 선을 살짝 그려요", tip: null },
       { text: "선은 하나만 살살 그려요", tip: null },
@@ -227,6 +265,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "mascara",
     part: "마스카라",
+    summary: "롬앤 한올 픽스 마스카라 롱 헤이즐을 속눈썹에 바르고 핀셋으로 속눈썹을 정리해줍니다.",
+    tool: "마스카라 브러시",
     actions: [
       { text: "속눈썹에 발라요", tip: null },
       { text: "핀셋으로 속눈썹을 정리해요", tip: null },
@@ -241,6 +281,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "contour",
     part: "코 쉐딩",
+    summary: "페리페라 브이 쉐딩 03 그레이쉬 쿨로 코 쉐딩을 넣어줍니다.",
+    tool: "쉐딩 브러시",
     actions: [
       { text: "코끝 모양을 살짝 잡아요", tip: null },
       { text: "약간 좁게 안쪽으로 들어와요", tip: null },
@@ -256,6 +298,9 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "highlight",
     part: "하이라이터",
+    summary:
+      "데이지크 멀티 섀도우 01 코튼키스의 하이라이터 색상을 코끝, 콧대, 눈 앞머리에 발라줍니다.",
+    tool: "손가락",
     actions: [
       { text: "하이라이터를 손가락으로 찍어요", tip: null },
       { text: "코끝, 콧대, 눈 앞머리에 발라요", tip: null },
@@ -270,6 +315,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "lip",
     part: "립 라인 커버",
+    summary: "투쿨포스쿨 워터프루프 슬림 라이너 도화살몬 밀크 색상으로 립 라인을 커버해줍니다.",
+    tool: "립 라이너 펜슬",
     actions: [{ text: "입술 라인을 따라 그려요", tip: null }],
     doneWhen: null,
     product: { brand: "투쿨포스쿨", name: "워터프루프 슬림 라이너", shade: "도화살몬 밀크" },
@@ -281,6 +328,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "lip",
     part: "베이스 립 틴트",
+    summary: "잉가 벨벳 쥬 틴트 애프리콧 슈를 입술에 베이스로 발라줍니다.",
+    tool: "어플리케이터",
     actions: [
       { text: "입술에 베이스로 발라요", tip: null },
       { text: "입술 주름을 잘 메워요", tip: null },
@@ -295,6 +344,8 @@ export const MOCK_GUIDE_STEPS: MockGuideStep[] = [
     type: "GUIDE",
     makeup: "lip",
     part: "메인 립 글로스",
+    summary: "웸 3D 볼류밍 글로스 스카치 70%를 메인 립으로 발라줍니다.",
+    tool: "어플리케이터",
     actions: [{ text: "글로스를 입술에 발라요", tip: null }],
     doneWhen: null,
     product: { brand: "웸", name: "3D 볼류밍 글로스", shade: "스카치 70%" },

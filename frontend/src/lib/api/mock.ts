@@ -20,7 +20,8 @@ interface MockRoute {
   method: string;
   /** 쿼리를 뺀 경로 */
   path: RegExp;
-  success: () => MockResult;
+  /** path는 쿼리를 뺀 요청 경로. 경로에 든 ID로 답을 고를 때 쓴다 */
+  success: (path: string) => MockResult | Promise<MockResult>;
   error: () => MockResult;
 }
 
@@ -42,6 +43,9 @@ const TOKEN_EXPIRES_AT = "2099-01-01T00:00:00Z";
 
 // 상태·코드·메시지는 BE GlobalExceptionHandler·SecurityConfig·회원 서비스가 실제로 돌려주는 값이다.
 // 모의 응답은 요청 본문을 보지 않고 시나리오대로만 답한다.
+const NOT_FOUND = () =>
+  error(404, { code: "NOT_FOUND", message: "요청한 리소스를 찾을 수 없습니다." });
+
 const ROUTES: MockRoute[] = [
   {
     method: "GET",
@@ -152,6 +156,22 @@ const ROUTES: MockRoute[] = [
     error: () =>
       error(403, { code: "CSRF_INVALID", message: "요청 보안 토큰이 유효하지 않습니다." }),
   },
+  {
+    // 모의 가이드 ID(mocks/mock-guide-api)만 답하고, 그 밖의 ID는 서버처럼 404다
+    method: "GET",
+    path: /^\/v1\/guides\/[^/]+$/,
+    success: async (path) => {
+      // 모의 가이드는 이 경로를 부를 때만 불러와, 다른 화면 번들에 목업 단계가 실리지 않게 한다
+      const { MOCK_LOGIN_REQUIRED_GUIDE_ID, mockGuide } = await import("@/mocks/mock-guide-api");
+      const guideId = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
+      if (guideId === MOCK_LOGIN_REQUIRED_GUIDE_ID)
+        return error(401, { code: "UNAUTHORIZED", message: "로그인이 필요합니다." });
+      const guide = await mockGuide(guideId);
+      return guide ? { status: 200, body: guide } : NOT_FOUND();
+    },
+    error: () =>
+      error(500, { code: "INTERNAL_ERROR", message: "서버에서 예기치 않은 오류가 발생했습니다." }),
+  },
 ];
 
 function wait(ms: number, signal?: AbortSignal) {
@@ -180,10 +200,10 @@ export async function mockFetch(
   await wait(DELAY_MS, signal);
   const route = ROUTES.find((r) => r.method === method && r.path.test(path));
   const result: MockResult = !route
-    ? error(404, { code: "NOT_FOUND", message: "요청한 리소스를 찾을 수 없습니다." })
+    ? NOT_FOUND()
     : scenario === "error"
       ? route.error()
-      : route.success();
+      : await route.success(path);
 
   if (result.body === undefined) return new Response(null, { status: result.status });
   return new Response(JSON.stringify(result.body), {

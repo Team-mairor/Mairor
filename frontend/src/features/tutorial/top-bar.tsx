@@ -12,7 +12,7 @@ export function TutorialTopBar({
   onExit,
   onGoStep,
 }: {
-  steps: GuideStepInfo[];
+  steps: Pick<GuideStepInfo, "stepId" | "short">[];
   step: number;
   onExit: () => void;
   onGoStep: (i: number) => void;
