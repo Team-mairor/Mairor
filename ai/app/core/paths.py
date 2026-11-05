@@ -7,3 +7,5 @@ AI_DIR = APP_DIR.parent
 PROMPTS_DIR = APP_DIR / "prompts"
 WEIGHTS_DIR = APP_DIR / "weights"
 FACE_MESH_DIR = AI_DIR.parent / "shared" / "face-mesh"
+CATALOG_IMPORT_DIR = AI_DIR.parent / "shared" / "catalog-import"
+DEFAULT_CATALOG_RUN_DIR = AI_DIR / "catalog-runs"

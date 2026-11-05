@@ -67,7 +67,10 @@ class CollectedProductReaderTest {
   void validSamplesAreAccepted() throws Exception {
     for (String file :
         List.of(
-            "romand_single_unverified.json", "romand_duo_shade.json", "etude_option_image.json")) {
+            "romand_single_unverified.json",
+            "romand_duo_shade.json",
+            "etude_option_image.json",
+            "romand_named_palette.json")) {
       ReadResult result = CollectedProductReader.read(sample(file));
 
       assertThat(result.issues()).as(file).isEmpty();

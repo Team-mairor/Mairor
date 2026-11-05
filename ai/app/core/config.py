@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.paths import AI_DIR
+from app.core.paths import AI_DIR, DEFAULT_CATALOG_RUN_DIR
 
 ENV_FILE = AI_DIR / ".env"
 
@@ -38,6 +38,16 @@ class Settings(BaseSettings):
     frame_download_max_retries: int = Field(default=1, ge=0)
     area_max_concurrency: int = Field(default=1, gt=0)
     area_work_dir: Path | None = None
+
+    catalog_run_dir: Path = DEFAULT_CATALOG_RUN_DIR
+    catalog_run_keep_days: int = Field(default=30, gt=0)
+    catalog_contact: str | None = None
+    catalog_min_interval_seconds: float = Field(default=1.5, ge=0)
+    catalog_request_timeout_seconds: float = Field(default=30, gt=0)
+    catalog_max_retries: int = Field(default=3, ge=0)
+    catalog_retry_base_delay_seconds: float = Field(default=1, ge=0)
+    catalog_max_interval_seconds: float = Field(default=30, gt=0)
+    catalog_robots_exempt_hosts: frozenset[str] = frozenset()
 
     tracing_endpoint: str | None = None
     tracing_project: str = "ai-guide"
