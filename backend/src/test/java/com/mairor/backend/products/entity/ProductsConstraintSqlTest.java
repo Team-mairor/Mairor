@@ -44,6 +44,13 @@ class ProductsConstraintSqlTest {
           + " color_source, color_estimated, created_at, updated_at)"
           + " values (gen_random_uuid(), ?::uuid, ?, ?, 1, ?, ?, ?, now(), now())";
 
+  private static final String INSERT_ALIAS =
+      "insert into product_shade_option_aliases (shade_id, source_option_id) values (?::uuid, ?)";
+  private static final String INSERT_SLOT =
+      "insert into product_shade_colors (id, shade_id, sort_order, name, name_normalized,"
+          + " name_source, color_hex, color_source, color_estimated, review_status, created_at,"
+          + " updated_at) values (gen_random_uuid(), ?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, now(), now())";
+
   @Autowired private JdbcTemplate jdbc;
 
   @BeforeEach
@@ -75,6 +82,20 @@ class ProductsConstraintSqlTest {
             ProductShade.PRODUCT_NAME_UNIQUE,
             ProductShade.COLOR_ALL_OR_NONE_CHECK,
             ProductShade.COLOR_HEX_CHECK);
+    assertThat(constraints("products")).contains(Product.SALE_STATUS_CHECK);
+    assertThat(constraints("product_shade_option_aliases"))
+        .contains("product_shade_option_aliases_pkey", ProductShade.OPTION_ALIAS_FK);
+    assertThat(constraints("product_shade_colors"))
+        .contains(
+            "product_shade_colors_pkey",
+            ProductShadeColor.SHADE_FK,
+            ProductShadeColor.SHADE_ORDER_UNIQUE,
+            ProductShadeColor.NAME_PAIR_CHECK,
+            ProductShadeColor.NAME_SOURCE_CHECK,
+            ProductShadeColor.COLOR_ALL_OR_NONE_CHECK,
+            ProductShadeColor.COLOR_HEX_CHECK,
+            ProductShadeColor.COLOR_SOURCE_CHECK,
+            ProductShadeColor.REVIEW_CHECK);
   }
 
   // --- 카테고리·종류 ---
@@ -215,6 +236,286 @@ class ProductsConstraintSqlTest {
     }
   }
 
+  // --- 수집 출처 식별자 ---
+
+  @Test
+  void saleStatusMustBeOneOfTheKnownValues() {
+    assertThatCode(() -> setSaleStatus("ON_SALE")).doesNotThrowAnyException();
+    assertThatThrownBy(() -> setSaleStatus("ARCHIVED"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(Product.SALE_STATUS_CHECK);
+  }
+
+  @Test
+  void sameSourceProductIdInOneSourceIsRejectedButNullSourcesAreNotCompared() {
+    update(
+        "update products set source = 'OFFICIAL:a.com', source_product_id = '10' where id = ?::uuid",
+        TINT_ID);
+
+    assertThatThrownBy(
+            () ->
+                update(
+                    "update products set source = 'OFFICIAL:a.com', source_product_id = '10'"
+                        + " where id = ?::uuid",
+                    TONER_ID))
+        .isInstanceOf(DuplicateKeyException.class)
+        .hasMessageContaining(Product.SOURCE_PRODUCT_UNIQUE_INDEX);
+    assertThatCode(
+            () ->
+                update(
+                    "update products set source = 'OFFICIAL:b.com', source_product_id = '10'"
+                        + " where id = ?::uuid",
+                    TONER_ID))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void sameSourceOptionIdInOneProductIsRejectedButNullOptionsAreNotCompared() {
+    update(INSERT_SHADE, TINT_ID, "1호", "1호", null, null, null);
+    update(INSERT_SHADE, TINT_ID, "2호", "2호", null, null, null);
+    update("update product_shades set source_option_id = 'opt-1' where name = '1호'");
+
+    assertThatThrownBy(
+            () -> update("update product_shades set source_option_id = 'opt-1' where name = '2호'"))
+        .isInstanceOf(DuplicateKeyException.class)
+        .hasMessageContaining(ProductShade.SOURCE_OPTION_UNIQUE_INDEX);
+    // 옵션 값이 없는 호수는 서로 비교하지 않는다
+    assertThatCode(() -> update(INSERT_SHADE, TINT_ID, "3호", "3호", null, null, null))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void optionAliasMustReferenceAnExistingShadeAndBeUniquePerShade() {
+    String shadeId = insertShade("1호");
+    update(INSERT_ALIAS, shadeId, "old-1");
+
+    assertThatThrownBy(() -> update(INSERT_ALIAS, shadeId, "old-1"))
+        .isInstanceOf(DuplicateKeyException.class)
+        .hasMessageContaining("product_shade_option_aliases_pkey");
+    assertThatThrownBy(() -> update(INSERT_ALIAS, "00000000-0000-4000-8000-000000000099", "old-1"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShade.OPTION_ALIAS_FK);
+  }
+
+  // --- 색 칸 ---
+
+  @Test
+  void shadeColorMustReferenceAnExistingShade() {
+    assertThatThrownBy(
+            () ->
+                update(
+                    INSERT_SLOT,
+                    "00000000-0000-4000-8000-000000000099",
+                    1,
+                    null,
+                    null,
+                    "NONE",
+                    null,
+                    null,
+                    null,
+                    null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.SHADE_FK);
+  }
+
+  @Test
+  void duplicateSlotOrderInOneShadeIsRejectedWhenTheConstraintIsChecked() {
+    String shade = insertShade("1호");
+    update(INSERT_SLOT, shade, 1, null, null, "NONE", null, null, null, null);
+    // 칸 순서 유니크는 DEFERRABLE INITIALLY DEFERRED 라 문장이 아니라 제약 검사(커밋) 시점에 확인한다
+    update(INSERT_SLOT, shade, 1, null, null, "NONE", null, null, null, null);
+
+    assertThatThrownBy(() -> update("set constraints all immediate"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.SHADE_ORDER_UNIQUE);
+  }
+
+  @Test
+  void sameSlotOrderIsAllowedInAnotherShade() {
+    String first = insertShade("1호");
+    String second = insertShade("2호");
+    update(INSERT_SLOT, first, 1, null, null, "NONE", null, null, null, null);
+    update(INSERT_SLOT, second, 1, null, null, "NONE", null, null, null, null);
+
+    assertThatCode(() -> update("set constraints all immediate")).doesNotThrowAnyException();
+  }
+
+  @Test
+  void slotOrdersCanBeSwappedInOneTransaction() {
+    String shade = insertShade("1호");
+    update(INSERT_SLOT, shade, 1, null, null, "NONE", null, null, null, null);
+    update(INSERT_SLOT, shade, 2, null, null, "NONE", null, null, null, null);
+
+    // 칸 순서 유니크는 DEFERRABLE 이라 커밋(또는 제약 검사) 시점에 확인한다
+    assertThatCode(
+            () -> {
+              jdbc.update(
+                  "update product_shade_colors set sort_order = 3 - sort_order where shade_id = ?::uuid",
+                  shade);
+              jdbc.execute("set constraints all immediate");
+            })
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void slotNameAndItsSourceMustAgree() {
+    String shade = insertShade("1호");
+
+    assertThatCode(
+            () ->
+                update(INSERT_SLOT, shade, 1, "Sand", "sand", "SITE_TEXT", null, null, null, null))
+        .doesNotThrowAnyException();
+    assertThatCode(
+            () ->
+                update(
+                    INSERT_SLOT, shade, 2, "Rose", "rose", "IMAGE_PRINT", null, null, null, null))
+        .doesNotThrowAnyException();
+    // 이름이 있는데 근거가 NONE
+    assertThatThrownBy(
+            () -> update(INSERT_SLOT, shade, 3, "Mauve", "mauve", "NONE", null, null, null, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.NAME_SOURCE_CHECK);
+    // 이름이 없는데 근거가 있음
+    assertThatThrownBy(
+            () -> update(INSERT_SLOT, shade, 3, null, null, "SITE_TEXT", null, null, null, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.NAME_SOURCE_CHECK);
+    // 이름과 비교용 키는 함께 있거나 함께 없다
+    assertThatThrownBy(
+            () -> update(INSERT_SLOT, shade, 3, "Mauve", null, "SITE_TEXT", null, null, null, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.NAME_PAIR_CHECK);
+    // 순서대로 센 번호 같은 값은 근거가 될 수 없다
+    assertThatThrownBy(
+            () ->
+                update(
+                    INSERT_SLOT, shade, 3, "Mauve", "mauve", "MODEL_INDEX", null, null, null, null))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.NAME_SOURCE_CHECK);
+  }
+
+  @Test
+  void slotColorWithAllFourValuesOrNoneIsAccepted() {
+    String shade = insertShade("1호");
+
+    assertThatCode(
+            () ->
+                update(
+                    INSERT_SLOT,
+                    shade,
+                    1,
+                    null,
+                    null,
+                    "NONE",
+                    "#E8452C",
+                    "PRODUCT_PHOTO",
+                    true,
+                    "AUTO_APPROVED"))
+        .doesNotThrowAnyException();
+    assertThatCode(
+            () ->
+                update(
+                    INSERT_SLOT,
+                    shade,
+                    2,
+                    null,
+                    null,
+                    "NONE",
+                    "#C8102E",
+                    "SOURCE_VALUE",
+                    true,
+                    "BELOW_THRESHOLD"))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> update(INSERT_SLOT, shade, 3, null, null, "NONE", null, null, null, null))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void slotColorWithOnlySomeValuesIsRejected() {
+    String shade = insertShade("1호");
+    int order = 1;
+    for (Object[] partial :
+        List.of(
+            new Object[] {"#E8452C", null, null, null},
+            new Object[] {null, "WEB_PHOTO", null, null},
+            new Object[] {null, null, false, null},
+            new Object[] {null, null, null, "AUTO_APPROVED"},
+            new Object[] {"#E8452C", "WEB_PHOTO", true, null},
+            new Object[] {"#E8452C", "WEB_PHOTO", null, "AUTO_APPROVED"})) {
+      int sortOrder = order++;
+      assertThatThrownBy(
+              () ->
+                  update(
+                      INSERT_SLOT,
+                      shade,
+                      sortOrder,
+                      null,
+                      null,
+                      "NONE",
+                      partial[0],
+                      partial[1],
+                      partial[2],
+                      partial[3]))
+          .as("hex=%s source=%s estimated=%s review=%s", partial)
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .hasMessageContaining(ProductShadeColor.COLOR_ALL_OR_NONE_CHECK);
+    }
+  }
+
+  @Test
+  void slotHexSourceAndReviewStatusMustBeKnownValues() {
+    String shade = insertShade("1호");
+
+    for (String hex : List.of("#e8452c", "E8452C", "#E8452", "#G8452C")) {
+      assertThatThrownBy(
+              () ->
+                  update(
+                      INSERT_SLOT,
+                      shade,
+                      1,
+                      null,
+                      null,
+                      "NONE",
+                      hex,
+                      "WEB_PHOTO",
+                      true,
+                      "AUTO_APPROVED"))
+          .as(hex)
+          .isInstanceOf(DataIntegrityViolationException.class)
+          .hasMessageContaining(ProductShadeColor.COLOR_HEX_CHECK);
+    }
+    assertThatThrownBy(
+            () ->
+                update(
+                    INSERT_SLOT,
+                    shade,
+                    1,
+                    null,
+                    null,
+                    "NONE",
+                    "#E8452C",
+                    "OFFICIAL",
+                    true,
+                    "AUTO_APPROVED"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.COLOR_SOURCE_CHECK);
+    assertThatThrownBy(
+            () ->
+                update(
+                    INSERT_SLOT,
+                    shade,
+                    1,
+                    null,
+                    null,
+                    "NONE",
+                    "#E8452C",
+                    "WEB_PHOTO",
+                    true,
+                    "PENDING"))
+        .isInstanceOf(DataIntegrityViolationException.class)
+        .hasMessageContaining(ProductShadeColor.REVIEW_CHECK);
+  }
+
   // --- 앱에서만 지키는 규칙 ---
 
   @Test
@@ -237,6 +538,14 @@ class ProductsConstraintSqlTest {
         .containsEntry(
             ProductShade.PRODUCT_ORDER_INDEX,
             List.of("product_id", "sort_order", "name_normalized"));
+    assertThat(indexColumns("product_shade_colors"))
+        .containsEntry(ProductShadeColor.SHADE_ORDER_UNIQUE, List.of("shade_id", "sort_order"))
+        .containsEntry(ProductShadeColor.SHADE_ORDER_INDEX, List.of("shade_id", "sort_order"));
+    assertThat(indexColumns("products"))
+        .containsEntry(Product.SOURCE_PRODUCT_UNIQUE_INDEX, List.of("source", "source_product_id"));
+    assertThat(indexColumns("product_shades"))
+        .containsEntry(
+            ProductShade.SOURCE_OPTION_UNIQUE_INDEX, List.of("product_id", "source_option_id"));
     assertThat(indexColumns("product_types"))
         .containsEntry(ProductType.CATEGORY_ORDER_INDEX, List.of("category_code", "sort_order"))
         .containsEntry(ProductType.CATEGORY_CODE_UNIQUE, List.of("category_code", "code"));
@@ -262,6 +571,20 @@ class ProductsConstraintSqlTest {
       throw e;
     }
     jdbc.execute("release savepoint attempt");
+  }
+
+  private void setSaleStatus(String status) {
+    update("update products set sale_status = ? where id = ?::uuid", status, TINT_ID);
+  }
+
+  /** TINT 제품에 호수를 하나 넣고 id 를 돌려준다. */
+  private String insertShade(String name) {
+    update(INSERT_SHADE, TINT_ID, name, name, null, null, null);
+    return jdbc.queryForObject(
+        "select id::text from product_shades where product_id = ?::uuid and name = ?",
+        String.class,
+        TINT_ID,
+        name);
   }
 
   private List<String> constraints(String table) {

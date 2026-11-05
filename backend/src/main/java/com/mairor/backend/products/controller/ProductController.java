@@ -51,7 +51,7 @@ public class ProductController {
 
           - 대소문자·공백 차이는 같은 이름으로 본다.
           - 결과는 0~1건이며, 없으면 빈 목록이다. 화면은 직접 입력으로 넘어간다.
-          - 호수가 없거나 대표 색을 모르면 각각 빈 목록·`null` 이다.
+          - 호수는 색 칸 목록(`colors`)을 가진다. 호수·칸이 없으면 빈 목록이고, 쓸 수 있는 색이 없는 칸의 `color`는 `null` 이다.
           """,
       security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE))
   @ApiResponse(

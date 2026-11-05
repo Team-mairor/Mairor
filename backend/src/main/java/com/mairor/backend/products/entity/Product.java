@@ -5,6 +5,8 @@ import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.ConstraintMode;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.GeneratedValue;
@@ -45,6 +47,16 @@ public class Product {
 
   public static final String TYPE_BRAND_NAME_UNIQUE = "uk_products_type_brand_name";
   public static final String CATEGORY_TYPE_FK = "fk_products_category_type";
+  public static final String SALE_STATUS_CHECK = "ck_products_sale_status";
+  public static final String SOURCE_PRODUCT_UNIQUE_INDEX = "uk_products_source_product";
+
+  public static final int IMAGE_URL_MAX_LENGTH = 1000;
+
+  /** 크롤링 출처 이름 상한. {@code OFFICIAL:<도메인>} 꼴이라 도메인이 길면 30자를 넘는다. */
+  public static final int SOURCE_MAX_LENGTH = 100;
+
+  public static final int SOURCE_PRODUCT_ID_MAX_LENGTH = 100;
+  public static final int SOURCE_URL_MAX_LENGTH = 1000;
 
   public static final int BRAND_MAX_LENGTH = 100;
   public static final int NAME_MAX_LENGTH = 200;
@@ -80,17 +92,26 @@ public class Product {
   private ProductType type;
 
   /** 크롤링 출처 이름. 직접 넣은 데이터는 {@code null}. */
-  @Column(length = 30)
+  @Column(length = SOURCE_MAX_LENGTH)
   private String source;
 
-  @Column(name = "source_product_id", length = 100)
+  @Column(name = "source_product_id", length = SOURCE_PRODUCT_ID_MAX_LENGTH)
   private String sourceProductId;
 
-  @Column(name = "source_url", length = 1000)
+  @Column(name = "source_url", length = SOURCE_URL_MAX_LENGTH)
   private String sourceUrl;
 
   @Column(name = "collected_at")
   private Instant collectedAt;
+
+  /** 대표 이미지 URL. 화면 표시는 선택이다. */
+  @Column(name = "image_url", length = IMAGE_URL_MAX_LENGTH)
+  private String imageUrl;
+
+  /** 수집 시점의 판매 상태. 직접 넣은 데이터는 {@code null}. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "sale_status", length = 20)
+  private SaleStatus saleStatus;
 
   @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
   @OrderBy("sortOrder ASC, nameNormalized ASC")
@@ -132,6 +153,21 @@ public class Product {
     this.sourceProductId = sourceProductId;
     this.sourceUrl = sourceUrl;
     this.collectedAt = collectedAt;
+  }
+
+  /**
+   * 대표 이미지와 판매 상태를 기록한다.
+   *
+   * @param imageUrl 대표 이미지 URL(최대 1000자). 없으면 {@code null}
+   * @param saleStatus 판매 상태. 모르면 {@code null}
+   * @throws IllegalArgumentException 이미지 URL 이 1000자를 넘으면
+   */
+  public void recordListing(String imageUrl, SaleStatus saleStatus) {
+    if (imageUrl != null && imageUrl.length() > IMAGE_URL_MAX_LENGTH) {
+      throw new IllegalArgumentException("이미지 URL은 " + IMAGE_URL_MAX_LENGTH + "자를 넘을 수 없다");
+    }
+    this.imageUrl = imageUrl;
+    this.saleStatus = saleStatus;
   }
 
   /**
@@ -209,6 +245,14 @@ public class Product {
 
   public Instant getCollectedAt() {
     return collectedAt;
+  }
+
+  public String getImageUrl() {
+    return imageUrl;
+  }
+
+  public SaleStatus getSaleStatus() {
+    return saleStatus;
   }
 
   /** 정렬: {@code sortOrder}, {@code nameNormalized} 순 (DB 에서 읽을 때). */

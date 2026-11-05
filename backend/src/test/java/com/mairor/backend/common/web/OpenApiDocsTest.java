@@ -27,8 +27,11 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 class OpenApiDocsTest {
 
-  /** 문서에 나오는 API 수(메서드 단위). 파우치 등록 POST·목록 GET·상세 GET·수정 PATCH 포함. API를 추가하면 함께 올린다. */
-  private static final int ALL_OPERATIONS = 34;
+  /**
+   * 문서에 나오는 API 수(메서드 단위). 파우치 등록 POST·목록 GET·상세 GET·수정 PATCH, 수집 상품 판정 시험 POST 포함. API 를 추가하면 함께
+   * 올린다.
+   */
+  private static final int ALL_OPERATIONS = 35;
 
   @Autowired private MockMvc mockMvc;
 
@@ -396,8 +399,39 @@ class OpenApiDocsTest {
             jsonPath("$.components.schemas.ColorInfoResponse.properties.source.example")
                 .value("CATALOG"))
         .andExpect(
+            jsonPath("$.components.schemas.ShadeColorResponse.properties.colorId.example")
+                .isNotEmpty())
+        .andExpect(
+            jsonPath("$.components.schemas.ShadeColorResponse.properties.sortOrder.example")
+                .value(1))
+        .andExpect(
+            jsonPath("$.components.schemas.ShadeResponse.properties.colors.description")
+                .isNotEmpty())
+        .andExpect(
             jsonPath("$.components.schemas.ProductResponse.properties.type.example")
                 .value("LIP_TINT"));
+  }
+
+  @Test
+  void apiDocs_catalogDryRunUsesTheInternalTokenAndDocumentsItsResults() throws Exception {
+    String dryRun = "$.paths['/v1/internal/catalog/import-runs/dry-run'].post";
+
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(dryRun + ".tags[0]").value("운영 · 화장품 카탈로그 수집"))
+        .andExpect(jsonPath(dryRun + ".summary").value("수집 상품 판정 시험"))
+        .andExpect(jsonPath(dryRun + ".security[0].internalToken").exists())
+        .andExpect(
+            jsonPath(dryRun + ".responses['200'].content['application/json'].examples")
+                .isNotEmpty())
+        .andExpect(
+            jsonPath(
+                    dryRun
+                        + ".responses['400'].content['application/json'].examples.VALIDATION_FAILED")
+                .exists())
+        .andExpect(jsonPath(dryRun + ".responses['401']").exists())
+        .andExpect(jsonPath("$.components.schemas.Item.properties.outcome.description").exists());
   }
 
   /** Swagger UI 의 그룹 이름이 한국어로 통일돼 있어야 한다(기본값 user-controller 같은 영문 이름이 남으면 안 된다). */

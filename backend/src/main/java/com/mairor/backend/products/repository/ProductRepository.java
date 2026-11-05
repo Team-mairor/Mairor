@@ -20,6 +20,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
         typeCode, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.normalize(name));
   }
 
+  /** 수집 출처의 상품 번호로 찾는다. 같은 출처의 같은 번호는 한 제품이다({@code uk_products_source_product}). */
+  @EntityGraph(attributePaths = {"category", "type"})
+  Optional<Product> findBySourceAndSourceProductId(String source, String sourceProductId);
+
   /** 정규화된 값으로 찾는다. 정규화 전 값으로는 {@link #findExact}를 쓴다. */
   @EntityGraph(attributePaths = {"category", "type"})
   Optional<Product> findByTypeCodeAndBrandNormalizedAndNameNormalized(

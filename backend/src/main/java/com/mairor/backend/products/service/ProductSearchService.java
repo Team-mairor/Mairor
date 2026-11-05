@@ -7,14 +7,19 @@ import com.mairor.backend.products.dto.request.ProductSearchQuery;
 import com.mairor.backend.products.dto.response.ProductResponse;
 import com.mairor.backend.products.dto.response.ShadeResponse;
 import com.mairor.backend.products.entity.Product;
+import com.mairor.backend.products.entity.ProductShade;
+import com.mairor.backend.products.entity.ProductShadeColor;
 import com.mairor.backend.products.entity.ProductType;
 import com.mairor.backend.products.repository.ProductCategoryRepository;
 import com.mairor.backend.products.repository.ProductRepository;
+import com.mairor.backend.products.repository.ProductShadeColorRepository;
 import com.mairor.backend.products.repository.ProductShadeRepository;
 import com.mairor.backend.products.repository.ProductTypeRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,8 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>검색은 정규화한 브랜드·제품명과 종류가 정확히 같은 제품만 찾는다. (종류, 브랜드, 제품명)이 유니크라 결과는 0~1건이다. 비슷한 이름의 다른 제품에 연결하지
  * 않는다.
  *
- * <p>호수는 {@code Product.shades} 컬렉션을 건드리지 않고 정렬 조회로 따로 읽는다. 쿼리는 검색 1건 3번(종류·제품·호수), 0건 2번, 상세
- * 2번(제품·호수)이다. 코드가 틀린 요청에만 카테고리 존재 확인 쿼리가 1번 더 나간다.
+ * <p>호수와 색 칸은 컬렉션을 건드리지 않고 정렬 조회로 따로 읽는다. 색 칸은 호수 ID 목록으로 한 번에 읽는다. 쿼리는 검색 1건 4번(종류·제품·호수·색 칸), 0건
+ * 2번, 상세 3번(제품·호수·색 칸)이다. 호수가 없으면 색 칸 쿼리는 나가지 않는다(호수 없는 제품 검색 3번, 상세 2번). 코드가 틀린 요청에만 카테고리 존재 확인
+ * 쿼리가 1번 더 나간다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -38,16 +44,19 @@ public class ProductSearchService {
   private final ProductTypeRepository typeRepository;
   private final ProductRepository productRepository;
   private final ProductShadeRepository shadeRepository;
+  private final ProductShadeColorRepository colorRepository;
 
   public ProductSearchService(
       ProductCategoryRepository categoryRepository,
       ProductTypeRepository typeRepository,
       ProductRepository productRepository,
-      ProductShadeRepository shadeRepository) {
+      ProductShadeRepository shadeRepository,
+      ProductShadeColorRepository colorRepository) {
     this.categoryRepository = categoryRepository;
     this.typeRepository = typeRepository;
     this.productRepository = productRepository;
     this.shadeRepository = shadeRepository;
+    this.colorRepository = colorRepository;
   }
 
   /**
@@ -91,13 +100,21 @@ public class ProductSearchService {
   }
 
   private ProductResponse toResponse(Product product) {
-    List<ShadeResponse> shades =
-        shadeRepository
-            .findByProductIdOrderBySortOrderAscNameNormalizedAsc(product.getId())
-            .stream()
-            .map(ShadeResponse::from)
-            .toList();
-    return ProductResponse.of(product, shades);
+    List<ProductShade> shades =
+        shadeRepository.findByProductIdOrderBySortOrderAscNameNormalizedAsc(product.getId());
+    Map<UUID, List<ProductShadeColor>> colorsByShade =
+        shades.isEmpty()
+            ? Map.of()
+            : colorRepository
+                .findByShadeIdInOrderByShadeIdAscSortOrderAsc(
+                    shades.stream().map(ProductShade::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(c -> c.getShade().getId()));
+    return ProductResponse.of(
+        product,
+        shades.stream()
+            .map(s -> ShadeResponse.of(s, colorsByShade.getOrDefault(s.getId(), List.of())))
+            .toList());
   }
 
   private static BusinessException invalid(String field, String reason) {

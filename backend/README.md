@@ -306,7 +306,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | 파일 | 테이블 |
 |---|---|
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
-| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수) |
+| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값) |
 | `db/schema/analysis.sql` | `videos` (유튜브 영상), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
 | `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
 
@@ -317,6 +317,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 |---|---|---|
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
 | 개인 파우치·회원별 버전 기반 | S15P31A306-211 | 먼저 `ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;` 다음 `pouch.sql` 전체. 기존 회원도 버전 0으로 시작한다. 기존 카탈로그 테이블은 변경·재적재하지 않는다 |
+| 호수별 색 칸: `products.image_url`·`sale_status`, `product_shades.source_option_id`, 테이블 `product_shade_colors`·`product_shade_option_aliases`, 수집 출처 유니크 인덱스 2개 | S15P31A306-294 | `psql -f db/upgrade/294-product-shade-colors.sql` (컬럼·테이블·인덱스 추가뿐이라 옛 버전 앱과 함께 돌아도 깨지지 않는다. 옛 `product_shades.color_*` 는 지우지 않는다). 적용 전에 ① `SELECT source, source_product_id, count(*) FROM products WHERE source IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;` 가 0건인지(있으면 새 유니크 인덱스가 만들어지지 않아 파일 전체가 롤백된다) ② `SELECT count(*) FROM product_shades WHERE color_hex IS NOT NULL;` 로 옮길 대표 색이 있는지 센다. ②가 0 이 아니면 **같은 시점에** `psql -f db/upgrade/294-product-shade-colors-data.sql` 로 호수마다 색 칸 1개로 옮긴다(다시 적용해도 된다). 옮기지 않으면 그 호수의 `colors` 는 빈 목록으로 나온다 |
 | `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |
@@ -347,12 +348,12 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 |---|---|---|---|---|
 | 1 | `db/schema/products.sql` | 테이블·제약·인덱스 | 모든 환경 | ❌ 빈 DB 에만 적용한다 (`already exists`) |
 | 2 | `db/seed/product-categories.sql` | 카테고리 9개, 종류 38개 | 모든 환경 | ✅ 같은 코드는 파일 값으로 갱신. 파일에서 지운 행은 DB 에 남는다 |
-| 3 | `db/seed/dev/product-samples.sql` | 설명용 샘플 제품 2개, 호수 3개 | **개발 환경만** (운영 금지) | ✅ 고정 id 로 파일 값으로 갱신 |
+| 3 | `db/seed/dev/product-samples.sql` | 설명용 샘플 제품 3개, 호수 4개, 색 칸 6개(팔레트 샘플 포함) | **개발 환경만** (운영 금지) | ✅ 고정 id 로 파일 값으로 갱신 |
 
 - dev 는 `ddl-auto=update` 로 Hibernate 가 테이블을 만들어서 시드만 적용하면 된다. 다만 이렇게 만든 테이블에는 `products.sql` 의 복합 FK·CHECK 가 없다. 제약까지 확인하려면 빈 DB 에 `products.sql` 을 먼저 적용한다.
 - **정규화 컬럼**(`*_normalized`)은 `CatalogTextNormalizer` 로 만든 비교용 키다(NFC → 공백 축약 → 앞뒤 공백 제거 → 소문자화). DB 트리거가 없으므로 SQL 로 직접 넣는 데이터도 같은 규칙으로 계산한 값을 넣는다. 시드 값이 규칙과 어긋나면 `ProductSeedSqlTest` 가 실패한다. 크롤링 적재는 엔티티(`Product`·`ProductShade`)를 거쳐 저장한다.
-- **DB 가 막는 규칙**: 카테고리-종류 불일치(복합 FK `fk_products_category_type`), 제품·호수 중복(정규화 키 유니크), 색상 세 컬럼 일부만 채움, 소문자·잘못된 HEX.
-- **앱에서만 막는 규칙**: 호수 선택이 없는 카테고리(SKINCARE·FRAGRANCE·TOOL)의 제품에 호수를 연결하지 않는다(`Product.addShade`). SQL 로 직접 넣으면 막지 못한다.
+- **DB 가 막는 규칙**: 카테고리-종류 불일치(복합 FK `fk_products_category_type`), 제품·호수 중복(정규화 키 유니크), 색상 세 컬럼 일부만 채움, 소문자·잘못된 HEX. 색 칸은 호수 안 순서 중복(`DEFERRABLE` 이라 제약 검사·커밋 시점에 확인), 이름과 이름 근거 불일치, 색 네 컬럼 일부만 채움, 모르는 출처·승인 상태. 수집 출처의 같은 상품 번호·같은 옵션 값 중복(부분 유니크 인덱스, JPA 로 표현할 수 없어 SQL 에만 있다).
+- **앱에서만 막는 규칙**: 호수 선택이 없는 카테고리(SKINCARE·FRAGRANCE·TOOL)의 제품에 호수를 연결하지 않는다(`Product.addShade`). SQL 로 직접 넣으면 막지 못한다. 사진·모델·사이트 색값 출처의 색은 `color_estimated=true` 이다(`ProductShadeColor.assignColor`). 같은 제품의 다른 호수와 옵션 값 별칭이 겹치는지는 적재 코드가 확인한다.
 - 종류 코드명과 호환 부위 값은 확정 전이다(`TODO(확인 필요 2)`). 호환 부위는 비워 두며 API 는 빈 목록을 응답한다.
 
 ## 분석 작업 (운영 명령 · worker)

@@ -32,7 +32,7 @@ final class ProductApiDocs {
         ]
       }""";
 
-  /** 제품 하나. 대표 색을 아는 호수와 모르는 호수를 함께 싣는다. */
+  /** 제품 하나. 단색 호수, 팔레트 호수(칸 3개: 쓸 수 있는 색·쓰지 않는 색·색 없음), 칸이 없는 호수를 함께 싣는다. */
   private static final String PRODUCT =
       """
       {
@@ -45,12 +45,43 @@ final class ProductApiDocs {
           {
             "shadeId": "00000000-0000-4000-8000-000000000201",
             "name": "01 Coral",
-            "color": {"colorSpace": "sRGB", "hex": "#F2665A", "source": "CATALOG", "estimated": false}
+            "colors": [
+              {
+                "colorId": "00000000-0000-4000-8000-000000000401",
+                "name": null,
+                "sortOrder": 1,
+                "color": {"colorSpace": "sRGB", "hex": "#F2665A", "source": "CATALOG", "estimated": false}
+              }
+            ]
+          },
+          {
+            "shadeId": "00000000-0000-4000-8000-000000000204",
+            "name": "01 Dusk",
+            "colors": [
+              {
+                "colorId": "00000000-0000-4000-8000-000000000404",
+                "name": "Matte Sand",
+                "sortOrder": 1,
+                "color": {"colorSpace": "sRGB", "hex": "#D9B8A0", "source": "CATALOG", "estimated": false}
+              },
+              {
+                "colorId": "00000000-0000-4000-8000-000000000405",
+                "name": "Shimmer Rose",
+                "sortOrder": 2,
+                "color": null
+              },
+              {
+                "colorId": "00000000-0000-4000-8000-000000000406",
+                "name": null,
+                "sortOrder": 3,
+                "color": null
+              }
+            ]
           },
           {
             "shadeId": "00000000-0000-4000-8000-000000000203",
             "name": "03 Nude",
-            "color": null
+            "colors": []
           }
         ]
       }""";

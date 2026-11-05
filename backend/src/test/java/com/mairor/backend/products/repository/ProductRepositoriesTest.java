@@ -4,12 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.products.entity.ColorSource;
+import com.mairor.backend.products.entity.NameSource;
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.entity.ProductCategory;
 import com.mairor.backend.products.entity.ProductShade;
+import com.mairor.backend.products.entity.ProductShadeColor;
 import com.mairor.backend.products.entity.ProductType;
+import com.mairor.backend.products.entity.ReviewStatus;
+import com.mairor.backend.products.entity.SaleStatus;
 import com.mairor.backend.products.entity.ShadeColor;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -192,6 +198,68 @@ class ProductRepositoriesTest {
             jdbc.queryForMap(
                 "select color_hex, color_source, color_estimated from product_shades where name = '2호'"))
         .allSatisfy((column, value) -> assertThat(value).as(column).isNull());
+  }
+
+  @Test
+  void shadeColorSlotsAreStoredInOrderWithTheirStateAndReadBack() {
+    Instant collectedAt = Instant.parse("2026-11-05T01:00:00Z");
+    Product product = new Product(lipTint, "ETUDE", "Palette Tint");
+    product.recordSource("OFFICIAL:etude.com", "p-1", "https://etude.com/p-1", collectedAt);
+    product.recordListing("https://etude.com/p-1.png", SaleStatus.ON_SALE);
+    ProductShade shade = product.addShade("01 Dusk", 1, null);
+    shade.changeSourceOptionId("opt-1");
+    shade.addOptionAlias("old-1");
+    // 넣는 순서와 칸 순서를 다르게 한다
+    ProductShadeColor third = shade.addColor(3, null, NameSource.NONE);
+    ProductShadeColor first = shade.addColor(1, "Matte Sand", NameSource.SITE_TEXT);
+    ProductShadeColor second = shade.addColor(2, "Shimmer Rose", NameSource.IMAGE_PRINT);
+    first.assignColor(
+        ColorSource.PRODUCT_PHOTO, "#d9b8a0", true, ReviewStatus.AUTO_APPROVED, collectedAt);
+    second.assignColor(
+        ColorSource.WEB_PHOTO, "#b76e79", true, ReviewStatus.BELOW_THRESHOLD, collectedAt);
+    UUID productId = productRepository.saveAndFlush(product).getId();
+    UUID firstColorId = first.getId();
+    em.clear();
+
+    Product loaded = productRepository.findById(productId).orElseThrow();
+    ProductShade loadedShade = loaded.getShades().get(0);
+
+    assertThat(loaded.getImageUrl()).isEqualTo("https://etude.com/p-1.png");
+    assertThat(loaded.getSaleStatus()).isEqualTo(SaleStatus.ON_SALE);
+    assertThat(loadedShade.getSourceOptionId()).isEqualTo("opt-1");
+    assertThat(loadedShade.getOptionAliases()).containsExactly("old-1");
+    assertThat(loadedShade.getColors())
+        .extracting(ProductShadeColor::getSortOrder)
+        .containsExactly(1, 2, 3);
+    ProductShadeColor loadedFirst = loadedShade.getColors().get(0);
+    assertThat(loadedFirst.getId()).isEqualTo(firstColorId);
+    assertThat(loadedFirst.getName()).isEqualTo("Matte Sand");
+    assertThat(loadedFirst.getNameNormalized()).isEqualTo("matte sand");
+    assertThat(loadedFirst.getNameSource()).isEqualTo(NameSource.SITE_TEXT);
+    assertThat(loadedFirst.getColor().getHex()).isEqualTo("#D9B8A0");
+    assertThat(loadedFirst.getColorSource()).isEqualTo(ColorSource.PRODUCT_PHOTO);
+    assertThat(loadedFirst.getReviewStatus()).isEqualTo(ReviewStatus.AUTO_APPROVED);
+    assertThat(loadedFirst.getSourceCollectedAt()).isEqualTo(collectedAt);
+    assertThat(loadedFirst.hasUsableColor()).isTrue();
+    assertThat(loadedShade.getColors().get(1).hasUsableColor()).isFalse();
+    assertThat(loadedShade.getColors().get(1).getColor().getHex()).isEqualTo("#B76E79");
+    ProductShadeColor loadedThird = loadedShade.getColors().get(2);
+    assertThat(loadedThird.getName()).isNull();
+    assertThat(loadedThird.getNameSource()).isEqualTo(NameSource.NONE);
+    assertThat(loadedThird.getColor()).isNull();
+    assertThat(loadedThird.getReviewStatus()).isNull();
+    assertThat(third.getId()).isEqualTo(loadedThird.getId());
+  }
+
+  @Test
+  void shadeColorIsSavedTogetherWithItsProduct() {
+    Product product = new Product(lipTint, "ETUDE", "Palette Tint");
+    ProductShade shade = product.addShade("01 Dusk", 1, null);
+    shade.addColor(1, null, NameSource.NONE);
+    productRepository.saveAndFlush(product);
+
+    assertThat(jdbc.queryForObject("select count(*) from product_shade_colors", Integer.class))
+        .isEqualTo(1);
   }
 
   @Test

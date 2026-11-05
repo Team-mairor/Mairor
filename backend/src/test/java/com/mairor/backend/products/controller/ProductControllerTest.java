@@ -8,9 +8,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.products.entity.ColorSource;
+import com.mairor.backend.products.entity.NameSource;
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.entity.ProductType;
-import com.mairor.backend.products.entity.ShadeColor;
+import com.mairor.backend.products.entity.ReviewStatus;
 import com.mairor.backend.users.support.AuthenticatedUser;
 import jakarta.persistence.EntityManager;
 import java.sql.Connection;
@@ -73,7 +75,9 @@ class ProductControllerTest {
       DataSourceUtils.releaseConnection(connection, dataSource);
     }
     tint = new Product(em.find(ProductType.class, "LIP_TINT"), BRAND, NAME);
-    tint.addShade("01 누드 로즈", 1, ShadeColor.of("#D08A86", "SAMPLE", false));
+    tint.addShade("01 누드 로즈", 1, null)
+        .addColor(1, null, NameSource.NONE)
+        .assignColor(ColorSource.SAMPLE, "#D08A86", false, ReviewStatus.AUTO_APPROVED, null);
     tint.addShade("03 로지", 2, null);
     em.persist(tint);
     em.flush();
@@ -123,13 +127,19 @@ class ProductControllerTest {
         .andExpect(jsonPath("$.items[0].shades[0].length()").value(3))
         .andExpect(jsonPath("$.items[0].shades[0].shadeId").isString())
         .andExpect(jsonPath("$.items[0].shades[0].name").value("01 누드 로즈"))
-        .andExpect(jsonPath("$.items[0].shades[0].color.length()").value(4))
-        .andExpect(jsonPath("$.items[0].shades[0].color.colorSpace").value("sRGB"))
-        .andExpect(jsonPath("$.items[0].shades[0].color.hex").value("#D08A86"))
-        .andExpect(jsonPath("$.items[0].shades[0].color.source").value("CATALOG"))
-        .andExpect(jsonPath("$.items[0].shades[0].color.estimated").value(false))
+        .andExpect(jsonPath("$.items[0].shades[0].colors.length()").value(1))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].length()").value(4))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].colorId").isString())
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].name").value((Object) null))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].sortOrder").value(1))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].color.length()").value(4))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].color.colorSpace").value("sRGB"))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].color.hex").value("#D08A86"))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].color.source").value("CATALOG"))
+        .andExpect(jsonPath("$.items[0].shades[0].colors[0].color.estimated").value(false))
+        .andExpect(jsonPath("$.items[0].shades[0].color").doesNotExist())
         // 색을 모르면 필드를 빼지 않고 null 로 보낸다
-        .andExpect(jsonPath("$.items[0].shades[1].color").value((Object) null))
+        .andExpect(jsonPath("$.items[0].shades[1].colors.length()").value(0))
         .andExpect(jsonPath("$.items[0].shades[1].length()").value(3));
   }
 

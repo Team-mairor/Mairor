@@ -11,11 +11,16 @@ import com.mairor.backend.common.error.ErrorResponse;
 import com.mairor.backend.products.dto.request.ProductSearchQuery;
 import com.mairor.backend.products.dto.response.ColorInfoResponse;
 import com.mairor.backend.products.dto.response.ProductResponse;
+import com.mairor.backend.products.dto.response.ShadeColorResponse;
 import com.mairor.backend.products.dto.response.ShadeResponse;
+import com.mairor.backend.products.entity.ColorSource;
+import com.mairor.backend.products.entity.NameSource;
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.entity.ProductCategory;
+import com.mairor.backend.products.entity.ProductShade;
+import com.mairor.backend.products.entity.ProductShadeColor;
 import com.mairor.backend.products.entity.ProductType;
-import com.mairor.backend.products.entity.ShadeColor;
+import com.mairor.backend.products.entity.ReviewStatus;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.List;
@@ -51,6 +56,7 @@ class ProductSearchServiceTest {
   private static final String NBSP = Character.toString(0x00A0);
   private static final String BRAND = "Mairor Sample";
   private static final String NAME = "Water Gel Tint";
+  private static final String PALETTE_NAME = "Three Color Palette";
 
   /** 엔티티 상한(200)을 앞뒤 공백까지 꽉 채운 제품명. 앞뒤 공백을 지우면 198자다. */
   private static final String LONG_NAME = " " + "x".repeat(Product.NAME_MAX_LENGTH - 2) + " ";
@@ -75,13 +81,36 @@ class ProductSearchServiceTest {
     em.persist(lipTint);
     em.persist(cushion);
     em.persist(toner);
+    ProductCategory eye = new ProductCategory("EYE", "아이", true, true, 3);
+    em.persist(eye);
+    ProductType palette = new ProductType("EYESHADOW_PALETTE", eye, "아이섀도 팔레트", 1);
+    em.persist(palette);
 
     // 호수 순서: 00 Base(0) → 01 Coral(1) → 02 Cherry(1). 같은 순서 값이면 이름 순. 넣는 순서는 다르게 한다
     tint = new Product(lipTint, BRAND, NAME);
-    tint.addShade("02 Cherry", 1, ShadeColor.of("#c8102e", "SAMPLE", true));
+    ProductShade cherry = tint.addShade("02 Cherry", 1, null);
+    cherry
+        .addColor(1, null, NameSource.NONE)
+        .assignColor(ColorSource.SAMPLE, "#c8102e", true, ReviewStatus.AUTO_APPROVED, null);
     tint.addShade("00 Base", 0, null);
-    tint.addShade("01 Coral", 1, ShadeColor.of("#F2665A", "SAMPLE", false));
+    ProductShade coral = tint.addShade("01 Coral", 1, null);
+    coral
+        .addColor(1, null, NameSource.NONE)
+        .assignColor(ColorSource.SAMPLE, "#F2665A", false, ReviewStatus.AUTO_APPROVED, null);
     em.persist(tint);
+
+    // 팔레트: 칸 4개를 일부러 순서와 다르게 넣는다. 쓸 수 있는 색 2(자동·정정), 쓰지 않는 색 1(품질 미달), 정정으로 거절 1
+    Product eyePalette = new Product(palette, BRAND, PALETTE_NAME);
+    ProductShade dusk = eyePalette.addShade("01 Dusk", 1, null);
+    ProductShadeColor fourth = dusk.addColor(4, null, NameSource.NONE);
+    ProductShadeColor second = dusk.addColor(2, "Shimmer Rose", NameSource.IMAGE_PRINT);
+    ProductShadeColor first = dusk.addColor(1, "Matte Sand", NameSource.SITE_TEXT);
+    ProductShadeColor third = dusk.addColor(3, "Deep Plum", NameSource.SITE_TEXT);
+    first.assignColor(ColorSource.PRODUCT_PHOTO, "#d9b8a0", true, ReviewStatus.AUTO_APPROVED, null);
+    second.assignColor(ColorSource.WEB_PHOTO, "#b76e79", true, ReviewStatus.BELOW_THRESHOLD, null);
+    third.assignColor(ColorSource.SOURCE_VALUE, "#5b2a4a", true, ReviewStatus.APPROVED, null);
+    fourth.assignColor(ColorSource.LLM_ESTIMATE, "#101010", true, ReviewStatus.REJECTED, null);
+    em.persist(eyePalette);
 
     // 같은 브랜드·제품명이지만 다른 종류
     em.persist(new Product(cushion, BRAND, NAME));
@@ -148,16 +177,60 @@ class ProductSearchServiceTest {
   }
 
   @Test
-  void shadeColorIsSrgbUppercaseHexWithCatalogSourceOrNull() {
+  void singleColorShadeHasOneSlotWithSrgbUppercaseHexAndCatalogSource() {
     List<ShadeResponse> shades = searchTint(BRAND, NAME).get(0).shades();
 
-    assertThat(shades.get(0).color()).isNull();
-    assertThat(shades.get(1).color())
-        .isEqualTo(new ColorInfoResponse("sRGB", "#F2665A", "CATALOG", false));
+    // 칸이 없는 호수는 빈 목록이다
+    assertThat(shades.get(0).colors()).isNotNull().isEmpty();
+    assertThat(shades.get(1).colors()).hasSize(1);
+    ShadeColorResponse coral = shades.get(1).colors().get(0);
+    assertThat(coral.colorId()).isNotBlank();
+    assertThat(coral.name()).isNull();
+    assertThat(coral.sortOrder()).isEqualTo(1);
+    assertThat(coral.color()).isEqualTo(new ColorInfoResponse("sRGB", "#F2665A", "CATALOG", false));
     // 내부 출처가 SAMPLE 이어도 CATALOG 로, 소문자로 넣은 HEX 는 대문자로 나온다
-    assertThat(shades.get(2).color())
+    assertThat(shades.get(2).colors().get(0).color())
         .isEqualTo(new ColorInfoResponse("sRGB", "#C8102E", "CATALOG", true));
     assertThat(shades).allSatisfy(s -> assertThat(s.shadeId()).isNotBlank());
+  }
+
+  @Test
+  void paletteSlotsComeInSlotOrderAndOnlyUsableColorsAreFilled() {
+    List<ProductResponse> items =
+        service.search(query("EYE", "EYESHADOW_PALETTE", BRAND, PALETTE_NAME));
+
+    List<ShadeColorResponse> slots = items.get(0).shades().get(0).colors();
+    assertThat(slots).extracting(ShadeColorResponse::sortOrder).containsExactly(1, 2, 3, 4);
+    assertThat(slots)
+        .extracting(ShadeColorResponse::name)
+        .containsExactly("Matte Sand", "Shimmer Rose", "Deep Plum", null);
+    assertThat(slots).extracting(ShadeColorResponse::colorId).doesNotHaveDuplicates();
+    // 자동 승인·운영 정정 승인만 색을 채우고, 품질 미달·거절은 값이 있어도 null 이다
+    assertThat(slots.get(0).color())
+        .isEqualTo(new ColorInfoResponse("sRGB", "#D9B8A0", "CATALOG", true));
+    assertThat(slots.get(1).color()).isNull();
+    assertThat(slots.get(2).color())
+        .isEqualTo(new ColorInfoResponse("sRGB", "#5B2A4A", "CATALOG", true));
+    assertThat(slots.get(3).color()).isNull();
+  }
+
+  @Test
+  void slotColorIdIsTheStoredIdOfTheSlot() {
+    UUID stored =
+        em.createQuery(
+                "select c.id from ProductShadeColor c where c.name = 'Matte Sand'", UUID.class)
+            .getSingleResult();
+
+    ShadeColorResponse slot =
+        service
+            .search(query("EYE", "EYESHADOW_PALETTE", BRAND, PALETTE_NAME))
+            .get(0)
+            .shades()
+            .get(0)
+            .colors()
+            .get(0);
+
+    assertThat(slot.colorId()).isEqualTo(stored.toString());
   }
 
   @Test
@@ -236,7 +309,7 @@ class ProductSearchServiceTest {
   }
 
   @Test
-  void searchWithAMatchRunsThreeQueries() {
+  void searchWithAMatchRunsFourQueries() {
     long queries =
         countQueries(
             () -> searchTint(BRAND, NAME),
@@ -245,6 +318,16 @@ class ProductSearchServiceTest {
               assertThat(items.get(0).type()).isEqualTo("LIP_TINT");
               assertThat(items.get(0).shades()).hasSize(3);
             });
+
+    assertThat(queries).isEqualTo(4);
+  }
+
+  @Test
+  void searchOfAProductWithoutShadesSkipsTheColorQuery() {
+    long queries =
+        countQueries(
+            () -> service.search(query("SKINCARE", "TONER", BRAND, "Daily Toner")),
+            items -> assertThat(items.get(0).shades()).isEmpty());
 
     assertThat(queries).isEqualTo(3);
   }
@@ -258,7 +341,7 @@ class ProductSearchServiceTest {
   }
 
   @Test
-  void getRunsTwoQueriesWithoutLoadingCategoryOrType() {
+  void getRunsThreeQueriesWithoutLoadingCategoryOrType() {
     long queries =
         countQueries(
             () -> service.get(tint.getId()),
@@ -268,6 +351,6 @@ class ProductSearchServiceTest {
               assertThat(item.shades()).hasSize(3);
             });
 
-    assertThat(queries).isEqualTo(2);
+    assertThat(queries).isEqualTo(3);
   }
 }

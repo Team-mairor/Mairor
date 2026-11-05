@@ -170,8 +170,9 @@ class ProductSeedSqlTest {
 
     apply(SAMPLES_SEED);
 
-    assertThat(count("products")).isEqualTo(2);
-    assertThat(count("product_shades")).isEqualTo(3);
+    assertThat(count("products")).isEqualTo(3);
+    assertThat(count("product_shades")).isEqualTo(4);
+    assertThat(count("product_shade_colors")).isEqualTo(6);
     assertThat(
             jdbc.queryForObject(
                 "select name from products where id = '00000000-0000-4000-8000-000000000101'",
@@ -204,8 +205,55 @@ class ProductSeedSqlTest {
         .isZero();
     assertThat(
             jdbc.queryForObject(
-                "select count(*) from product_shades where color_hex is null", Integer.class))
+                "select count(*) from product_shades s join products p on p.id = s.product_id"
+                    + " where p.type_code = 'LIP_TINT' and s.color_hex is null",
+                Integer.class))
         .isEqualTo(1);
+  }
+
+  @Test
+  void sampleSeedHasAPaletteWithThreeSlotsOfDifferentStates() {
+    apply(CATEGORIES_SEED);
+    apply(SAMPLES_SEED);
+
+    List<Map<String, Object>> slots =
+        jdbc.queryForList(
+            "select c.sort_order, c.name, c.name_source, c.color_hex, c.review_status"
+                + " from product_shade_colors c join product_shades s on s.id = c.shade_id"
+                + " join products p on p.id = s.product_id"
+                + " where p.type_code = 'EYESHADOW_PALETTE' order by c.sort_order");
+
+    assertThat(slots).hasSize(3);
+    assertThat(slots.get(0))
+        .containsEntry("name", "Matte Sand")
+        .containsEntry("name_source", "SITE_TEXT")
+        .containsEntry("review_status", "AUTO_APPROVED");
+    assertThat(slots.get(1))
+        .containsEntry("color_hex", "#B76E79")
+        .containsEntry("review_status", "BELOW_THRESHOLD");
+    assertThat(slots.get(2))
+        .containsEntry("name_source", "NONE")
+        .containsEntry("color_hex", null)
+        .containsEntry("review_status", null);
+  }
+
+  @Test
+  void everySingleShadeOfTheTintHasOneSlotMatchingItsOldColor() {
+    apply(CATEGORIES_SEED);
+    apply(SAMPLES_SEED);
+
+    List<Map<String, Object>> rows =
+        jdbc.queryForList(
+            "select s.name, s.color_hex as shade_hex, c.color_hex as slot_hex, count(*) over"
+                + " (partition by s.id) as slots from product_shades s join product_shade_colors c"
+                + " on c.shade_id = s.id join products p on p.id = s.product_id"
+                + " where p.type_code = 'LIP_TINT' order by s.sort_order");
+
+    assertThat(rows).hasSize(3);
+    for (Map<String, Object> r : rows) {
+      assertThat(r.get("slots")).as(r.toString()).isEqualTo(1L);
+      assertThat(r.get("slot_hex")).as(r.toString()).isEqualTo(r.get("shade_hex"));
+    }
   }
 
   @Test
@@ -217,6 +265,9 @@ class ProductSeedSqlTest {
         jdbc.queryForList("select brand, name, brand_normalized, name_normalized from products");
     List<Map<String, Object>> shades =
         jdbc.queryForList("select name, name_normalized from product_shades");
+    List<Map<String, Object>> slots =
+        jdbc.queryForList(
+            "select name, name_normalized from product_shade_colors where name is not null");
 
     assertThat(products).isNotEmpty();
     assertThat(shades).isNotEmpty();
@@ -232,6 +283,12 @@ class ProductSeedSqlTest {
       assertThat(s.get("name_normalized"))
           .as("shade %s", s.get("name"))
           .isEqualTo(CatalogTextNormalizer.normalize((String) s.get("name")));
+    }
+    assertThat(slots).isNotEmpty();
+    for (Map<String, Object> c : slots) {
+      assertThat(c.get("name_normalized"))
+          .as("slot %s", c.get("name"))
+          .isEqualTo(CatalogTextNormalizer.normalize((String) c.get("name")));
     }
   }
 

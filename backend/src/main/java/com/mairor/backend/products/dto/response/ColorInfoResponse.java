@@ -4,7 +4,7 @@ import com.mairor.backend.products.entity.ShadeColor;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * 대표 색상 (명세 ColorInfo). 색상을 모르면 이 객체 자체를 {@code null}로 응답한다.
+ * 색상 (명세 ColorInfo). 색 칸의 색이며, 쓸 수 있는 색이 없으면 이 객체 자체를 {@code null}로 응답한다.
  *
  * <p>카탈로그 색상의 {@code source}는 항상 {@code CATALOG}다. 저장된 내부 출처값(예: 크롤링 출처명)은 내보내지 않는다.
  */
@@ -17,7 +17,10 @@ public record ColorInfoResponse(
   public static final String SRGB = "sRGB";
   public static final String CATALOG = "CATALOG";
 
-  /** 카탈로그 호수 색상. 색상이 없으면 {@code null}. */
+  /**
+   * 카탈로그 색. 색상이 없으면 {@code null}. 서비스에 쓸 수 있는지는 호출하는 쪽이 정한다({@code
+   * ProductShadeColor#hasUsableColor}).
+   */
   public static ColorInfoResponse ofCatalog(ShadeColor color) {
     if (color == null) {
       return null;
