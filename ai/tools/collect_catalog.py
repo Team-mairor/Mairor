@@ -71,6 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     product.add_argument("--colors", action="store_true", help="호수 사진을 받아 색(HEX)도 계산")
     product.add_argument(
+        "--vision",
+        action="store_true",
+        help="--colors와 함께: 모델이 사진 종류와 칸 위치를 찾게 한다(모델 호출 발생)",
+    )
+    product.add_argument(
         "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
     )
 
@@ -159,11 +164,19 @@ async def run_product(
     url: str,
     renderer: Renderer | None,
     colors: bool = False,
+    llm: Llm | None = None,
 ) -> int:
     platform = await resolve_platform(client, site)
     try:
         product, raw = await collect_product(
-            client, site, platform, url, item_key="000001", renderer=renderer, colors=colors
+            client,
+            site,
+            platform,
+            url,
+            item_key="000001",
+            renderer=renderer,
+            colors=colors,
+            llm=llm,
         )
     except ExtractError as error:
         print(f"{error.code}: {error}", file=sys.stderr)
@@ -252,7 +265,8 @@ async def _run(
         if args.command == "find":
             return await run_find(client, site, args.name)
         if args.command == "product":
-            return await run_product(client, site, args.url, renderer, args.colors)
+            vision = (llm or get_catalog_llm()) if args.vision else None
+            return await run_product(client, site, args.url, renderer, args.colors, vision)
         return await run_list(
             client,
             site,
