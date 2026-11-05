@@ -407,6 +407,7 @@ API-POUCH-007 · DELETE /api/v1/users/me/pouch-items/\{pouchItemId\}
 관련 기능: POUCH-006 제품 삭제
 
 - 회원·CSRF 필요. Path pouchItemId:string 필수, Body 없음. 204 본문 없음. 404 NOT\_FOUND(타인·이미 삭제·없음).
+- <b>로컬 수정 -354</b>: 잘못된 UUID는 400 VALIDATION\_FAILED, 비인증 요청은 401 UNAUTHORIZED, CSRF 토큰 오류는 403 CSRF\_INVALID다. 삭제와 pouchVersion 증가는 한 트랜잭션이며 실패 시 둘 다 반영하지 않는다.
 - 삭제 성공 시 pouchVersion 증가·시작 전 매칭 무효화. 실행·리포트의 당시 제품 스냅샷과 공용 카탈로그 유지.
 </toggle>
 
