@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   containTransform,
@@ -9,18 +9,33 @@ import {
   type FaceFrame,
   type RegionName,
 } from "@/features/face";
-import { GuideRenderer, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/features/guide";
+import {
+  GuideRenderer,
+  loadDefaultGuideSet,
+  loadGuideArea,
+  loadGuideSet,
+  resolveSubStep,
+  type AreaStatus,
+  type GuideArea,
+  type GuideSet,
+} from "@/features/guide";
 import { loadFaceMesh, loadLayerSet, OverlayRenderer, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 const FACES = ["front", "turned-left", "close-up", "far", "blink-hold", "lost"];
 const LAYERS = ["sample", "lip-only", "empty", "no-color", "missing-mask"];
+const STATUS_LABEL: Record<AreaStatus, string> = {
+  extracted: "영상에서 찾은 영역",
+  template: "기본 위치",
+  notApplicable: "이 단계는 바를 영역이 없어요",
+  failed: "영상에서 바를 곳을 찾지 못했어요. 설명을 보고 따라 해 주세요",
+};
 
 /**
  * ?step=은 단계 이름(stepId)이나 0부터 센 순서. 이름으로 고르면 가이드 파일을 바꿔도 같은 단계를 본다.
  * 없거나 맞는 단계가 없으면 가이드를 그리지 않는다(-1).
  */
-function stepIndex(set: GuideSet | null, value: string | null): number {
+function stepIndex(set: { steps: { stepId: string }[] } | null, value: string | null): number {
   if (!set || value === null) return -1;
   const byId = set.steps.findIndex((s) => s.stepId === value);
   if (byId >= 0) return byId;
@@ -77,9 +92,37 @@ export default function DebugOverlayPage() {
   const [size, setSize] = useState<{ width: number; height: number; dpr: number } | null>(null);
   const [face, setFace] = useState(FACES[0]);
   const [guides, setGuides] = useState<GuideSet | null>(null);
+  const [area, setArea] = useState<GuideArea | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [subKey, setSubKey] = useState<string | null>(null);
   // 단계 이름이나 순서. null이면 가이드를 그리지 않는다.
   const [stepKey, setStepKey] = useState<string | null>(null);
-  const step = stepIndex(guides, stepKey);
+  const step = stepIndex(area ?? guides, stepKey);
+  const areaStep = area?.steps[step];
+  const bySubId = areaStep?.subSteps.findIndex((s) => s.subStepId === subKey) ?? -1;
+  const subIndex =
+    bySubId >= 0 ? bySubId : subKey === null ? 0 : /^\d+$/.test(subKey) ? Number(subKey) : -1;
+  const sub = areaStep?.subSteps[subIndex] ?? null;
+  const guideStep = useMemo(
+    () => (area ? (sub ? resolveSubStep(sub, guides) : null) : (guides?.steps[step] ?? null)),
+    [area, sub, guides, step],
+  );
+  const positions =
+    area?.steps.flatMap((s, i) =>
+      s.subSteps.map((ss) => ({ step: i, stepId: s.stepId, subStepId: ss.subStepId })),
+    ) ?? [];
+  const position = positions.findIndex(
+    (p) => p.stepId === areaStep?.stepId && p.subStepId === sub?.subStepId,
+  );
+  // 하위 단계를 고르지 않았으면 지금 단계를 기준으로 앞뒤 하위 단계로 간다.
+  const prev = position >= 0 ? position - 1 : positions.findLastIndex((p) => p.step < step);
+  const next = position >= 0 ? position + 1 : positions.findIndex((p) => p.step >= step);
+  const move = (index: number) => {
+    const target = positions[index];
+    if (!target) return;
+    setStepKey(target.stepId);
+    setSubKey(target.subStepId);
+  };
   const [layersName, setLayersName] = useState(LAYERS[0]);
   const [mesh, setMesh] = useState<FaceMesh | null>(null);
   const [message, setMessage] = useState("");
@@ -87,8 +130,11 @@ export default function DebugOverlayPage() {
   const [error, setError] = useState("");
   // 가이드 파일 오류는 그리기가 끝날 때 지워지지 않도록 따로 둔다.
   const [guideError, setGuideError] = useState("");
+  // 기본 가이드를 못 불러와도 AI 영역은 보이므로, 영역 파일 오류와 따로 알린다.
+  const [defaultsError, setDefaultsError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     const params = new URLSearchParams(window.location.search);
     const f = params.get("face");
     const l = params.get("layers");
@@ -97,15 +143,48 @@ export default function DebugOverlayPage() {
     if (f && FACES.includes(f)) setFace(f);
     if (l && LAYERS.includes(l)) setLayersName(l);
     setStepKey(params.get("step"));
+    setSubKey(params.get("subStep"));
+    const areaUrl = params.get("area");
+    if (areaUrl && (!l || !LAYERS.includes(l))) setLayersName("empty");
     /* eslint-enable react-hooks/set-state-in-effect */
     loadFaceMesh()
-      .then(setMesh)
-      .catch((e) => setError(String(e)));
+      .then((data) => {
+        if (!cancelled) setMesh(data);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(String(e));
+      });
     // ?guides=경로 로 가이드 파일을 바꿔 본다 (예: 좌우 확인용 right-only.json)
     const guidesUrl = params.get("guides");
-    (guidesUrl ? loadGuideSet(guidesUrl) : loadDefaultGuideSet())
-      .then(setGuides)
-      .catch((e) => setGuideError(String(e)));
+    const load = async () => {
+      if (areaUrl) {
+        const [areaResult, defaults] = await Promise.allSettled([
+          loadGuideArea(areaUrl),
+          loadDefaultGuideSet(),
+        ]);
+        if (cancelled) return;
+        if (areaResult.status === "rejected") throw areaResult.reason;
+        const data = areaResult.value;
+        setArea(data);
+        if (defaults.status === "fulfilled") setGuides(defaults.value);
+        else setDefaultsError(`기본 가이드를 불러오지 못했습니다: ${String(defaults.reason)}`);
+        // AI 영역은 주소에서 고르지 않으면 첫 하위 단계부터 확인한다.
+        setStepKey(params.get("step") ?? data.steps[0]?.stepId ?? null);
+      } else {
+        const data = await (guidesUrl ? loadGuideSet(guidesUrl) : loadDefaultGuideSet());
+        if (!cancelled) setGuides(data);
+      }
+    };
+    load()
+      .catch((e) => {
+        if (!cancelled) setGuideError(String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -152,7 +231,7 @@ export default function DebugOverlayPage() {
       guide.resize(width, height, dpr);
       guide.render({
         frame,
-        step: guides?.steps[step] ?? null,
+        step: guideStep,
         mesh,
         projection: {
           toPx: (p) => toScreen(p, frame.imageSize, view),
@@ -163,13 +242,18 @@ export default function DebugOverlayPage() {
       setError("");
       setMessage(`${frame.trackingState} · 레이어 ${layers.length}개`);
     })().catch((e) => {
-      if (!cancelled) setError(String(e));
+      if (!cancelled) {
+        // 새 선택을 그리지 못했을 때 이전 하위 단계가 현재 영역처럼 남지 않게 한다.
+        guide.clear();
+        setMessage("");
+        setError(String(e));
+      }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [face, layersName, mesh, guides, step, size]);
+  }, [face, layersName, mesh, guideStep, size]);
 
   return (
     <main className="flex flex-1 flex-col gap-3 p-4">
@@ -198,18 +282,88 @@ export default function DebugOverlayPage() {
           aria-label="가이드 단계"
           className="h-8 rounded-lg border bg-background px-2"
           value={step}
-          onChange={(e) => setStepKey(guides?.steps[Number(e.target.value)]?.stepId ?? null)}
+          onChange={(e) => {
+            setStepKey((area ?? guides)?.steps[Number(e.target.value)]?.stepId ?? null);
+            setSubKey(null);
+          }}
         >
           <option value={-1}>가이드 없음</option>
-          {guides?.steps.map((s, i) => (
-            <option key={s.stepId} value={i}>
-              가이드 {s.order}. {s.title.split(":")[0]}
-            </option>
-          ))}
+          {area
+            ? area.steps.map((s, i) => (
+                <option key={s.stepId} value={i}>
+                  {s.order}. {s.stepId} · {s.makeup}
+                </option>
+              ))
+            : guides?.steps.map((s, i) => (
+                <option key={s.stepId} value={i}>
+                  가이드 {s.order}. {s.title.split(":")[0]}
+                </option>
+              ))}
         </select>
+        {area && (
+          <>
+            <select
+              aria-label="가이드 하위 단계"
+              className="h-8 rounded-lg border bg-background px-2"
+              value={sub?.subStepId ?? ""}
+              disabled={!areaStep}
+              onChange={(e) => setSubKey(e.target.value)}
+            >
+              <option value="">하위 단계 없음</option>
+              {areaStep?.subSteps.map((s) => (
+                <option key={s.subStepId} value={s.subStepId}>
+                  {s.order}. {s.subStepId} · {s.status}
+                </option>
+              ))}
+            </select>
+            <button
+              className="rounded-lg border px-3 py-1 disabled:opacity-40"
+              disabled={prev < 0}
+              onClick={() => move(prev)}
+            >
+              이전
+            </button>
+            <button
+              className="rounded-lg border px-3 py-1 disabled:opacity-40"
+              disabled={next < 0 || next >= positions.length}
+              onClick={() => move(next)}
+            >
+              다음
+            </button>
+            <span>
+              {position >= 0 ? position + 1 : 0} / {positions.length} 하위 단계
+            </span>
+          </>
+        )}
         <span className="text-muted-foreground">{message}</span>
         {error && <span className="text-destructive">{error}</span>}
         {guideError && <span className="text-destructive">{guideError}</span>}
+        {defaultsError && <span className="text-destructive">{defaultsError}</span>}
+      </div>
+      <div aria-live="polite" className="rounded-lg border px-4 py-3 text-sm">
+        {!loaded ? (
+          "가이드를 불러오는 중"
+        ) : guideError ? (
+          "가이드를 불러오지 못했어요. 파일 경로와 형식을 확인해 주세요."
+        ) : sub ? (
+          <>
+            <p>
+              {areaStep?.stepId} / {sub.subStepId} · {sub.status} · {STATUS_LABEL[sub.status]}
+            </p>
+            <p>
+              기본 가이드 키: {sub.templateId ?? "없음"} · 사유: {sub.reasons.join(", ") || "없음"}
+            </p>
+            {sub.status === "template" && !guideStep && (
+              <p>해당 기본 가이드를 찾지 못해 표시하지 않아요.</p>
+            )}
+          </>
+        ) : (area ?? guides)?.steps.length === 0 ? (
+          "이 파일에는 가이드가 없어요"
+        ) : area ? (
+          "단계와 하위 단계를 선택해 주세요"
+        ) : (
+          "기본 가이드 또는 파일 가이드를 선택해 주세요"
+        )}
       </div>
       <div className="relative">
         <canvas ref={canvasRef} className="aspect-video w-full rounded-lg" />
