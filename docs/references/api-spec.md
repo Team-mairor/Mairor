@@ -303,6 +303,9 @@ API-POUCH-003 · GET /api/v1/users/me/pouch-items
 
 - 회원 GET. Query category:string·type:string 선택, page·size는 공통 규약. 200 \{items:PouchItem\[\],page:integer,size:integer,hasNext:boolean,pouchVersion:integer\}.
 - 타인 userId 입력 없음. 같은 카테고리 전체 선택 패널은 hasNext=false까지 페이지를 조회하며 첫 페이지만 전체로 취급하지 않는다. 조회 중 pouchVersion이 바뀌면 목록·매칭 재조회.
+- <b>로컬 수정 -299</b>: category와 type은 각각 선택 필터이며 코드 값은 카테고리·종류 목록 API의 code와 정확히 일치해야 한다. category만 보내면 해당 카테고리 전체, type만 보내면 해당 종류 전체, 둘 다 보내면 type은 category 소속이어야 한다. 없는 category는 400 VALIDATION_FAILED(details.field=category), 없는 type 또는 소속 불일치는 400 VALIDATION_FAILED(details.field=type)이다. 빈 문자열도 해당 필드 오류로 처리한다.
+- <b>로컬 수정 -299</b>: page는 0부터 시작하고 생략 시 0, size는 생략 시 20·최대 100이다. 범위를 벗어나면 400 VALIDATION_FAILED(details.field=page 또는 size).
+- <b>로컬 수정 -299</b>: 목록 정렬은 createdAt 내림차순, 같은 시각이면 pouchItemId 내림차순이다. 결과가 없어도 200으로 items=[]·hasNext=false를 반환한다.
 </toggle>
 
 <toggle>
