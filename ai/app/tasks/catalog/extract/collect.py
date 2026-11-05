@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlsplit
 
+from app.tasks.catalog.color.apply import add_colors
 from app.tasks.catalog.contract import CollectedProduct
 from app.tasks.catalog.discover.registry import BrandSite, Platform
 from app.tasks.catalog.extract.product import ExtractError, build_product
@@ -32,6 +33,7 @@ async def collect_product(
     item_key: str,
     now: datetime | None = None,
     renderer: Renderer | None = None,
+    colors: bool = False,
 ) -> tuple[CollectedProduct, dict[str, Any]]:
     """페이지를 받아 상품을 만든다. 차단·robots 거부는 그대로 올린다."""
     source_id = product_id(platform, url)
@@ -58,12 +60,12 @@ async def collect_product(
         )
 
     product, raw = build(html)
-    if product.shades or renderer is None:
-        return product, raw
-    rendered = await renderer.render(url)
-    if rendered.status_code != 200:
-        return product, raw
-    product, raw = build(decode_html(rendered))
-    product.warnings.append("RENDERED")
-    raw["rendered"] = True
+    if not product.shades and renderer is not None:
+        rendered = await renderer.render(url)
+        if rendered.status_code == 200:
+            product, raw = build(decode_html(rendered))
+            product.warnings.append("RENDERED")
+            raw["rendered"] = True
+    if colors and product.shades:
+        product, raw = await add_colors(client, product, raw)
     return product, raw
