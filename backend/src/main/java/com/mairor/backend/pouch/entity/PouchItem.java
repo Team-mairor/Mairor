@@ -203,6 +203,43 @@ public class PouchItem {
     return color == null ? "NONE" : color.getSource().name();
   }
 
+  /** 수정 후보의 변경 가능한 필드를 반영한다. 식별자·소유자·생성 시각은 유지한다. */
+  public void replaceDetailsFrom(PouchItem candidate) {
+    if (!Objects.equals(userId, candidate.userId)) {
+      throw new IllegalArgumentException("파우치 항목 소유자는 변경할 수 없다");
+    }
+    registrationMode = candidate.registrationMode;
+    productId = candidate.productId;
+    shadeId = candidate.shadeId;
+    category = candidate.category;
+    type = candidate.type;
+    brand = candidate.brand;
+    name = candidate.name;
+    shadeName = candidate.shadeName;
+    brandNormalized = candidate.brandNormalized;
+    nameNormalized = candidate.nameNormalized;
+    shadeNameNormalized = candidate.shadeNameNormalized;
+    color = candidate.color;
+  }
+
+  /** 응답·버전 변경 여부 판정에 쓰는 저장 가능한 모든 필드를 비교한다. */
+  public boolean hasSameDetails(PouchItem other) {
+    return other != null
+        && Objects.equals(userId, other.userId)
+        && registrationMode == other.registrationMode
+        && Objects.equals(productId, other.productId)
+        && Objects.equals(shadeId, other.shadeId)
+        && Objects.equals(category, other.category)
+        && Objects.equals(type, other.type)
+        && Objects.equals(brand, other.brand)
+        && Objects.equals(name, other.name)
+        && Objects.equals(shadeName, other.shadeName)
+        && Objects.equals(brandNormalized, other.brandNormalized)
+        && Objects.equals(nameNormalized, other.nameNormalized)
+        && Objects.equals(shadeNameNormalized, other.shadeNameNormalized)
+        && Objects.equals(color, other.color);
+  }
+
   public Instant getCreatedAt() {
     return createdAt;
   }

@@ -388,12 +388,16 @@ API-POUCH-005 · GET /api/v1/users/me/pouch-items/\{pouchItemId\}
 <toggle>
 API-POUCH-006 · PATCH /api/v1/users/me/pouch-items/\{pouchItemId\}
 
+<b>로컬 수정 -213</b>: CATALOG 항목은 직접 입력 필드가 현재 저장값과 실제로 달라질 때 MANUAL로 전환한다. 같은 값의 재전송은 카탈로그 연결·색상·등록 방식을 유지하며, 최종 저장 상태가 같으면 pouchVersion도 유지한다. `colorHex`는 대소문자 차이를 같은 값으로 본다. `registrationMode=MANUAL`은 명시적 전환 의도이므로 같은 값이어도 MANUAL 전환 규칙을 적용한다.
+
 관련 기능: POUCH-005 제품 수정
 
-- 회원·CSRF 필요. Path pouchItemId:string 필수. Body: PouchWrite의 수정할 필드, 모두 생략은 400 POUCH\_INVALID\_UPDATE. 생략은 유지, null 초기화는 shadeName·colorHex만 허용(연결 ID 초기화는 MANUAL 전환 시 서버 처리).
-- 전 항목 수정 가능. category/type 쌍, CATALOG productId/shadeId 연관 조건은 수정 후 최종 상태로 검증. 등록 방식 전환은 전환 후 조건부 필수값을 전부 전달.
-- CATALOG의 브랜드·제품명·카테고리·종류·색상을 직접 바꾸면 MANUAL로 전환하고 연결 ID를 제거한다. 공용 카탈로그를 수정하지 않는다.
-- 200 \{item:PouchItem,pouchVersion:integer\}. 400 POUCH\_INVALID\_UPDATE, 404 NOT\_FOUND, 409 POUCH\_DUPLICATE. 성공 시 매칭 무효화·pouchVersion 증가, 기존 실행·리포트 불변.
+- 회원·CSRF 필요. Path pouchItemId:string 필수. Body는 PouchWrite의 수정할 필드다. 모두 생략하면 400 POUCH_INVALID_UPDATE다. 생략은 유지하고 명시적 null은 shadeName·colorHex만 허용한다. productId·shadeId의 명시적 null은 거절하고 연결 해제는 서버가 전환 과정에서 처리한다.
+- 형식·길이·UUID·HEX 오류는 400 VALIDATION_FAILED다. category/type 소속, 제품·호수 조합 오류는 400 POUCH_INVALID_PRODUCT다. 등록 방식·필드 조합 오류는 400 POUCH_INVALID_UPDATE다.
+- MANUAL 내부 수정은 전달 필드만 병합하고 최종 category/type 및 필수값을 검증한다. shadeSelectable=false인 분류로 이동하면 shadeName·colorHex를 제거한다. 그 요청에서 새 비null shadeName/colorHex를 보내면 거절한다.
+- CATALOG에서 brand/name/category/type/shadeName/colorHex를 직접 수정하면 MANUAL로 자동 전환한다. 생략된 표시값은 개인 복사본에서 유지하되 기존 카탈로그 색은 제거한다. productId/shadeId 선택과 명시 CATALOG 유지의 type은 전환이 아니라 제품 종류 일치 검사다.
+- CATALOG productId 변경 시 이전 shadeId를 이어받지 않는다. 호수 선택이 필요한 제품은 새 shadeId가 필요하다. MANUAL→CATALOG는 registrationMode, productId, type 및 필요한 shadeId를 보내고 직접 입력 필드는 함께 보낼 수 없다. 같은 카탈로그 ID 재전송은 저장 복사본을 새로고침하지 않는다.
+- 200 {item:PouchItem,pouchVersion:integer}. 실제 최종 상태가 변경될 때만 pouchVersion을 1 증가시키고, 같은 상태 PATCH는 버전을 유지한다. 404 NOT_FOUND(타인·미존재), 409 POUCH_DUPLICATE. 실패 시 항목·버전 모두 롤백한다. 실행·리포트 스냅샷과 공용 카탈로그는 변경하지 않는다.
 </toggle>
 
 <toggle>
