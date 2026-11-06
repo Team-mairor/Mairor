@@ -4,3 +4,6 @@
 !infra/alloy/config.alloy
 !deploy/deploy.sh
 !deploy/rollback.sh
+!docker-compose.ai.yml
+!deploy/callback-gw.conf
+!deploy/deploy-ai.sh
