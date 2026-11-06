@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-/** 앱 화면과 같은 기준 크기(S6 Lite 세로, globals.css의 800×1200) */
+/** 레이아웃 기준 크기(globals.css의 800×1200). 시연 기기 S6 키오스크(800×1280)에서는 위아래 40px 여백으로 가운데 놓인다 */
 export const STAGE = { width: 800, height: 1200 } as const;
 
 /**

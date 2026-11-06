@@ -190,6 +190,7 @@ const ITEMS: Item[] = [
   { label: "확인 · 레이어 합성", sub: "픽스처 얼굴 · 카메라 없이", href: "/debug/overlay" },
   { label: "확인 · 화장 레이어", sub: "카메라 · ?layers=경로", href: "/debug/preview" },
   { label: "확인 · 튜토리얼 가이드", sub: "카메라 · ?guides=경로", href: "/debug/tutorial" },
+  { label: "확인 · 화면 크기", sub: "뷰포트 · DPR · 앱 축소 배율", href: "/debug/screen" },
 ];
 
 /**
