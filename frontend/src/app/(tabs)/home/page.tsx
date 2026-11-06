@@ -97,6 +97,10 @@ export default function HomePage() {
           <p className="text-[17px] text-mute">{state.email}</p>
         </div>
         <MirrorToggle className="justify-between" />
+        {/* 미러필름을 붙인 기기에서 가이드가 비친 얼굴과 어긋나면 한 번 맞춘다 */}
+        <Link href="/mirror-fit" className="text-[17px] font-semibold text-navy">
+          거울에 비친 얼굴에 가이드 맞추기
+        </Link>
         {logoutError && <FieldError>{logoutError}</FieldError>}
         <div className="flex gap-2.5">
           <button
