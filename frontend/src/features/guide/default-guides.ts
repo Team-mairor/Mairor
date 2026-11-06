@@ -22,7 +22,7 @@ function barycentric(p: Uv, [a, b, c]: Uv[]): [number, number, number] {
 }
 
 /** 메시 UV 위의 점을 MeshAnchor로 바꾸는 도구 */
-function anchorTools(mesh: FaceMesh) {
+export function anchorTools(mesh: FaceMesh) {
   const uvPt = (i: number): Uv => ({ x: mesh.uv[i][0], y: mesh.uv[i][1] });
   // 점마다 삼각형 전체를 훑으므로 꼭짓점 UV는 한 번만 꺼내 둔다.
   const triangleUvs = mesh.triangles.map((tri) => tri.map(uvPt));
@@ -181,48 +181,7 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     ),
   ];
 
-  /**
-   * 눈썹 결: [아래 선 점, 위 선 점] 쌍을 앞머리 → 꼬리 순서로 받아 결 방향의 짧은 붓 자국을 만든다.
-   * 앞머리는 거의 위로, 꼬리로 갈수록 꼬리 쪽으로 눕는다.
-   */
-  const browHairs = (pairs: [number, number][], count = 16): GuideShape[] => {
-    const lerp = (p: Uv, q: Uv, t: number): Uv => ({
-      x: p.x + (q.x - p.x) * t,
-      y: p.y + (q.y - p.y) * t,
-    });
-    /** 눈썹 길이 비율 s(0 앞머리 ~ 1 꼬리), 높이 h(0 아래 선 ~ 1 위 선)의 UV 점 */
-    const browAt = (s: number, h: number): Uv => {
-      const x = Math.min(0.999, Math.max(0, s)) * (pairs.length - 1);
-      const i = Math.floor(x);
-      const [l0, u0] = pairs[i].map(uvPt);
-      const [l1, u1] = pairs[i + 1].map(uvPt);
-      return lerp(lerp(l0, l1, x - i), lerp(u0, u1, x - i), h);
-    };
-    // 털처럼 보이도록 길이·간격을 조금씩 흐트러뜨리고, 아래·위 두 줄에서 엇갈려 시작한다 (같은 값이 나오는 고정 난수)
-    const jitter = (k: number) => {
-      const x = Math.sin(k * 12.9898) * 43758.5453;
-      return x - Math.floor(x);
-    };
-    return Array.from({ length: count }, (_, k): GuideShape => {
-      const s = 0.03 + (0.92 * k) / (count - 1) + (jitter(k) - 0.5) * 0.02;
-      const lean = 0.015 + 0.11 * s;
-      const start = k % 2 === 0 ? 0.08 : 0.3;
-      const top = Math.min(
-        0.95,
-        start + (0.82 - 0.4 * Math.max(0, (s - 0.6) / 0.4)) * (0.7 + 0.3 * jitter(k + 100)),
-      );
-      return {
-        type: "polyline",
-        path: [
-          anchorAt(browAt(s, start)),
-          anchorAt(browAt(s + lean * 0.45, (start + top) / 2 + 0.06)),
-          anchorAt(browAt(s + lean, top)),
-        ],
-        width: 0.018,
-        brush: true,
-      };
-    });
-  };
+  const browHairs = (pairs: [number, number][]) => buildBrowHairs(mesh, pairs);
   /**
    * 속눈썹: [눈꺼풀 점, 눈썹 점] 쌍을 안쪽 → 바깥쪽 순서로 받아, 눈꺼풀을 따라 가늘고 짧은 속눈썹을 촘촘히 만든다.
    * 눈썹 쪽으로 뻗되 바깥쪽으로 갈수록 눈꼬리 쪽으로 눕는다.
@@ -313,23 +272,16 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       ],
     },
     {
-      // 볼 영역 전체. 볼 위쪽 점만 쓰면 실제 바른 곳을 일부만 덮는다
+      // 볼 전체 외접 범위를 유지한 둥근 타원. 시작점·방향은 기존과 같다
       stepId: "blush",
       title: "블러셔: 볼 앞에서 광대 쪽으로 둥글게 펴요",
       regions: ["rightCheek", "leftCheek"],
-      guides: [
-        outline(regions.rightCheek.indices),
-        outline(regions.leftCheek.indices),
-        point(between(101, 50)),
-        arrow(between(101, 50), between(123, 117, 0.3)),
-        point(between(330, 280)),
-        arrow(between(330, 280), between(352, 346, 0.3)),
-      ],
+      guides: buildBlushGuides(mesh, regions),
     },
     {
       // 앞머리(55·107)에서 꼬리(46·70)까지 결 방향 붓 자국. 결이 채울 영역을 보여 주므로 윤곽은 따로 그리지 않는다
       stepId: "brow",
-      title: "눈썹: 앞머리에서 꼬리 쪽으로 결대로 빈 곳만 채워요",
+      title: "눈썹: 결을 따라 빈 곳만 가볍게 채워요",
       regions: ["rightBrow", "leftBrow"],
       guides: [
         ...browHairs([
@@ -339,7 +291,6 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
           [53, 63],
           [46, 70],
         ]),
-        point(between(55, 107, 0.3)),
         ...browHairs([
           [285, 336],
           [295, 296],
@@ -347,7 +298,6 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
           [283, 293],
           [276, 300],
         ]),
-        point(between(285, 336, 0.3)),
       ],
     },
     {
@@ -422,4 +372,84 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     meshVersion: "v1",
     steps: steps.map((step, i) => ({ ...step, order: i + 1, source: "template" })),
   };
+}
+
+/** 결정된 기본 눈썹: 중앙은 숱을 늘리고 앞머리·꼬리는 줄인 결 40개. */
+export function buildBrowHairs(mesh: FaceMesh, pairs: [number, number][]): GuideShape[] {
+  const { uvPt, anchorAt } = anchorTools(mesh);
+  const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  });
+  const at = (s: number, h: number) => {
+    const x = Math.min(0.999, s) * (pairs.length - 1),
+      i = Math.floor(x);
+    const lower = lerp(uvPt(pairs[i][0]), uvPt(pairs[i + 1][0]), x - i);
+    const upper = lerp(uvPt(pairs[i][1]), uvPt(pairs[i + 1][1]), x - i);
+    // 기존 눈썹의 높이를 대부분 유지하고 끝부분만 완만하게 좁힌다.
+    const tail = Math.max(0, (s - 0.65) / 0.35);
+    const half = 0.46 * (1 - 0.45 * tail);
+    return anchorAt(lerp(lower, upper, 0.5 + (h * 2 - 1) * half));
+  };
+  const jitter = (k: number) => {
+    const v = Math.sin(k * 12.9898) * 43758.5453;
+    return v - Math.floor(v);
+  };
+  // 밀도의 누적분포를 반대로 읽어 중앙은 숱을 늘리고 앞머리·꼬리는 줄인다.
+  // 고정 난수와 함께 쓰므로 프레임마다 결 위치가 바뀌지 않는다.
+  const cdf = [0];
+  for (let k = 1; k <= 128; k++) {
+    const t = (k - 0.5) / 128;
+    cdf.push(cdf[k - 1] + 0.22 + 0.78 * Math.sin(Math.PI * t) ** 1.2);
+  }
+  const position = (u: number) => {
+    const target = u * cdf[128];
+    const i = cdf.findIndex((v) => v >= target);
+    return 0.025 + (0.92 * (i - 1 + (target - cdf[i - 1]) / (cdf[i] - cdf[i - 1]))) / 128;
+  };
+  return Array.from({ length: 40 }, (_, k): GuideShape => {
+    const row = k % 2,
+      col = Math.floor(k / 2);
+    const s = position((col + 0.3 + row * 0.4 + jitter(k) * 0.15) / 20);
+    const root = 0.08 + row * 0.22 + jitter(k + 70) * 0.07;
+    const tail = Math.max(0, (s - 0.65) / 0.35);
+    const tip = Math.min(0.95, root + (0.66 - 0.22 * tail) * (0.8 + jitter(k + 100) * 0.2));
+    // 기존 결 방향을 유지하되 끝점이 꼬리 끝에 몰리지 않게 한다.
+    const lean = Math.min(0.015 + 0.09 * s, (0.99 - s) * 0.7);
+    return {
+      type: "polyline",
+      brush: true,
+      width: 0.013 * (1 - 0.25 * tail),
+      path: [at(s, root), at(s + lean * 0.45, (root + tip) / 2 + 0.035), at(s + lean, tip)],
+    };
+  });
+}
+
+/** 볼 전체 외접 범위의 타원과 기존 시작점·방향. */
+export function buildBlushGuides(mesh: FaceMesh, regions: RegionIndices): GuideShape[] {
+  const { uvPt, anchorAt, between } = anchorTools(mesh);
+  const ellipse = (indices: readonly number[]): GuideShape => {
+    const points = indices.map(uvPt);
+    const xs = points.map((p) => p.x),
+      ys = points.map((p) => p.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2,
+      cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const rx = (Math.max(...xs) - Math.min(...xs)) / 2,
+      ry = (Math.max(...ys) - Math.min(...ys)) / 2;
+    return {
+      type: "polygon",
+      outline: Array.from({ length: 32 }, (_, k) => {
+        const t = (k * Math.PI) / 16;
+        return anchorAt({ x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) });
+      }),
+    };
+  };
+  return [
+    ellipse(regions.rightCheek.indices),
+    ellipse(regions.leftCheek.indices),
+    { type: "point", at: between(101, 50) },
+    { type: "arrow", from: between(101, 50), to: between(123, 117, 0.3) },
+    { type: "point", at: between(330, 280) },
+    { type: "arrow", from: between(330, 280), to: between(352, 346, 0.3) },
+  ];
 }

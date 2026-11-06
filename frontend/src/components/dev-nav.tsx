@@ -178,6 +178,15 @@ const ITEMS: Item[] = [
     prep: () => loggedIn,
   },
   { label: "확인 · 얼굴 추적", sub: "랜드마크 · FPS · 색 측정", href: "/debug/face" },
+  ...(process.env.GUIDE_EXPERIMENTS
+    ? [
+        {
+          label: "확인 · 가이드 비교",
+          sub: "블러셔 · 눈썹 변경 전/적용 후",
+          href: "/debug/guide-compare",
+        },
+      ]
+    : []),
   { label: "확인 · 레이어 합성", sub: "픽스처 얼굴 · 카메라 없이", href: "/debug/overlay" },
   { label: "확인 · 화장 레이어", sub: "카메라 · ?layers=경로", href: "/debug/preview" },
   { label: "확인 · 튜토리얼 가이드", sub: "카메라 · ?guides=경로", href: "/debug/tutorial" },

@@ -1,3 +1,4 @@
+export { buildDefaultGuideSet } from "./default-guides";
 export { resolveStep, resolveSubStep } from "./area";
 export {
   fetchGuide,

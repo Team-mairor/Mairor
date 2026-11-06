@@ -45,3 +45,6 @@ next-env.d.ts
 # copied by scripts/sync-mediapipe-assets.mjs
 /public/mediapipe
 /public/models
+
+# copied by scripts/sync-brow-assets.mjs
+/public/brow-runtime

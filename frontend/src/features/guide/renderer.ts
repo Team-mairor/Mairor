@@ -63,6 +63,7 @@ const STYLE = {
   point: { size: 0.05, min: 5 },
   /** 붓 자국 가운데 최소 두께 (px). 두께는 도형의 width를 쓴다 */
   brushMin: 1.2,
+  browBrushMin: 0.9,
 };
 
 /**
@@ -98,7 +99,10 @@ export class GuideRenderer {
   private readonly visibility = new HoldVisibility();
   private stepId: string | null = null;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly brushMin?: number,
+  ) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("캔버스 2D를 쓸 수 없습니다");
     this.ctx = ctx;
@@ -161,6 +165,10 @@ export class GuideRenderer {
 
     // 붓 자국은 다른 도형보다 먼저 깔아 시작점·화살표가 위에 보이게 한다.
     const ordered = [...step.guides].sort((a, b) => Number(isBrush(b)) - Number(isBrush(a)));
+    const brow =
+      step.regions.length > 0 &&
+      step.regions.every((region) => region === "rightBrow" || region === "leftBrow");
+    const brushMin = this.brushMin ?? (brow ? STYLE.browBrushMin : STYLE.brushMin);
     const yaw = frame.pose.yaw;
     const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
     for (const guide of ordered) {
@@ -170,7 +178,7 @@ export class GuideRenderer {
       const draw = () => {
         if (guide.type === "polygon" && guide.exclude?.length)
           this.drawPolygonWithHoles(guide, guide.exclude.map(holeOf), at, areaDot);
-        else this.drawGuide(guide, at, projection.unit, dashOffset, areaDot);
+        else this.drawGuide(guide, at, projection.unit, dashOffset, areaDot, brushMin);
       };
       // 얼굴 윤곽처럼 양쪽 끝까지 걸친 도형은 먼 쪽 절반만 옅게 한다
       if (spans(guide, mesh)) {
@@ -273,6 +281,7 @@ export class GuideRenderer {
     unit: number,
     dashOffset: number,
     areaDot: number,
+    brushMin: number,
   ) {
     const ctx = this.ctx;
     const dot = sized(unit, STYLE.dot);
@@ -289,7 +298,7 @@ export class GuideRenderer {
         const points = guide.path.map(at);
         if (points.length < 2) return;
         if (guide.brush) {
-          this.brushStroke(points, Math.max(STYLE.brushMin, guide.width * unit));
+          this.brushStroke(points, Math.max(brushMin, guide.width * unit));
           return;
         }
         // 그릴 선: 점선이 진행 방향으로 천천히 흐름

@@ -23,11 +23,24 @@ const devToolsEnabled = (phase: string) => {
 // cacheComponents·partialPrefetching은 정적 내보내기와 호환되지 않아 쓰지 않는다.
 const nextConfig = (phase: string): NextConfig => {
   const devTools = devToolsEnabled(phase);
+  // 임시 가이드·눈썹 인식 실험은 개발 서버에서만 기본으로 켠다.
+  // DEV_TOOLS=1 배포에도 포함하려면 GUIDE_EXPERIMENTS=1을 별도로 지정한다.
+  const guideExperiments =
+    devTools &&
+    (process.env.GUIDE_EXPERIMENTS === "1" ||
+      (phase === PHASE_DEVELOPMENT_SERVER && process.env.GUIDE_EXPERIMENTS !== "0"));
   return {
     output: "export",
-    env: { DEV_TOOLS: devTools ? "1" : "" },
+    env: { DEV_TOOLS: devTools ? "1" : "", GUIDE_EXPERIMENTS: guideExperiments ? "1" : "" },
     // debug 화면은 *.dev.tsx로 두어 개발 도구가 꺼지면 라우트에서 빠진다.
-    pageExtensions: devTools ? ["dev.tsx", "tsx", "ts", "jsx", "js"] : ["tsx", "ts", "jsx", "js"],
+    pageExtensions: [
+      ...(guideExperiments ? ["experiment.tsx"] : []),
+      ...(devTools ? ["dev.tsx"] : []),
+      "tsx",
+      "ts",
+      "jsx",
+      "js",
+    ],
     // 같은 와이파이의 폰·태블릿(https://<PC의 IP>:3000)에서 개발 서버 화면이 동작하게 사설 IP 대역을 허용한다.
     // 없으면 Next 16이 /_next 개발 요청을 막아 화면은 보여도 버튼이 눌리지 않는다.
     // 172는 사설 대역(172.16~31)만 연다

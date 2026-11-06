@@ -31,6 +31,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // copied by scripts/sync-mediapipe-assets.mjs
     "public/mediapipe/**",
+    // copied by scripts/sync-brow-assets.mjs
+    "public/brow-runtime/**",
   ]),
 ]);
 
