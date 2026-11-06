@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { useHiddenVideo } from "@/features/face";
+import { mirrorScreen, useHiddenVideo } from "@/features/face";
 import {
   GuideOverlay,
   loadDefaultGuideSet,
@@ -31,6 +31,86 @@ import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
 /**
+ * ponytail: 하프미러 얼굴 자리 정하기용 임시 표시(?layout=1). 위·아래 UI가 차지하는 칸과 가이드 칸을 테두리로,
+ * 경계가 카메라에서 몇 mm 아래인지 함께 보여 준다. 자리가 정해지면 지운다
+ */
+function LayoutBoxes({
+  guideRef,
+  bottomRef,
+}: {
+  guideRef: RefObject<HTMLDivElement | null>;
+  bottomRef: RefObject<HTMLDivElement | null>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{
+    guide: [number, number];
+    bottom: number;
+    h: number;
+    toMm: (y: number) => number;
+  } | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const g = guideRef.current?.getBoundingClientRect();
+      const b = bottomRef.current?.getBoundingClientRect();
+      if (!g || !b) return;
+      const rect = el.getBoundingClientRect();
+      const zoom = rect.width / el.clientWidth || 1;
+      const y = (v: number) => (v - rect.top) / zoom;
+      const s = mirrorScreen(el);
+      setBox({
+        guide: [y(g.top), y(g.bottom)],
+        bottom: y(b.top),
+        h: el.clientHeight,
+        toMm: (v) => (v - s.originY) / s.pxPerMm,
+      });
+    };
+    measure();
+    // 하단 안내는 동작·단계마다 높이가 바뀐다
+    const observer = new ResizeObserver(measure);
+    if (bottomRef.current) observer.observe(bottomRef.current);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [guideRef, bottomRef]);
+
+  const label = "absolute right-2 rounded bg-black px-1.5 text-[14px] font-bold tabular";
+  return (
+    <div ref={ref} className="pointer-events-none absolute inset-0 z-50">
+      {box && (
+        <>
+          <div
+            className="absolute inset-x-1 border-[3px] border-[#ff6b6b]"
+            style={{ top: 0, height: box.guide[0] }}
+          >
+            <span className={`${label} bottom-1 text-[#ff6b6b]`}>
+              위 UI 끝 {box.guide[0].toFixed(0)}px · 카메라 {box.toMm(box.guide[0]).toFixed(0)}mm
+            </span>
+          </div>
+          <div
+            className="absolute inset-x-1 border-[3px] border-dashed border-[#4ef0c2]"
+            style={{ top: box.guide[0], height: box.guide[1] - box.guide[0] }}
+          >
+            <span className={`${label} top-1 text-[#4ef0c2]`}>
+              가이드 칸 {box.toMm(box.guide[0]).toFixed(0)}~{box.toMm(box.guide[1]).toFixed(0)}mm
+            </span>
+          </div>
+          <div
+            className="absolute inset-x-1 border-[3px] border-[#5ce1ff]"
+            style={{ top: box.bottom, height: box.h - box.bottom }}
+          >
+            <span className={`${label} top-1 text-[#5ce1ff]`}>
+              아래 바 시작 {box.bottom.toFixed(0)}px · 카메라 {box.toMm(box.bottom).toFixed(0)}mm
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * 10 튜토리얼 (GUIDE-003 · 006 · 007 · 008 · 011 · 013).
  * ?alert=cover 등은 측정 불가 상태 확인용.
  * 사진 저장에 동의했으면 단계를 넘길 때 확인 창 없이 사진을 남긴다 (동의는 튜토리얼 안내에서 받는다).
@@ -38,6 +118,8 @@ import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
  */
 export default function TutorialPage() {
   const router = useRouter();
+  const guideRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const query = useQuery();
   const { state, updateRun, startRun } = useSession();
   const run = state.run;
@@ -178,7 +260,7 @@ export default function TutorialPage() {
         남은 칸(flex-1)에 맞추면 '했어요'를 누를 때마다 얼굴 배율이 다시 잡혀 가이드가 출렁였다.
         그래서 하단 안내가 가장 클 때(약 370px)를 비워 둔 고정 칸에 그린다
       */}
-      <div className="absolute inset-x-0 top-[140px] bottom-[372px]">
+      <div ref={guideRef} className="absolute inset-x-0 top-[140px] bottom-[372px]">
         {/* 이 단계에 그릴 가이드가 없어도 윤곽은 띄운다. 알림으로 가이드를 숨기는 동안은 윤곽도 숨긴다 */}
         <GuideOverlay step={canRender ? guideStep : null} fit face={canRender} />
       </div>
@@ -199,7 +281,7 @@ export default function TutorialPage() {
       <LiveNote note={note} />
 
       {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
-      <div className="relative flex flex-col gap-3.5 px-7 pt-2 pb-[18px]">
+      <div ref={bottomRef} className="relative flex flex-col gap-3.5 px-7 pt-2 pb-[18px]">
         <div className="flex items-end gap-3">
           <span className="shrink-0 font-serif text-[34px] leading-[.9] text-blush italic tabular">
             {String(step + 1).padStart(2, "0")}
@@ -273,6 +355,7 @@ export default function TutorialPage() {
       )}
 
       <ExitModal open={exitAsk} onQuit={quit} onClose={() => setExitAsk(false)} />
+      {query?.has("layout") && <LayoutBoxes guideRef={guideRef} bottomRef={bottomRef} />}
     </main>
   );
 }
