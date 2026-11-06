@@ -208,6 +208,7 @@ API-VIDEO-001 · POST /api/v1/videos
 - 400 VALIDATION\_FAILED(형식), 404 NOT\_FOUND(영상 없음), 502 VIDEO\_PROVIDER\_ERROR, 504 VIDEO\_PROVIDER\_TIMEOUT.
 - 서버가 메타데이터·공개 여부 재확인. 비공개·삭제·연령 제한 영상은 409 VIDEO_UNSUPPORTED_FOR_ANALYSIS (로컬 수정 -307: 임베드 재생을 하지 않아 embeddable 칸을 없앰). guideAvailable=true는 검수 승인일 때만, 승인 전 guideId=null. analysisJobId는 본인이 조회 가능한 작업만 제공.
 - 이 API 자체는 분석을 생성하지 않는다. 검색 결과는 분석하기 버튼, Top 4는 탭 직후 guideAvailable=false이면 API-VIDEO-002를 연이어 호출.
+- <b>구현 메모 (로컬 수정 -361)</b>: 분석은 크리에이티브 커먼즈(CC BY) 영상만 받는다(11.04 결정). YouTube에서 `status.license`가 `creativeCommon`이 아니거나, 라이브·예정 영상이어도 409 VIDEO\_UNSUPPORTED\_FOR\_ANALYSIS다. YouTube `videos.list`가 없는 영상·삭제·비공개를 구분 없이 빼고 돌려줘서 셋 다 409이고, 404는 쓰지 않는다. 라이선스는 저장하지 않고 선택·분석 요청 때마다 다시 확인한다. reviewStatus는 분석이 진행 중이면 NOT\_READY, 아니면 가장 최근 가이드의 검수 상태, 분석한 적 없으면 null.
 </toggle>
 
 <toggle>
@@ -245,6 +246,7 @@ API-VIDEO-004 · GET /api/v1/videos/search
 - 회원 GET. Query q:string 필수(공백 제거 후 1\~100자), pageToken:string 선택(검색어 변경 시 제거), size:integer 선택(기본20, 1\~50).
 - 200 VideoSearchPage. 결과 없음은 items=\[\]·nextPageToken=null. 검색 순서는 외부 관련도순, 필터 후 size 미만 가능.
 - 502 VIDEO\_PROVIDER\_ERROR, 504 VIDEO\_PROVIDER\_TIMEOUT, 503 VIDEO\_SEARCH\_UNAVAILABLE. API 키는 서버 관리. 검색 실패를 빈 결과로 위장하거나 구버전 검수 목록 API로 우회하지 않는다.
+- <b>구현 메모 (로컬 수정 -361)</b>: YouTube 검색을 `videoLicense=creativeCommon`으로 걸러 CC BY 영상만 준다. 분석할 수 없는 영상(연령 제한·라이브·예정)은 결과에서 뺀다("필터 후 size 미만 가능"). 그래서 목록에 '분석 불가' 표시용 칸은 없다(기능명세 VIDEO-001의 '분석 불가 표시'는 선택 API의 409로 처리). 할당량 초과·키 없음은 503 VIDEO\_SEARCH\_UNAVAILABLE. 같은 검색어·pageToken·size의 YouTube 결과는 서버가 잠시 다시 쓴다(가이드 상태는 매번 새로 붙인다).
 </toggle>
 
 <toggle>
