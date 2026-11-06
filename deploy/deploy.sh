@@ -207,6 +207,10 @@ main() {
   # 이미지는 Docker Hub 에 있어 위 받기에 넣지 않는다. up 이 서버에 없는 버전일 때만 받는다
   compose_at "$TAG" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" alloy ||
     log "alloy 교체 실패(배포는 성공). docker compose logs alloy 로 원인을 본다"
+  # 콜백 입구(AI 서버 → BE 콜백). 설정이 바뀌었을 때만 다시 만들어진다. 같은 서버의 ai 는 core 로 바로 콜백하므로
+  # 여기서 실패해도 지금 배포는 성공으로 두고 알린다(S15P31A306-355)
+  compose_at "$TAG" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" callback-gw ||
+    log "callback-gw 교체 실패(배포는 성공). AI 서버의 콜백이 닿지 않는다. docker compose logs callback-gw 로 원인을 본다"
   # 쓰지 않는 이미지 중 7일 지난 것을 지운다. 되돌릴 때는 ECR 에서 다시 받는다
   docker image prune -af --filter "until=168h" >/dev/null || log "이미지 정리 실패(배포는 성공)"
   log "$ACTION 완료: $TAG"

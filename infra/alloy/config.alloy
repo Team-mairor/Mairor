@@ -1,6 +1,7 @@
-// 앱 서버(EC2 mairor-app)의 수집기. docker-compose.prod.yml 의 alloy 서비스가 이 파일로 돈다.
-// 모은 것은 인프라 서버 입구(caddy)로 HTTPS 로 보낸다. 입구는 이 서버의 Elastic IP 에서 온 요청만 받는다.
-//   INFRA_HOST  인프라 서버 도메인. docker-compose.prod.yml 에 적혀 있다
+// 앱 서버(EC2 mairor-app)와 AI 서버(EC2 mairor-ai)의 수집기. docker-compose.prod.yml · docker-compose.ai.yml 의
+// alloy 서비스가 이 파일로 돈다. 모은 것은 인프라 서버 입구(caddy)로 HTTPS 로 보낸다. 입구는 두 서버의 Elastic IP 만 받는다.
+//   INFRA_HOST   인프라 서버 도메인. compose 에 적혀 있다
+//   SERVER_NAME  서버 이름(app · ai). 로그 · 지표에 server 라벨로 붙어 Grafana 에서 서버를 나눈다. 없으면 app
 
 // 자기 로그도 loki 로 가므로 경고 이상만 남긴다
 logging {
@@ -80,7 +81,8 @@ loki.write "infra" {
 	}
 
 	external_labels = {
-		env = "prod",
+		env    = "prod",
+		server = coalesce(sys.env("SERVER_NAME"), "app"),
 	}
 }
 
@@ -111,7 +113,8 @@ prometheus.remote_write "infra" {
 	}
 
 	external_labels = {
-		env = "prod",
+		env    = "prod",
+		server = coalesce(sys.env("SERVER_NAME"), "app"),
 	}
 }
 
