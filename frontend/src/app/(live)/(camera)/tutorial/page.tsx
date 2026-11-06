@@ -7,13 +7,14 @@ import { PillButton } from "@/components/ui/pill-button";
 import { useHiddenVideo } from "@/features/face";
 import {
   checkGuideArea,
-  GuideOverlay,
+  TutorialViewport,
   loadDefaultGuideSet,
   loadGuideArea,
   resolveStep,
   toGuideArea,
   useGuide,
   useStepInView,
+  useTutorialCrop,
   type GuideArea,
   type GuideModel,
   type GuideSet,
@@ -234,7 +235,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     [info.stepId, subs, defaults],
   );
   // 가까이 다가가 지금 단계 부위만 잘려도 화면 밖으로 잘린 것으로 안내하고 측정을 멈춘다
-  const stepInView = useStepInView(guideStep);
+  const { crop } = useTutorialCrop();
+  const stepInView = useStepInView(guideStep, crop);
   const { note, canRender, canMeasure } = useLiveState(alert, stepInView ? null : "out-of-frame");
   // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가 (CAMERA-004 · GUIDE-013)
   const blocked = !canMeasure;
@@ -320,15 +322,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
   return (
     <main className="relative flex flex-1 flex-col">
-      {/*
-        가이드는 상단 바·제품 칩과 하단 안내 사이에 그린다. 하단 안내 높이는 동작·단계마다 150px 가까이 달라서,
-        남은 칸(flex-1)에 맞추면 '했어요'를 누를 때마다 얼굴 배율이 다시 잡혀 가이드가 출렁였다.
-        그래서 하단 안내가 가장 클 때(약 370px)를 비워 둔 고정 칸에 그린다
-      */}
-      <div className="absolute inset-x-0 top-[140px] bottom-[372px]">
-        {/* 이 단계에 그릴 가이드가 없어도 윤곽은 띄운다. 알림으로 가이드를 숨기는 동안은 윤곽도 숨긴다 */}
-        <GuideOverlay step={canRender ? guideStep : null} fit face={canRender} />
-      </div>
+      <TutorialViewport step={canRender ? guideStep : null} face={canRender} />
       <div className="flex-1" />
 
       <TutorialTopBar

@@ -93,7 +93,8 @@ npm run dev:https
 - 좌우는 사용자 신체 기준이다. 반전 전 원본 프레임과 얼굴 메시 UV에서 사용자 오른쪽 부위(`rightEye` 등)는 왼쪽(x < 0.5)에 있다
 - 가이드·화장 레이어 좌표(`MeshAnchor`)와 좌우 라벨은 반전 전 기준 그대로 두고 바꾸지 않는다
 - 화면에는 실제 얼굴에 매핑한 뒤 거울 반전을 한 번만 적용한다
-- 카메라 영상은 `<video>`에 CSS `-scale-x-100`으로 뒤집고, 캔버스에 영상을 직접 그릴 때는 `drawFitted`에서 뒤집는다
+- 카메라 영상은 `<video>`에 CSS `-scale-x-100`으로 뒤집는다. 캔버스에 직접 그릴 때는 `drawFitted` 또는 크롭 표시용 `CropView`에서 한 번만 뒤집는다
+- 크롭 좌표는 거울 방향 기준이다. `CropView`의 영상과 가이드는 같은 `cropTransform`을 쓰며, 가이드 좌표는 `toScreen`에서 반전한다
 - 가이드·화장 레이어 캔버스는 CSS로 뒤집지 않고, `toScreen`(`features/face/view-transform.ts`)에서 x를 `1 - x`로 바꾼다. 캔버스에 CSS 반전을 더하거나 좌표를 미리 뒤집으면 두 번 반전된다
 - 확인: `?guides=/fixtures/guides/right-only.json`을 붙이면 가이드가 화면 오른쪽 얼굴에만 보여야 한다 (`/debug/tutorial`, `/debug/overlay`)
 

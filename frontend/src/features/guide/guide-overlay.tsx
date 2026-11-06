@@ -14,6 +14,7 @@ import {
   useFaceFrame,
   type GuideShape,
   type MeshAnchor,
+  type NormalizedRect,
   type ViewTransform,
 } from "@/features/face";
 import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/features/overlay";
@@ -21,6 +22,7 @@ import { observeCanvasSize } from "@/lib/canvas-size";
 
 import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer, isStepVisible } from "./renderer";
+import { cropTransform, isStepInCrop } from "./tutorial-crop";
 import type { AreaSubStep, GuideArea, GuideSet, GuideStep } from "./types";
 
 function anchorsOf(guide: GuideShape): MeshAnchor[] {
@@ -144,18 +146,28 @@ export function loadDefaultGuideSet(): Promise<GuideSet> {
  * 지금 단계 부위가 화면 안에 보이는지. 바뀔 때만 다시 그린다.
  * 추적이 불안정할 때는 추적 판정이 따로 안내하므로 직전 값을 유지한다.
  */
-export function useStepInView(step: GuideStep | null): boolean {
+export function useStepInView(step: GuideStep | null, crop: NormalizedRect | null = null): boolean {
   const [inView, setInView] = useState(true);
   const stepRef = useRef(step);
+  const cropRef = useRef(crop);
   useEffect(() => {
     stepRef.current = step;
-  }, [step]);
+    cropRef.current = crop;
+  }, [step, crop]);
   useFaceFrame((frame) => {
     if (frame?.trackingState !== "tracking") return;
     // 추적기처럼 한번 숨긴 뒤에는 조금 더 들어와야 다시 보이게 해 경계에서 깜빡이지 않게 한다.
     setInView((prev) => {
       const limit = MIN_IN_FRAME_RATIO + (prev ? 0 : RECOVER_IN_FRAME_MARGIN);
-      const next = !stepRef.current || isStepVisible(stepRef.current, frame, limit);
+      const next =
+        (!stepRef.current || isStepVisible(stepRef.current, frame, limit)) &&
+        (!cropRef.current ||
+          isStepInCrop(
+            stepRef.current,
+            frame,
+            cropRef.current,
+            prev ? 0 : RECOVER_IN_FRAME_MARGIN,
+          ));
       return prev === next ? prev : next;
     });
   });
@@ -185,10 +197,12 @@ export function GuideOverlay({
   step,
   fit = false,
   face = fit,
+  crop,
 }: {
   step: GuideStep | null;
   fit?: boolean;
   face?: boolean;
+  crop?: NormalizedRect;
 }) {
   const { viewTransform } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -197,6 +211,7 @@ export function GuideOverlay({
   const stepRef = useRef(step);
   const faceRef = useRef(face);
   const viewRef = useRef(viewTransform);
+  const cropRef = useRef(crop);
   const fitRef = useRef<ViewTransform | null>(null);
   const fitScaleRef = useRef(0);
   const iodRef = useRef(0);
@@ -206,7 +221,8 @@ export function GuideOverlay({
     stepRef.current = step;
     faceRef.current = face;
     viewRef.current = viewTransform;
-  }, [step, face, viewTransform]);
+    cropRef.current = crop;
+  }, [step, face, viewTransform, crop]);
 
   useEffect(() => {
     loadFaceMesh()
@@ -230,8 +246,15 @@ export function GuideOverlay({
 
   useFaceFrame((frame) => {
     const canvas = canvasRef.current;
+    const crop = cropRef.current;
     let view = viewRef.current;
-    if (fit && frame && canvas) {
+    if (crop && frame && canvas) {
+      view = cropTransform(
+        frame.imageSize,
+        { width: canvas.clientWidth, height: canvas.clientHeight },
+        crop,
+      );
+    } else if (fit && frame && canvas) {
       const size = { width: canvas.clientWidth, height: canvas.clientHeight };
       const target = faceFitTransform(
         REGIONS.faceOval.indices.map((i) => frame.landmarks[i]),
@@ -253,6 +276,17 @@ export function GuideOverlay({
             mirrored: true,
           }
         : goal;
+    }
+    if (canvas) {
+      if (crop && frame && view) {
+        const x = crop.x0 * frame.imageSize.width * view.scale + view.offsetX;
+        const y = crop.y0 * frame.imageSize.height * view.scale + view.offsetY;
+        const right =
+          canvas.clientWidth - (crop.x1 * frame.imageSize.width * view.scale + view.offsetX);
+        const bottom =
+          canvas.clientHeight - (crop.y1 * frame.imageSize.height * view.scale + view.offsetY);
+        canvas.style.clipPath = `inset(${Math.max(0, y)}px ${Math.max(0, right)}px ${Math.max(0, bottom)}px ${Math.max(0, x)}px)`;
+      } else canvas.style.clipPath = "";
     }
     let iod = frame?.iod ?? 0;
     if (frame) {

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
-  GuideOverlay,
+  TutorialCropEditor,
   loadDefaultGuideSet,
   loadGuideArea,
   loadGuideSet,
@@ -74,9 +74,7 @@ export default function TutorialPage() {
   const item = list[index] ?? null;
 
   return (
-    <main className="relative flex flex-1 flex-col justify-between p-6">
-      <GuideOverlay step={item?.step ?? null} />
-
+    <main className="relative flex flex-1 flex-col gap-4 bg-background p-6">
       <header className="relative rounded-lg bg-black/50 px-4 py-3 text-white">
         {item ? (
           <>
@@ -91,6 +89,8 @@ export default function TutorialPage() {
           </h1>
         )}
       </header>
+
+      <TutorialCropEditor step={item?.step ?? null} />
 
       <nav className="relative flex items-center justify-between gap-3">
         <Button size="lg" variant="outline" asChild>

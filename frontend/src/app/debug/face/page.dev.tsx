@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { MirrorToggle } from "@/components/mirror-toggle";
 import { Button } from "@/components/ui/button";
 import {
   applyLandmarkerParams,
@@ -356,6 +357,8 @@ export default function DebugFacePage() {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        <MirrorToggle />
+        <span className="text-sm">끄면 카메라 영상 · 켜면 미러필름용 랜드마크</span>
         <Button variant="outline" onClick={() => setShowIndices((v) => !v)}>
           랜드마크 번호 {showIndices ? "숨기기" : "표시"}
         </Button>
