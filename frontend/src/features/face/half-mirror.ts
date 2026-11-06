@@ -78,15 +78,30 @@ export function halfMirror(
   return { frame: { ...frame, landmarks }, view: eyeDepthTransform(frame, screen, fit) };
 }
 
-/** 눈과 같은 깊이의 점을 비친 자리에 그리는 변환 */
-function eyeDepthTransform(frame: FaceFrame, screen: MirrorScreen, fit: MirrorFit): ViewTransform {
+/** 눈 깊이에서 영상 1px이 실제로 몇 mm인지. 눈 사이 거리를 IOD_MM으로 보고 잰다 */
+function mmPerPx(frame: FaceFrame) {
   const { width: w, height: h } = frame.imageSize;
   const a = frame.landmarks[RIGHT_IRIS_CENTER];
   const b = frame.landmarks[LEFT_IRIS_CENTER];
   // 고개를 돌려도 줄지 않게 깊이까지 넣어 잰다 (z는 x와 같은 축척)
   const iod = Math.hypot((a.x - b.x) * w, (a.y - b.y) * h, ((a.z ?? 0) - (b.z ?? 0)) * w);
-  // 눈 깊이에서 영상 1px이 실제로 몇 mm인지
-  const k = IOD_MM / Math.max(1, iod);
+  return IOD_MM / Math.max(1, iod);
+}
+
+/**
+ * 눈에서 화면까지 거리(mm). 화각(CAMERA_HFOV_DEG)과 IOD 가정에 비례해 틀리므로,
+ * 자로 잰 거리와 다르면 화각 상수를 고친다
+ */
+export function eyeDistanceMm(frame: FaceFrame) {
+  return (frame.imageSize.width / DEPTH_PER_Z) * mmPerPx(frame);
+}
+
+/** 눈과 같은 깊이의 점을 비친 자리에 그리는 변환 */
+function eyeDepthTransform(frame: FaceFrame, screen: MirrorScreen, fit: MirrorFit): ViewTransform {
+  const { width: w, height: h } = frame.imageSize;
+  const a = frame.landmarks[RIGHT_IRIS_CENTER];
+  const b = frame.landmarks[LEFT_IRIS_CENTER];
+  const k = mmPerPx(frame);
   // 카메라 기준 실제 위치(mm). 사용자가 보는 방향으로 x 오른쪽, y 아래이고, 영상은 좌우가 반대라 x를 뒤집는다
   const ex = (w / 2 - (a.x + b.x) * (w / 2)) * k;
   const ey = ((a.y + b.y) * (h / 2) - h / 2) * k;
