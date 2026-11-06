@@ -10,6 +10,13 @@ export const MIRROR_SCRIPT = `try{if(localStorage.getItem("${MIRROR_KEY}")==="1"
 /** 지금 미러필름 모드인지 */
 export const isMirror = () => document.documentElement.classList.contains("mirror");
 
+/** <html>의 mirror 클래스가 바뀔 때마다 부른다. 돌려준 함수로 그만 듣는다 */
+export function subscribeMirror(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  return () => observer.disconnect();
+}
+
 /** 미러필름 모드를 켜고 끈다. 상단바 색도 함께 바꾼다 */
 export function setMirror(on: boolean) {
   document.documentElement.classList.toggle("mirror", on);

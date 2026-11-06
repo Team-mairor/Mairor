@@ -2,19 +2,13 @@
 
 import { useSyncExternalStore } from "react";
 
-import { isMirror, MIRROR_KEY, setMirror } from "@/lib/mirror";
+import { isMirror, MIRROR_KEY, setMirror, subscribeMirror } from "@/lib/mirror";
 import { cn } from "@/lib/utils";
-
-/** <html>의 mirror 클래스를 구독해, 화면에 토글이 여러 개 있어도 같은 상태를 보여 준다 */
-function subscribe(onChange: () => void) {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-  return () => observer.disconnect();
-}
 
 /** 일반 / 미러필름 모드 전환. 색 규칙은 globals.css의 .mirror */
 export function MirrorToggle({ className }: { className?: string }) {
-  const on = useSyncExternalStore(subscribe, isMirror, () => false);
+  // <html>의 mirror 클래스를 구독해, 화면에 토글이 여러 개 있어도 같은 상태를 보여 준다
+  const on = useSyncExternalStore(subscribeMirror, isMirror, () => false);
 
   const toggle = () => {
     const next = !on;
