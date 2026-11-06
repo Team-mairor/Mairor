@@ -23,6 +23,7 @@ export {
   distanceHint,
   eyesClosed,
   faceBox,
+  faceBoxIn,
   facePhoto,
   MIN_DISTANCE_RATIO,
   NO_CHECK,
@@ -75,6 +76,7 @@ export {
   type TrackingIssue,
 } from "./tracking-issue";
 export {
+  eyeDistanceMm,
   fitMirror,
   halfMirror,
   loadMirrorFit,

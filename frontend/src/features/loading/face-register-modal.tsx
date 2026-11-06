@@ -1,7 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
@@ -65,8 +65,11 @@ export function FaceRegisterModal({
   /** 마지막 촬영을 다시 하는 이유 */
   const [retake, setRetake] = useState<null | "failed" | "eyes">(null);
   const cameraReady = camera.status === "ready";
+  // 미러필름 위에서는 비친 얼굴이 이 원 안에 있는지로 위치를 본다
+  const circleRef = useRef<HTMLDivElement>(null);
   const { check, found, hint, frame, passedNow } = useFaceCheck(
     step === "cam" && cameraReady && !done,
+    circleRef,
   );
   const passed = allPassed(check);
   const ok = CHECKS.filter((name) => check[name]).length;
@@ -257,7 +260,14 @@ export function FaceRegisterModal({
             </span>
           </div>
 
-          <FaceRing stage={stage} pct={scan} live={cameraReady} face={found} alert={alert} />
+          <FaceRing
+            circleRef={circleRef}
+            stage={stage}
+            pct={scan}
+            live={cameraReady}
+            face={found}
+            alert={alert}
+          />
 
           <div className="flex flex-col items-center gap-2 text-center">
             <span className="font-display text-[30px] leading-[1.3] text-ink">{title}</span>
@@ -340,12 +350,14 @@ const TICK_R = RING / 2 - 8;
 
 /** 눈금 링 + 얼굴 원 */
 function FaceRing({
+  circleRef,
   stage,
   pct,
   live,
   face,
   alert,
 }: {
+  circleRef: RefObject<HTMLDivElement | null>;
   stage: Stage;
   pct: number;
   /** 카메라가 켜져 영상을 보여 줄 수 있음 */
@@ -399,6 +411,7 @@ function FaceRing({
         </div>
       )}
       <div
+        ref={circleRef}
         className="absolute top-[50px] left-[50px] overflow-hidden rounded-full bg-cream"
         style={{ width: FACE, height: FACE }}
       >
