@@ -6,7 +6,7 @@
 # 2. ECR 로그인, 새 태그 이미지 받기
 # 3. 슬롯 a → b 롤링: 대상 그룹에서 빼기 → 연결 정리(등록 해제 지연 30초) → 컨테이너 교체 → 컨테이너 헬스
 #    → 대상 그룹에 다시 넣기 → ALB 에서 정상 확인. 한 슬롯씩 바꾸므로 다른 슬롯이 계속 요청을 받는다
-# 4. ai(공용) 교체. 몇 초 끊기는 분석 호출은 작업 재시도로 흡수한다
+# 4. worker(켜져 있을 때만) 교체. ai 는 AI 서버(mairor-ai, deploy-ai.sh)에 있다(S15P31A306-356)
 # 중간에 실패하면 이미 바꾼 것까지 이전 태그로 되돌리고 실패(종료 코드 1)로 끝낸다. 이력은 releases.log.
 # 이전 성공 태그가 없는 첫 배포는 롤링 없이 전부 띄우고 대상 그룹에 넣는다.
 set -euo pipefail
@@ -64,7 +64,8 @@ for p in json.load(sys.stdin)["Parameters"]:
     print(key + "=" + value)
 ' >"$tmp"
   local key
-  for key in SPRING_PROFILES_ACTIVE DB_URL DB_USERNAME DB_PASSWORD ALLOWED_ORIGINS; do
+  # AI 는 다른 서버라 주소 두 개가 없으면 분석이 안 된다(기본값 http://ai:8000 은 이 서버에 없다)
+  for key in SPRING_PROFILES_ACTIVE DB_URL DB_USERNAME DB_PASSWORD ALLOWED_ORIGINS AI_BASE_URL AI_CALLBACK_BASE_URL; do
     if ! grep -q "^$key=" "$tmp"; then
       rm -f "$tmp"
       echo "Parameter Store 에 $PARAM_PATH/$key 가 없다" >&2
@@ -132,10 +133,8 @@ switch_slot() { # switch_slot <a|b> <태그>
   slot_in "$port" || return 1
 }
 
-switch_ai() { # switch_ai <태그>
-  log "ai: $1 로 교체"
-  compose_at "$1" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" ai || return 1
-  # worker 는 5B 에서 켠다. 켜져 있을 때만 같이 바꾼다
+switch_worker() { # switch_worker <태그>
+  # worker 는 켜져 있을 때만 바꾼다
   if [ -n "$(compose_at "$1" --profile worker ps -q --status running worker)" ]; then
     log "worker: $1 로 교체"
     compose_at "$1" --profile worker up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" worker || return 1
@@ -143,12 +142,12 @@ switch_ai() { # switch_ai <태그>
 }
 
 # 실패했을 때 바꾼 것을 이전 태그로 되돌린다. 실패한 쪽부터 되돌려 늘 한 슬롯은 요청을 받게 한다
-revert() { # revert <이전 태그> <되돌릴 대상...>   대상: a, b, ai
+revert() { # revert <이전 태그> <되돌릴 대상...>   대상: a, b, worker
   local prev=$1 item failed=0
   shift
   for item in "$@"; do
-    if [ "$item" = ai ]; then
-      switch_ai "$prev" || failed=1
+    if [ "$item" = worker ]; then
+      switch_worker "$prev" || failed=1
     else
       switch_slot "$item" "$prev" || failed=1
     fi
@@ -176,11 +175,11 @@ main() {
   ecr_login
 
   log "이미지 받기"
-  compose_at "$TAG" pull --quiet nginx-a api-a ai
+  compose_at "$TAG" pull --quiet nginx-a api-a
 
   if [ -z "$prev" ]; then
     log "첫 배포: 롤링 없이 전부 띄운다"
-    if ! compose_at "$TAG" up -d --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" nginx-a api-a nginx-b api-b ai ||
+    if ! compose_at "$TAG" up -d --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" nginx-a api-a nginx-b api-b ||
       ! slot_in 8081 || ! slot_in 8082; then
       record failed
       log "첫 배포 실패. 되돌릴 이전 태그가 없다. docker compose logs 로 원인을 본다"
@@ -188,9 +187,9 @@ main() {
     fi
   else
     local done_items=() item
-    for item in a b ai; do
-      if [ "$item" = ai ]; then
-        switch_ai "$TAG" && done_items=(ai "${done_items[@]}") && continue
+    for item in a b worker; do
+      if [ "$item" = worker ]; then
+        switch_worker "$TAG" && done_items=(worker "${done_items[@]}") && continue
       else
         switch_slot "$item" "$TAG" && done_items=("$item" "${done_items[@]}") && continue
       fi
@@ -207,10 +206,14 @@ main() {
   # 이미지는 Docker Hub 에 있어 위 받기에 넣지 않는다. up 이 서버에 없는 버전일 때만 받는다
   compose_at "$TAG" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" alloy ||
     log "alloy 교체 실패(배포는 성공). docker compose logs alloy 로 원인을 본다"
-  # 콜백 입구(AI 서버 → BE 콜백). 설정이 바뀌었을 때만 다시 만들어진다. 같은 서버의 ai 는 core 로 바로 콜백하므로
-  # 여기서 실패해도 지금 배포는 성공으로 두고 알린다(S15P31A306-355)
+  # 콜백 입구(AI 서버 → BE 콜백). 설정이 바뀌었을 때만 다시 만들어진다. 실패하면 AI 콜백이 닿지 않지만 앱 배포는 끝났으므로
+  # 성공으로 두고 알린다(S15P31A306-355). 감시(AiCallbackWatcher)가 시간 초과 뒤 상태 조회로 줍는다
   compose_at "$TAG" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" callback-gw ||
     log "callback-gw 교체 실패(배포는 성공). AI 서버의 콜백이 닿지 않는다. docker compose logs callback-gw 로 원인을 본다"
+  # ai 를 AI 서버로 옮기기 전(S15P31A306-356 이전)의 ai 컨테이너가 남아 있으면 지운다. compose 에서 빠져 up 이 지우지 않는다
+  if docker ps -a --format '{{.Names}}' | grep -qx mairor-ai-1; then
+    docker rm -f mairor-ai-1 >/dev/null && log "옛 ai 컨테이너(mairor-ai-1)를 지웠다" || log "옛 ai 컨테이너 지우기 실패(배포는 성공)"
+  fi
   # 쓰지 않는 이미지 중 7일 지난 것을 지운다. 되돌릴 때는 ECR 에서 다시 받는다
   docker image prune -af --filter "until=168h" >/dev/null || log "이미지 정리 실패(배포는 성공)"
   log "$ACTION 완료: $TAG"

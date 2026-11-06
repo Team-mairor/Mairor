@@ -1,20 +1,38 @@
 #!/usr/bin/env bash
-# CI 의 deploy · rollback 잡이 EC2 에 배포 명령을 보내고 끝날 때까지 기다린다(SSM Run Command, 22번 없음).
-#   deploy/run-on-ec2.sh deploy <태그>     ECR 의 mairor-deploy:<태그> 에서 배포 파일을 꺼내 deploy.sh <태그>
-#   deploy/run-on-ec2.sh rollback <태그>   같은 순서로 그 태그의 배포 파일을 꺼내 rollback.sh <태그>
-# 필요한 환경변수: EC2_INSTANCE_ID, AWS 자격(CI 변수, IAM 사용자 mairor-ci-deploy), AWS_DEFAULT_REGION.
+# CI 의 deploy · rollback 잡이 EC2 한 대에 배포 명령을 보내고 끝날 때까지 기다린다(SSM Run Command, 22번 없음).
+#   deploy/run-on-ec2.sh deploy <태그> <be|ai>     ECR 의 mairor-deploy:<태그> 에서 배포 파일을 꺼내 그 서버의 배포 스크립트 <태그>
+#   deploy/run-on-ec2.sh rollback <태그> <be|ai>   같은 순서로 그 서버의 되돌리기 스크립트 <태그>
+# 서버: be = mairor-app(deploy.sh · rollback.sh), ai = mairor-ai(deploy-ai.sh · rollback-ai.sh). S15P31A306-356
+# 필요한 환경변수: EC2_INSTANCE_ID(be) · AI_EC2_INSTANCE_ID(ai), AWS 자격(CI 변수, IAM 사용자 mairor-ci-deploy), AWS_DEFAULT_REGION.
 # 서버 출력은 잡 로그에 그대로 찍고, 서버에서 실패하면 이 스크립트도 실패(종료 코드 1)한다.
 set -euo pipefail
 
-ACTION="${1:?사용법: run-on-ec2.sh <deploy|rollback> <태그>}"
-TAG="${2:?사용법: run-on-ec2.sh <deploy|rollback> <태그>}"
-INSTANCE="${EC2_INSTANCE_ID:?EC2_INSTANCE_ID 가 없다(CI 변수)}"
+ACTION="${1:?사용법: run-on-ec2.sh <deploy|rollback> <태그> <be|ai>}"
+TAG="${2:?사용법: run-on-ec2.sh <deploy|rollback> <태그> <be|ai>}"
+SERVER="${3:?사용법: run-on-ec2.sh <deploy|rollback> <태그> <be|ai>}"
 REGION="${AWS_DEFAULT_REGION:-ap-northeast-2}"
 RUN_SECONDS=1200 # 서버에서 명령이 돌 수 있는 최대 시간. 롤링 배포는 보통 3 ~ 5분
 
+case "$SERVER" in
+  be)
+    INSTANCE="${EC2_INSTANCE_ID:?EC2_INSTANCE_ID 가 없다(CI 변수)}"
+    DEPLOY_SCRIPT=deploy.sh
+    ROLLBACK_SCRIPT=rollback.sh
+    ;;
+  ai)
+    INSTANCE="${AI_EC2_INSTANCE_ID:?AI_EC2_INSTANCE_ID 가 없다(CI 변수)}"
+    DEPLOY_SCRIPT=deploy-ai.sh
+    ROLLBACK_SCRIPT=rollback-ai.sh
+    ;;
+  *)
+    echo "서버는 be 또는 ai 만 받는다: $SERVER" >&2
+    exit 1
+    ;;
+esac
+
 case "$ACTION" in
-  deploy) SCRIPT=deploy.sh ;;
-  rollback) SCRIPT=rollback.sh ;;
+  deploy) SCRIPT=$DEPLOY_SCRIPT ;;
+  rollback) SCRIPT=$ROLLBACK_SCRIPT ;;
   *)
     echo "deploy 또는 rollback 만 받는다: $ACTION" >&2
     exit 1
@@ -47,10 +65,10 @@ b64=$(printf '%s\n' "$remote" | base64 | tr -d '\n')
 command_id=$(aws ssm send-command \
   --instance-ids "$INSTANCE" \
   --document-name AWS-RunShellScript \
-  --comment "mairor $ACTION $TAG pipeline ${CI_PIPELINE_ID:-manual}" \
+  --comment "mairor $ACTION $TAG $SERVER pipeline ${CI_PIPELINE_ID:-manual}" \
   --parameters "{\"commands\":[\"echo $b64 | base64 -d | bash\"],\"executionTimeout\":[\"$RUN_SECONDS\"]}" \
   --query Command.CommandId --output text)
-echo "SSM 명령 $command_id: $ACTION $TAG"
+echo "SSM 명령 $command_id: $ACTION $TAG ($SERVER 서버 $INSTANCE)"
 
 invocation() { # invocation <조회할 칸>
   aws ssm get-command-invocation --command-id "$command_id" --instance-id "$INSTANCE" --query "$1" --output text
@@ -69,7 +87,7 @@ while [ "$waited" -le $((RUN_SECONDS + 60)) ]; do
   esac
 done
 
-echo "----- 서버 출력 -----"
+echo "----- $SERVER 서버 출력 -----"
 invocation StandardOutputContent || true
 errors=$(invocation StandardErrorContent 2>/dev/null || true)
 if [ -n "$errors" ] && [ "$errors" != None ]; then
@@ -78,5 +96,5 @@ if [ -n "$errors" ] && [ "$errors" != None ]; then
   echo "$errors"
 fi
 echo "---------------------"
-echo "결과: $status (${waited}초)"
+echo "결과: $SERVER $status (${waited}초)"
 [ "$status" = Success ]

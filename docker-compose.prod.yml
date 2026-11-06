@@ -4,7 +4,8 @@
 # 앱 슬롯 2개: 슬롯 a(nginx-a → api-a, 호스트 8081), 슬롯 b(nginx-b → api-b, 호스트 8082).
 # ALB 대상 그룹에 8081·8082가 따로 등록되어, 배포 때 한 슬롯을 빼고 바꾸는 동안 다른 슬롯이 요청을 받는다.
 # 네트워크를 슬롯마다 나눠 nginx 는 같은 슬롯의 api 만 api 라는 이름으로 찾는다(frontend/nginx/api.conf 를 그대로 쓴다).
-# ai·worker 는 슬롯 밖 공용(core)이다. core 에서 api 는 두 api 중 하나로 찾힌다(ai 의 콜백용).
+# worker 는 슬롯 밖 공용(core)이다. core 에서 api 는 두 api 중 하나로 찾힌다(callback-gw 가 AI 콜백을 넘길 때 쓴다).
+# ai 는 AI 서버(EC2 mairor-ai, docker-compose.ai.yml)에 있다. BE 는 AI_BASE_URL 로 부르고, AI 는 callback-gw(8090)로 콜백한다(S15P31A306-355 · 356).
 # alloy 는 이 서버의 로그·지표·호출 흐름을 모아 인프라 서버로 보낸다(infra/README.md). 설정은 alloy.alloy(레포 infra/alloy/config.alloy).
 #
 # 값은 두 파일에서 온다. 둘 다 deploy.sh 가 만들고 레포에는 없다.
@@ -100,31 +101,6 @@ services:
         aliases: [api]
       core:
         aliases: [api]
-
-  ai:
-    <<: *app-env
-    image: ${ECR_REGISTRY}/mairor-ai:${IMAGE_TAG}
-    restart: unless-stopped
-    logging: *logging
-    environment:
-      # CloudWatch Logs Insights · Loki 에서 칸으로 읽힌다
-      LOG_FORMAT: json
-      # 작업 · Claude 호출 기록을 alloy 로 보내면 alloy 가 Tempo · Phoenix 로 나눠 보낸다
-      TRACING_ENDPOINT: http://alloy:4318/v1/traces
-      OTEL_SERVICE_NAME: ai
-    healthcheck:
-      test: ["CMD", ".venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: "2"
-          memory: 6G
-    networks:
-      - core
 
   # 영상 분석 작업(5B). 정의만 하고 기본으로 띄우지 않는다: docker compose --profile worker up -d worker
   worker:

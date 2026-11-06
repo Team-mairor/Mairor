@@ -37,13 +37,13 @@ master에 머지되면 검사가 끝난 뒤 운영 배포가 이어진다(`ci/de
 | 잡 | 하는 일 |
 |---|---|
 | `build-images` | 이미지 4개(`mairor-nginx` · `mairor-backend` · `mairor-ai` · `mairor-deploy`)를 빌드해 ECR에 올린다. 태그는 커밋 해시 8자리 |
-| `deploy` | EC2에서 `deploy.sh <태그>`를 돌린다(SSM Run Command). 슬롯 a → b → ai 순서로 바꿔 배포 중에도 사이트가 끊기지 않는다. 실패하면 서버가 이전 버전으로 되돌리고 잡이 빨강이 된다 |
-| `rollback` (수동) | 이전 버전으로 되돌린다. 아래 방법 |
+| `deploy` | SSM Run Command로 **AI 서버(`deploy-ai.sh`) → BE 서버(`deploy.sh`)** 순서로 배포한다. BE는 슬롯 a → b → worker 순서라 배포 중에도 사이트가 끊기지 않는다. 실패한 서버는 스스로 이전 버전으로 되돌리고 잡이 빨강이 된다. AI가 실패하면 BE는 건드리지 않고, AI 성공 뒤 BE가 실패하면 AI는 새 버전으로 남는다(함께 되돌리려면 `rollback`) |
+| `rollback` (수동) | 두 서버를 같은 순서로 이전 버전으로 되돌린다. 아래 방법 |
 | `deploy-infra` | `infra/`가 바뀌었을 때만 돈다. 인프라 서버에 SSH로 `infra/`를 올리고 `infra/deploy.sh`를 돌린다(`ci/infra.yml`, 박형준 관리). 되돌리기는 예전 파이프라인의 이 잡을 다시 실행 |
 
-**되돌리기:** master 파이프라인 화면에서 `rollback` 잡 **이름**을 누른다. 열린 화면의 변수 칸에 키 `ROLLBACK_TAG`, 값에 되돌릴 태그(예전 `deploy` 잡 로그의 `deploy 완료: <태그>`)를 넣고 **Run job**. 서버에서 성공했던 태그만 받는다. ▶ 버튼을 바로 누르면 변수 없이 돌아 안내만 찍고 실패한다.
+**되돌리기:** master 파이프라인 화면에서 `rollback` 잡 **이름**을 누른다. 열린 화면의 변수 칸에 키 `ROLLBACK_TAG`, 값에 되돌릴 태그(예전 `deploy` 잡 로그의 `deploy 완료: <태그>`)를 넣고 **Run job**. 두 서버 모두 그 태그로 성공했던 적이 있어야 한다(AI 서버는 `c5b05159`부터). ▶ 버튼을 바로 누르면 변수 없이 돌아 안내만 찍고 실패한다.
 
-- AWS 자격은 CI 변수(`AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY` · `EC2_INSTANCE_ID`, Protected)라 master에서만 보인다. 키 교체와 서버 쪽 절차는 `deploy/README.md`.
+- AWS 자격은 CI 변수(`AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY` · `EC2_INSTANCE_ID`(BE 서버) · `AI_EC2_INSTANCE_ID`(AI 서버), Protected)라 master에서만 보인다. 키 교체와 서버 쪽 절차는 `deploy/README.md`.
 - 배포 잡 로그 아래쪽 "서버 오류 출력"에 `credentials are stored unencrypted` 경고가 보여도 정상이다. 성공 · 실패는 마지막 줄 `결과:`로 본다.
 
 ## 결과 보는 곳

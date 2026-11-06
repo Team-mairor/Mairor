@@ -7,3 +7,4 @@
 !docker-compose.ai.yml
 !deploy/callback-gw.conf
 !deploy/deploy-ai.sh
+!deploy/rollback-ai.sh
