@@ -7,7 +7,8 @@ from app.schemas.manifest import Makeup
 
 TRIANGLE_COUNT = 898
 BARY_TOLERANCE = 0.001
-NO_AREA_MAKEUPS: tuple[Makeup, ...] = ("other", "mascara")
+NO_AREA_MAKEUPS: tuple[Makeup, ...] = ("other",)
+TemplateId = Literal[Makeup, "eyeshadowUpper", "eyeshadowUnder"]
 
 RegionName = Literal[
     "leftEye",
@@ -65,13 +66,15 @@ class AreaSubStep(CamelModel):
 
     extracted: 영역 1개 이상 / template: 영역 없이 templateId와 이유 / notApplicable: 모두 비움 /
     failed: 영역 없이 이유만
+    templateId는 FE 기본 가이드 키다. 화장 종류에 더해 아이섀도는 바른 자리별 키
+    (eyeshadowUpper 윗눈두덩, eyeshadowUnder 눈 밑)가 있고, eyeshadow는 위아래 모두다.
     """
 
     sub_step_id: str = Field(min_length=1)
     order: int = Field(ge=1)
     status: AreaStatus
     reasons: list[str]
-    template_id: Makeup | None
+    template_id: TemplateId | None
     guide_sets: list[GuideSet]
 
     @model_validator(mode="after")
@@ -82,7 +85,9 @@ class AreaSubStep(CamelModel):
         if status != "extracted" and self.guide_sets:
             raise ValueError(f"{status}이면 guideSets가 비어 있어야 합니다")
         if status == "template" and self.template_id in (None, "other"):
-            raise ValueError("template이면 templateId에 other가 아닌 화장 종류를 적어야 합니다")
+            raise ValueError(
+                "template이면 templateId에 other가 아닌 기본 가이드 키를 적어야 합니다"
+            )
         if status != "template" and self.template_id is not None:
             raise ValueError(f"{status}이면 templateId가 null이어야 합니다")
         if status in ("template", "failed") and not self.reasons:
@@ -104,8 +109,7 @@ class AreaStep(CamelModel):
     def check_sub_steps(self) -> "AreaStep":
         """하위 단계 번호와, 영역이 없는 화장 종류의 상태를 본다.
 
-        makeup이 NO_AREA_MAKEUPS(other, mascara)이면 notApplicable이고, 그 밖에는 쓰지 않는다.
-        마스카라는 영역 안내 없이 설명만 하기로 해서 other처럼 영역이 없다.
+        makeup이 NO_AREA_MAKEUPS(other)이면 notApplicable이고, 그 밖에는 쓰지 않는다.
         """
         for order, sub_step in enumerate(self.sub_steps, start=1):
             if sub_step.order != order:
@@ -118,7 +122,7 @@ class AreaStep(CamelModel):
                     f"{self.step_id}는 makeup이 {self.makeup}라 notApplicable이어야 합니다"
                 )
             if not no_area and sub_step.status == "notApplicable":
-                raise ValueError("notApplicable은 makeup이 other나 mascara인 단계에만 씁니다")
+                raise ValueError("notApplicable은 makeup이 other인 단계에만 씁니다")
         return self
 
 

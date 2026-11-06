@@ -10,6 +10,8 @@ from app.schemas.guide_area import GuideArea
 SAMPLE = Path(__file__).resolve().parents[1] / "samples" / "local_01" / "guide_area.json"
 
 LIP, LIP_TEMPLATE, LIP_FAILED = 16, 17, 18
+EYESHADOW_BOTH, EYESHADOW_UNDER, MASCARA = 9, 12, 13
+EYESHADOW_KEYS = ["eyeshadowUpper", "eyeshadowUnder"]
 
 ANCHORS = [
     {"triangle": 37, "bary": [0.21, 0.52, 0.27]},
@@ -47,7 +49,14 @@ BROKEN: dict[str, Callable[[dict], None]] = {
     "립 단계가 notApplicable": lambda s: sub_step(s, LIP_TEMPLATE).update(
         status="notApplicable", reasons=[], templateId=None
     ),
+    "마스카라 단계가 notApplicable": lambda s: sub_step(s, MASCARA).update(
+        status="notApplicable", reasons=[], templateId=None
+    ),
     "없는 화장 종류": lambda s: s["steps"][0].update(makeup="concealer"),
+    "단계 화장 종류에 기본 가이드 키": lambda s: s["steps"][EYESHADOW_BOTH].update(
+        makeup="eyeshadowUpper"
+    ),
+    "없는 기본 가이드 키": lambda s: sub_step(s, EYESHADOW_BOTH).update(templateId="eyeshadowTail"),
     "arrow 도형": lambda s: lip_polygon(s).update(type="arrow"),
     "이유 없는 failed": lambda s: sub_step(s, LIP_FAILED).update(reasons=[]),
 }
@@ -59,15 +68,28 @@ def broken_sample(name: str) -> dict:
     return sample
 
 
+def eyeshadow_key_sample(template_id: str) -> dict:
+    sample = load_sample()
+    sub_step(sample, EYESHADOW_UNDER).update(templateId=template_id)
+    return sample
+
+
 def test_sample_passes_model():
     area = GuideArea.model_validate(load_sample())
 
     statuses = [step.sub_steps[0].status for step in area.steps]
     assert len(area.steps) == 19
     assert statuses.count("extracted") == 1
-    assert statuses.count("template") == 10
-    assert statuses.count("notApplicable") == 7
+    assert statuses.count("template") == 11
+    assert statuses.count("notApplicable") == 6
     assert statuses.count("failed") == 1
+
+
+@pytest.mark.parametrize("template_id", EYESHADOW_KEYS)
+def test_eyeshadow_template_keys_pass_model(template_id: str):
+    area = GuideArea.model_validate(eyeshadow_key_sample(template_id))
+
+    assert area.steps[EYESHADOW_UNDER].sub_steps[0].template_id == template_id
 
 
 @pytest.mark.parametrize("name", BROKEN)

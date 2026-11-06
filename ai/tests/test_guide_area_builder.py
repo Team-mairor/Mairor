@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from app.schemas.guide import Fact, GuideInputStep, StepFacts
 from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
 from app.schemas.manifest import Step
 from app.tasks.area import guide_area_builder
@@ -116,7 +117,8 @@ def test_error_in_one_step_fails_only_that_step(monkeypatch, caplog):
 
 def test_failed_area_fails_only_analyzed_steps():
     eyeliner = Step(step_id="s4", order=4, start_seconds=10.5, end_seconds=12, makeup="eyeliner")
-    area = failed_guide_area("test_01", [STEPS[2], eyeliner, STEPS[0], STEPS[1]])
+    mascara = Step(step_id="s5", order=5, start_seconds=12, end_seconds=14, makeup="mascara")
+    area = failed_guide_area("test_01", [STEPS[2], mascara, eyeliner, STEPS[0], STEPS[1]])
 
     assert [
         (s.step_id, s.sub_steps[0].status, s.sub_steps[0].reasons, s.sub_steps[0].template_id)
@@ -126,6 +128,7 @@ def test_failed_area_fails_only_analyzed_steps():
         ("s2", "template", [NOT_ANALYZED], "foundation"),
         ("s3", "failed", [ANALYSIS_ERROR], None),
         ("s4", "failed", [ANALYSIS_ERROR], None),
+        ("s5", "template", [NOT_ANALYZED], "mascara"),
     ]
     jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
 
@@ -257,6 +260,93 @@ def test_brow_and_eyeshadow_not_found_use_default_guide_with_reasons(monkeypatch
     assert eyeshadow.reasons == ["noUsableFrame", "eyeshadowColorNotFound"]
 
 
+def input_step(
+    makeup: str, part_label: str, area: str, eye_zone: str | None = None
+) -> GuideInputStep:
+    return GuideInputStep(
+        step_id="s5",
+        order=1,
+        start_seconds=8,
+        end_seconds=10.5,
+        makeup=makeup,
+        eye_zone=eye_zone,
+        part_label=part_label,
+        summary=part_label,
+        facts=StepFacts(area=Fact(value=area, source="voice")),
+    )
+
+
+def eyeshadow_not_found(*_, **__) -> EyeshadowArea:
+    return EyeshadowArea(mask=None, reason="eyeshadowColorNotFound")
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area", "template_id"),
+    [
+        ("눈두덩이 베이스 섀도우", "눈두덩이와 애교살", "eyeshadow"),
+        ("애교살 하이라이트", "눈 점막 바로 밑 애교살", "eyeshadowUnder"),
+        ("아이홀 음영", "눈꺼풀 전체", "eyeshadowUpper"),
+        ("언더 섀도", "눈밑", "eyeshadowUnder"),
+        ("음영 섀도", "눈 밑 전체", "eyeshadowUnder"),
+        ("포인트 섀도", "아래 눈꺼풀 바깥쪽", "eyeshadowUnder"),
+        ("음영 섀도", "아랫눈꺼풀과 윗눈두덩", "eyeshadow"),
+        ("애교살 섀도", "눈두덩은 피하고 애교살에만", "eyeshadowUnder"),
+        ("눈두덩 섀도", "애교살은 제외하고 눈두덩에만", "eyeshadowUpper"),
+        ("포인트 섀도", "눈꼬리", "eyeshadow"),
+    ],
+)
+def test_eyeshadow_default_guide_follows_where_the_step_says_it_was_applied(
+    monkeypatch, part_label, area, template_id
+):
+    monkeypatch.setattr(guide_area_builder, "find_eyeshadow_area", eyeshadow_not_found)
+    step = input_step("eyeshadow", part_label, area)
+    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id, sub_step.reasons) == (
+        "template",
+        template_id,
+        ["eyeshadowColorNotFound"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("eye_zone", "part_label", "area", "template_id"),
+    [
+        ("upper", "애교살 하이라이트", "눈 점막 바로 밑 애교살", "eyeshadowUpper"),
+        ("under", "아이홀 음영", "눈꺼풀 전체", "eyeshadowUnder"),
+        ("both", "애교살 하이라이트", "눈 점막 바로 밑 애교살", "eyeshadow"),
+        ("waterline", "애교살 하이라이트", "눈 점막 바로 밑 애교살", "eyeshadowUnder"),
+    ],
+)
+def test_eye_zone_from_be_comes_before_step_words(
+    monkeypatch, eye_zone, part_label, area, template_id
+):
+    monkeypatch.setattr(guide_area_builder, "find_eyeshadow_area", eyeshadow_not_found)
+    step = input_step("eyeshadow", part_label, area, eye_zone)
+    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id) == ("template", template_id)
+
+
+def test_found_eyeshadow_keeps_its_area_whatever_the_step_says(monkeypatch):
+    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
+        return EyeshadowArea(mask=eyeshadow_range(eye), strength=2.0)
+
+    monkeypatch.setattr(guide_area_builder, "find_eyeshadow_area", found)
+    step = input_step("eyeshadow", "애교살 하이라이트", "눈 점막 바로 밑 애교살")
+    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id) == ("extracted", None)
+
+
+def test_other_default_guides_ignore_eye_words_and_zone(monkeypatch):
+    step = input_step("lip", "립 틴트", "애교살", "under")
+    area = build(
+        monkeypatch,
+        lambda *_, **__: LipArea(mask=None, reason="lipColorNotFound"),
+        steps=[step],
+    )
+    sub_step = area.steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id) == ("template", "lip")
+
+
 def eyeliner_steps(*orders: int) -> list[Step]:
     return [
         Step(step_id=f"s{o}", order=o, start_seconds=o, end_seconds=o + 2.5, makeup="eyeliner")
@@ -361,14 +451,12 @@ def test_occlusion_finder_reaches_every_part_analysis(monkeypatch):
         assert seen[name] == [hides_nothing, hides_nothing]
 
 
-@pytest.mark.parametrize("makeup", ["foundation", "contour"])
+@pytest.mark.parametrize("makeup", ["foundation", "contour", "mascara"])
 def test_makeup_without_analysis_falls_back_to_its_default_guide(monkeypatch, makeup):
     step = Step(step_id="s1", order=1, start_seconds=0, end_seconds=5, makeup=makeup)
     sub_step = build(monkeypatch, lips_found, steps=[step]).steps[0].sub_steps[0]
-    assert (sub_step.status, sub_step.template_id) == ("template", makeup)
-
-
-def test_mascara_step_has_no_area(monkeypatch):
-    step = Step(step_id="s1", order=1, start_seconds=0, end_seconds=5, makeup="mascara")
-    sub_step = build(monkeypatch, lips_found, steps=[step]).steps[0].sub_steps[0]
-    assert (sub_step.status, sub_step.template_id, sub_step.reasons) == ("notApplicable", None, [])
+    assert (sub_step.status, sub_step.template_id, sub_step.reasons) == (
+        "template",
+        makeup,
+        [NOT_ANALYZED],
+    )

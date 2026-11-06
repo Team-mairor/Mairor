@@ -30,7 +30,7 @@ BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본�
 | --- | --- | --- | --- |
 | `callbackUrl` | string (http · https URL) | Y | 결과를 받을 BE 주소 |
 | `progressUrl` | string (http · https URL) | N | 진행 알림을 받을 BE 주소. 없으면 보내지 않는다 |
-| `guideInput` | GuideInput | Y | 단계 목록 · 사실 칸. 단계마다 바르는 곳(`facts.area`), 팔레트 제품이면 고른 색(`product.palette.color`)이 필수다. 칸 설명은 [ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md) |
+| `guideInput` | GuideInput | Y | 단계 목록 · 사실 칸. 단계마다 바르는 곳(`facts.area`), 팔레트 제품이면 고른 색(`product.palette.color`)이 필수다. 눈 화장 단계는 바른 자리(`eyeZone`)도 받는다(선택). 칸 설명은 [ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md) |
 | `frames` | ReferenceFrames | N | 가이드 영역을 찾을 레퍼런스 사진. 없으면 영역을 만들지 않고 콜백의 `area`는 `null`이다 |
 
 `frames`
@@ -97,7 +97,7 @@ BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본�
 - `status`는 `COMPLETED`나 `FAILED`다. `COMPLETED`면 `guide`, `FAILED`면 `error`가 들어가고 `guide` · `area`는 `null`이다.
 - `guide.steps`는 입력 단계마다 하나씩, 같은 `stepId` · `order`로 온다.
 - `area`는 `frames`를 보낸 작업의 가이드 영역이다. 형식은 [shared/guide-area](../../shared/guide-area/README.md) 그대로이고, `guide.steps`와 같은 `stepId` · `order` 목록이다. 영역을 못 찾은 단계는 `area` 안에서 `template`(기본 영역) · `failed`로 온다.
-- 영역 분석이 통째로 실패하면 설명은 그대로 `COMPLETED`로 보내고, `area`는 분석하는 단계(`lip` · `blush` · `brow` · `eyeshadow` · `eyeliner`)만 `failed`(`reasons` `analysisError`)로 온다. 나머지 단계는 평소와 같다(`foundation` · `contour` · `highlight`는 `template`(`notAnalyzed`), `other` · `mascara`는 `notApplicable`). `COMPLETED`인데 `area`가 `null`이면 `frames`를 보내지 않은 작업이다.
+- 영역 분석이 통째로 실패하면 설명은 그대로 `COMPLETED`로 보내고, `area`는 분석하는 단계(`lip` · `blush` · `brow` · `eyeshadow` · `eyeliner`)만 `failed`(`reasons` `analysisError`)로 온다. 나머지 단계는 평소와 같다(`foundation` · `contour` · `highlight` · `mascara`는 `template`(`notAnalyzed`), `other`는 `notApplicable`). `COMPLETED`인데 `area`가 `null`이면 `frames`를 보내지 않은 작업이다.
 - 설명을 못 만들면 영역 작업을 멈추고 `FAILED`를 바로 보낸다.
 - `actions`는 순서대로 할 동작이고, `tip`은 그 동작에 붙는 팁이다(`tip` 요령, `caution` 주의). `doneWhen`은 다음 단계로 넘어가도 되는 때이고, 입력에 근거가 없으면 `null`이다.
 - 동작 1~4개(25자 이내), 팁 단계당 2개 이하(30자 이내)는 지시문으로 맞춘 값이다. 아직 코드로 검사하지 않는다(S15P31A306-252에서 추가).

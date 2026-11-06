@@ -3,10 +3,22 @@ import json
 import pytest
 from jsonschema import Draft202012Validator
 
-from tests.test_guide_area import broken_sample, load_sample
+from tests.test_guide_area import (
+    EYESHADOW_KEYS,
+    broken_sample,
+    eyeshadow_key_sample,
+    load_sample,
+)
 from tools.export_guide_area_schema import SCHEMA_PATH, build_schema
 
-SCHEMA_CATCHES = ["없는 부위 이름", "없는 삼각형 번호", "없는 화장 종류", "arrow 도형"]
+SCHEMA_CATCHES = [
+    "없는 부위 이름",
+    "없는 삼각형 번호",
+    "없는 화장 종류",
+    "arrow 도형",
+    "단계 화장 종류에 기본 가이드 키",
+    "없는 기본 가이드 키",
+]
 
 
 def load_validator() -> Draft202012Validator:
@@ -20,6 +32,11 @@ def test_shared_schema_matches_model():
 
 def test_sample_passes_shared_schema():
     load_validator().validate(load_sample())
+
+
+@pytest.mark.parametrize("template_id", EYESHADOW_KEYS)
+def test_eyeshadow_template_keys_pass_shared_schema(template_id: str):
+    load_validator().validate(eyeshadow_key_sample(template_id))
 
 
 @pytest.mark.parametrize("name", SCHEMA_CATCHES)

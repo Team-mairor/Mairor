@@ -677,7 +677,7 @@
       "order": 14,
       "startSeconds": 420,
       "endSeconds": 429,
-      "makeup": "eyeliner",
+      "makeup": "mascara",
       "partLabel": "마스카라",
       "summary": "롬앤 한올 픽스 마스카라 롱 헤이즐을 속눈썹에 바르고 핀셋으로 속눈썹을 정리해줍니다.",
       "images": [
@@ -718,7 +718,7 @@
       "order": 15,
       "startSeconds": 429,
       "endSeconds": 452,
-      "makeup": "other",
+      "makeup": "contour",
       "partLabel": "코 쉐딩",
       "summary": "페리페라 브이 쉐딩 03 그레이쉬 쿨로 코 쉐딩을 넣어줍니다.",
       "images": [
@@ -769,7 +769,7 @@
       "order": 16,
       "startSeconds": 452,
       "endSeconds": 465,
-      "makeup": "other",
+      "makeup": "highlight",
       "partLabel": "하이라이터",
       "summary": "데이지크 멀티 섀도우 01 코튼키스의 하이라이터 색상을 코끝, 콧대, 눈 앞머리에 발라줍니다.",
       "images": [

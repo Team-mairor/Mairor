@@ -52,6 +52,20 @@ def test_product_and_facts_other_than_area_are_optional():
     assert (step.facts.area.value, step.facts.tool, step.facts.tips) == ("입술 안쪽", None, [])
 
 
+def test_eye_zone_is_optional_and_kept_when_given():
+    assert GuideInput.model_validate(VALID).steps[0].eye_zone is None
+    given = GuideInput.model_validate(make_input(eyeZone="under"))
+
+    assert given.steps[0].eye_zone == "under"
+
+
+def test_unknown_eye_zone_is_rejected_with_location():
+    with pytest.raises(ValidationError) as e:
+        GuideInput.model_validate(make_input(eyeZone="tail"))
+
+    assert "steps.0.eyeZone" in error_text(e)
+
+
 @pytest.mark.parametrize(
     ("change", "location"),
     [

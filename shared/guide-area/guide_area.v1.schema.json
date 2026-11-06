@@ -49,7 +49,7 @@
       "type": "object"
     },
     "AreaSubStep": {
-      "description": "하위 단계. status에 따라 guideSets · templateId · reasons를 채우는 규칙이 정해져 있다.\n\nextracted: 영역 1개 이상 / template: 영역 없이 templateId와 이유 / notApplicable: 모두 비움 /\nfailed: 영역 없이 이유만",
+      "description": "하위 단계. status에 따라 guideSets · templateId · reasons를 채우는 규칙이 정해져 있다.\n\nextracted: 영역 1개 이상 / template: 영역 없이 templateId와 이유 / notApplicable: 모두 비움 /\nfailed: 영역 없이 이유만\ntemplateId는 FE 기본 가이드 키다. 화장 종류에 더해 아이섀도는 바른 자리별 키\n(eyeshadowUpper 윗눈두덩, eyeshadowUnder 눈 밑)가 있고, eyeshadow는 위아래 모두다.",
       "properties": {
         "subStepId": {
           "minLength": 1,
@@ -91,7 +91,9 @@
                 "mascara",
                 "contour",
                 "highlight",
-                "other"
+                "other",
+                "eyeshadowUpper",
+                "eyeshadowUnder"
               ],
               "type": "string"
             },

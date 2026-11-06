@@ -9,6 +9,8 @@ FactSource = Literal["voice", "onscreenText", "scene", "estimated"]
 
 FieldStatus = Literal["used", "estimated", "missing", "empty"]
 
+EyeZone = Literal["upper", "under", "both", "waterline"]
+
 
 class Fact(CamelModel):
     value: str = Field(min_length=1)
@@ -55,13 +57,20 @@ class StepProduct(CamelModel):
 
 
 class GuideInputStep(CamelModel):
-    """설명에는 이미지를 쓰지 않는다 (11.02 ADR). 예전 입력의 images 칸은 모르는 칸이라 버린다."""
+    """설명에는 이미지를 쓰지 않는다 (11.02 ADR). 예전 입력의 images 칸은 모르는 칸이라 버린다.
+
+    eyeZone은 BE가 정해진 값으로 주는 눈 화장(아이섀도·아이라인)의 바른 자리다.
+    upper 윗눈두덩·윗라인, under 눈 밑·애교살·아랫라인, both 위아래 둘 다, waterline 점막.
+    선택 칸이고, 없으면 partLabel·facts.area 글로 자리를 알아본다.
+    눈 화장이 아닌 단계에는 쓰지 않는다.
+    """
 
     step_id: str = Field(min_length=1)
     order: int = Field(ge=1)
     start_seconds: float = Field(ge=0)
     end_seconds: float = Field(ge=0)
     makeup: Makeup
+    eye_zone: EyeZone | None = None
     part_label: str = Field(min_length=1)
     summary: str = Field(min_length=1)
     product: StepProduct | None = None

@@ -30,16 +30,29 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
   | `status` | `guideSets` | `templateId` | `reasons` |
   | --- | --- | --- | --- |
   | `extracted` | 1개 이상 | `null` | 빈 목록 |
-  | `template` | 빈 목록 | `other`가 아닌 화장 종류 | 1개 이상 |
+  | `template` | 빈 목록 | `other`가 아닌 기본 가이드 키 (아래 표) | 1개 이상 |
   | `notApplicable` | 빈 목록 | `null` | 빈 목록 |
   | `failed` | 빈 목록 | `null` | 1개 이상 |
 
-- `makeup`이 `other`나 `mascara`인 단계는 `notApplicable`이고, `notApplicable`은 이 두 화장 종류에만 쓴다 (마스카라는 영역을 안내하지 않고 설명만 한다)
+- `makeup`이 `other`인 단계는 `notApplicable`이고, `notApplicable`은 `other`에만 쓴다. 마스카라처럼 영역을 분석하지 않는 부위는 `template`(`notAnalyzed`)로 보낸다
 - `subStepId`는 `<stepId>-<order>`이고, 하위 단계 `order`는 1부터 차례대로
 - 단계는 `order` 순서대로, `stepId` · `order`가 겹치지 않음
 - `bary` 세 값의 합이 1 (0.001까지 허용)
 
 가이드 입력의 단계가 빠짐없이 같은 순서로 들어 있는지는 AI가 결과를 만들 때 가이드 입력과 맞춰 본다.
+
+## 기본 가이드 키 (`templateId`)
+
+`status`가 `template`일 때 FE가 그릴 기본 가이드를 고르는 키다. FE `frontend/src/features/guide/types.ts`의 `TemplateId`와 같다.
+
+| 키 | 기본 가이드 |
+| --- | --- |
+| `foundation` · `eyeliner` · `blush` · `lip` · `brow` · `mascara` · `contour` · `highlight` | 그 화장 종류의 기본 가이드 |
+| `eyeshadow` | 아이섀도 위아래 모두 (바른 자리를 모를 때) |
+| `eyeshadowUpper` | 아이섀도 윗눈두덩 |
+| `eyeshadowUnder` | 아이섀도 눈 밑(애교살) |
+
+아이섀도 키는 가이드 입력의 `eyeZone`(`upper` · `under` · `both`)으로 고르고, 없으면 `partLabel` · `facts.area` 글로 고른다([ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md)).
 
 ## 형식을 바꿀 때
 

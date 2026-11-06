@@ -6,11 +6,12 @@
 """
 
 import logging
+import re
 from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 
-from app.schemas.guide import GuideInputStep
+from app.schemas.guide import EyeZone, GuideInputStep
 from app.schemas.guide_area import (
     NO_AREA_MAKEUPS,
     AreaStep,
@@ -19,6 +20,7 @@ from app.schemas.guide_area import (
     GuideSet,
     PolygonShape,
     RegionName,
+    TemplateId,
 )
 from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
@@ -45,6 +47,20 @@ logger = logging.getLogger(__name__)
 
 NOT_ANALYZED = "notAnalyzed"
 ANALYSIS_ERROR = "analysisError"
+UPPER_EYE_WORDS = ("눈두덩", "아이홀", "눈꺼풀", "쌍꺼풀")
+UNDER_EYE_WORDS = ("애교살", "언더", "눈밑", "눈아래", "아래속눈썹", "아랫눈꺼풀", "아래눈꺼풀")
+UNDER_EYE_PATTERN = re.compile("|".join(UNDER_EYE_WORDS))
+EYE_WORDS = UPPER_EYE_WORDS + UNDER_EYE_WORDS
+EYE_EXCLUSION_WORDS = ("피하고", "제외하고", "빼고", "말고", "바르지않고")
+EYE_EXCLUSION_PATTERN = re.compile(
+    rf"(?:{'|'.join(EYE_WORDS)})(?:에는|은|는|을|를|에)?"
+    rf"(?:{'|'.join(EYE_EXCLUSION_WORDS)})"
+)
+EYE_ZONE_TEMPLATES: dict[EyeZone, TemplateId] = {
+    "upper": "eyeshadowUpper",
+    "under": "eyeshadowUnder",
+    "both": "eyeshadow",
+}
 
 AreaFinder = Callable[
     [LandmarksResult, int, int, PhotoLoader, str, OcclusionFinder | None], AreaSubStep
@@ -63,10 +79,10 @@ def build_guide_area(
 
     steps는 매니페스트나 가이드 입력의 단계이고 stepId·order·makeup을 그대로 옮긴다.
     result는 check_frames를 거친 얼굴 점 결과, load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
-    other와 mascara는 notApplicable, AREA_FINDERS에 분석이 있으면 그 결과다.
-    마스카라는 영역 안내 없이 설명만 하기로 해서 영역을 보내지 않는다.
+    other는 notApplicable, AREA_FINDERS에 분석이 있으면 그 결과다.
     아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
-    나머지(베이스처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로 기본 가이드(template)를 쓴다.
+    나머지(베이스·마스카라처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로
+    기본 가이드(template)를 쓴다.
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
     occlusion은 사진에서 얼굴을 가린 픽셀을 찾는 함수이고, 있으면 부위 분석마다 넘긴다.
     None이면 가림을 따로 빼지 않고 사진 여러 장의 중앙값에만 맡긴다.
@@ -116,14 +132,17 @@ def _sub_step(
     load_photo: PhotoLoader,
     occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
-    """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다."""
+    """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
+
+    아이섀도를 못 찾아 기본 가이드로 보낼 때는 단계 글로 바른 자리별 키를 고른다.
+    """
     sub_step_id = f"{step.step_id}-1"
     fixed = _fixed_sub_step(step.makeup, sub_step_id)
     if fixed is not None:
         return fixed
     finder = AREA_FINDERS[step.makeup]
     try:
-        return finder(
+        sub_step = finder(
             result,
             round(step.start_seconds * 1000),
             round(step.end_seconds * 1000),
@@ -134,6 +153,41 @@ def _sub_step(
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
         return _failed(sub_step_id)
+    if step.makeup == "eyeshadow" and sub_step.status == "template":
+        return _template(sub_step_id, _eyeshadow_template_id(step), sub_step.reasons)
+    return sub_step
+
+
+def _eyeshadow_template_id(step: Step | GuideInputStep) -> TemplateId:
+    """아이섀도 기본 가이드 키를 BE가 준 바른 자리(eyeZone)나 단계 글로 고른다.
+
+    단계 글은 partLabel·facts.area다.
+    eyeZone이 upper·under·both이면 그 값(EYE_ZONE_TEMPLATES)을 먼저 쓴다.
+    waterline(점막)은 아이섀도 자리가 아니라서, 값이 없을 때처럼 글로 고른다.
+    띄어쓰기를 지운 글에 윗눈두덩 낱말(UPPER_EYE_WORDS)만 있으면 eyeshadowUpper,
+    눈 밑 낱말(UNDER_EYE_WORDS)만 있으면 eyeshadowUnder, 둘 다 있거나 둘 다 없으면
+    위아래 모두인 eyeshadow다. 점막·눈꼬리는 위아래를 가르지 않아 낱말에 넣지 않았다.
+    위 낱말은 눈 밑 낱말을 지운 글에서 찾아, 「아랫눈꺼풀」의 「눈꺼풀」을 윗눈두덩으로 보지 않는다.
+    부위 뒤에 피하고·제외하고 같은 말이 붙으면 그 부위를 지운 뒤 찾는다.
+    글이 없는 매니페스트 단계는 eyeshadow다.
+    """
+    if not isinstance(step, GuideInputStep):
+        return "eyeshadow"
+    if step.eye_zone in EYE_ZONE_TEMPLATES:
+        return EYE_ZONE_TEMPLATES[step.eye_zone]
+    texts = [
+        EYE_EXCLUSION_PATTERN.sub("", "".join(text.split()))
+        for text in (step.part_label, step.facts.area.value)
+    ]
+    under = any(UNDER_EYE_PATTERN.search(text) for text in texts)
+    upper = any(
+        word in UNDER_EYE_PATTERN.sub("", text) for text in texts for word in UPPER_EYE_WORDS
+    )
+    if upper and not under:
+        return "eyeshadowUpper"
+    if under and not upper:
+        return "eyeshadowUnder"
+    return "eyeshadow"
 
 
 def _eyeliner_step(
@@ -218,8 +272,8 @@ def _eyeliner_sub_step(
 def _fixed_sub_step(makeup: Makeup, sub_step_id: str) -> AreaSubStep | None:
     """분석과 상관없이 정해지는 하위 단계. 분석하는 부위(AREA_FINDERS와 아이라인)면 None이다.
 
-    other와 mascara는 notApplicable이다.
-    베이스처럼 분석하지 않는 부위는 notAnalyzed 이유로 기본 가이드(template)다.
+    other는 notApplicable이다.
+    베이스·마스카라처럼 분석하지 않는 부위는 notAnalyzed 이유로 기본 가이드(template)다.
     """
     if makeup in NO_AREA_MAKEUPS:
         return _not_applicable(sub_step_id)
@@ -251,17 +305,18 @@ def _failed(sub_step_id: str) -> AreaSubStep:
     )
 
 
-def _template(sub_step_id: str, makeup: Makeup, reasons: list[str]) -> AreaSubStep:
+def _template(sub_step_id: str, template_id: TemplateId, reasons: list[str]) -> AreaSubStep:
     """FE 기본 가이드를 쓰라는 하위 단계.
 
-    templateId는 화장 종류, reasons는 기본 가이드를 쓰는 이유다.
+    template_id는 기본 가이드 키(화장 종류, 아이섀도는 바른 자리별 키도),
+    reasons는 기본 가이드를 쓰는 이유다.
     """
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,
         status="template",
         reasons=reasons,
-        template_id=makeup,
+        template_id=template_id,
         guide_sets=[],
     )
 

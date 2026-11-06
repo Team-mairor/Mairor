@@ -6,7 +6,7 @@
     { "stepId": "s2", "order": 2, "makeup": "other", "subSteps": [{ "subStepId": "s2-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
     { "stepId": "s3", "order": 3, "makeup": "other", "subSteps": [{ "subStepId": "s3-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
     { "stepId": "s4", "order": 4, "makeup": "other", "subSteps": [{ "subStepId": "s4-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
-    { "stepId": "s5", "order": 5, "makeup": "foundation", "subSteps": [{ "subStepId": "s5-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "foundation", "guideSets": [] }] },
+    { "stepId": "s5", "order": 5, "makeup": "foundation", "subSteps": [{ "subStepId": "s5-1", "order": 1, "status": "template", "reasons": ["notAnalyzed"], "templateId": "foundation", "guideSets": [] }] },
     { "stepId": "s6", "order": 6, "makeup": "other", "subSteps": [{ "subStepId": "s6-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
     { "stepId": "s7", "order": 7, "makeup": "blush", "subSteps": [{ "subStepId": "s7-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "blush", "guideSets": [] }] },
     { "stepId": "s8", "order": 8, "makeup": "other", "subSteps": [{ "subStepId": "s8-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
@@ -14,10 +14,10 @@
     { "stepId": "s10", "order": 10, "makeup": "eyeshadow", "subSteps": [{ "subStepId": "s10-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeshadow", "guideSets": [] }] },
     { "stepId": "s11", "order": 11, "makeup": "eyeliner", "subSteps": [{ "subStepId": "s11-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeliner", "guideSets": [] }] },
     { "stepId": "s12", "order": 12, "makeup": "eyeliner", "subSteps": [{ "subStepId": "s12-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeliner", "guideSets": [] }] },
-    { "stepId": "s13", "order": 13, "makeup": "eyeshadow", "subSteps": [{ "subStepId": "s13-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeshadow", "guideSets": [] }] },
-    { "stepId": "s14", "order": 14, "makeup": "mascara", "subSteps": [{ "subStepId": "s14-1", "order": 1, "status": "notApplicable", "reasons": [], "templateId": null, "guideSets": [] }] },
-    { "stepId": "s15", "order": 15, "makeup": "contour", "subSteps": [{ "subStepId": "s15-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "contour", "guideSets": [] }] },
-    { "stepId": "s16", "order": 16, "makeup": "highlight", "subSteps": [{ "subStepId": "s16-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "highlight", "guideSets": [] }] },
+    { "stepId": "s13", "order": 13, "makeup": "eyeshadow", "subSteps": [{ "subStepId": "s13-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "eyeshadowUnder", "guideSets": [] }] },
+    { "stepId": "s14", "order": 14, "makeup": "mascara", "subSteps": [{ "subStepId": "s14-1", "order": 1, "status": "template", "reasons": ["notAnalyzed"], "templateId": "mascara", "guideSets": [] }] },
+    { "stepId": "s15", "order": 15, "makeup": "contour", "subSteps": [{ "subStepId": "s15-1", "order": 1, "status": "template", "reasons": ["notAnalyzed"], "templateId": "contour", "guideSets": [] }] },
+    { "stepId": "s16", "order": 16, "makeup": "highlight", "subSteps": [{ "subStepId": "s16-1", "order": 1, "status": "template", "reasons": ["notAnalyzed"], "templateId": "highlight", "guideSets": [] }] },
     {
       "stepId": "s17", "order": 17, "makeup": "lip",
       "subSteps": [
@@ -39,6 +39,6 @@
       ]
     },
     { "stepId": "s18", "order": 18, "makeup": "lip", "subSteps": [{ "subStepId": "s18-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "lip", "guideSets": [] }] },
-    { "stepId": "s19", "order": 19, "makeup": "lip", "subSteps": [{ "subStepId": "s19-1", "order": 1, "status": "failed", "reasons": ["FRAME_UNREADABLE"], "templateId": null, "guideSets": [] }] }
+    { "stepId": "s19", "order": 19, "makeup": "lip", "subSteps": [{ "subStepId": "s19-1", "order": 1, "status": "failed", "reasons": ["analysisError"], "templateId": null, "guideSets": [] }] }
   ]
 }

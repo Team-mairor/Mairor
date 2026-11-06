@@ -29,3 +29,4 @@
 | [아이섀도 기본 가이드를 바른 자리별로 보내기](2026-11-04-seoyun-hyeonsoo-eyeshadow-template-by-area.md) | 2026-11-04 | 한서윤 → 김현수 | 요청 |
 | [마스카라 단계를 기본 가이드로 보내기](2026-11-04-seoyun-hyeonsoo-mascara-template.md) | 2026-11-04 | 한서윤 → 김현수 | 요청 |
 | [화장품 소분류(종류) 추가 논의](2026-11-04-seoyeon-juyeon-missing-product-types.md) | 2026-11-04 | 김서연 → 최주연·팀 | 논의 대기 |
+| [눈 화장 단계에 바른 자리(eyeZone) 보내기](2026-11-05-hyeonsoo-jungyoon-eye-zone.md) | 2026-11-05 | 김현수 → 김정윤 | 요청 |
