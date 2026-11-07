@@ -27,6 +27,9 @@ export function FoundProducts({
       </div>
       {/* 단계 수는 영상마다 달라, 두 줄을 넘으면 이 안에서 넘겨 본다 */}
       <div className="grid max-h-[168px] grid-cols-4 gap-2 overflow-y-auto">
+        {rows.length === 0 && (
+          <span className="col-span-4 py-5 text-[19px] text-mute">아직 찾은 제품이 없어요</span>
+        )}
         {rows.map((r) =>
           r.found ? (
             <button

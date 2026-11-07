@@ -1,6 +1,7 @@
 export {
   api,
   ApiError,
+  apiUrl,
   errorMessage,
   failText,
   isAbortError,

@@ -11,13 +11,17 @@ import {
   AnalysisProgress,
   FaceRegisterModal,
   FoundProducts,
+  jobReview,
   PouchCheckModal,
   ReadyStatus,
   ScanPreview,
+  stageText,
+  useAnalysisJob,
 } from "@/features/loading";
 import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
 import { hasSame, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
+import { errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
@@ -26,13 +30,14 @@ const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composi
 /** i번째 제품을 찾았다고 보여 줄 진행률. 단계 수와 상관없이 6~90% 사이에 고르게 나눈다 */
 const foundAt = (i: number) => 6 + (i * 84) / REF_PRODUCTS.length;
 
-type Fail = null | "timeout" | "failed";
+/** timeout·failed는 확인용 샘플, stopped는 실제 작업 FAILED, missing은 작업 없음(404) */
+type Fail = null | "timeout" | "failed" | "stopped" | "missing";
 type Review = null | "pending" | "rejected";
 
 /**
  * 04 로딩 · 준비 (VIDEO-003 · VIDEO-004). 분석 진행 + 얼굴 등록 모달 + 파우치 확인 모달.
- * ?joined=1 진행 중 분석 합류 · ?fail=timeout|failed · ?review=pending|rejected 는 상태 확인용.
- * ponytail: 진행률은 타이머(0.6초에 1%). 분석 상태 조회 API가 붙으면 pct·progressStage를 응답으로 바꾼다.
+ * ?jobId=<id> 가 있으면 그 분석 작업의 상태를 SSE로 받아 보여 준다. 분석 요청 API(API-VIDEO-002)가 붙으면 그 응답의 jobId로 들어온다.
+ * jobId가 없으면 샘플로 움직인다: 진행률은 타이머(0.6초에 1%), ?joined=1 진행 중 분석 합류 · ?fail=timeout|failed · ?review=pending|rejected.
  */
 export default function LoadingPage() {
   const router = useRouter();
@@ -45,10 +50,10 @@ export default function LoadingPage() {
   // 사진은 메모리에만 있어서, 새로 고침으로 사라졌으면 다시 등록해야 한다
   const faceOk = run.faceReg && facePhoto(run.id) !== null;
 
-  const [pct, setPct] = useState(replay ? 100 : 0);
+  const [demoPct, setDemoPct] = useState(replay ? 100 : 0);
   const [joined, setJoined] = useState(false);
-  const [fail, setFail] = useState<Fail>(null);
-  const [review, setReview] = useState<Review>(null);
+  const [demoFail, setDemoFail] = useState<Fail>(null);
+  const [demoReview, setDemoReview] = useState<Review>(null);
   // 다시 따라 하기는 들어오자마자 등록부터 한다. 미리보기에서 돌아왔을 때처럼 이미 등록했으면 띄우지 않는다
   const [faceModal, setFaceModal] = useState(replay && !faceOk);
   const [faceShown, setFaceShown] = useState(replay);
@@ -61,29 +66,46 @@ export default function LoadingPage() {
     if (query.get("joined")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 상태를 한 번 반영한다
       setJoined(true);
-      setPct(46);
+      setDemoPct(46);
     }
     const f = query.get("fail");
     if (f === "timeout" || f === "failed") {
-      setFail(f);
-      setPct(38);
+      setDemoFail(f);
+      setDemoPct(38);
       setFaceShown(true);
     }
     const r = query.get("review");
     if (r === "pending" || r === "rejected") {
-      setReview(r);
-      setPct(100);
+      setDemoReview(r);
+      setDemoPct(100);
       setFaceShown(true);
     }
   }, [query]);
 
-  // 진행률 타이머
+  const jobId = query?.get("jobId") ?? null;
+  const live = useAnalysisJob(jobId);
+  const job = jobId ? live.job : null;
+  const pct = jobId ? live.pct : demoPct;
+  const fail: Fail = jobId
+    ? live.error?.code === "NOT_FOUND"
+      ? "missing"
+      : job?.status === "FAILED"
+        ? "stopped"
+        : null
+    : demoFail;
+  const review: Review = job ? jobReview(job) : demoReview;
+
+  useEffect(() => {
+    if (live.error?.code === "UNAUTHORIZED") router.replace("/login?expired=basic");
+  }, [live.error, router]);
+
+  // 샘플 진행률 타이머
   const running = !replay && !fail && pct < 100;
   useEffect(() => {
-    if (!running) return;
-    const t = setInterval(() => setPct((p) => Math.min(100, p + 1)), 600);
+    if (!running || jobId) return;
+    const t = setInterval(() => setDemoPct((p) => Math.min(100, p + 1)), 600);
     return () => clearInterval(t);
-  }, [running]);
+  }, [running, jobId]);
 
   // 4%가 되면 얼굴 등록 모달을 한 번 띄운다
   useEffect(() => {
@@ -104,20 +126,32 @@ export default function LoadingPage() {
   const pi = Math.max(0, Math.min(5, phaseIdx));
   const phaseName = ANALYSIS_PHASES[pi][1];
   const phaseLabel = fail
-    ? `${phaseName} 단계에서 멈췄어요`
+    ? fail === "missing"
+      ? "작업을 찾지 못했어요"
+      : `${phaseName} 단계에서 멈췄어요`
     : done
       ? review === "pending"
         ? "분석 완료 · 검수 대기"
         : review === "rejected"
           ? "검수 반려"
           : "분석이 끝났어요"
-      : `${phaseName} 중…`;
+      : jobId
+        ? (stageText(job?.stageProgress ?? null) ?? phaseName)
+        : `${phaseName} 중…`;
   const phaseEn = fail ? "Stopped." : done ? (review ? "In review." : "Ready.") : PHASE_EN[pi];
-  const eta = fail ? "멈춤" : done ? "완료" : `약 ${Math.ceil((100 - pct) * 0.6)}초 남음`;
+  // 실제 작업은 남은 시간을 받지 못한다(estimatedRemainingSeconds가 늘 null)
+  const eta = fail
+    ? "멈춤"
+    : done
+      ? "완료"
+      : jobId
+        ? "처리 중"
+        : `약 ${Math.ceil((100 - pct) * 0.6)}초 남음`;
   const scanSec = Math.floor(pct * 7.5);
   const scanTime = `${Math.floor(scanSec / 60)}:${String(scanSec % 60).padStart(2, "0")}`;
 
-  const rows = REF_PRODUCTS.map((r, i) => ({
+  // 실제 작업은 제품 인식이 연결되기 전까지 찾은 제품이 비어 있다
+  const rows = (jobId ? [] : REF_PRODUCTS).map((r, i) => ({
     ...r,
     found: pct >= foundAt(i),
     next: pct < foundAt(i) && (i === 0 || pct >= foundAt(i - 1)),
@@ -127,19 +161,33 @@ export default function LoadingPage() {
   const haveCount = rows.filter((r) => r.have).length;
 
   const notice = fail
-    ? fail === "timeout"
-      ? {
+    ? {
+        timeout: {
           tag: "STOPPED · TIMEOUT",
           title: "분석이 너무 오래 걸려 멈췄어요",
           sub: `${phaseName} 단계에서 멈췄어요. 다시 시도하면 이 단계부터 이어서 분석해요.`,
           retry: true,
-        }
-      : {
+        },
+        failed: {
           tag: "STOPPED · FAILED",
           title: "이 영상은 분석할 수 없어요",
           sub: `${phaseName} 단계에서 메이크업 장면을 찾지 못했어요. 다른 영상을 골라 주세요.`,
           retry: false,
-        }
+        },
+        // 다시 시도(API-VIDEO-006)는 BE 구현 전이라 다른 영상만 고를 수 있다
+        stopped: {
+          tag: "STOPPED",
+          title: "분석을 마치지 못했어요",
+          sub: `${phaseName} 단계에서 멈췄어요. 다른 영상을 골라 주세요.`,
+          retry: false,
+        },
+        missing: {
+          tag: "NOT FOUND",
+          title: "분석 작업을 찾을 수 없어요",
+          sub: errorMessage(live.error),
+          retry: false,
+        },
+      }[fail]
     : review === "pending"
       ? {
           tag: "IN REVIEW",
@@ -284,7 +332,7 @@ export default function LoadingPage() {
               <PillButton
                 size="hero"
                 onClick={() => {
-                  setFail(null);
+                  setDemoFail(null);
                   router.replace("/loading");
                 }}
                 className="flex-1"

@@ -120,11 +120,11 @@ export const VIDEOS: VideoItem[] = [
   },
   {
     id: "y4",
-    ytid: "B4W4ueREbs0",
-    title: "코랄로 해본 공주 메이크업",
+    ytid: "VxAXD6PP76I",
+    title: "완성도 up! 요즘 진짜 예뻐진 메이크업 · 사람들 잘 모르는 스킬 총집합",
     ch: "뷰티 크리에이터 D",
-    meta: "조회수 27만회 · 7개월 전",
-    dur: "14:48",
+    meta: "조회수 125만회 · 9개월 전",
+    dur: "30:58",
   },
   {
     id: "y5",
