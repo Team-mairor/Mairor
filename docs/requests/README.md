@@ -30,3 +30,4 @@
 | [화장품 소분류(종류) 추가 논의](2026-11-04-seoyeon-juyeon-missing-product-types.md) | 2026-11-04 | 김서연 → 최주연·팀 | 논의 대기 |
 | [눈 화장 단계에 바른 자리(eyeZone) 보내기](2026-11-05-hyeonsoo-jungyoon-eye-zone.md) | 2026-11-05 | 김현수 → 김정윤 | 요청 |
 | [분석 재시도 API와 로딩 화면 확인용 작업](2026-11-06-juyeon-seoyeon-analysis-retry-and-test-job.md) | 2026-11-06 | 최주연 → 김서연 | 요청 |
+| [회원 분석 요청 API(API-VIDEO-002)와 영상 파일 확보 방식](2026-11-06-juyeon-jungyoon-analysis-request-api.md) | 2026-11-06 | 최주연 → 김정윤 | 요청 |
