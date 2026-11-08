@@ -203,8 +203,9 @@ def test_an_option_palette_becomes_slots_in_grid_order_with_printed_names() -> N
 
 def test_a_cell_that_is_not_one_colour_keeps_its_place_without_a_colour() -> None:
     image = palette()
-    for x in range(20, 80, 6):
-        image.paste(Image.new("RGB", (3, 60), (20, 20, 200)), (x, 20))
+    colors = ((20, 20, 200), (30, 160, 60), (230, 200, 40), (120, 30, 160))
+    for x, color in zip((20, 35, 50, 65), colors, strict=True):
+        image.paste(Image.new("RGB", (15, 60), color), (x, 20))
     product, raw = shopify(
         [variant(1, "A", "//cdn.example/a.jpg"), variant(2, "B", "//cdn.example/b.jpg")],
         ["//cdn.example/m.jpg"],
@@ -259,13 +260,27 @@ def test_two_slots_with_the_same_printed_name_are_not_guessed() -> None:
     assert "NO_LABEL_MATCH:1" in colored.warnings
 
 
-def test_a_single_slot_on_a_shared_photo_stays_unverified() -> None:
+def test_a_single_slot_on_a_shared_photo_gives_every_shade_no_color() -> None:
     product, raw = shopify([variant(1, "A"), variant(2, "B")], ["//cdn.example/main.jpg"])
     site = Site({"cdn.example/main.jpg": image_response(png(palette()))})
 
     colored, _ = colorize(site, product, raw, FakeLlm(analysis(cells=[cell(0.1, 0.1)])))
 
-    assert {s.colors[0].shade_link for s in colored.shades} == {ShadeLink.UNVERIFIED}
+    assert [s.color_status for s in colored.shades] == [ColorStatus.NOT_FOUND] * 2
+    assert "NO_LABEL_MATCH:1" in colored.warnings and "NO_LABEL_MATCH:2" in colored.warnings
+
+
+def test_a_single_labelled_slot_on_a_shared_photo_belongs_to_the_matching_shade() -> None:
+    product, raw = shopify(
+        [variant(1, "01 로즈"), variant(2, "02 피치")], ["//cdn.example/main.jpg"]
+    )
+    site = Site({"cdn.example/main.jpg": image_response(png(palette()))})
+
+    colored, _ = colorize(site, product, raw, FakeLlm(analysis(cells=[cell(0.1, 0.1, "01")])))
+
+    first, second = colored.shades
+    assert first.colors[0].shade_link is ShadeLink.LABEL_IN_IMAGE
+    assert second.color_status is ColorStatus.NOT_FOUND
 
 
 @pytest.mark.parametrize(
@@ -402,3 +417,43 @@ def test_product_command_with_vision_records_the_photo_kinds(
     assert code == 0
     assert len(printed["raw"]["vision"]) == 2
     assert len(printed["collected"]["shades"][0]["colors"]) == 4
+
+
+def test_the_prompt_tells_the_model_to_skip_clear_products() -> None:
+    from app.tasks.catalog.color.vision import VISION_SYSTEM
+
+    assert "투명" in VISION_SYSTEM and "색 칸이 아니므로 넣지 않는다" in VISION_SYSTEM
+
+
+def test_a_vision_cell_that_reads_as_near_white_gets_a_low_quality() -> None:
+    from app.tasks.catalog.contract import ShadeLink as Link
+
+    white_cap = Image.new("RGB", (200, 200), (247, 247, 247))
+    white_cap.paste(Image.new("RGB", (40, 40), (200, 40, 40)), (150, 150))
+    product, raw = shopify(
+        [variant(1, "A", "//cdn.example/a.jpg"), variant(2, "B", "//cdn.example/b.jpg")],
+        ["//cdn.example/m.jpg"],
+    )
+    site = Site(
+        {
+            "cdn.example/a.jpg": image_response(png(white_cap)),
+            "cdn.example/b.jpg": image_response(png(white_cap)),
+        }
+    )
+
+    colored, _ = colorize(
+        site,
+        product,
+        raw,
+        FakeLlm(analysis(cells=[cell(0.2, 0.2)]), analysis(cells=[cell(0.2, 0.2)])),
+    )
+
+    [slot] = colored.shades[0].colors
+    assert slot.hex is not None and slot.color_quality <= 0.3
+    assert slot.shade_link is Link.OPTION_IMAGE
+
+
+def test_the_prompt_asks_for_the_contents_not_the_case() -> None:
+    from app.tasks.catalog.color.vision import VISION_SYSTEM
+
+    assert "내용물" in VISION_SYSTEM and "케이스" in VISION_SYSTEM

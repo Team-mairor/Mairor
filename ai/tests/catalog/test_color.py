@@ -231,9 +231,9 @@ def test_colors_follow_the_links_and_carry_their_source_and_link() -> None:
     )
     assert rose_color.color_quality <= WHOLE_PHOTO_CAP
     assert rose_color.evidence_key == "blush/9001/1"
-    assert peach.colors[0].shade_link is ShadeLink.UNVERIFIED
-    assert close(peach.colors[0].hex, (120, 40, 60))
-    assert {e["evidenceKey"] for e in result["evidence"]} == {"blush/9001/1", "blush/9002/1"}
+    assert (peach.color_status, peach.colors) == (ColorStatus.NOT_FOUND, [])
+    assert "UNATTRIBUTABLE:9002" in colored.warnings
+    assert {e["evidenceKey"] for e in result["evidence"]} == {"blush/9001/1"}
     first = result["evidence"][0]
     assert first["method"] == METHOD and len(first["imageHash"]) == 64
     assert colored.to_wire()["shades"][0]["colors"][0]["hex"] == rose_color.hex
@@ -291,7 +291,7 @@ def test_a_failed_download_only_fails_that_shade() -> None:
 
     rose, peach = colored.shades
     assert (rose.color_status, rose.colors) == (ColorStatus.FAILED, [])
-    assert peach.color_status is ColorStatus.EXTRACTED
+    assert peach.color_status is ColorStatus.NOT_FOUND
     assert "IMAGE_FAILED:IMAGE_HTTP_404:9001" in colored.warnings
 
 

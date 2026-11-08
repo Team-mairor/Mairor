@@ -68,6 +68,13 @@ def _to_lab(rgb: np.ndarray) -> np.ndarray:
     return np.stack([lightness, 500 * (f[:, 0] - f[:, 1]), 200 * (f[:, 1] - f[:, 2])], axis=1)
 
 
+def is_neutral_light(hex_value: str) -> bool:
+    """거의 무채색이고 밝은 값인가. 배경·흰 케이스·투명 젤을 잘못 잡았을 가능성이 크다."""
+    rgb = np.array([[int(hex_value[i : i + 2], 16) for i in (1, 3, 5)]], dtype=np.float64)
+    lab = _to_lab(rgb)[0]
+    return bool(lab[0] > NEUTRAL_LIGHT_L and np.hypot(lab[1], lab[2]) < NEUTRAL_CHROMA)
+
+
 def hex_delta_e(first: str, second: str) -> float:
     """두 HEX의 CIELAB 거리(ΔE76). 기준 세트 리포트가 오차를 잴 때 쓴다."""
     rgb = np.array(

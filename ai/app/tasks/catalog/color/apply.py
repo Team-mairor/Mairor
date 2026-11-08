@@ -7,7 +7,8 @@
     한 칸의 색이 못 미더우면 그 칸만 hex 없이 두어 나머지 칸의 순서가 밀리지 않게 한다.
   - 연결 근거가 없는 사진(UNVERIFIED)에 칸이 여럿이면, 칸에 인쇄된 이름이 호수 이름과 맞는 칸이
     하나일 때만 그 칸을 쓰고 LABEL_IN_IMAGE로 올린다. 맞는 칸이 없거나 여럿이면 색을 만들지 않는다.
-  - 칸이 하나뿐이면 UNVERIFIED 그대로 쓴다.
+  - 그 밖의 UNVERIFIED는 색을 만들지 않는다. 여러 호수가 같은 사진을 쓰면 칸 하나가 모든 호수에
+    똑같이 붙어 버리기 때문이다(실제 투쿨포스쿨 상품에서 호수 4개가 같은 색으로 나왔다).
 
 근거(evidence)는 raw["evidence"]에, 사진 종류 판정은 raw["vision"]에 남긴다.
 사진 하나는 한 번만 받고 한 번만 모델에 보낸다.
@@ -21,7 +22,13 @@ from PIL import Image
 
 from app.clients.llm import Llm, LlmError
 from app.tasks.catalog.color.images import ImageUnusableError, LoadedImage, load_image
-from app.tasks.catalog.color.pixels import METHOD, METHOD_VERSION, ColorReading, read_color
+from app.tasks.catalog.color.pixels import (
+    METHOD,
+    METHOD_VERSION,
+    ColorReading,
+    is_neutral_light,
+    read_color,
+)
 from app.tasks.catalog.color.vision import Analysis, Cell, analyze_image
 from app.tasks.catalog.contract import (
     BBox,
@@ -42,11 +49,12 @@ from app.tasks.catalog.link.shade_link import ShadeImage
 from app.tasks.catalog.text import compact_key, tokens
 
 MAX_IMAGES = 60
-MAX_VISION_CALLS = 10
+MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
 CELL_INSET = 0.15
-MIN_CELL_HOMOGENEITY = 0.6
+MIN_CELL_HOMOGENEITY = 0.45
 SKIN_QUALITY_CAP = 0.4
+NEUTRAL_QUALITY_CAP = 0.3
 VISION_METHOD = "vision_box_pixel_median_lab"
 
 
@@ -127,6 +135,8 @@ def _read_cells(cells: tuple[Cell, ...], image: Image.Image, kind: ImageKind) ->
             reading = None
         elif kind is ImageKind.SKIN_SWATCH and reading.quality > SKIN_QUALITY_CAP:
             reading = ColorReading(reading.hex, SKIN_QUALITY_CAP, reading.scores)
+        elif is_neutral_light(reading.hex) and reading.quality > NEUTRAL_QUALITY_CAP:
+            reading = ColorReading(reading.hex, NEUTRAL_QUALITY_CAP, reading.scores)
         slots.append(_Slot(index, reading, cell.label, box, kind))
     return slots
 
@@ -140,7 +150,7 @@ def _vision_slots(
     cells, shade_link = analysis.cells, link.link
     if not cells:
         return "NO_CELLS"
-    if shade_link is ShadeLink.UNVERIFIED and len(cells) > 1:
+    if shade_link is ShadeLink.UNVERIFIED:
         match = _match_label(shade.name, cells)
         if match is None:
             return "NO_LABEL_MATCH"
@@ -238,6 +248,8 @@ async def _color_shade(
             return _not_found(ctx, shade, planned)
         slots, shade_link = planned
         return _finish(ctx, product, shade, loaded, link, slots, shade_link, VISION_METHOD)
+    if link.link is ShadeLink.UNVERIFIED:
+        return _not_found(ctx, shade, "UNATTRIBUTABLE")
     slots = _whole_slot(loaded, link)
     if slots[0].reading is None:
         return _not_found(ctx, shade, "COLOR_NOT_FOUND")
