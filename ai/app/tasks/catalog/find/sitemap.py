@@ -89,7 +89,7 @@ async def sitemap_candidates(
         keep_all = len(children) <= SMALL_INDEX
         queue.extend(child for child in children if keep_all or is_product_sitemap_name(child))
         for loc, title in entries:
-            identifier = product_id(platform, loc)
+            identifier = product_id(platform, loc, site.url_rules)
             if identifier is not None and identifier not in found:
                 found[identifier] = Candidate(loc, title or title_from_url(loc), identifier)
     return list(found.values())

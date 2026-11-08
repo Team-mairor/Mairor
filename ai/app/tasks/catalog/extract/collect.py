@@ -40,7 +40,7 @@ async def collect_product(
     estimate: bool = False,
 ) -> tuple[CollectedProduct, dict[str, Any]]:
     """페이지를 받아 상품을 만든다. 차단·robots 거부는 그대로 올린다."""
-    source_id = product_id(platform, url)
+    source_id = product_id(platform, url, site.url_rules)
     if source_id is None:
         raise ExtractError("NOT_PRODUCT_URL", f"상품 상세 주소가 아니다: {url}")
     response = await client.get(url)

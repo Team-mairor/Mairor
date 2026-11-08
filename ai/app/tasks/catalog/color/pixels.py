@@ -9,7 +9,9 @@
 
 품질(0~1)은 모은 픽셀이 얼마나 한 색으로 모이는지(homogeneity), 영역을 얼마나 차지하는지(coverage),
 픽셀 수(resolution), 하이라이트·그림자로 날아간 정도(clip)를 섞는다. 임계값은 백엔드가 정한다.
-영역을 모르고 사진 전체를 본 경우(whole_photo)는 제품과 배경이 섞였을 수 있어 품질을 0.5로 막는다.
+영역을 모르고 사진 전체를 본 경우(whole_photo)는 제품과 배경이 섞였을 수 있어 품질을 0.3으로 막고,
+거의 무채색의 밝은 값은 배경이나 투명 젤일 가능성이 커서 내보내지 않는다. 실제 에뛰드 제품 사진에서
+사진 전체를 읽으면 호수 색(코랄)이 아니라 흰색 계열이 나왔고, 칸 영역을 주면 정확히 읽혔다.
 """
 
 from dataclasses import dataclass
@@ -34,7 +36,9 @@ SHADOW_L = 8.0
 MINORITY_HIGHLIGHT = 0.3
 ONLY_CLIPPED = 0.7
 CANDIDATES = 64
-WHOLE_PHOTO_CAP = 0.5
+WHOLE_PHOTO_CAP = 0.3
+NEUTRAL_LIGHT_L = 85.0
+NEUTRAL_CHROMA = 8.0
 
 
 @dataclass(frozen=True)
@@ -170,6 +174,12 @@ def read_color(
         center = np.median(chosen_lab[near], axis=0)
     near = _delta(chosen_lab, center) <= CLUSTER_DELTA
     if int(near.sum()) < MIN_PIXELS:
+        return None
+    if (
+        whole_photo
+        and center[0] > NEUTRAL_LIGHT_L
+        and np.hypot(center[1], center[2]) < NEUTRAL_CHROMA
+    ):
         return None
     red, green, blue = (int(round(v)) for v in np.median(chosen_rgb[near], axis=0))
     homogeneity = float(near.mean())

@@ -163,7 +163,7 @@ def test_cafe24_page_becomes_a_product_without_any_colors() -> None:
         Platform.CAFE24, f"{BASE}/product/juicy/1170/category/24/display/1/", fixtures.CAFE24_CHIPS
     )
 
-    assert product.name == "[롬앤] 쥬시 래스팅 틴트"
+    assert product.name == "쥬시 래스팅 틴트"
     assert product.source_product_id == "1170"
     assert product.source == f"OFFICIAL:{HOST}"
     assert product.image_url == "https://s.example/og.jpg"
@@ -185,7 +185,7 @@ def test_the_first_method_with_shades_wins_and_platform_data_goes_first() -> Non
     )
 
     assert raw["method"] == "shopify.product_json"
-    assert raw["tried"] == ["shopify.product_json"]
+    assert raw["tried"] == ["shopify.product_json", "schema_org.product"]
     assert product.name == "Dear Dahlia Blush"
     assert product.shades[0].variant_hints.option_attributes == {"Shade": "Rose"}
     assert product.shades[0].variant_hints.list_price is None
@@ -212,7 +212,7 @@ def test_the_product_name_falls_back_to_h1_then_title() -> None:
     titled = fixtures.page("<p>x</p>", "<title> 제목 | 샵 </title>")
 
     assert build(Platform.CAFE24, f"{BASE}/product/a/1/", plain)[0].name == "제품 이름"
-    assert build(Platform.CAFE24, f"{BASE}/product/a/1/", titled)[0].name == "제목 | 샵"
+    assert build(Platform.CAFE24, f"{BASE}/product/a/1/", titled)[0].name == "제목"
     assert read_meta(titled).title == "제목 | 샵"
 
 
@@ -323,3 +323,10 @@ def test_the_product_option_select_wins_over_shipping_and_language_selects() -> 
         ("01 포멜로 스킨", "01 포멜로 스킨", None),
         ("02 누카다미아", "02 누카다미아", "//cdn.example/swatch02.jpg"),
     ]
+
+
+def test_a_trailing_price_add_on_is_not_part_of_the_shade_name() -> None:
+    result = parse_generic_options(fixtures.MAKESHOP_REAL_STRUCTURE)
+
+    assert [s.name for s in result.shades] == ["01.101 성수", "02.강남핑크", "(+3,000)"]
+    assert result.raw["optionNotes"] == {"1": "(+15,000)", "2": "(+15,000원)"}

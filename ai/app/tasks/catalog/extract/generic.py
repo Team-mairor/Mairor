@@ -3,7 +3,8 @@
 두 가지를 본다. 옵션 값을 attribute로 가진 칩 요소(option_value, data-option-value)와
 옵션 select다. 칩 요소는 이름과 칩 사진을 함께 주므로 먼저 쓰고, 없으면 select를 쓴다.
 select 안의 안내 문구("- 옵션을 선택해 주세요 -", "-----")와
-값이 비었거나 *로 시작하는 항목은 호수가 아니다.
+값이 비었거나 *로 시작하는 항목은 호수가 아니다. 이름 끝의 추가금 표기("(+15,000)")는 호수 이름이
+아니라서 떼어 raw의 optionNotes에 남긴다(실제 정샘물 상품 페이지에서 확인).
 
 select가 여럿이면 상품 옵션 select(product_type="product_option", id가 product_option_id<숫자>,
 name이 option<숫자>)를 먼저 본다. 배송 국가·언어·수량 같은 select는 처음부터 뺀다.
@@ -29,6 +30,8 @@ SOLD_OUT_MARK = re.compile(r"[\[(]\s*(품절|sold\s*out)\s*[\])]|\s-\s*(품절|s
 SKIP_SELECT = re.compile(
     r"quantity|qty|sort|order|lang|country|currency|page|shipping|multishop", re.IGNORECASE
 )
+DEFAULT_OPTION = "default title"
+PRICE_DELTA = re.compile(r"\s*\(\s*[+-]\s*[0-9][0-9,]*\s*원?\s*\)\s*$")
 PRODUCT_OPTION_ID = re.compile(r"^product_option_id[0-9]+$")
 PRODUCT_OPTION_NAME = re.compile(r"^option[0-9]*$")
 
@@ -39,6 +42,7 @@ class _Options(HTMLParser):
         self.chips: list[RawShade] = []
         self.selects: dict[str, list[RawShade]] = {}
         self.preferred: set[str] = set()
+        self.notes: dict[str, str] = {}
         self._chip: dict[str, str | None] | None = None
         self._chip_depth = 0
         self._select: str | None = None
@@ -118,10 +122,16 @@ class _Options(HTMLParser):
         value, disabled, link_image = self._option or ("", False, None)
         self._option = None
         label = clean_text("".join(self._text))
-        if not value or value.startswith("*") or label is None or PLACEHOLDER.search(label):
+        if not value or value.startswith(("*", "/", "http")) or label is None:
+            return
+        if PLACEHOLDER.search(label) or label.lower() == DEFAULT_OPTION:
             return
         marked = SOLD_OUT_MARK.search(label)
         name = clean_text(SOLD_OUT_MARK.sub("", label)) or label
+        delta = PRICE_DELTA.search(name)
+        if delta is not None and PRICE_DELTA.sub("", name).strip():
+            self.notes[value] = delta.group(0).strip()
+            name = PRICE_DELTA.sub("", name).strip()
         sold_out = True if marked or disabled else None
         self.selects[self._select or "select"].append(
             RawShade(option_id=value, name=name, image_url=link_image, sold_out=sold_out)
@@ -141,6 +151,8 @@ def parse_generic_options(html: str) -> Extraction | None:
         pool = pool or {k: v for k, v in parser.selects.items() if v}
         name, candidates = max(pool.items(), key=lambda item: len(item[1]))
         result.raw = {"select": name.split("#")[0]}
+        if parser.notes:
+            result.raw["optionNotes"] = parser.notes
         if len(pool) > 1:
             result.warnings.append("MULTIPLE_OPTION_SELECTS")
     else:

@@ -2,7 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 
-from app.tasks.catalog.discover.registry import BrandSite, Platform
+from app.tasks.catalog.discover.registry import BrandSite, Platform, UrlRules
 from app.tasks.catalog.find.site_search import links_to_candidates
 from app.tasks.catalog.find.urls import Candidate, is_category_url, page_url
 from app.tasks.catalog.html import decode_html, extract_links
@@ -25,7 +25,7 @@ async def find_category_urls(
         return []
     urls: dict[str, None] = {}
     for link in extract_links(decode_html(response), home):
-        if is_category_url(platform, link.url):
+        if is_category_url(platform, link.url, site.url_rules):
             urls.setdefault(link.url.split("#", 1)[0], None)
     return list(urls)[:MAX_CATEGORIES]
 
@@ -36,6 +36,7 @@ async def list_category(
     category_url: str,
     *,
     max_pages: int = MAX_PAGES_PER_CATEGORY,
+    rules: UrlRules | None = None,
 ) -> list[Candidate]:
     """카테고리의 쪽을 새 상품이 나오지 않을 때까지 넘기며 상품 후보를 모은다."""
     found: dict[str, Candidate] = {}
@@ -45,7 +46,7 @@ async def list_category(
         if response.status_code != 200:
             break
         added = 0
-        for candidate in links_to_candidates(platform, url, decode_html(response)):
+        for candidate in links_to_candidates(platform, url, decode_html(response), rules):
             if candidate.product_id not in found:
                 found[candidate.product_id] = candidate
                 added += 1
@@ -75,7 +76,9 @@ async def crawl_categories(
         if category in skip:
             continue
         try:
-            candidates = await list_category(client, platform, category, max_pages=max_pages)
+            candidates = await list_category(
+                client, platform, category, max_pages=max_pages, rules=site.url_rules
+            )
         except BlockedError:
             raise
         except HttpFailure as error:

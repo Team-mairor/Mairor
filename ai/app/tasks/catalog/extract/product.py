@@ -5,6 +5,7 @@
 상품 이름은 사이트가 보여 주는 원문 그대로 두고, 호수가 하나도 없으면 warnings에 NO_SHADES를 남긴다.
 """
 
+import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from html.parser import HTMLParser
@@ -91,12 +92,13 @@ def extract_shades(
         parsed = parse_woocommerce_variations(html)
         if parsed is not None:
             attempts.append(parsed)
-    for parse in (parse_schema_org, parse_generic_options):
-        if any(attempt.shades for attempt in attempts):
-            break
-        parsed = parse(html)
-        if parsed is not None:
-            attempts.append(parsed)
+    structured = parse_schema_org(html)
+    if structured is not None:
+        attempts.append(structured)
+    if not any(attempt.shades or attempt.sole_variant for attempt in attempts):
+        generic = parse_generic_options(html)
+        if generic is not None:
+            attempts.append(generic)
     chosen = next((a for a in attempts if a.shades), None)
     chosen = chosen or next((a for a in attempts if a.sole_variant), None)
     return chosen or Extraction(method="none"), attempts
@@ -111,13 +113,20 @@ def _hints(shade: RawShade) -> VariantHints | None:
     )
 
 
+def _title_head(title: str | None) -> str | None:
+    """<title>의 사이트 이름 꼬리("제품 – 사이트", "제품 | 사이트")를 떼고 앞부분만 쓴다."""
+    if not title:
+        return None
+    return re.split(r"\s[–—|-]\s", title, maxsplit=1)[0].strip() or None
+
+
 def _name_of(chosen: Extraction, attempts: list[Extraction], meta: PageMeta) -> str | None:
     for candidate in (
         chosen.name,
         *(a.name for a in attempts),
-        meta.og_title,
         meta.h1,
-        meta.title,
+        _title_head(meta.title),
+        meta.og_title,
     ):
         if candidate:
             return candidate
@@ -135,7 +144,7 @@ def build_product(
     product_json: str | None = None,
 ) -> tuple[CollectedProduct, dict[str, Any]]:
     """CollectedProduct와 실행 결과 파일의 raw를 만든다. 상품 번호를 못 읽으면 ExtractError다."""
-    source_product_id = product_id(platform, url)
+    source_product_id = product_id(platform, url, site.url_rules)
     if source_product_id is None:
         raise ExtractError("NOT_PRODUCT_URL", f"상품 상세 주소가 아니다: {url}")
     meta = read_meta(html)

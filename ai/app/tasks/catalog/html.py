@@ -76,17 +76,21 @@ class _Anchors(HTMLParser):
         self._parts = []
 
 
+def _bare_host(url: str) -> str:
+    """www.를 뗀 호스트. 홈이 www가 있는 쪽으로 넘겨 주는 사이트의 링크를 같은 사이트로 본다."""
+    return urlsplit(url).netloc.lower().removeprefix("www.")
+
+
 def extract_links(html: str, base_url: str) -> list[Link]:
     """a 태그의 주소와 글자. 같은 사이트의 http(s) 링크만 돌려준다."""
     parser = _Anchors(base_url)
     parser.feed(html)
     parser.close()
-    host = urlsplit(base_url).netloc.lower()
+    host = _bare_host(base_url)
     return [
         link
         for link in parser.links
-        if urlsplit(link.url).scheme in ("http", "https")
-        and urlsplit(link.url).netloc.lower() == host
+        if urlsplit(link.url).scheme in ("http", "https") and _bare_host(link.url) == host
     ]
 
 

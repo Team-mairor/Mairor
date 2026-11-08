@@ -5,6 +5,8 @@
 # enabled: 운영 수집에 쓰는가. policy 가 TERMS_CHECKED 또는 PERMISSION 이고 technical 이 OK 또는 PARTIAL 일 때만 true.
 # robots_exempt: robots.txt 예외. policy 가 PERMISSION 일 때만 true.
 # search_path: 사이트 검색 경로 템플릿({query}). 비우면 플랫폼 기본 경로를 쓰고, 기본이 없으면 검색을 건너뛴다.
+# product_pattern: 상품 상세 주소의 경로 정규식(캡처 그룹 하나 = 상품 번호). 플랫폼 기본과 다른 사이트만 적는다.
+# category_pattern: 카테고리 목록 주소의 경로 정규식. 플랫폼 기본과 다른 사이트만 적는다.
 # 지금 모든 사이트는 policy UNCONFIRMED, enabled false 다.
 - brand: 롬앤
   aliases: [romand, 롬앤]
@@ -20,10 +22,12 @@
   technical: OK
 - brand: 에뛰드
   aliases: [etude, etude house, 에뛰드하우스, 에뛰드]
-  domain: etude.com
+  domain: www.etude.com
   language: ko
   platform: WOOCOMMERCE
   technical: OK
+  product_pattern: '^/shop/category/[^/]+/([^/]+)/?$'
+  category_pattern: '^/product/category/.+'
 - brand: 힌스
   aliases: [hince, 힌스]
   domain: hince.co.kr

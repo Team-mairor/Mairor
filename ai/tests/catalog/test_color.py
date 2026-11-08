@@ -381,3 +381,10 @@ def test_product_command_with_colors_prints_hex_and_evidence(
     assert code == 0
     assert printed["collected"]["shades"][0]["colors"][0]["hex"] == "#C9707A"
     assert len(printed["raw"]["evidence"]) == 2
+
+
+def test_a_whole_photo_that_reads_as_near_white_is_dropped_not_reported() -> None:
+    near_white = solid((245, 243, 245))
+
+    assert read_color(near_white, whole_photo=True) is None
+    assert read_color(near_white) is not None

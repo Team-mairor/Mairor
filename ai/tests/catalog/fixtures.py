@@ -211,3 +211,13 @@ CAFE24_REAL_STRUCTURE = page(
     '<option value="ko">한국어</option><option value="en">English</option></select>',
     "<script>var EC_FRONT_JS_CONFIG = {};</script>",
 )
+
+MAKESHOP_REAL_STRUCTURE = page(
+    "<h1>정샘물 에센셜 스킨 누더 쿠션</h1>"
+    '<select name="optionlist[]" id="MK_opt1">'
+    '<option value="">옵션 선택</option>'
+    '<option value="1">01.101 성수(+15,000)</option>'
+    '<option value="2">02.강남핑크(+15,000원)</option>'
+    '<option value="3">(+3,000)</option>'
+    "</select>",
+)

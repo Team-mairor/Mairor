@@ -162,3 +162,12 @@ def test_the_same_product_listed_twice_is_not_ambiguous() -> None:
     result = pick("쥬시 틴트", [cand("쥬시 틴트", "1"), cand("쥬시 틴트 ", "1")])
 
     assert result.status is PickStatus.FOUND
+
+
+def test_makeshop_category_pages_are_recognised() -> None:
+    assert is_category_url(
+        Platform.MAKESHOP, "https://s.example/shop/shopbrand.html?xcode=017&type=Y"
+    )
+    assert not is_category_url(
+        Platform.MAKESHOP, "https://s.example/shop/shopdetail.html?branduid=1"
+    )

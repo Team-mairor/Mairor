@@ -2,7 +2,7 @@
 
 from urllib.parse import quote_plus
 
-from app.tasks.catalog.discover.registry import BrandSite, Platform
+from app.tasks.catalog.discover.registry import BrandSite, Platform, UrlRules
 from app.tasks.catalog.find.urls import Candidate, product_id
 from app.tasks.catalog.html import decode_html, extract_links
 from app.tasks.catalog.http import PoliteClient
@@ -25,11 +25,13 @@ def search_url(site: BrandSite, platform: Platform, query: str) -> str | None:
     return site.base_url + template.format(query=quote_plus(query))
 
 
-def links_to_candidates(platform: Platform, base_url: str, html: str) -> list[Candidate]:
+def links_to_candidates(
+    platform: Platform, base_url: str, html: str, rules: UrlRules | None = None
+) -> list[Candidate]:
     """목록 페이지의 링크 중 상품 상세 주소만 후보로 만든다. 같은 상품은 가장 긴 이름을 쓴다."""
     best: dict[str, Candidate] = {}
     for link in extract_links(html, base_url):
-        found = product_id(platform, link.url)
+        found = product_id(platform, link.url, rules)
         if found is None:
             continue
         current = best.get(found)
@@ -47,4 +49,4 @@ async def search_candidates(
     response = await client.get(url)
     if response.status_code != 200:
         return []
-    return links_to_candidates(platform, url, decode_html(response))
+    return links_to_candidates(platform, url, decode_html(response), site.url_rules)

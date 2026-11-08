@@ -6,6 +6,8 @@ enabled는 정책 확인이 끝난 사이트만 켤 수 있고, 목록을 읽을
 robots 예외(robots_exempt)는 사이트 주인의 허락 기록이 있는 사이트(PERMISSION)만 쓸 수 있다.
 """
 
+import re
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Self
@@ -52,6 +54,18 @@ class RegistryError(Exception):
     """사이트 목록이 규칙에 맞지 않는다."""
 
 
+@dataclass(frozen=True)
+class UrlRules:
+    """사이트마다 다른 상품·카테고리 주소 모양. 정규식은 주소의 경로에 맞춘다.
+
+    product는 캡처 그룹이 정확히 하나이고 그 값이 상품 번호다. 둘 중 정해진 쪽은 플랫폼 기본
+    규칙을 대신한다. 실제 사이트를 보고 플랫폼 기본값과 다를 때만 목록에 적는다.
+    """
+
+    product: re.Pattern[str] | None = None
+    category: re.Pattern[str] | None = None
+
+
 class BrandSite(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -66,6 +80,8 @@ class BrandSite(BaseModel):
     robots_exempt: bool = False
     search_path: str | None = None
     sitemap_path: str | None = None
+    product_pattern: str | None = None
+    category_pattern: str | None = None
 
     @model_validator(mode="after")
     def _rules(self) -> Self:
@@ -80,7 +96,24 @@ class BrandSite(BaseModel):
             raise ValueError(f"{self.brand}: robots 예외는 허락 기록(PERMISSION)이 있어야 한다")
         if self.search_path is not None and "{query}" not in self.search_path:
             raise ValueError(f"{self.brand}: search_path에는 {{query}}가 있어야 한다")
+        for name in ("product_pattern", "category_pattern"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            try:
+                compiled = re.compile(value)
+            except re.error as error:
+                raise ValueError(f"{self.brand}: {name}이 정규식이 아니다: {error}") from error
+            if name == "product_pattern" and compiled.groups != 1:
+                raise ValueError(f"{self.brand}: product_pattern에는 캡처 그룹이 하나여야 한다")
         return self
+
+    @property
+    def url_rules(self) -> UrlRules:
+        return UrlRules(
+            product=re.compile(self.product_pattern) if self.product_pattern else None,
+            category=re.compile(self.category_pattern) if self.category_pattern else None,
+        )
 
     @property
     def source(self) -> str:

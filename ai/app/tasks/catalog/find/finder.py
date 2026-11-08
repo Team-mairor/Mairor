@@ -59,7 +59,9 @@ async def _category_candidates(
     """
     found: dict[str, Candidate] = {}
     for category in (await find_category_urls(client, site, platform))[:FIND_MAX_CATEGORIES]:
-        for candidate in await list_category(client, platform, category, max_pages=FIND_MAX_PAGES):
+        for candidate in await list_category(
+            client, platform, category, max_pages=FIND_MAX_PAGES, rules=site.url_rules
+        ):
             found.setdefault(candidate.product_id, candidate)
         if pick(query, list(found.values())).status is not PickStatus.NOT_FOUND:
             break

@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from app.tasks.catalog.discover.registry import Platform
+from app.tasks.catalog.discover.registry import Platform, UrlRules
 
 _CAFE24_PATH = re.compile(r"^/product/[^/]+/(\d+)(?:/|$)")
 _SHOPIFY_PATH = re.compile(r"/products/([^/?#]+)")
@@ -43,9 +43,15 @@ def is_supported(platform: Platform) -> bool:
     return platform in PRODUCT_PLATFORMS
 
 
-def product_id(platform: Platform, url: str) -> str | None:
-    """상품 상세 주소에서 상품 번호를 뽑는다. 상품 주소가 아니면 None이다."""
+def product_id(platform: Platform, url: str, rules: UrlRules | None = None) -> str | None:
+    """상품 상세 주소에서 상품 번호를 뽑는다. 상품 주소가 아니면 None이다.
+
+    사이트 규칙(rules.product)이 있으면 플랫폼 기본 규칙 대신 그것만 쓴다.
+    """
     parts = urlsplit(url)
+    if rules is not None and rules.product is not None:
+        found = rules.product.search(parts.path)
+        return unquote(found.group(1)) if found else None
     query = parse_qs(parts.query)
     path = parts.path
     match platform:
@@ -71,8 +77,10 @@ def product_id(platform: Platform, url: str) -> str | None:
             return None
 
 
-def is_category_url(platform: Platform, url: str) -> bool:
+def is_category_url(platform: Platform, url: str, rules: UrlRules | None = None) -> bool:
     path = urlsplit(url).path
+    if rules is not None and rules.category is not None:
+        return bool(rules.category.search(path))
     match platform:
         case Platform.CAFE24:
             return bool(_CAFE24_CATEGORY.match(path))
@@ -80,6 +88,8 @@ def is_category_url(platform: Platform, url: str) -> bool:
             return bool(_SHOPIFY_COLLECTION.match(path))
         case Platform.WOOCOMMERCE:
             return bool(_WOO_CATEGORY.match(path))
+        case Platform.MAKESHOP:
+            return path.endswith("shopbrand.html")
         case _:
             return False
 
