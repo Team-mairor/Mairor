@@ -37,9 +37,7 @@ public class GuideMatchController {
 
   @Operation(
       summary = "가이드 매칭 생성",
-      description =
-          "승인된 가이드의 단계와 내 파우치 제품을 매칭해 생성 시점 스냅샷을 저장한다."
-              + " 카탈로그 데이터를 생성·수정하거나 수집하지 않는다.",
+      description = "승인된 가이드의 단계와 내 파우치 제품을 매칭해 생성 시점 스냅샷을 저장한다." + " 카탈로그 데이터를 생성·수정하거나 수집하지 않는다.",
       security = {
         @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE),
         @SecurityRequirement(name = OpenApiConfig.CSRF_TOKEN)

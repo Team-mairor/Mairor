@@ -256,9 +256,7 @@ public class GuideMatchGenerationService {
     color.put("hex", referenceColor.hex());
     color.put("source", referenceColor.source());
     color.put("estimated", referenceColor.estimated());
-    if ("CATALOG".equals(referenceColor.source())
-        && link != null
-        && link.getColor() != null) {
+    if ("CATALOG".equals(referenceColor.source()) && link != null && link.getColor() != null) {
       color.put("sourceColorId", link.getColor().getId().toString());
     } else {
       color.putNull("sourceColorId");
@@ -297,7 +295,8 @@ public class GuideMatchGenerationService {
     return product;
   }
 
-  private static UUID findSameItem(UUID sourceProductId, UUID sourceShadeId, List<PouchItem> items) {
+  private static UUID findSameItem(
+      UUID sourceProductId, UUID sourceShadeId, List<PouchItem> items) {
     if (sourceProductId == null || sourceShadeId == null) {
       return null;
     }

@@ -52,10 +52,7 @@ public final class RecommendationCandidateSelector {
 
   /** 같은 파우치 항목은 원본 제품·호수 ID가 모두 확인될 때만 SAME이다. */
   public static boolean isSame(
-      UUID sourceProductId,
-      UUID sourceShadeId,
-      UUID candidateProductId,
-      UUID candidateShadeId) {
+      UUID sourceProductId, UUID sourceShadeId, UUID candidateProductId, UUID candidateShadeId) {
     return sourceProductId != null
         && sourceShadeId != null
         && Objects.equals(sourceProductId, candidateProductId)
