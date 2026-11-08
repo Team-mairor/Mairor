@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 
 from app.clients.llm import Llm
 from app.tasks.catalog.color.apply import add_colors
+from app.tasks.catalog.color.estimate import add_estimates
 from app.tasks.catalog.contract import CollectedProduct
 from app.tasks.catalog.discover.registry import BrandSite, Platform
 from app.tasks.catalog.extract.product import ExtractError, build_product
@@ -36,6 +37,7 @@ async def collect_product(
     renderer: Renderer | None = None,
     colors: bool = False,
     llm: Llm | None = None,
+    estimate: bool = False,
 ) -> tuple[CollectedProduct, dict[str, Any]]:
     """페이지를 받아 상품을 만든다. 차단·robots 거부는 그대로 올린다."""
     source_id = product_id(platform, url)
@@ -70,4 +72,6 @@ async def collect_product(
             raw["rendered"] = True
     if colors and product.shades:
         product, raw = await add_colors(client, product, raw, llm=llm)
+    if estimate and llm is not None and product.shades:
+        product, raw = await add_estimates(llm, product, raw)
     return product, raw

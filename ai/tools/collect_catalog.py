@@ -76,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="--colors와 함께: 모델이 사진 종류와 칸 위치를 찾게 한다(모델 호출 발생)",
     )
     product.add_argument(
+        "--estimate",
+        action="store_true",
+        help="색을 못 구한 호수는 이름으로 모델이 추정(LLM_ESTIMATE, 백엔드가 켠 경우에만 쓰임)",
+    )
+    product.add_argument(
         "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
     )
 
@@ -165,6 +170,7 @@ async def run_product(
     renderer: Renderer | None,
     colors: bool = False,
     llm: Llm | None = None,
+    estimate: bool = False,
 ) -> int:
     platform = await resolve_platform(client, site)
     try:
@@ -177,6 +183,7 @@ async def run_product(
             renderer=renderer,
             colors=colors,
             llm=llm,
+            estimate=estimate,
         )
     except ExtractError as error:
         print(f"{error.code}: {error}", file=sys.stderr)
@@ -265,8 +272,11 @@ async def _run(
         if args.command == "find":
             return await run_find(client, site, args.name)
         if args.command == "product":
-            vision = (llm or get_catalog_llm()) if args.vision else None
-            return await run_product(client, site, args.url, renderer, args.colors, vision)
+            needs_model = args.vision or args.estimate
+            model = (llm or get_catalog_llm()) if needs_model else None
+            return await run_product(
+                client, site, args.url, renderer, args.colors, model, args.estimate
+            )
         return await run_list(
             client,
             site,
