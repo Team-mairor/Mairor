@@ -40,6 +40,7 @@ from app.tasks.catalog.contract import (
     evidence_key,
 )
 from app.tasks.catalog.detail.images import DetailImage
+from app.tasks.catalog.detail.link import ChartMatch, match_shades
 from app.tasks.catalog.detail.scan import scan_detail_images, scan_to_json
 from app.tasks.catalog.http import PoliteClient
 from app.tasks.catalog.link.shade_link import ShadeImage
@@ -49,6 +50,7 @@ MAX_IMAGES = 60
 MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
 VISION_METHOD = "vision_box_pixel_median_lab"
+CHART_METHOD = "detail_chart_box_pixel_median_lab"
 
 
 @dataclass
@@ -231,6 +233,46 @@ async def _color_shade(
     return _finish(ctx, product, shade, loaded, link, slots, link.link, METHOD)
 
 
+def _chart_shade(
+    ctx: _Context, product: CollectedProduct, shade: Shade, match: ChartMatch
+) -> Shade:
+    """상세 이미지 차트에서 번호로 이은 칸 하나를 호수의 색 칸으로 붙인다."""
+    cell, reading = match.cell, match.cell.reading
+    if reading is None:
+        return shade
+    chip = cell.kind is ImageKind.SWATCH_CHIP
+    key = evidence_key(product.source_product_id, shade.source_option_id, 1)
+    ctx.evidence.append(
+        EvidenceRecord(
+            evidence_key=key,
+            image_url=match.scan.url,
+            image_hash=match.scan.sha256,
+            image_kind=cell.kind,
+            bbox=cell.box,
+            method=CHART_METHOD,
+            method_version=METHOD_VERSION,
+            scores=reading.scores,
+        )
+    )
+    color = Color(
+        sort_order=1,
+        name=cell.label,
+        name_source=NameSource.IMAGE_PRINT if cell.label else NameSource.NONE,
+        hex=reading.hex,
+        color_source=ColorSource.SWATCH_CHIP if chip else ColorSource.PRODUCT_PHOTO,
+        shade_link=ShadeLink.LABEL_IN_IMAGE,
+        color_quality=reading.quality,
+        evidence_key=key,
+    )
+    return shade.model_copy(
+        update={
+            "color_status": ColorStatus.EXTRACTED,
+            "slot_order_basis": SlotOrderBasis.GRID,
+            "colors": [color],
+        }
+    )
+
+
 async def add_colors(
     client: PoliteClient,
     product: CollectedProduct,
@@ -250,6 +292,7 @@ async def add_colors(
         for shade in product.shades
     ]
     detail_charts: list[dict[str, Any]] = []
+    detail_links: list[dict[str, Any]] = []
     if llm is not None and any(shade.color_status is not ColorStatus.EXTRACTED for shade in shades):
         detail = [
             DetailImage(entry["url"], entry.get("skip")) for entry in raw.get("detailImages", [])
@@ -257,6 +300,19 @@ async def add_colors(
         scans, scan_warnings = await scan_detail_images(client, llm, detail)
         ctx.warnings.extend(scan_warnings)
         detail_charts = [scan_to_json(scan) for scan in scans]
+        wanted = {s.source_option_id for s in shades if s.color_status is not ColorStatus.EXTRACTED}
+        matched = match_shades(shades, scans, wanted=wanted)
+        shades = [
+            _chart_shade(ctx, product, shade, matched.matches[shade.source_option_id])
+            if shade.source_option_id in matched.matches
+            else shade
+            for shade in shades
+        ]
+        ctx.warnings.extend(f"{why}:{option}" for option, why in matched.reasons.items())
+        detail_links = [
+            {"optionId": option, "label": match.cell.label, "imageUrl": match.scan.url}
+            for option, match in matched.matches.items()
+        ]
     updated = product.model_copy(update={"shades": shades, "warnings": ctx.warnings[:MAX_WARNINGS]})
     result = {
         **raw,
@@ -264,6 +320,7 @@ async def add_colors(
     }
     if detail_charts:
         result["detailCharts"] = detail_charts
+        result["detailLinks"] = detail_links
     if ctx.vision:
         result["vision"] = ctx.vision
     return CollectedProduct.model_validate(updated.model_dump()), result
