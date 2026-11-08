@@ -2,3 +2,4 @@ export { CodeField, useVerificationCode, type VerificationCode } from "./code-fi
 export { GoogleSheet, type GoogleResult } from "./google-sheet";
 export { PasswordReset, type ResetStep } from "./password-reset";
 export { useLogout } from "./use-logout";
+export { TermsModal, TermsPage, type TermsDoc } from "./terms";

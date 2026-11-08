@@ -9,7 +9,7 @@ import { FieldError, Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
-import { CodeField, useVerificationCode } from "@/features/auth";
+import { CodeField, TermsModal, useVerificationCode, type TermsDoc } from "@/features/auth";
 import {
   api,
   ApiError,
@@ -35,10 +35,10 @@ import {
 } from "@/lib/validation";
 
 const AGREEMENTS = [
-  { type: "TERMS", label: "[필수] 서비스 이용약관", required: true },
-  { type: "PRIVACY", label: "[필수] 개인정보 수집·이용 동의", required: true },
-  { type: "AGE_OVER_14", label: "[필수] 만 14세 이상입니다", required: true },
-  { type: "MARKETING", label: "[선택] 마케팅 정보 수신 동의", required: false },
+  { type: "TERMS", label: "[필수] 서비스 이용약관", required: true, doc: "TERMS" },
+  { type: "PRIVACY", label: "[필수] 개인정보 수집·이용 동의", required: true, doc: "PRIVACY" },
+  { type: "AGE_OVER_14", label: "[필수] 만 14세 이상입니다", required: true, doc: null },
+  { type: "MARKETING", label: "[선택] 마케팅 정보 수신 동의", required: false, doc: null },
 ] as const;
 type AgreeType = (typeof AGREEMENTS)[number]["type"];
 const agreeAll = (on: boolean) =>
@@ -168,6 +168,7 @@ export default function SignupPage() {
   const [pwErr, setPwErr] = useState<string | null>(null);
   const [pw2Err, setPw2Err] = useState<string | null>(null);
   const [agreeErr, setAgreeErr] = useState<string | null>(null);
+  const [termsOpen, setTermsOpen] = useState<TermsDoc | null>(null);
   const [formErr, setFormErr] = useState<string | null>(null);
   /** 선택 항목. 생년월일은 YYYY-MM-DD */
   const [profile, setProfile] = useState(EMPTY_PROFILE);
@@ -662,9 +663,15 @@ export default function SignupPage() {
                 </span>
                 <span className="flex-1">{a.label}</span>
               </button>
-              {/* TODO: 약관 원문 정적 페이지 연결 */}
-              {a.type !== "AGE_OVER_14" && (
-                <span className="text-[15px] text-mute underline">보기</span>
+              {a.doc && (
+                <button
+                  type="button"
+                  onClick={() => setTermsOpen(a.doc)}
+                  className="text-[15px] text-mute underline"
+                  aria-label={`${a.label} 보기`}
+                >
+                  보기
+                </button>
               )}
             </div>
           ))}
@@ -684,6 +691,19 @@ export default function SignupPage() {
           </PillButton>
         </div>
       </form>
+      {termsOpen && (
+        <TermsModal
+          // 약관마다 스크롤 상태를 새로 센다
+          key={termsOpen}
+          doc={termsOpen}
+          onClose={() => setTermsOpen(null)}
+          onAgree={() => {
+            setAgree((p) => ({ ...p, [termsOpen]: true }));
+            setAgreeErr(null);
+            setTermsOpen(null);
+          }}
+        />
+      )}
     </main>
   );
 }

@@ -178,6 +178,7 @@ src/
 │  ├─ page.tsx                # 00 인트로
 │  ├─ login/                  # 01 로그인 · 비밀번호 재설정 · Google
 │  ├─ signup/                 # 01-1 회원가입
+│  ├─ terms/ · privacy/       # 서비스 이용약관 · 개인정보 처리방침 원문 (가입 화면 「보기」는 같은 원문을 모달로 띄우고 끝까지 읽으면 확인·동의)
 │  ├─ onboarding/             # 02-1 온보딩 · 파우치 담기
 │  ├─ (tabs)/                 # 하단 탭이 있는 화면 묶음
 │  │  ├─ home/                # 02 홈
@@ -201,7 +202,7 @@ src/
 │  ├─ overlay/                # 화장 레이어 합성 ('use client')
 │  ├─ guide/                  # 튜토리얼 가이드 ('use client')
 │  ├─ live/                   # 카메라 화면 공통: 추적 상태 · 안내 문구 · 상태 훅 · 패널
-│  └─ auth/ · select/ · loading/ · check/ · tutorial/ · my/   # 화면 전용 조각
+│  └─ auth/(약관 원문 포함) · select/ · loading/ · check/ · tutorial/ · my/   # 화면 전용 조각
 ├─ lib/                       # validation · 공통 유틸 · hooks/(여러 화면이 쓰는 훅. 파일 이름은 use-*.ts)
 │  └─ api/                    # BE API 클라이언트·모의 응답
 ├─ mocks/                     # API 연동 전 샘플 데이터. 화면(app/)·layout·개발용 dev-nav만 가져온다(예외: lib/api/mock.ts)
