@@ -35,9 +35,6 @@ public final class PouchCandidateAssembler {
           }
         }
       }
-      if (colors.isEmpty() && storedColor != null) {
-        colors.add(new RecommendationCandidateSelector.ColorOption(null, storedColor.getHex()));
-      }
     }
 
     return new RecommendationCandidateSelector.Candidate(

@@ -256,7 +256,9 @@ public class GuideMatchGenerationService {
     color.put("hex", referenceColor.hex());
     color.put("source", referenceColor.source());
     color.put("estimated", referenceColor.estimated());
-    if (link != null && link.getColor() != null) {
+    if ("CATALOG".equals(referenceColor.source())
+        && link != null
+        && link.getColor() != null) {
       color.put("sourceColorId", link.getColor().getId().toString());
     } else {
       color.putNull("sourceColorId");
