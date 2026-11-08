@@ -21,14 +21,9 @@ from typing import Any
 from PIL import Image
 
 from app.clients.llm import Llm, LlmError
+from app.tasks.catalog.color.cell_reading import cell_box, read_cell
 from app.tasks.catalog.color.images import ImageUnusableError, LoadedImage, load_image
-from app.tasks.catalog.color.pixels import (
-    METHOD,
-    METHOD_VERSION,
-    ColorReading,
-    is_neutral_light,
-    read_color,
-)
+from app.tasks.catalog.color.pixels import METHOD, METHOD_VERSION, ColorReading, read_color
 from app.tasks.catalog.color.vision import Analysis, Cell, analyze_image
 from app.tasks.catalog.contract import (
     BBox,
@@ -44,6 +39,8 @@ from app.tasks.catalog.contract import (
     SlotOrderBasis,
     evidence_key,
 )
+from app.tasks.catalog.detail.images import DetailImage
+from app.tasks.catalog.detail.scan import scan_detail_images, scan_to_json
 from app.tasks.catalog.http import PoliteClient
 from app.tasks.catalog.link.shade_link import ShadeImage
 from app.tasks.catalog.text import compact_key, tokens
@@ -51,10 +48,6 @@ from app.tasks.catalog.text import compact_key, tokens
 MAX_IMAGES = 60
 MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
-CELL_INSET = 0.15
-MIN_CELL_HOMOGENEITY = 0.45
-SKIN_QUALITY_CAP = 0.4
-NEUTRAL_QUALITY_CAP = 0.3
 VISION_METHOD = "vision_box_pixel_median_lab"
 
 
@@ -76,17 +69,6 @@ class _Context:
     evidence: list[EvidenceRecord] = field(default_factory=list)
     vision: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-
-
-def _cell_box(cell: Cell, image: Image.Image) -> BBox:
-    """모델이 잡은 칸의 안쪽만 읽도록 가장자리를 줄인다. 값은 원본 사진의 픽셀이다."""
-    width, height = image.size
-    return BBox(
-        x=(cell.x + cell.width * CELL_INSET) * width,
-        y=(cell.y + cell.height * CELL_INSET) * height,
-        width=max(1.0, cell.width * (1 - 2 * CELL_INSET) * width),
-        height=max(1.0, cell.height * (1 - 2 * CELL_INSET) * height),
-    )
 
 
 def _match_label(shade_name: str, cells: tuple[Cell, ...]) -> Cell | None:
@@ -129,15 +111,8 @@ async def _analysis(ctx: _Context, loaded: LoadedImage) -> Analysis | None:
 def _read_cells(cells: tuple[Cell, ...], image: Image.Image, kind: ImageKind) -> list[_Slot]:
     slots: list[_Slot] = []
     for index, cell in enumerate(cells, start=1):
-        box = _cell_box(cell, image)
-        reading = read_color(image, box)
-        if reading is None or reading.scores["homogeneity"] < MIN_CELL_HOMOGENEITY:
-            reading = None
-        elif kind is ImageKind.SKIN_SWATCH and reading.quality > SKIN_QUALITY_CAP:
-            reading = ColorReading(reading.hex, SKIN_QUALITY_CAP, reading.scores)
-        elif is_neutral_light(reading.hex) and reading.quality > NEUTRAL_QUALITY_CAP:
-            reading = ColorReading(reading.hex, NEUTRAL_QUALITY_CAP, reading.scores)
-        slots.append(_Slot(index, reading, cell.label, box, kind))
+        box = cell_box(cell, image.size)
+        slots.append(_Slot(index, read_cell(image, box, kind), cell.label, box, kind))
     return slots
 
 
@@ -274,11 +249,21 @@ async def add_colors(
         await _color_shade(ctx, product, shade, links.get(shade.source_option_id))
         for shade in product.shades
     ]
+    detail_charts: list[dict[str, Any]] = []
+    if llm is not None and any(shade.color_status is not ColorStatus.EXTRACTED for shade in shades):
+        detail = [
+            DetailImage(entry["url"], entry.get("skip")) for entry in raw.get("detailImages", [])
+        ]
+        scans, scan_warnings = await scan_detail_images(client, llm, detail)
+        ctx.warnings.extend(scan_warnings)
+        detail_charts = [scan_to_json(scan) for scan in scans]
     updated = product.model_copy(update={"shades": shades, "warnings": ctx.warnings[:MAX_WARNINGS]})
     result = {
         **raw,
         "evidence": [item.model_dump(mode="json", by_alias=True) for item in ctx.evidence],
     }
+    if detail_charts:
+        result["detailCharts"] = detail_charts
     if ctx.vision:
         result["vision"] = ctx.vision
     return CollectedProduct.model_validate(updated.model_dump()), result
