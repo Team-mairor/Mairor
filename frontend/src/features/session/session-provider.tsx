@@ -33,6 +33,8 @@ export interface RunState {
   picked: VideoItem | null;
   /** 분석 없이 시작한 경로 */
   replay: "guide" | "report" | null;
+  /** 검수 승인된 가이드. 있으면 튜토리얼이 이 가이드로 돈다(없으면 샘플) */
+  guideId: string | null;
   /** 얼굴 등록 완료 */
   faceReg: boolean;
   /** 레퍼런스 제품 id → 선택. 없으면 기본 매칭(보유 > 추천 대체) */
@@ -66,6 +68,7 @@ export const EMPTY_RUN: RunState = {
   id: "",
   picked: null,
   replay: null,
+  guideId: null,
   faceReg: false,
   choice: {},
   subOn: {},

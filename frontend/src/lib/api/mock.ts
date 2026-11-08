@@ -7,6 +7,9 @@ import type {
   LoginResponse,
   PasswordResetVerified,
   User,
+  VideoSearchItem,
+  VideoSearchPage,
+  VideoSelection,
 } from "./types";
 
 /** 모의 응답 시나리오. BE 없이 화면을 만들 때 성공·오류 흐름을 골라 확인한다. */
@@ -43,6 +46,20 @@ const TOKEN_EXPIRES_AT = "2099-01-01T00:00:00Z";
 
 // 상태·코드·메시지는 BE GlobalExceptionHandler·SecurityConfig·회원 서비스가 실제로 돌려주는 값이다.
 // 모의 응답은 요청 본문을 보지 않고 시나리오대로만 답한다.
+// 영상 검색·선택 모의 응답. guideId는 mocks/mock-guide-api의 MOCK_GUIDE_ID(샘플 영상 가이드)와 같다
+const MOCK_VIDEO: VideoSearchItem = {
+  youtubeVideoId: "VxAXD6PP76I",
+  title: "피부 좋아 보인다는 말 듣는 데일리 메이크업",
+  channelTitle: "뷰티 크리에이터 A",
+  durationSeconds: 760,
+  thumbnailUrl: "https://i.ytimg.com/vi/VxAXD6PP76I/hqdefault.jpg",
+  viewCount: 180_345,
+  publishedAt: "2026-10-23T09:00:00Z",
+  guideId: "a0000000-0000-4000-8000-000000000001",
+  guideAvailable: true,
+};
+const NO_GUIDE = { guideId: null, guideAvailable: false } as const;
+
 const NOT_FOUND = () =>
   error(404, { code: "NOT_FOUND", message: "요청한 리소스를 찾을 수 없습니다." });
 
@@ -171,6 +188,57 @@ const ROUTES: MockRoute[] = [
     },
     error: () =>
       error(500, { code: "INTERNAL_ERROR", message: "서버에서 예기치 않은 오류가 발생했습니다." }),
+  },
+  {
+    // 검색어와 상관없이 같은 두 영상. 첫 영상은 모의 가이드(mocks/mock-guide-api의 샘플 영상 가이드)와 이어진다
+    method: "GET",
+    path: /^\/v1\/videos\/search$/,
+    success: () => ({
+      status: 200,
+      body: {
+        items: [
+          MOCK_VIDEO,
+          {
+            ...MOCK_VIDEO,
+            youtubeVideoId: "eoNi1sl-5RQ",
+            title: "10분 완성 코랄 블러셔 메이크업",
+            thumbnailUrl: "https://i.ytimg.com/vi/eoNi1sl-5RQ/hqdefault.jpg",
+            ...NO_GUIDE,
+          },
+        ],
+        nextPageToken: null,
+        size: 20,
+      } satisfies VideoSearchPage,
+    }),
+    error: () =>
+      error(503, {
+        code: "VIDEO_SEARCH_UNAVAILABLE",
+        message: "지금은 영상 검색을 이용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+      }),
+  },
+  {
+    // 모의 응답은 요청 본문을 보지 않아, 어느 영상을 골라도 가이드가 있는 영상으로 답한다
+    method: "POST",
+    path: /^\/v1\/videos$/,
+    success: () => ({
+      status: 200,
+      body: {
+        ...MOCK_VIDEO,
+        videoId: "b0000000-0000-4000-8000-000000000001",
+        chapters: [
+          { startSeconds: 202, label: "파운데이션" },
+          { startSeconds: 242, label: "크림 블러셔" },
+          { startSeconds: 319, label: "언더 아이라인" },
+        ],
+        analysisJobId: null,
+        reviewStatus: "APPROVED",
+      } satisfies VideoSelection,
+    }),
+    error: () =>
+      error(409, {
+        code: "VIDEO_UNSUPPORTED_FOR_ANALYSIS",
+        message: "분석할 수 없는 영상입니다. 크리에이티브 커먼즈(CC BY) 영상만 분석할 수 있습니다.",
+      }),
   },
 ];
 

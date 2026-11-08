@@ -2,7 +2,7 @@
 
 import { ArrowRight, Play, Search, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
@@ -11,14 +11,18 @@ import { PillButton } from "@/components/ui/pill-button";
 import { GuideBadge, KW_BG, VideoPicker } from "@/features/select";
 import { useSession } from "@/features/session";
 import { videoThumb, type VideoItem } from "@/features/video";
+import type { VideoSelection } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
-import { CHAPTERS, VIDEOS, videoState } from "@/mocks/mock-data";
+import { VIDEOS, videoState } from "@/mocks/mock-data";
 
 const KEYWORDS = ["데일리", "코랄 블러셔", "봄 웜톤", "10분 메이크업", "무쌍 섀도", "글로시 립"];
 const TOP_VIEWS = ["312만회", "248만회", "196만회", "153만회"];
 
-/** 03 영상 입력 (VIDEO-001 · VIDEO-002 · VIDEO-005) */
+/**
+ * 03 영상 입력 (VIDEO-001 · VIDEO-002 · VIDEO-005).
+ * 검색·선택은 API(VIDEO-004 · VIDEO-001)를 쓰고, Top 4는 인기 영상 API(VIDEO-005)가 생기기 전까지 샘플이다.
+ */
 export default function SelectPage() {
   const router = useRouter();
   const { startRun } = useSession();
@@ -26,7 +30,7 @@ export default function SelectPage() {
   /** 검색 화면에 넣을 첫 검색어. null이면 닫힘 */
   const [picker, setPicker] = useState<string | null>(null);
   const [quota, setQuota] = useState(false);
-  // ?fail=1: 검색·Top 4 조회 실패 확인용. 실제 API가 붙으면 오류 응답으로 바뀐다.
+  // ?fail=1: Top 4 조회 실패 확인용. 인기 영상 API가 붙으면 오류 응답으로 바뀐다.
   const [apiFail, setApiFail] = useState(false);
   const params = useQuery();
   useEffect(() => {
@@ -34,17 +38,34 @@ export default function SelectPage() {
     setApiFail(params?.get("fail") === "1");
   }, [params]);
 
+  // 한 번 시작하면 화면을 떠날 때까지 다시 시작하지 않는다 (연타·다른 영상 탭으로 분석이 두 번 시작되지 않게)
+  const started = useRef(false);
   const start = (v: VideoItem) => {
     const st = videoState(v);
-    if (st === "blocked") return;
+    if (started.current || st === "blocked") return;
     if (st === "quota") {
       setPicked(v);
       setPicker(null);
       setQuota(true);
       return;
     }
+    started.current = true;
     startRun({ picked: v, replay: st === "guide" ? "guide" : null });
     router.push(st === "running" ? "/loading?joined=1" : "/loading");
+  };
+
+  /** 검색에서 고른 영상. 승인된 가이드면 바로 따라 하기, 내가 요청한 분석이 진행 중이면 그 작업으로 간다 */
+  const startPicked = (v: VideoItem, s: VideoSelection) => {
+    if (started.current) return;
+    started.current = true;
+    setPicker(null);
+    if (s.guideAvailable && s.guideId) {
+      startRun({ picked: v, replay: "guide", guideId: s.guideId });
+      router.push("/loading");
+    } else if (s.analysisJobId) {
+      startRun({ picked: v });
+      router.push(`/loading?jobId=${encodeURIComponent(s.analysisJobId)}`);
+    }
   };
 
   const openPicker = (q = "") => setPicker(q);
@@ -220,17 +241,9 @@ export default function SelectPage() {
       {picker !== null && (
         <VideoPicker
           initialQuery={picker}
-          stateOf={videoState}
-          videos={VIDEOS}
-          chapters={CHAPTERS}
-          apiFail={apiFail}
-          onRetry={() => setApiFail(false)}
           onClose={() => setPicker(null)}
-          onPick={(v) => {
-            setPicked(v);
-            setPicker(null);
-            setQuota(false);
-          }}
+          // 검색 화면의 버튼이 곧 시작이다. 이 화면으로 돌아와 한 번 더 누르지 않는다
+          onPick={startPicked}
         />
       )}
     </main>

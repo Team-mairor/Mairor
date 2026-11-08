@@ -32,15 +32,18 @@ export default function TutorialGuidePage() {
   const showSlides = review || query?.get("force") === "1" || !state.tutSeen;
   const phase = showSlides ? slide : 3;
   useHiddenVideo();
+  // 승인된 가이드로 시작한 실행이면 튜토리얼에 그 가이드를 넘긴다
+  const guideId = state.run.guideId;
+  const tutorial = guideId ? `/tutorial?guideId=${encodeURIComponent(guideId)}` : "/tutorial";
 
   const endSlides = () => {
-    if (review) return router.push("/tutorial");
+    if (review) return router.push(tutorial);
     update({ tutSeen: true });
     setSlide(3);
   };
   const consent = (ok: boolean) => {
     updateRun({ photoOk: ok, captures: [] });
-    router.push("/tutorial");
+    router.push(tutorial);
   };
 
   return (
