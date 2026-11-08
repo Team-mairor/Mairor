@@ -221,6 +221,7 @@ API-VIDEO-002 · POST /api/v1/users/me/analysis-jobs
 - 404 NOT\_FOUND, 409 VIDEO\_UNSUPPORTED\_FOR\_ANALYSIS, 429 ANALYSIS\_DAILY\_LIMIT\_EXCEEDED + Retry-After, 503 VIDEO\_ANALYSIS\_UNAVAILABLE. 한도 초과 Error 확장: resetAt:datetime 필수.
 - 재사용→합류→신규 허용 여부 순서로 검사. 신규 생성과 한도 차감·조회 권한 연결을 원자적으로 처리하며, 동시 요청으로 같은 영상 작업을 중복 생성하지 않는다. 재사용·합류는 차감 없음.
 - 영상 ID만으로 분석용 입력 확보를 가정하지 않는다. 입력 확보·지원 조건·길이 상한·한도 수치 확정 필요. 30분 초과는 구간 분할, 유효 GUIDE 단계 0개면 FAILED/NO\_VALID\_STEPS.
+- <b>구현 메모 (로컬 수정 -362)</b>: 검사 순서는 영상 없음 404 → YouTube 재확인(공개·CC BY 등, 재사용·합류 포함 요청마다) 409 → 재사용 200 → 합류 202 → 회원별 일일 한도 429 → 신규 202. YouTube 확인 실패(할당량·시간 초과 포함)는 503 VIDEO\_ANALYSIS\_UNAVAILABLE. 한도는 회원별 하루 신규 작업 수만 세고(설정값, 시연 때문에 넉넉히 20) Asia/Seoul 0시에 초기화, 서비스 전체 한도는 없다. 합류한 회원도 그 작업의 상태 조회·SSE를 본다(운영 명령으로 만든 작업에 합류해도 같다). `videoId`가 UUID가 아니면 400 VALIDATION\_FAILED(field=videoId). 응답 Cache-Control: no-store. 새 작업은 노트북 연결(-358) 전까지 운영자가 올린 원본(`videos/{youtubeVideoId}/source.mp4`)이 없으면 FAILED/SOURCE\_NOT\_FOUND로 끝난다.
 </toggle>
 
 <toggle>

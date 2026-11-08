@@ -3,6 +3,7 @@ package com.mairor.backend.videos.service;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
+import com.mairor.backend.analysis.service.AnalysisJobAccess;
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
 import com.mairor.backend.common.error.ErrorResponse;
@@ -66,6 +67,7 @@ public class VideoSelectionService {
   private final VideoRepository videos;
   private final GuideRepository guides;
   private final AnalysisJobRepository jobs;
+  private final AnalysisJobAccess access;
   private final JdbcTemplate jdbc;
   private final ObjectMapper objectMapper;
   private final Clock clock;
@@ -76,9 +78,10 @@ public class VideoSelectionService {
       VideoRepository videos,
       GuideRepository guides,
       AnalysisJobRepository jobs,
+      AnalysisJobAccess access,
       JdbcTemplate jdbc,
       ObjectMapper objectMapper) {
-    this(youTube, videos, guides, jobs, jdbc, objectMapper, Clock.systemUTC());
+    this(youTube, videos, guides, jobs, access, jdbc, objectMapper, Clock.systemUTC());
   }
 
   VideoSelectionService(
@@ -86,6 +89,7 @@ public class VideoSelectionService {
       VideoRepository videos,
       GuideRepository guides,
       AnalysisJobRepository jobs,
+      AnalysisJobAccess access,
       JdbcTemplate jdbc,
       ObjectMapper objectMapper,
       Clock clock) {
@@ -93,6 +97,7 @@ public class VideoSelectionService {
     this.videos = videos;
     this.guides = guides;
     this.jobs = jobs;
+    this.access = access;
     this.jdbc = jdbc;
     this.objectMapper = objectMapper;
     this.clock = clock;
@@ -112,15 +117,16 @@ public class VideoSelectionService {
     }
 
     YouTubeVideo found = fetch(youtubeVideoId);
-    checkAnalyzable(found);
+    VideoErrors.checkAnalyzable(found);
     List<VideoChapter> chapters = ChapterParser.parse(found.description());
 
     Video video = upsert(found, chapters);
     Optional<Guide> approved =
         guides.findByVideoIdAndReviewStatus(video.getId(), ReviewStatus.APPROVED);
     Optional<AnalysisJob> active = jobs.findFirstByVideoIdAndStatusIn(video.getId(), ACTIVE);
+    // 요청했거나 합류한 회원만 진행 중 작업 ID 를 받는다(상태 조회 · SSE 권한과 같은 기준)
     UUID analysisJobId =
-        active.filter(j -> userId.equals(j.getRequestedBy())).map(AnalysisJob::getId).orElse(null);
+        active.filter(j -> access.canView(userId, j)).map(AnalysisJob::getId).orElse(null);
     // 분석이 진행 중이면 이전 판 가이드 상태(예 REJECTED)보다 진행 중(NOT_READY)을 먼저 보인다
     ReviewStatus reviewStatus =
         active.isPresent()
@@ -159,21 +165,6 @@ public class VideoSelectionService {
       throw VideoErrors.unsupported("없거나 비공개 · 삭제된 영상입니다.");
     }
     return found.getFirst();
-  }
-
-  private static void checkAnalyzable(YouTubeVideo video) {
-    if (!"public".equals(video.privacyStatus())) {
-      throw VideoErrors.unsupported("공개 영상이 아닙니다.");
-    }
-    if (video.ageRestricted()) {
-      throw VideoErrors.unsupported("연령 제한 영상입니다.");
-    }
-    if (!"none".equals(video.liveBroadcastContent()) || video.durationSeconds() <= 0) {
-      throw VideoErrors.unsupported("라이브 · 예정 영상입니다.");
-    }
-    if (!video.creativeCommon()) {
-      throw VideoErrors.unsupported("크리에이티브 커먼즈(CC BY) 영상만 분석할 수 있습니다.");
-    }
   }
 
   private Video upsert(YouTubeVideo found, List<VideoChapter> chapters) {

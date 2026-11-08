@@ -2,6 +2,7 @@ package com.mairor.backend.analysis.service;
 
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
+import com.mairor.backend.analysis.repository.AnalysisJobRequestRecordRepository;
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
 import java.util.Objects;
@@ -11,17 +12,19 @@ import org.springframework.stereotype.Component;
 /**
  * 회원이 분석 작업을 볼 수 있는지 정한다. 상태 조회(API-VIDEO-003)와 분석 상태 SSE 가 함께 쓴다.
  *
- * <p>지금은 작업을 요청한 회원({@code requestedBy})만 본다. 운영 명령으로 만든 작업({@code requestedBy = null})은 아무 회원도 못
- * 본다. 진행 작업에 합류한 회원(API-VIDEO-002 JOINED_JOB)은 002 가 합류 기록을 만들 때 여기서 넓힌다. 없는 작업과 볼 수 없는 작업은 구분하지 않고
- * 404 다(다른 회원의 작업이 있는지 알 수 없게).
+ * <p>작업을 처음 요청한 회원({@code requestedBy})과 분석 요청 기록({@code analysis_job_requests})이 있는 회원(새 작업 · 합류,
+ * API-VIDEO-002)이 본다. 운영 명령으로 만든 작업은 회원이 합류하기 전까지 아무 회원도 못 본다. 없는 작업과 볼 수 없는 작업은 구분하지 않고 404 다(다른
+ * 회원의 작업이 있는지 알 수 없게).
  */
 @Component
 public class AnalysisJobAccess {
 
   private final AnalysisJobRepository jobs;
+  private final AnalysisJobRequestRecordRepository requests;
 
-  AnalysisJobAccess(AnalysisJobRepository jobs) {
+  AnalysisJobAccess(AnalysisJobRepository jobs, AnalysisJobRequestRecordRepository requests) {
     this.jobs = jobs;
+    this.requests = requests;
   }
 
   /**
@@ -35,6 +38,7 @@ public class AnalysisJobAccess {
   }
 
   public boolean canView(UUID userId, AnalysisJob job) {
-    return userId.equals(job.getRequestedBy());
+    return userId.equals(job.getRequestedBy())
+        || requests.existsByAnalysisJobIdAndUserId(job.getId(), userId);
   }
 }

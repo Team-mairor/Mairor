@@ -323,6 +323,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |
+| `analysis_job_requests` 테이블 (회원 분석 요청 기록: 합류한 회원의 조회 권한, 회원별 일일 한도) | S15P31A306-362 | `psql -f db/upgrade/362-analysis-job-requests.sql` (새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다) |
 | `analysis_jobs.ai_requested_at` (AI 에 맡긴 시각, 콜백 시간 초과 기준) · `analysis_jobs.ai_progress` (AI 진행 숫자) | S15P31A306-296 | `ALTER TABLE analysis_jobs ADD COLUMN ai_requested_at timestamp(6) with time zone, ADD COLUMN ai_progress jsonb;` 다음 이미 AI 콜백을 기다리던 행의 기준을 채운다: `UPDATE analysis_jobs SET ai_requested_at = updated_at WHERE status = 'RUNNING' AND ai_job_id IS NOT NULL AND ai_requested_at IS NULL;` (둘 다 NULL 허용이라 옛 코드와 함께 돌아도 된다. 그 사이 옛 코드가 맡긴 작업은 첫 진행 알림 때 채워진다) |
 
 - 적용은 BE(정윤)가 한다(S15P31A306-203). master 머지가 곧 운영 배포라, 스키마를 바꾸는 MR 은 **머지 전에** 운영 DB 에 적용한다. 그래서 옛 버전과 함께 돌아도 깨지지 않는 변경(추가 → 코드 전환 → 삭제)만 한다. 절차는 `deploy/README.md` "DB 스키마".

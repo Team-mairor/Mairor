@@ -81,6 +81,24 @@ CREATE UNIQUE INDEX uk_analysis_jobs_video_active ON analysis_jobs (video_id)
 CREATE INDEX idx_analysis_jobs_status_created ON analysis_jobs (status, created_at);
 CREATE INDEX idx_analysis_jobs_requested_by ON analysis_jobs (requested_by, created_at);
 
+-- 회원의 분석 요청 기록 (S15P31A306-362, API-VIDEO-002). 새 작업을 만든 요청(NEW_JOB)과 진행 중 작업에 합류한 요청(JOINED_JOB)이
+-- 한 줄씩 남는다. 승인 가이드 재사용(REUSED_GUIDE)은 작업이 없어 남기지 않는다.
+-- 합류한 회원도 작업 상태 · SSE 를 볼 수 있게 하고(AnalysisJobAccess), 회원별 일일 신규 분석 한도를 NEW_JOB 줄로 센다.
+-- 같은 회원이 같은 작업에 두 번 요청해도 한 줄이다. 작업 · 회원이 지워지면 함께 지운다.
+CREATE TABLE analysis_job_requests (
+    id              uuid                        NOT NULL,
+    analysis_job_id uuid                        NOT NULL,
+    user_id         uuid                        NOT NULL,
+    receipt_type    varchar(20)                 NOT NULL,
+    created_at      timestamp(6) with time zone NOT NULL,
+    CONSTRAINT analysis_job_requests_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_analysis_job_requests_job FOREIGN KEY (analysis_job_id) REFERENCES analysis_jobs (id) ON DELETE CASCADE,
+    CONSTRAINT fk_analysis_job_requests_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT uk_analysis_job_requests_job_user UNIQUE (analysis_job_id, user_id),
+    CONSTRAINT ck_analysis_job_requests_receipt_type CHECK (receipt_type IN ('NEW_JOB', 'JOINED_JOB'))
+);
+CREATE INDEX idx_analysis_job_requests_user_created ON analysis_job_requests (user_id, created_at);
+
 -- 가이드. 분석 작업 하나가 가이드 하나를 만든다. 검수 상태 값은 API 명세 v2 reviewStatus 와 같다.
 -- explanation·area 는 AI 콜백이 오기 전에는 NULL 이다. 콜백은 설명·영역을 한 번에 보내므로, 콜백 뒤 area 가 NULL 이면 프레임 없이 맡긴 작업이다.
 -- frames_manifest_key: 레퍼런스 프레임 목록(frames.json)의 S3 키.
