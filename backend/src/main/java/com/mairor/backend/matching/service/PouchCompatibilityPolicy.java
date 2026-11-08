@@ -6,6 +6,8 @@ import java.util.Set;
 /** 매칭 대상 메이크업 단계와 자동 대체 가능한 카탈로그 종류를 명시적으로 연결한다. */
 public final class PouchCompatibilityPolicy {
 
+  public static final int VERSION = 1;
+
   private static final Map<String, Set<String>> COMPATIBLE_TYPES =
       Map.of(
           "foundation", Set.of("CUSHION", "FOUNDATION"),

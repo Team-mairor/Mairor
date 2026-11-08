@@ -11,7 +11,7 @@ import org.springframework.data.repository.query.Param;
 
 public interface GuideStepProductLinkRepository extends JpaRepository<GuideStepProductLink, UUID> {
 
-  @EntityGraph(attributePaths = {"product", "shade"})
+  @EntityGraph(attributePaths = {"product", "shade", "color"})
   List<GuideStepProductLink> findByGuideIdOrderByStepIdAsc(UUID guideId);
 
   Optional<GuideStepProductLink> findByGuideIdAndStepId(UUID guideId, String stepId);

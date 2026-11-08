@@ -5,8 +5,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.stereotype.Component;
 
 /** 색 비교가 가능한 본인 파우치 대체 후보를 거리순으로 최대 3개 선택한다. */
+@Component
 public final class RecommendationCandidateSelector {
 
   public static final int MAX_CANDIDATES = 3;
