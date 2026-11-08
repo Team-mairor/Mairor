@@ -64,6 +64,16 @@ def _to_lab(rgb: np.ndarray) -> np.ndarray:
     return np.stack([lightness, 500 * (f[:, 0] - f[:, 1]), 200 * (f[:, 1] - f[:, 2])], axis=1)
 
 
+def hex_delta_e(first: str, second: str) -> float:
+    """두 HEX의 CIELAB 거리(ΔE76). 기준 세트 리포트가 오차를 잴 때 쓴다."""
+    rgb = np.array(
+        [[int(value[i : i + 2], 16) for i in (1, 3, 5)] for value in (first, second)],
+        dtype=np.float64,
+    )
+    lab = _to_lab(rgb)
+    return float(np.linalg.norm(lab[0] - lab[1]))
+
+
 def _delta(lab: np.ndarray, center: np.ndarray) -> np.ndarray:
     return np.linalg.norm(lab - center, axis=1)
 

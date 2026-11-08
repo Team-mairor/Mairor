@@ -1,4 +1,4 @@
-"""화장품 수집기 명령줄. 사이트 목록, 상품 주소·목록, 상품 한 건 수집, 새 브랜드 홈 찾기다.
+"""화장품 수집기 명령줄. 사이트 목록, 상품 주소·목록, 한 건 수집, 새 브랜드 홈, 목록 수집이다.
 
 색 추출은 이어지는 단계에서 붙는다. 운영 수집은 목록에서 켜진(enabled) 사이트에만 한다.
 켜지지 않은 사이트는 구조를 확인하는 소량 요청에 한해 --allow-disabled 로만 접근한다.
@@ -8,6 +8,7 @@
     uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --allow-disabled
     uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --resume
     uv run python tools/collect_catalog.py discover --brand 새브랜드 --alias NewBrand
+    uv run python tools/collect_catalog.py collect --brand 롬앤 --products p.jsonl --name romand
     uv run python tools/collect_catalog.py product --brand 롬앤 --url https://... --render
 """
 
@@ -23,7 +24,11 @@ sys.path.insert(0, str(AI_DIR))
 
 from app.clients.llm import Llm, LlmError, get_catalog_llm  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
-from app.tasks.catalog.checkpoint import Checkpoint, CheckpointError  # noqa: E402
+from app.tasks.catalog.checkpoint import (  # noqa: E402
+    Checkpoint,
+    CheckpointError,
+    checkpoint_path_for,
+)
 from app.tasks.catalog.discover.official import DiscoverStatus, discover_site  # noqa: E402
 from app.tasks.catalog.discover.registry import (  # noqa: E402
     BrandSite,
@@ -38,6 +43,12 @@ from app.tasks.catalog.find.finder import FindStatus, find_product, resolve_plat
 from app.tasks.catalog.find.urls import Candidate, is_supported  # noqa: E402
 from app.tasks.catalog.http import HttpConfig, HttpFailure, PoliteClient  # noqa: E402
 from app.tasks.catalog.render.browser import PlaywrightRenderer, Renderer  # noqa: E402
+from app.tasks.catalog.runfile import RunFileError, RunFileWriter  # noqa: E402
+from app.tasks.catalog.runner import (  # noqa: E402
+    collect_candidates,
+    new_header,
+    read_candidates,
+)
 
 EXIT_OK = 0
 EXIT_NOT_FOUND = 1
@@ -83,6 +94,22 @@ def build_parser() -> argparse.ArgumentParser:
     product.add_argument(
         "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
     )
+
+    collect = commands.add_parser(
+        "collect", help="상품 후보 목록(list 결과)을 수집해 실행 결과 파일로"
+    )
+    collect.add_argument("--brand", required=True)
+    collect.add_argument("--products", type=Path, required=True, help="list 명령이 만든 JSONL")
+    collect.add_argument("--name", help="실행 이름(파일 이름에 들어간다)")
+    collect.add_argument("--out-dir", type=Path, help="기본은 설정의 실행 결과 폴더")
+    collect.add_argument("--resume", type=Path, help="끊긴 실행 결과 파일을 이어서")
+    collect.add_argument("--retry-failed", action="store_true")
+    collect.add_argument("--limit", type=int, help="이번에 처리할 최대 상품 수")
+    collect.add_argument("--render", action="store_true")
+    collect.add_argument("--colors", action="store_true")
+    collect.add_argument("--vision", action="store_true")
+    collect.add_argument("--estimate", action="store_true")
+    collect.add_argument("--allow-disabled", action="store_true")
 
     listing = commands.add_parser("list", help="브랜드의 카테고리를 돌며 상품 목록 모으기")
     listing.add_argument("--brand", required=True)
@@ -196,6 +223,52 @@ async def run_product(
     return EXIT_OK
 
 
+async def run_collect(
+    client: PoliteClient,
+    site: BrandSite,
+    args: argparse.Namespace,
+    renderer: Renderer | None,
+    llm: Llm | None,
+) -> int:
+    platform = await resolve_platform(client, site)
+    candidates = read_candidates(args.products)
+    try:
+        if args.resume:
+            writer = RunFileWriter.resume(args.resume)
+        else:
+            directory = args.out_dir or get_settings().catalog_run_dir
+            name = args.name or site.domain.replace(".", "-")
+            writer = RunFileWriter.create(directory, new_header(site), name)
+    except (RunFileError, OSError) as error:
+        print(f"실행 결과 파일 오류: {error}", file=sys.stderr)
+        return EXIT_USAGE
+    with writer:
+        checkpoint = Checkpoint.load_or_create(
+            checkpoint_path_for(writer.path), writer.header.run_id
+        )
+        try:
+            stats = await collect_candidates(
+                client,
+                site,
+                platform,
+                candidates,
+                writer,
+                checkpoint,
+                renderer=renderer,
+                colors=args.colors,
+                llm=llm,
+                estimate=args.estimate,
+                retry_failed=args.retry_failed,
+                limit=args.limit,
+            )
+        except HttpFailure as error:
+            print(f"{error.code}: {error} (그때까지 {writer.path} 에 저장했다)", file=sys.stderr)
+            return EXIT_STOPPED
+    print(f"{stats.written}건을 썼다, 실패 {len(stats.failed)}건, 건너뜀 {stats.skipped}건")
+    print(f"실행 결과 파일: {writer.path}")
+    return EXIT_OK if not stats.failed else EXIT_NOT_FOUND
+
+
 async def run_list(
     client: PoliteClient,
     site: BrandSite,
@@ -271,6 +344,10 @@ async def _run(
     try:
         if args.command == "find":
             return await run_find(client, site, args.name)
+        if args.command == "collect":
+            needs_model = args.vision or args.estimate
+            model = (llm or get_catalog_llm()) if needs_model else None
+            return await run_collect(client, site, args, renderer, model)
         if args.command == "product":
             needs_model = args.vision or args.estimate
             model = (llm or get_catalog_llm()) if needs_model else None
