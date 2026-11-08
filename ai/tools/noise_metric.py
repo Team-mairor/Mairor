@@ -1,7 +1,10 @@
 """부위를 안 건드린 시간의 사진으로 잡음 분포와 헛것 비율을 재 output/noise.json에 둔다 (개발용).
 
-부위마다 그 부위를 안 건드린 단계(UNTOUCHED_STEPS) 안에서, 실제 분석과 같은 직전·직후 구간으로
-사진 쌍을 만들고 두 사진 사이를 GAPS_SECONDS만큼 띄운다. 쌍마다 부위 코드와 같은 계산을 해서
+부위마다 그 부위를 안 건드린 시간(UNTOUCHED_SECONDS) 안에서, 실제 분석과 같은 직전·직후 구간으로
+사진 쌍을 만들고 두 사진 사이를 GAPS_SECONDS만큼 띄운다.
+안 건드린 시간은 단계표를 바른 시간으로 나누기 전의 유튜브 챕터 단위 구간이다. 말하거나 제품을
+보여 주는 시간도 그 부위를 건드리지 않은 시간이라 넣고, 단계를 나눈 뒤에도 같은 구간으로 재서
+앞선 잡음 결과와 견줄 수 있게 한다. 쌍마다 부위 코드와 같은 계산을 해서
 나온 값은 모두 잡음이다. 립은 전후 비교가 아니라 바른 뒤 사진 한 장을 보므로,
 맨입술 순간의 사진만 쓴다. 조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
 사진은 서비스 부위 찾기와 같이 고른다. 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
@@ -10,6 +13,8 @@
 범위를 많이 가린 사진은 통째로 뺀다.
 쌍마다 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py), FE로 나가는 영역이
 생기는지도 센다(나가는 영역 헛것).
+섀도·아이라인은 나가는 영역 헛것이 눈꼬리 점과 앞머리 점을 잇는 직선 위(upper)와 아래(under) 중
+어디에 났는지도 센다(ZONES). 한쪽 칸이 ZONE_MIN_CELLS 이상이면 그 자리의 헛것이다.
 아이라인은 그 시각 전에 끝난 아이라인 단계들이 안내한 칸을 빼고 본다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
@@ -63,12 +68,17 @@ STRIDE_MS = 4000
 MAP_CACHE = 300
 HIST_EDGES = np.arange(-40.0, 40.0001, 0.05)
 PERCENTILES = (50, 95, 99, 99.9)
-UNTOUCHED_STEPS: dict[str, tuple[str, ...]] = {
-    "brow": ("s9", "s12", "s13", "s14", "s22", "s25", "s26", "s27"),
-    "eyeshadow": ("s9", "s22", "s26", "s27"),
-    "eyeliner": ("s9", "s22", "s26", "s27"),
-    "blush": ("s8", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s26", "s27"),
-    "lip": ("s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "s16", "s17", "s18", "s19"),
+UNTOUCHED_SECONDS: dict[str, tuple[tuple[float, float], ...]] = {
+    "brow": ((548, 640), (782, 966), (1402, 1470), (1632, 1782)),
+    "eyeshadow": ((548, 640), (1402, 1470), (1692, 1782)),
+    "eyeliner": ((548, 640), (1402, 1470), (1692, 1782)),
+    "blush": ((455, 548), (640, 1183), (1692, 1782)),
+    "lip": ((455, 1223),),
+}
+ZONES = ("upper", "under")
+ZONE_MIN_CELLS = {
+    "eyeshadow": eyeshadow_area.MIN_PIECE_CELLS,
+    "eyeliner": eyeliner_area.FOUND_MIN_CELLS,
 }
 
 Span = tuple[int, int]
@@ -116,25 +126,25 @@ class Part:
 
 @dataclass
 class Tally:
-    """부위·쪽·간격 하나에 모은 결과. size_skipped는 skipped 중 얼굴 크기를 못 맞춰 뺀 쌍이다."""
+    """부위·쪽·간격 하나에 모은 결과. size_skipped는 skipped 중 얼굴 크기를 못 맞춰 뺀 쌍이다.
+
+    zone_found는 섀도·아이라인의 자리(ZONES)마다 나가는 영역 헛것이 난 쌍의 수다.
+    """
 
     pairs: int = 0
     skipped: int = 0
     size_skipped: int = 0
     found: int = 0
     output_found: int = 0
+    zone_found: dict[str, int] = field(default_factory=dict)
     hist: np.ndarray = field(default_factory=lambda: np.zeros(len(HIST_EDGES) + 1, dtype=np.int64))
     overs: list[float] = field(default_factory=list)
     gates: list[float] = field(default_factory=list)
 
 
-def untouched_spans(steps: Sequence[Step], step_ids: Sequence[str]) -> list[Span]:
-    """고른 단계들의 구간(ms)을 시간 순으로 놓고, 맞닿은 단계는 하나로 이어 붙인다."""
-    picked = sorted(
-        (round(s.start_seconds * 1000), round(s.end_seconds * 1000))
-        for s in steps
-        if s.step_id in step_ids
-    )
+def untouched_spans(ranges: Sequence[tuple[float, float]]) -> list[Span]:
+    """안 건드린 시간(초)을 ms로 바꿔 시간 순으로 놓고, 맞닿거나 겹친 구간은 하나로 이어 붙인다."""
+    picked = sorted((round(start * 1000), round(end * 1000)) for start, end in ranges)
     merged: list[Span] = []
     for start, end in picked:
         if merged and start <= merged[-1][1]:
@@ -142,6 +152,26 @@ def untouched_spans(steps: Sequence[Step], step_ids: Sequence[str]) -> list[Span
         else:
             merged.append((start, end))
     return merged
+
+
+def zone_finds(part: str, side: RegionName, mask: np.ndarray | None) -> dict[str, bool]:
+    """섀도·아이라인 나가는 영역이 자리(ZONES)마다 헛것을 냈는지. 다른 부위는 빈 dict다.
+
+    아이라인 코드가 윗선·아랫선을 가르는 것과 같은 직선(눈꼬리 점과 앞머리 점을 잇는 선)으로
+    나눈다. 한쪽 칸이 ZONE_MIN_CELLS(섀도는 남기는 가장 작은 조각, 아이라인은 찾음으로 보는
+    가장 적은 칸) 이상일 때만 그 자리의 헛것으로 세어, 선에 걸친 몇 칸 때문에 두 자리 모두에
+    세지 않게 한다. 아이라인 윗점막은 윗선과 같은 쪽이라 upper에 든다.
+    """
+    if part not in ZONE_MIN_CELLS:
+        return {}
+    if mask is None:
+        return dict.fromkeys(ZONES, False)
+    upper = eyeliner_area._upper_side(side)
+    least = ZONE_MIN_CELLS[part]
+    return {
+        "upper": int((mask & upper).sum()) >= least,
+        "under": int((mask & ~upper).sum()) >= least,
+    }
 
 
 def caution_spans(doc: dict) -> list[Span]:
@@ -373,12 +403,14 @@ PARTS = (
 def measure_part(
     part: Part,
     result: LandmarksResult,
-    steps: Sequence[Step],
+    spans: Sequence[Span],
     cautions: Sequence[Span],
     load_map: MapLoader,
     drawn_at: DrawnAt | None = None,
 ) -> tuple[dict[tuple[str, int], Tally], list[dict]]:
-    """부위 하나를 간격마다 잰다. (모은 결과, 쌍마다 기록)을 돌려준다.
+    """부위 하나를 안 건드린 시간(spans, ms) 안에서 간격마다 잰다.
+
+    (모은 결과, 쌍마다 기록)을 돌려준다.
 
     립은 간격 대신 순간 하나씩(간격 0)이다.
     직전 창이 있는 부위는 서비스처럼 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
@@ -386,13 +418,13 @@ def measure_part(
     load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
     쌍마다 쪽을 다 잰 뒤 서비스처럼 하위 단계로 바꿔 쪽마다 나가는 영역이 생기는지 센다.
     재지 못한 쪽은 서비스처럼 못 찾음(noUsableFrame)으로 넘기고, 나가는 영역 헛것은 그 쪽을 잰
-    쌍에서만 센다.
+    쌍에서만 센다. 섀도·아이라인은 그 헛것이 난 자리(zone_finds)도 센다.
     drawn_at은 쌍 기준 시각에 앞 아이라인 단계들이 안내한 칸을 내고 아이라인에만 쓴다.
     """
     tallies: dict[tuple[str, int], Tally] = {}
     records: list[dict] = []
     gaps = (0,) if part.name == "lip" else GAPS_SECONDS
-    for span_ in untouched_spans(steps, UNTOUCHED_STEPS[part.name]):
+    for span_ in spans:
         for gap in gaps:
             for t in pair_starts(
                 span_, gap * 1000, part.before_ms, part.after_ms, STRIDE_MS, cautions
@@ -443,23 +475,29 @@ def measure_part(
                 drawn = None if drawn_at is None else drawn_at(t)
                 output, _, _ = output_area(part.name, areas, drawn)
                 for side, m in measures.items():
-                    output_found = found_side(output, side) is not None
-                    tallies[(side, gap)].output_found += output_found
-                    records.append(
-                        {
-                            "part": part.name,
-                            "side": side,
-                            "gapSeconds": gap,
-                            "startMs": t,
-                            "over": round(m.over, 4),
-                            "gate": None if m.gate is None else round(m.gate, 3),
-                            "p99": None
-                            if m.values is None
-                            else round(float(np.percentile(m.values, 99)), 3),
-                            "found": m.found,
-                            "outputFound": output_found,
-                        }
-                    )
+                    output_mask = found_side(output, side)
+                    output_found = output_mask is not None
+                    tally = tallies[(side, gap)]
+                    tally.output_found += output_found
+                    zones = zone_finds(part.name, side, output_mask)
+                    for zone, zone_found in zones.items():
+                        tally.zone_found[zone] = tally.zone_found.get(zone, 0) + zone_found
+                    record = {
+                        "part": part.name,
+                        "side": side,
+                        "gapSeconds": gap,
+                        "startMs": t,
+                        "over": round(m.over, 4),
+                        "gate": None if m.gate is None else round(m.gate, 3),
+                        "p99": None
+                        if m.values is None
+                        else round(float(np.percentile(m.values, 99)), 3),
+                        "found": m.found,
+                        "outputFound": output_found,
+                    }
+                    if zones:
+                        record["outputZones"] = zones
+                    records.append(record)
     return tallies, records
 
 
@@ -479,12 +517,28 @@ def part_zones(part: Part) -> dict[RegionName, np.ndarray | None]:
     return {side: None if part.zone is None else part.zone(side) for side in part.sides}
 
 
+def zone_key(zone: str) -> str:
+    """자리별 나가는 영역 헛것 수를 적는 칸 이름. upper → outputUpperFalsePositives."""
+    return f"output{zone[0].upper()}{zone[1:]}FalsePositives"
+
+
 def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
-    """간격·쪽마다 잡음 분포, 기준값과의 비, 헛것 비율을 줄로 만든다."""
+    """간격·쪽마다 잡음 분포, 기준값과의 비, 헛것 비율을 줄로 만든다.
+
+    섀도·아이라인은 자리(ZONES)마다 나가는 영역 헛것 수와 비율 칸을 더한다.
+    """
     rows = []
     for (side, gap), t in sorted(tallies.items(), key=lambda kv: (kv[0][1], kv[0][0])):
         pct = {f"p{q:g}": hist_percentile(t.hist, q) for q in PERCENTILES}
         p99 = pct["p99"]
+        zones = {}
+        if part.name in ZONE_MIN_CELLS:
+            for zone in ZONES:
+                found = t.zone_found.get(zone, 0)
+                zones[zone_key(zone)] = found
+                zones[zone_key(zone).replace("Positives", "PositiveRatio")] = (
+                    round(found / t.pairs, 3) if t.pairs else None
+                )
         rows.append(
             {
                 "part": part.name,
@@ -505,6 +559,7 @@ def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
                 "outputFalsePositiveRatio": (
                     round(t.output_found / t.pairs, 3) if t.pairs else None
                 ),
+                **zones,
             }
         )
     return rows
@@ -562,7 +617,7 @@ def main() -> None:
         tallies, part_records = measure_part(
             part,
             result,
-            reference.manifest.steps,
+            untouched_spans(UNTOUCHED_SECONDS[part.name]),
             cautions,
             load_map,
             eyeliner_drawn_at if part.name == "eyeliner" else None,
@@ -570,12 +625,17 @@ def main() -> None:
         summary += summarize(part, tallies)
         records += part_records
         for row in summary[-len(tallies) :]:
+            zones = "".join(
+                f"  {zone} {row[zone_key(zone)]}/{row['pairs']}"
+                for zone in ZONES
+                if zone_key(zone) in row
+            )
             print(
                 f"{row['part']:9} {row['side']:9} 간격 {row['gapSeconds']:>3}초"
                 f"  쌍 {row['pairs']:>3}  잡음 99%선 {row['p99']}  기준 {row['threshold']}"
                 f"  헛것 {row['falsePositives']}/{row['pairs']}"
                 f"  크기로 뺀 쌍 {row['sizeSkipped']}"
-                f"  나가는 영역 헛것 {row['outputFalsePositives']}/{row['pairs']}"
+                f"  나가는 영역 헛것 {row['outputFalsePositives']}/{row['pairs']}{zones}"
             )
 
     path = output_dir(folder, occlusion_name) / OUTPUT_FILE

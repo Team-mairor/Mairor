@@ -1,3 +1,4 @@
+from app.schemas.manifest import Manifest
 from tools import guide_scorecard
 
 BROW_S8 = {
@@ -230,3 +231,77 @@ def test_a_line_that_could_not_be_measured_is_left_out_but_a_missing_value_still
     assert by_name(checks)["keepRatio"]["passed"] is None
     assert "keepRatio 못 잼" in guide_scorecard.describe(checks)
     assert guide_scorecard.step_status("lip", stability, boundary, timing)[0] == "failed"
+
+
+def test_every_analysed_step_of_the_test_video_has_a_zone():
+    """시험 영상의 섀도·아이라인·블러셔·립 단계는 모두 자리 이름표가 있다.
+
+    단계표를 다시 나누면서 이름표를 빠뜨리면 그 단계가 자리 요약에서 조용히 빠지므로 막는다.
+    """
+    manifest = Manifest.model_validate_json(
+        (guide_scorecard.AI_ROOT / "samples" / "local_03_seq" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    zoned = {"eyeshadow", "eyeliner", "blush", "lip"}
+    steps = {step.step_id for step in manifest.steps if step.makeup in zoned}
+
+    assert steps and steps == set(guide_scorecard.STEP_ZONES)
+
+
+def test_score_judges_noise_and_counts_steps_for_each_zone():
+    """섀도가 불합격이어도 윗눈두덩·눈 밑 중 어디가 문제인지 자리마다 보이는지 본다.
+
+    헛것 10% 중 9%가 선 위에 난 잡음 줄과, 윗눈두덩 단계는 합격·눈 밑 단계는 못 찾음인 경우를
+    골랐다.
+    """
+    stability = {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.03}
+    timing = {"outsideRatio": 0.1, "keepRatio": 0.9, "strongShare": 0.8}
+
+    def step(step_id, base_found):
+        key = {"part": "eyeshadow", "stepId": step_id, "side": "leftEye"}
+        return key | stability | {"baseFound": base_found}
+
+    docs = {
+        "noise.json": {
+            "summary": [
+                {
+                    "part": "eyeshadow",
+                    "side": "leftEye",
+                    "pairs": 100,
+                    "falsePositives": 10,
+                    "outputFalsePositives": 10,
+                    "outputUpperFalsePositives": 9,
+                    "outputUnderFalsePositives": 1,
+                },
+                {"part": "brow", "side": "leftBrow", "pairs": 100, "falsePositives": 0},
+            ]
+        },
+        "stability.json": {"steps": [step("s10a", True), step("s10b", False)]},
+        "boundary.json": {
+            "steps": [{"part": "eyeshadow", "stepId": "s10a", "side": "leftEye", "intrude": 0.01}]
+        },
+        "timing.json": {
+            "steps": [{"part": "eyeshadow", "stepId": "s10a", "side": "leftEye", **timing}]
+        },
+    }
+
+    result = guide_scorecard.score(docs)
+
+    shadow_noise = next(r for r in result["noise"] if r["part"] == "eyeshadow")
+    assert shadow_noise["passed"] is False
+    assert [(z["zone"], z["passed"]) for z in shadow_noise["zones"]] == [
+        ("upper", False),
+        ("under", True),
+    ]
+    assert "zones" not in next(r for r in result["noise"] if r["part"] == "brow")
+    assert [(r["stepId"], r["zone"], r["status"]) for r in result["steps"]] == [
+        ("s10a", "upper", "passed"),
+        ("s10b", "under", "notFound"),
+    ]
+    shadow = next(p for p in result["parts"] if p["part"] == "eyeshadow")
+    assert shadow["zones"] == [
+        {"zone": "upper", "noisePassed": False, "steps": {"passed": 1, "failed": 0, "notFound": 0}},
+        {"zone": "under", "noisePassed": True, "steps": {"passed": 0, "failed": 0, "notFound": 1}},
+    ]
+    assert next(p for p in result["parts"] if p["part"] == "brow")["zones"] == []

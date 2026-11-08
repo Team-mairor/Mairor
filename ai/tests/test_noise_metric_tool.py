@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from app.schemas.manifest import Manifest, Step
+from app.schemas.manifest import Manifest
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -20,16 +20,6 @@ from tools import noise_metric, timing_metric
 SKIN = (224, 186, 168)
 
 
-def make_step(step_id: str, start: float, end: float) -> Step:
-    return Step(
-        step_id=step_id,
-        order=int(step_id[1:]),
-        start_seconds=start,
-        end_seconds=end,
-        makeup="other",
-    )
-
-
 def skin_map() -> np.ndarray:
     return np.full((MAP_SIZE, MAP_SIZE, 3), SKIN, dtype=np.uint8)
 
@@ -41,15 +31,31 @@ def with_red(base: np.ndarray, cells: np.ndarray, amount: int) -> np.ndarray:
     return out
 
 
-def test_untouched_spans_joins_touching_steps_and_skips_others():
-    steps = [
-        make_step("s1", 0, 10),
-        make_step("s2", 10, 20),
-        make_step("s3", 20, 30),
-        make_step("s4", 30, 40),
-    ]
+def test_untouched_spans_joins_touching_ranges_in_time_order():
+    spans = noise_metric.untouched_spans([(30, 40), (0, 10), (10, 20)])
 
-    assert noise_metric.untouched_spans(steps, ["s1", "s2", "s4"]) == [(0, 20000), (30000, 40000)]
+    assert spans == [(0, 20000), (30000, 40000)]
+
+
+def test_untouched_time_keeps_the_talk_between_the_split_lip_steps():
+    """시험 영상 립은 바른 자리마다 다섯 단계로 나뉘고, 그 사이에 말하는 시간이 있다.
+
+    단계 번호로 안 건드린 시간을 고르면 바른 순간만 남아 그 사이가 빠진다. 그 시간에도 눈썹은
+    건드리지 않으므로 잡음 구간에 넣고, 단계를 나누기 전 챕터 구간을 그대로 써서 고른 이유다.
+    """
+    manifest = Manifest.model_validate_json(
+        (noise_metric.AI_ROOT / "samples" / "local_03_seq" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    lips = sorted((s.start_seconds, s.end_seconds) for s in manifest.steps if s.makeup == "lip")
+    first, last = lips[0][0] * 1000, lips[-1][1] * 1000
+    talk = sum(b[0] - a[1] for a, b in zip(lips, lips[1:], strict=False))
+
+    spans = noise_metric.untouched_spans(noise_metric.UNTOUCHED_SECONDS["brow"])
+
+    assert len(lips) > 1 and talk > 0
+    assert any(start <= first and last <= end for start, end in spans)
 
 
 def test_pair_starts_keep_both_windows_inside_span():
@@ -184,11 +190,16 @@ def test_eye_parts_leave_out_brow_steps():
             encoding="utf-8"
         )
     )
-    brow_steps = {step.step_id for step in manifest.steps if step.makeup == "brow"}
+    brow_steps = [
+        (round(step.start_seconds * 1000), round(step.end_seconds * 1000))
+        for step in manifest.steps
+        if step.makeup == "brow"
+    ]
 
     assert brow_steps
-    assert not brow_steps & set(noise_metric.UNTOUCHED_STEPS["eyeshadow"])
-    assert not brow_steps & set(noise_metric.UNTOUCHED_STEPS["eyeliner"])
+    for part in ("eyeshadow", "eyeliner"):
+        spans = noise_metric.untouched_spans(noise_metric.UNTOUCHED_SECONDS[part])
+        assert not any(noise_metric.overlaps(start, end, spans) for start, end in brow_steps)
 
 
 def test_a_false_find_on_one_cheek_counts_on_both_cheeks_as_output(monkeypatch):
@@ -209,11 +220,10 @@ def test_a_false_find_on_one_cheek_counts_on_both_cheeks_as_output(monkeypatch):
     part = noise_metric.Part(
         "blush", blush_area.CHEEKS, 1000, 1000, 0.5, None, lambda side: [side], measure
     )
-    steps = [make_step("s8", 0.0, 12.0)]
     empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
 
     tallies, records = noise_metric.measure_part(
-        part, None, steps, [], lambda rows, side: (skin_map(), empty)
+        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty)
     )
 
     left, right = tallies[("leftCheek", 1)], tallies[("rightCheek", 1)]
@@ -221,6 +231,66 @@ def test_a_false_find_on_one_cheek_counts_on_both_cheeks_as_output(monkeypatch):
     assert (left.found, right.found) == (left.pairs, 0)
     assert left.output_found == right.output_found == left.pairs
     assert all(r["outputFound"] for r in records)
+
+
+@pytest.mark.parametrize(
+    ("part", "least"),
+    [
+        ("eyeshadow", eyeshadow_area.MIN_PIECE_CELLS),
+        ("eyeliner", eyeliner_area.FOUND_MIN_CELLS),
+    ],
+)
+def test_a_side_of_the_eye_line_counts_only_with_enough_cells(part, least):
+    """선 아래로 넘친 칸이 서비스가 영역으로 보는 가장 작은 크기보다 적으면 눈 밑 헛것이 아니다.
+
+    선에 걸친 몇 칸 때문에 윗눈두덩 헛것이 두 자리 모두에 세어지지 않게 하려고 고른 경계다.
+    """
+    upper = eyeliner_area._upper_side("leftEye")
+    rows, cols = np.nonzero(~upper)
+    mask = upper.copy()
+    mask[rows[: least - 1], cols[: least - 1]] = True
+
+    assert noise_metric.zone_finds(part, "leftEye", mask) == {"upper": True, "under": False}
+    mask[rows[least - 1], cols[least - 1]] = True
+    assert noise_metric.zone_finds(part, "leftEye", mask) == {"upper": True, "under": True}
+    assert noise_metric.zone_finds(part, "leftEye", None) == {"upper": False, "under": False}
+    assert noise_metric.zone_finds("blush", "leftCheek", mask) == {}
+
+
+def test_a_false_find_above_the_eye_line_counts_as_upper_only(monkeypatch):
+    """한쪽 눈 윗눈두덩에만 헛것이 나면 뒤집어 그린 반대쪽 눈까지 위 자리 헛것으로만 센다.
+
+    섀도 불합격만으로는 윗눈두덩·눈 밑 중 어디를 고칠지 모르므로, 나가는 영역으로 자리를
+    가르는지 본다.
+    """
+    monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
+
+    def measure(before, after, eye, unknown=None):
+        if eye == "leftEye":
+            upper = eyeshadow_area.eyeshadow_range(eye) & eyeliner_area._upper_side(eye)
+            area = eyeshadow_area.EyeshadowArea(mask=upper, strength=2.0)
+        else:
+            area = eyeshadow_area.EyeshadowArea(mask=None, reason="eyeshadowColorNotFound")
+        return noise_metric.Measure(None, 0.0, None, area.mask is not None, area)
+
+    part = noise_metric.Part(
+        "eyeshadow", eyeshadow_area.EYES, 1000, 1000, 0.5, None, lambda side: [side], measure
+    )
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    tallies, records = noise_metric.measure_part(
+        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty)
+    )
+
+    for eye in eyeshadow_area.EYES:
+        tally = tallies[(eye, 1)]
+        assert tally.pairs > 0
+        assert tally.zone_found == {"upper": tally.pairs, "under": 0}
+    assert all(r["outputZones"] == {"upper": True, "under": False} for r in records)
+    row = next(r for r in noise_metric.summarize(part, tallies) if r["gapSeconds"] == 1)
+    assert row["outputUpperFalsePositiveRatio"] == 1.0
+    assert row["outputUnderFalsePositiveRatio"] == 0.0
 
 
 def face_row(width: float) -> SimpleNamespace:
@@ -253,7 +323,7 @@ def test_pair_whose_face_sizes_cannot_be_matched_is_skipped_like_the_service(mon
     tallies, records = noise_metric.measure_part(
         part,
         None,
-        [make_step("s8", 0.0, 12.0)],
+        [(0, 12000)],
         [],
         lambda rows, side: loads.append(side) or (skin_map(), empty),
     )

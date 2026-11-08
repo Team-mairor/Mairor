@@ -1,0 +1,571 @@
+{
+  "videoId": "local_03_seq",
+  "durationSeconds": 1858.4,
+  "steps": [
+    {
+      "stepId": "s4",
+      "order": 1,
+      "startSeconds": 128,
+      "endSeconds": 209,
+      "makeup": "other",
+      "partLabel": "선크림",
+      "summary": "선크림을 얼굴 전체에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s5",
+      "order": 2,
+      "startSeconds": 209,
+      "endSeconds": 367,
+      "makeup": "other",
+      "partLabel": "선크림 반반 비교",
+      "summary": "얼굴 반쪽씩 다른 선크림을 바르고 차이를 비교합니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "얼굴 반쪽",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s6",
+      "order": 3,
+      "startSeconds": 367,
+      "endSeconds": 439,
+      "makeup": "foundation",
+      "partLabel": "쿠션",
+      "summary": "쿠션을 퍼프로 얼굴 전체에 두드려 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s7",
+      "order": 4,
+      "startSeconds": 439,
+      "endSeconds": 455,
+      "makeup": "foundation",
+      "partLabel": "컨실러",
+      "summary": "컨실러 펜슬로 얼굴의 잡티를 살짝 가립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "얼굴 잡티",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s8a",
+      "order": 5,
+      "startSeconds": 464,
+      "endSeconds": 511,
+      "makeup": "brow",
+      "partLabel": "아이브로우",
+      "summary": "아이브로우 펜슬로 눈썹을 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈썹",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s8b",
+      "order": 6,
+      "startSeconds": 513,
+      "endSeconds": 547,
+      "makeup": "foundation",
+      "partLabel": "컨실러",
+      "summary": "컨실러 펜슬과 브러시로 눈썹 테두리를 정리합니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈썹 테두리",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s9",
+      "order": 7,
+      "startSeconds": 548,
+      "endSeconds": 640,
+      "makeup": "contour",
+      "partLabel": "코쉐딩",
+      "summary": "쉐딩 스틱으로 코 옆에 음영을 넣습니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "콧대 옆",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s10a",
+      "order": 8,
+      "startSeconds": 646,
+      "endSeconds": 677,
+      "makeup": "eyeshadow",
+      "partLabel": "아이섀도우",
+      "summary": "브러시로 섀도를 윗눈두덩에 펴 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "윗눈두덩",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s10b",
+      "order": 9,
+      "startSeconds": 681,
+      "endSeconds": 691,
+      "makeup": "eyeshadow",
+      "partLabel": "아이섀도우",
+      "summary": "같은 섀도를 눈 밑 눈꼬리 쪽에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈 밑 눈꼬리 쪽",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s11a",
+      "order": 10,
+      "startSeconds": 714,
+      "endSeconds": 765,
+      "makeup": "eyeshadow",
+      "partLabel": "애교살",
+      "summary": "브러시로 섀도를 애교살에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "애교살",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s11b",
+      "order": 11,
+      "startSeconds": 777,
+      "endSeconds": 781,
+      "makeup": "eyeshadow",
+      "partLabel": "쌍꺼풀 라인 음영",
+      "summary": "브러시로 쌍꺼풀 라인에 음영을 넣습니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "쌍꺼풀 라인",
+          "source": "onscreenText",
+          "at": 777
+        }
+      }
+    },
+    {
+      "stepId": "s12",
+      "order": 12,
+      "startSeconds": 783,
+      "endSeconds": 815,
+      "makeup": "eyeliner",
+      "partLabel": "아이라인",
+      "summary": "펜슬로 윗 속눈썹 사이를 채우고 눈꼬리 라인을 일자로 뺍니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "윗눈꺼풀 라인과 눈꼬리",
+          "source": "onscreenText",
+          "at": 806
+        }
+      }
+    },
+    {
+      "stepId": "s13a",
+      "order": 13,
+      "startSeconds": 831,
+      "endSeconds": 839,
+      "makeup": "eyeliner",
+      "partLabel": "언더트임",
+      "summary": "펜슬로 눈 앞머리 아래 라인을 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈 앞머리 아래",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s13b",
+      "order": 14,
+      "startSeconds": 840,
+      "endSeconds": 859,
+      "makeup": "eyeliner",
+      "partLabel": "언더트임",
+      "summary": "펜슬로 아래 눈꼬리 라인을 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "아래 눈꼬리",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s14",
+      "order": 15,
+      "startSeconds": 916,
+      "endSeconds": 933,
+      "makeup": "eyeliner",
+      "partLabel": "언더래쉬",
+      "summary": "연한 펜슬로 아래 속눈썹 라인을 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "아래 속눈썹 라인",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s15a",
+      "order": 16,
+      "startSeconds": 966,
+      "endSeconds": 1113,
+      "makeup": "mascara",
+      "partLabel": "속눈썹",
+      "summary": "인조 속눈썹을 붙이고 마스카라를 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "윗속눈썹",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s15b",
+      "order": 17,
+      "startSeconds": 1118,
+      "endSeconds": 1123,
+      "makeup": "eyeliner",
+      "partLabel": "언더래쉬",
+      "summary": "펜슬로 아래 속눈썹 뿌리를 톡톡 채웁니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "아래 속눈썹 뿌리",
+          "source": "onscreenText",
+          "at": 1118
+        }
+      }
+    },
+    {
+      "stepId": "s16a",
+      "order": 18,
+      "startSeconds": 1132,
+      "endSeconds": 1143,
+      "makeup": "eyeliner",
+      "partLabel": "점막",
+      "summary": "펜슬로 윗점막을 채웁니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "윗점막",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s16b",
+      "order": 19,
+      "startSeconds": 1149,
+      "endSeconds": 1153,
+      "makeup": "eyeliner",
+      "partLabel": "페이크래쉬",
+      "summary": "리퀴드 라이너로 아래 속눈썹을 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "아래 속눈썹",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s17",
+      "order": 20,
+      "startSeconds": 1171,
+      "endSeconds": 1182,
+      "makeup": "eyeshadow",
+      "partLabel": "애교살",
+      "summary": "펜슬로 애교살을 그리고 브러시로 펴 줍니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "애교살",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s18",
+      "order": 21,
+      "startSeconds": 1183,
+      "endSeconds": 1191,
+      "makeup": "other",
+      "partLabel": "렌즈",
+      "summary": "컬러 렌즈를 끼웁니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s19",
+      "order": 22,
+      "startSeconds": 1194,
+      "endSeconds": 1203,
+      "makeup": "eyeshadow",
+      "partLabel": "마무리 음영",
+      "summary": "브러시로 눈꼬리 아래에 음영을 넣습니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈꼬리 아래",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s20",
+      "order": 23,
+      "startSeconds": 1223,
+      "endSeconds": 1383,
+      "makeup": "highlight",
+      "partLabel": "컨실러",
+      "summary": "밝은 컨실러로 눈 밑과 콧대를 밝힙니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈 밑과 콧대",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s21",
+      "order": 24,
+      "startSeconds": 1383,
+      "endSeconds": 1402,
+      "makeup": "foundation",
+      "partLabel": "파우더",
+      "summary": "파우더를 브러시로 얼굴에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "얼굴 전체",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s22a",
+      "order": 25,
+      "startSeconds": 1407,
+      "endSeconds": 1432,
+      "makeup": "blush",
+      "partLabel": "블러셔",
+      "summary": "브러시로 블러셔를 눈 밑부터 볼에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈 밑 볼",
+          "source": "onscreenText",
+          "at": 1418
+        }
+      }
+    },
+    {
+      "stepId": "s22b",
+      "order": 26,
+      "startSeconds": 1435,
+      "endSeconds": 1452,
+      "makeup": "blush",
+      "partLabel": "코 블러셔",
+      "summary": "같은 블러셔를 코끝과 콧등에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "코끝과 콧등",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s22c",
+      "order": 27,
+      "startSeconds": 1457,
+      "endSeconds": 1463,
+      "makeup": "blush",
+      "partLabel": "블러셔",
+      "summary": "같은 블러셔를 콧대 위 눈 앞머리 사이에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "콧대 위 눈 앞머리 사이",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s23",
+      "order": 28,
+      "startSeconds": 1481,
+      "endSeconds": 1496,
+      "makeup": "brow",
+      "partLabel": "아이브로우",
+      "summary": "펜슬로 얇아 보이는 눈썹을 덧그리고 손가락으로 펴 줍니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "눈썹 앞머리와 꼬리",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s24",
+      "order": 29,
+      "startSeconds": 1509,
+      "endSeconds": 1632,
+      "makeup": "highlight",
+      "partLabel": "하이라이터",
+      "summary": "하이라이터를 콧대와 볼에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "콧대와 볼",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s25",
+      "order": 30,
+      "startSeconds": 1632,
+      "endSeconds": 1692,
+      "makeup": "highlight",
+      "partLabel": "무펄 하이라이터",
+      "summary": "무펄 하이라이터를 콧볼 위 패인 곳에 바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "콧볼 위",
+          "source": "onscreenText",
+          "at": 1645
+        }
+      }
+    },
+    {
+      "stepId": "s26a",
+      "order": 31,
+      "startSeconds": 1696,
+      "endSeconds": 1728,
+      "makeup": "lip",
+      "partLabel": "오버립",
+      "summary": "립 펜슬로 입술 윤곽을 바깥으로 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "입술 윤곽",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s26b",
+      "order": 32,
+      "startSeconds": 1733,
+      "endSeconds": 1738,
+      "makeup": "lip",
+      "partLabel": "오버립",
+      "summary": "진한 립 펜슬로 입꼬리에 음영을 그립니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "입꼬리",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s26c",
+      "order": 33,
+      "startSeconds": 1747,
+      "endSeconds": 1755,
+      "makeup": "lip",
+      "partLabel": "오버립",
+      "summary": "펜슬로 윗입술 가운데를 덧그리고 손가락으로 펴 줍니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "윗입술 가운데",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s27a",
+      "order": 34,
+      "startSeconds": 1762,
+      "endSeconds": 1769,
+      "makeup": "lip",
+      "partLabel": "틴트",
+      "summary": "틴트를 입술 안쪽에 바르고 손가락으로 펴 줍니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "입술 안쪽",
+          "source": "scene"
+        }
+      }
+    },
+    {
+      "stepId": "s27b",
+      "order": 35,
+      "startSeconds": 1774,
+      "endSeconds": 1779,
+      "makeup": "lip",
+      "partLabel": "글로스",
+      "summary": "글로스를 입술 가운데에 덧바릅니다.",
+      "product": null,
+      "facts": {
+        "area": {
+          "value": "입술 가운데",
+          "source": "scene"
+        }
+      }
+    }
+  ]
+}

@@ -5,6 +5,26 @@ BE가 AI 서버에 넘기는 단계별 설명 재료다. BE는 GMS(Gemini)로 �
 - 모델: `app/schemas/guide.py`의 `GuideInput`
 - 공유 스키마: `shared/guide-input/guide_input.v2.schema.json`. BE도 이 파일로 검사한다 ([README](../../shared/guide-input/README.md))
 - 전체 예시: `samples/local_01/guide_input.json` (Gemini 시험 4회차 결과를 바꾸고, `area`·`palette`는 요약을 보고 손으로 채운 것). 아래 예시는 그중 5·11단계. 이 파일의 `images`는 이미지 비교 도구(`tools/explain_image_compare.py`)용으로 남긴 예전 칸이다
+- 시험 영상 예시: `samples/local_03_seq/guide_input.json` (사진으로 본 바른 자리마다 나눈 35단계. `partLabel`·`facts.area`는 BE 단계 추출 프롬프트 규칙대로 손으로 채웠고, BE가 아직 뽑지 않는 `eyeZone`과 영역 계산에 쓰지 않는 `product`는 비웠다). 같은 폴더 `manifest.json`의 단계와 번호·구간이 같다
+
+## local_01 샘플의 두 단계표
+
+`samples/local_01`의 `manifest.json`은 사람이 영상을 보고 정한 10단계라 이 형식 예시(`guide_input.json`, Gemini 19단계)와 단계 번호가 다르다. 같은 번호가 다른 단계를 가리키므로(manifest `s10`은 립, guide_input `s10`은 아이섀도) 아래 표로 이어 본다. `local_01_seq` · `local_01_lip_seq` · `local_01_no_face` · `local_01_occluded`의 manifest도 같은 10단계다.
+
+manifest는 `local_01`의 505초 사진을 립을 다 바른 뒤 사진으로, `local_01_lip_seq`의 503.5초 뒤 사진을 립 바른 뒤 사진으로 쓴다. guide_input의 마지막 립 단계(`s19`)는 515초까지라 manifest를 guide_input 번호·구간으로 바꾸면 이 사진들의 뜻이 달라져서 두 표를 그대로 둔다.
+
+| manifest (사람, 10단계) | guide_input (Gemini, 19단계) |
+|---|---|
+| `s1` other 20~203초 | `s1`~`s4` other |
+| `s2` foundation 204~221초 | `s5` foundation |
+| `s3` other 222~242초 | `s6` other |
+| `s4` blush 243~267초 | `s7` blush |
+| `s5` other 268~287초 | `s8` other, `s9` blush |
+| `s6` eyeshadow 288~360초 | `s10` eyeshadow, `s11` eyeliner |
+| `s7` eyeliner 361~420초 | `s12` eyeliner, `s13` eyeshadow |
+| `s8` other 421~429초 | `s14` mascara |
+| `s9` other 430~463초 | `s15` contour, `s16` highlight |
+| `s10` lip 464~503.5초 | `s17` · `s18` · `s19` lip (465~515초) |
 
 ## 칸
 

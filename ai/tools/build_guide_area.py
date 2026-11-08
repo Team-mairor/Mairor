@@ -2,17 +2,21 @@
 
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 서비스와 같게 가림 찾기 모델로 사진마다 가린 칸을 빼고 만든다.
+샘플 폴더에 BE 형식 가이드 입력(guide_input.json)이 있으면 그 단계로 만든다(guide_steps).
 실행 (ai/ 폴더에서): uv run python tools/build_guide_area.py samples/local_01_lip_seq
 """
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
+from app.schemas.guide import GuideInput, GuideInputStep
 from app.schemas.guide_area import GuideArea
 from app.schemas.landmarks import LandmarksResult
+from app.schemas.manifest import Step
 from app.tasks.area.guide_area_builder import build_guide_area
 from app.tasks.area.landmarks.occlusion import remember_by_frame
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
@@ -21,6 +25,20 @@ from app.tasks.area.reference_area import OCCLUSION_KEEP
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = Path("output") / "guide_area.json"
+GUIDE_INPUT_FILE = "guide_input.json"
+
+
+def guide_steps(folder: Path, manifest_steps: Sequence[Step]) -> list[Step] | list[GuideInputStep]:
+    """영역을 만들 단계. 샘플 폴더에 guide_input.json이 있으면 그 단계, 없으면 매니페스트 단계다.
+
+    서비스는 BE가 보낸 가이드 입력 단계로 영역을 만들고, 아이섀도 기본 가이드 키를 그 단계 글
+    (partLabel·facts.area)로 고른다. 매니페스트 단계에는 글이 없어 늘 위아래 모두(eyeshadow)가
+    되므로, 가이드 입력이 있으면 서비스와 같은 키가 나오게 그 단계를 쓴다.
+    """
+    path = folder / GUIDE_INPUT_FILE
+    if not path.is_file():
+        return list(manifest_steps)
+    return GuideInput.model_validate_json(path.read_text(encoding="utf-8")).steps
 
 
 def main() -> None:
@@ -39,7 +57,7 @@ def main() -> None:
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     area = build_guide_area(
         reference.manifest.video_id,
-        reference.manifest.steps,
+        guide_steps(folder, reference.manifest.steps),
         result,
         lambda row: read_frame_rgb(reference, frames[row.frame_index]),
         occlusion=remember_by_frame(find_occlusion, OCCLUSION_KEEP),

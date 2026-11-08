@@ -1,9 +1,14 @@
+from pathlib import Path
+
 import numpy as np
 from PIL import Image
 
+from app.schemas.guide import GuideInputStep
 from app.schemas.guide_area import AreaStep, AreaSubStep, GuideArea, MeshAnchor
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
+from app.schemas.manifest import Manifest
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.guide_area_builder import _eyeshadow_template_id
 from tools import build_guide_area, draw_guide_area
 
 
@@ -147,3 +152,26 @@ def test_hole_is_drawn_only_on_the_right_half(tmp_path):
     half = sheet.shape[1] // 2
     assert blue[:, half:].any()
     assert not blue[:, :half].any()
+
+
+def test_guide_input_steps_are_used_when_the_sample_has_them():
+    """서비스는 BE 가이드 입력 단계의 글로 아이섀도 기본 가이드 키를 고른다.
+
+    시험 영상처럼 guide_input.json이 있는 샘플은 그 단계를 써서 윗눈두덩 단계(s10a)가
+    윗눈두덩 기본 가이드를 받는지 보고, 가이드 입력이 없는 샘플은 매니페스트 단계 그대로인지 본다.
+    """
+    samples = Path(build_guide_area.AI_ROOT) / "samples"
+
+    def manifest_steps(name):
+        path = samples / name / "manifest.json"
+        return Manifest.model_validate_json(path.read_text(encoding="utf-8")).steps
+
+    with_input = build_guide_area.guide_steps(
+        samples / "local_03_seq", manifest_steps("local_03_seq")
+    )
+    upper = next(step for step in with_input if step.step_id == "s10a")
+    without = manifest_steps("local_01_lip_seq")
+
+    assert isinstance(upper, GuideInputStep)
+    assert _eyeshadow_template_id(upper) == "eyeshadowUpper"
+    assert build_guide_area.guide_steps(samples / "local_01_lip_seq", without) == without

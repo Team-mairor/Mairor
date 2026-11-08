@@ -26,7 +26,7 @@ SAMPLE = REPO / "ai" / "samples" / "local_03_seq"
 CHECKED = SAMPLE / "output" / "frames_checked.json"
 FINGER_ON_CHEEK = 58044
 PENCIL_AND_SUBTITLE_ON_LIPS = 27246
-CLEAN_FACE = 41904
+CLEAN_FACE = 41910
 CLOSED_EYES = 49812
 NEEDS_SAMPLE = pytest.mark.skipif(
     not CHECKED.is_file(), reason="local_03_seq 사진과 사진 판정 결과는 git에 없다"
@@ -218,9 +218,10 @@ def test_finger_on_the_cheek_is_found():
 
 @NEEDS_SAMPLE
 def test_clean_face_has_no_occlusion():
-    """698.4초: 가린 것이 없는 얼굴이다. 가림이 하나도 없어야 한다.
+    """698.5초: 가린 것이 없는 얼굴이다. 가림이 하나도 없어야 한다.
 
-    MediaPipe 셀카 다중 분할 그대로는 같은 사진의 얼굴 테두리를 따라 6,644px을 가림으로 칠했다.
+    MediaPipe 셀카 다중 분할 그대로는 바로 앞 698.4초 사진의 얼굴 테두리를 따라
+    6,644px을 가림으로 칠했다. 시험 영상 사진을 BE 규칙으로 다시 뽑으면서 698.4초 사진이 빠졌다.
     """
     row, rgb = sample_photo(CLEAN_FACE)
 

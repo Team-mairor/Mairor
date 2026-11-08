@@ -5,8 +5,11 @@
 
 output/noise.json, stability.json, boundary.json, timing.json을 읽으므로 먼저 tools/noise_metric.py,
 stability_metric.py, boundary_metric.py, timing_metric.py를 실행해 둔다.
-합격선(NOISE_LINE, STEP_LINES)은 모든 지표가 정상인 기준 사례(눈썹 s8, 립 s27)가 조금 여유 있게
-통과하는 값이다. 잡음은 부위·쪽마다, 나머지는 실제 바른 단계의 쪽마다 판정한다.
+합격선(NOISE_LINE, STEP_LINES)은 모든 지표가 정상인 기준 사례(챕터 단위 단계표의 눈썹 s8,
+립 s27)가 조금 여유 있게 통과하는 값이다. 잡음은 부위·쪽마다, 나머지는 실제 바른 단계의 쪽마다
+판정한다.
+단계마다 사진으로 본 바른 자리(STEP_ZONES)를 붙이고, 부위 요약에 자리별 단계 판정 수를 더한다.
+섀도·아이라인 잡음은 나가는 영역 헛것을 자리(눈꼬리·앞머리 잇는 선 위·아래)마다 다시 판정한다.
 서비스 그대로의 창에서 영역을 못 찾은 쪽은 notFound로 따로 센다.
 진한 칸 비율은 아이라인에 쓰지 않는다. 아이라인 색 값은 바뀜/안 바뀜 두 값이라 늘 1에 가깝다.
 지표마다 선까지의 배수(gap)도 낸다. 1 이하면 합격 쪽이고 클수록 선에서 멀다.
@@ -33,6 +36,30 @@ from tools.occlusion_tables import USAGE, output_dir, split_occlusion
 INPUT_FILES = ("noise.json", "stability.json", "boundary.json", "timing.json")
 OUTPUT_FILE = "scorecard.json"
 PARTS = ("brow", "eyeshadow", "eyeliner", "blush", "lip")
+NOISE_ZONES = ("upper", "under")
+STEP_ZONES: dict[str, str] = {
+    "s10a": "upper",
+    "s10b": "under",
+    "s11a": "under",
+    "s11b": "upper",
+    "s17": "under",
+    "s19": "under",
+    "s12": "upper",
+    "s13a": "under",
+    "s13b": "under",
+    "s14": "under",
+    "s15b": "under",
+    "s16a": "waterline",
+    "s16b": "under",
+    "s22a": "cheek",
+    "s22b": "nose",
+    "s22c": "noseBridge",
+    "s26a": "outline",
+    "s26b": "corner",
+    "s26c": "upperCenter",
+    "s27a": "inside",
+    "s27b": "center",
+}
 
 StepKey = tuple[str, str, str]
 
@@ -126,6 +153,26 @@ def noise_rates(
     return {k: (found / pairs if pairs else None) for k, (found, pairs) in totals.items()}
 
 
+def zone_noise_rates(doc: dict, zone: str) -> dict[tuple[str, str], float | None]:
+    """자리별 나가는 영역 헛것 칸이 있는 줄(섀도·아이라인)만 부위·쪽마다 합쳐 헛것 비율을 낸다.
+
+    칸 이름은 잡음 도구 noise_metric.zone_key와 같다(upper → outputUpperFalsePositives).
+    """
+    key = f"output{zone[0].upper()}{zone[1:]}FalsePositives"
+    totals: dict[tuple[str, str], tuple[int, int]] = {}
+    for row in doc["summary"]:
+        if key not in row:
+            continue
+        found, pairs = totals.get((row["part"], row["side"]), (0, 0))
+        totals[(row["part"], row["side"])] = (found + row[key], pairs + row["pairs"])
+    return {k: (found / pairs if pairs else None) for k, (found, pairs) in totals.items()}
+
+
+def zone_order(names: Sequence[str | None]) -> list[str]:
+    """자리 이름을 처음 나온 차례대로 한 번씩. 자리가 없는 단계(None)는 뺀다."""
+    return list(dict.fromkeys(name for name in names if name is not None))
+
+
 def by_step(doc: dict) -> dict[StepKey, dict]:
     """결과 파일의 단계 줄을 (부위, 단계, 쪽)으로 찾을 수 있게 묶는다."""
     return {(row["part"], row["stepId"], row["side"]): row for row in doc["steps"]}
@@ -155,29 +202,51 @@ def step_status(part: str, stability: dict, boundary: dict, timing: dict) -> tup
     return ("passed" if passed else "failed"), checks
 
 
+def status_counts(rows: Sequence[dict]) -> dict[str, int]:
+    """단계 줄들의 판정(합격·불합격·못 찾음)마다 수."""
+    return {
+        status: sum(r["status"] == status for r in rows)
+        for status in ("passed", "failed", "notFound")
+    }
+
+
 def score(docs: dict[str, dict]) -> dict:
     """결과 파일 네 개(이름 → 내용)로 잡음 판정, 단계 판정, 부위 요약을 낸다.
 
     판정(passed·status·checks)은 나가는 영역 값으로 하고,
     쪽마다 찾은 영역 판정은 side로 시작하는 칸에 둔다.
+    잡음 줄에 자리별 헛것 칸이 있으면 자리마다 판정을 zones에 더한다.
+    단계 줄에는 STEP_ZONES의 자리를 zone에 적고(없으면 None),
+    부위 요약의 zones에 자리마다 잡음 판정(잡음을 자리로 나누지 않는 자리는 None)과
+    단계 판정 수를 둔다.
+    부위 합격 여부는 자리와 상관없이 지금처럼 부위 전체로 정한다.
     """
     side_rates = noise_rates(docs["noise.json"]) or {}
     output_rates = noise_rates(docs["noise.json"], "outputFalsePositives")
+    zone_rates = {zone: zone_noise_rates(docs["noise.json"], zone) for zone in NOISE_ZONES}
     noise_rows = []
     for (part, side), side_rate in sorted(side_rates.items()):
         rate = side_rate if output_rates is None else output_rates[(part, side)]
         passed, checks = judge(part, {"falsePositiveRatio": rate}, [NOISE_LINE])
         side_passed, side_checks = judge(part, {"falsePositiveRatio": side_rate}, [NOISE_LINE])
-        noise_rows.append(
-            {
-                "part": part,
-                "side": side,
-                "passed": passed,
-                "checks": checks,
-                "sidePassed": side_passed,
-                "sideChecks": side_checks,
-            }
-        )
+        row = {
+            "part": part,
+            "side": side,
+            "passed": passed,
+            "checks": checks,
+            "sidePassed": side_passed,
+            "sideChecks": side_checks,
+        }
+        zones = []
+        for zone, rates in zone_rates.items():
+            if (part, side) in rates:
+                zone_passed, zone_checks = judge(
+                    part, {"falsePositiveRatio": rates[(part, side)]}, [NOISE_LINE]
+                )
+                zones.append({"zone": zone, "passed": zone_passed, "checks": zone_checks})
+        if zones:
+            row["zones"] = zones
+        noise_rows.append(row)
 
     boundary, timing = by_step(docs["boundary.json"]), by_step(docs["timing.json"])
     step_rows = []
@@ -194,6 +263,7 @@ def score(docs: dict[str, dict]) -> dict:
             {
                 "part": part,
                 "stepId": step_id,
+                "zone": STEP_ZONES.get(step_id),
                 "side": side,
                 "status": status,
                 "checks": checks,
@@ -206,17 +276,26 @@ def score(docs: dict[str, dict]) -> dict:
     for part in PARTS:
         noise = [r for r in noise_rows if r["part"] == part]
         steps = [r for r in step_rows if r["part"] == part]
-        counts = {
-            status: sum(r["status"] == status for r in steps)
-            for status in ("passed", "failed", "notFound")
-        }
+        counts = status_counts(steps)
         noise_passed = bool(noise) and all(r["passed"] for r in noise)
+        zone_noise = [z for r in noise for z in r.get("zones", [])]
+        zones = []
+        for zone in zone_order([r["zone"] for r in steps] + [z["zone"] for z in zone_noise]):
+            judged = [z["passed"] for z in zone_noise if z["zone"] == zone]
+            zones.append(
+                {
+                    "zone": zone,
+                    "noisePassed": all(judged) if judged else None,
+                    "steps": status_counts([r for r in steps if r["zone"] == zone]),
+                }
+            )
         parts.append(
             {
                 "part": part,
                 "noisePassed": noise_passed,
                 "steps": counts,
                 "passed": noise_passed and counts["failed"] == 0 and counts["notFound"] == 0,
+                "zones": zones,
             }
         )
     return {"noise": noise_rows, "steps": step_rows, "parts": parts}
@@ -249,17 +328,23 @@ def main() -> None:
     docs = {name: json.loads((folder / name).read_text(encoding="utf-8")) for name in INPUT_FILES}
     result = score(docs)
     names = {"passed": "합격", "failed": "불합격", "notFound": "못 찾음"}
+    passed_names = {True: "합격", False: "불합격", None: "-"}
     for row in result["noise"]:
         status = "합격" if row["passed"] else "불합격"
         side = "합격" if row["sidePassed"] else "불합격"
+        zones = "".join(
+            f"  {z['zone']} {passed_names[z['passed']]} {describe(z['checks'])}"
+            for z in row.get("zones", [])
+        )
         print(
             f"잡음 {row['part']:9} {row['side']:10} {status}  {describe(row['checks'])}"
-            f"  (쪽마다 {side})"
+            f"  (쪽마다 {side}){zones}"
         )
     for row in result["steps"]:
         print(
-            f"단계 {row['part']:9} {row['stepId']:4} {row['side']:10} {names[row['status']]}"
-            f"  {describe(row['checks'])}  (쪽마다 {names[row['sideStatus']]})"
+            f"단계 {row['part']:9} {row['stepId']:4} {row['zone'] or '-':11} {row['side']:10}"
+            f" {names[row['status']]}  {describe(row['checks'])}"
+            f"  (쪽마다 {names[row['sideStatus']]})"
         )
     for row in result["parts"]:
         steps = row["steps"]
@@ -268,6 +353,13 @@ def main() -> None:
             f"  잡음 {'합격' if row['noisePassed'] else '불합격'}"
             f"  단계 합격 {steps['passed']} 불합격 {steps['failed']} 못 찾음 {steps['notFound']}"
         )
+        for zone in row["zones"]:
+            counts = zone["steps"]
+            print(
+                f"  자리 {zone['zone']:11} 잡음 {passed_names[zone['noisePassed']]}"
+                f"  단계 합격 {counts['passed']} 불합격 {counts['failed']}"
+                f" 못 찾음 {counts['notFound']}"
+            )
 
     lines = [NOISE_LINE, *STEP_LINES]
     path = folder / OUTPUT_FILE
