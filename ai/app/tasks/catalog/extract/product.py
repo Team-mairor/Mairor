@@ -17,6 +17,7 @@ from app.tasks.catalog.contract import (
     Shade,
     VariantHints,
 )
+from app.tasks.catalog.detail.images import find_detail_images
 from app.tasks.catalog.discover.registry import BrandSite, Platform
 from app.tasks.catalog.extract.generic import parse_generic_options
 from app.tasks.catalog.extract.model import MAX_SHADE_NAME, Extraction, RawShade, clean_text
@@ -199,6 +200,9 @@ def build_product(
         "tried": [a.method for a in attempts],
         "pageTitle": meta.title,
         "links": [link.model_dump(mode="json") for link in links],
+        "detailImages": [
+            {"url": image.url, "skip": image.skip} for image in find_detail_images(html, url)
+        ],
         **chosen.raw,
     }
     return product, raw
