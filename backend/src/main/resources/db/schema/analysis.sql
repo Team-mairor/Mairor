@@ -1,4 +1,4 @@
--- 영상 · 분석 작업 · 가이드 · LLM 호출 기록 (S15P31A306-307). 엔티티: videos/entity, analysis/entity, guides/entity
+-- 영상 · 분석 작업 · 가이드 · 추천 매칭 · LLM 호출 기록 (S15P31A306-307, 325). 엔티티: videos/entity, analysis/entity, guides/entity, matching/entity
 --
 -- 운영 프로파일은 ddl-auto=validate 라서 이 테이블들이 먼저 있어야 앱이 기동한다.
 -- 빈 DB 에만 적용한다. 이미 테이블이 있는 DB 에 다시 적용하면 already exists 로 실패한다.
@@ -203,6 +203,28 @@ CREATE TRIGGER increment_guide_reference_version_for_color_change
         (CASE WHEN NEW.review_status IN ('AUTO_APPROVED', 'APPROVED') THEN NEW.color_hex END)
     )
     EXECUTE FUNCTION increment_guide_reference_version_for_color_change_fn();
+
+-- 추천 결과. 회원·가이드 버전과 API 응답 스냅샷을 보존해, 이후 데이터가 바뀌어도 stale 결과를 재계산하지 않는다.
+-- match_snapshot 에 단계별 결과·기준 색·후보 파우치 항목/색 칸 스냅샷을 JSON 으로 저장한다.
+CREATE TABLE guide_matches (
+    id                    uuid                        NOT NULL,
+    user_id               uuid                        NOT NULL,
+    guide_id              uuid                        NOT NULL,
+    guide_version         integer                     NOT NULL,
+    pouch_version         bigint                      NOT NULL,
+    reference_version     integer                     NOT NULL,
+    compatibility_version integer                     NOT NULL,
+    match_snapshot        jsonb                       NOT NULL,
+    created_at            timestamp(6) with time zone NOT NULL,
+    CONSTRAINT guide_matches_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_guide_matches_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    CONSTRAINT fk_guide_matches_guide FOREIGN KEY (guide_id) REFERENCES guides (id),
+    CONSTRAINT ck_guide_matches_guide_version CHECK (guide_version >= 1),
+    CONSTRAINT ck_guide_matches_pouch_version CHECK (pouch_version >= 0),
+    CONSTRAINT ck_guide_matches_reference_version CHECK (reference_version >= 0),
+    CONSTRAINT ck_guide_matches_compatibility_version CHECK (compatibility_version >= 1)
+);
+CREATE INDEX idx_guide_matches_user_created ON guide_matches (user_id, created_at DESC, id DESC);
 
 -- LLM 호출 기록. 토큰·소요·비용 확인과 응답 원문 보존용. 분석 작업 밖에서 부른 호출은 analysis_job_id 가 NULL.
 CREATE TABLE llm_calls (
