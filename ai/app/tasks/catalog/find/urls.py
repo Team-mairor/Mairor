@@ -15,6 +15,7 @@ _CAFE24_PATH = re.compile(r"^/product/[^/]+/(\d+)(?:/|$)")
 _SHOPIFY_PATH = re.compile(r"/products/([^/?#]+)")
 _WOO_PATH = re.compile(r"^/product/([^/]+)/?$")
 _CAFE24_CATEGORY = re.compile(r"^/category/[^/]+/(\d+)/?$")
+_CAFE24_LIST_PATH = re.compile(r"^/product/list\d*\.html$")
 _SHOPIFY_COLLECTION = re.compile(r"^/collections/([^/]+)/?$")
 _WOO_CATEGORY = re.compile(r"^/product-category/.+")
 
@@ -78,12 +79,16 @@ def product_id(platform: Platform, url: str, rules: UrlRules | None = None) -> s
 
 
 def is_category_url(platform: Platform, url: str, rules: UrlRules | None = None) -> bool:
-    path = urlsplit(url).path
+    parts = urlsplit(url)
+    path = parts.path
     if rules is not None and rules.category is not None:
         return bool(rules.category.search(path))
     match platform:
         case Platform.CAFE24:
-            return bool(_CAFE24_CATEGORY.match(path))
+            if _CAFE24_CATEGORY.match(path):
+                return True
+            number = parse_qs(parts.query).get("cate_no", [None])[0]
+            return bool(_CAFE24_LIST_PATH.match(path) and number and number.isdigit())
         case Platform.SHOPIFY:
             return bool(_SHOPIFY_COLLECTION.match(path))
         case Platform.WOOCOMMERCE:
@@ -110,6 +115,19 @@ def title_from_url(url: str) -> str:
     """제목을 모를 때 주소의 마지막 마디를 이름 대신 쓴다. 정확도가 낮아 보조로만 쓴다."""
     segment = unquote(urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1])
     return re.sub(r"[-_+]+", " ", segment).strip()
+
+
+def title_from_product_url(platform: Platform, url: str) -> str:
+    """상품 상세 주소에서 이름을 짐작한다. 링크에 글자가 없을 때(이미지 링크)만 쓰는 보조다.
+
+    Cafe24는 /product/이름-슬러그/번호/ 모양이라 슬러그가 이름이다. 그 밖의 플랫폼은 마지막 마디다.
+    """
+    path = unquote(urlsplit(url).path)
+    if platform is Platform.CAFE24:
+        found = _CAFE24_PATH.match(urlsplit(url).path)
+        slug = path.split("/")[2] if found else ""
+        return re.sub(r"[-_+]+", " ", slug).strip()
+    return title_from_url(url)
 
 
 def _single(query: dict[str, list[str]], key: str) -> str | None:

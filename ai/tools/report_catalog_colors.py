@@ -3,6 +3,7 @@
 uv run python tools/report_catalog_colors.py reference
 uv run python tools/report_catalog_colors.py reference --manifest ref/manifest.json --out r.md
 uv run python tools/report_catalog_colors.py run /data/catalog-runs/20261105-103000-romand.jsonl
+uv run python tools/report_catalog_colors.py brands runs/*.jsonl --min-quality 0.5 --out brands.md
 """
 
 import argparse
@@ -18,7 +19,12 @@ from app.tasks.catalog.report.reference import (  # noqa: E402
     render_markdown,
     synthetic_cases,
 )
-from app.tasks.catalog.report.runs import render_run_markdown, summarize_run  # noqa: E402
+from app.tasks.catalog.report.runs import (  # noqa: E402
+    render_brands_markdown,
+    render_run_markdown,
+    summarize_brands,
+    summarize_run,
+)
 from app.tasks.catalog.runfile import RunFileError  # noqa: E402
 
 EXIT_OK = 0
@@ -35,6 +41,14 @@ def build_parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run", help="수집 실행 결과 파일을 요약한다")
     run.add_argument("file", type=Path)
     run.add_argument("--out", type=Path)
+    brands = commands.add_parser(
+        "brands", help="실행 결과 파일 여러 개를 브랜드별 채움률로 요약한다"
+    )
+    brands.add_argument("files", type=Path, nargs="+")
+    brands.add_argument(
+        "--min-quality", type=float, default=0.5, help="쓸 수 있는 색의 최소 품질(리포트용 가정)"
+    )
+    brands.add_argument("--out", type=Path)
     return parser
 
 
@@ -57,6 +71,9 @@ def main(argv: list[str] | None = None) -> int:
                 print("사례가 없다", file=sys.stderr)
                 return EXIT_USAGE
             emit(render_markdown(build_report(cases)), args.out)
+        elif args.command == "brands":
+            summary = summarize_brands(args.files, args.min_quality)
+            emit(render_brands_markdown(summary, args.min_quality), args.out)
         else:
             emit(render_run_markdown(summarize_run(args.file)), args.out)
     except (OSError, ValueError, KeyError, RunFileError) as error:
