@@ -2,6 +2,7 @@ package com.mairor.backend.pouch.repository;
 
 import com.mairor.backend.pouch.entity.PouchItem;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +19,9 @@ public interface PouchItemRepository extends JpaRepository<PouchItem, UUID> {
 
   /** 추천 입력과 같은 시점의 회원 파우치를 전부 안정된 순서로 읽는다. */
   List<PouchItem> findByUserIdOrderByCreatedAtDescIdDesc(UUID userId);
+
+  /** 카탈로그 색 칸을 참조하는 파우치 회원을 중복 없이 찾는다. */
+  List<UUID> findDistinctUserIdByShadeIdIn(Collection<UUID> shadeIds);
 
   /** 회원·선택 필터에 맞는 페이지를 새 항목 순서로 읽는다. */
   @Query(
