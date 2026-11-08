@@ -75,17 +75,27 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
     doAnswer(call -> "ai-" + UUID.randomUUID()).when(ai).submit(any());
   }
 
-  /** AI 콜백이 온 것처럼 결과를 반영한다. */
+  /** AI 콜백이 온 것처럼 결과를 반영한다. 작업 영상 · 가이드 입력 단계(s1) · 영역을 맞춰 보낸다(-363 검사). */
   private void aiCompletes(UUID jobId) {
     String aiJobId = jobs.findById(jobId).orElseThrow().getAiJobId();
+    String youtubeVideoId =
+        jdbc.queryForObject(
+            "select v.youtube_video_id from analysis_jobs j join videos v on v.id = j.video_id"
+                + " where j.id = ?",
+            String.class,
+            jobId);
     var json = JsonMapper.builder().build();
     aiResults.apply(
         new AiGuideJobCallbackRequest(
             aiJobId,
-            "VxAXD6PP76I",
+            youtubeVideoId,
             "COMPLETED",
             json.readTree("{\"steps\": [{\"stepId\": \"s1\", \"order\": 1, \"actions\": []}]}"),
-            null,
+            json.readTree(
+                "{\"videoId\": \""
+                    + youtubeVideoId
+                    + "\", \"meshVersion\": \"v1\", \"steps\": [{\"stepId\": \"s1\", \"order\": 1,"
+                    + " \"makeup\": \"eyeshadow\", \"subSteps\": []}]}"),
             null));
   }
 

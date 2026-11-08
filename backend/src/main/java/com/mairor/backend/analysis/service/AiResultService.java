@@ -10,19 +10,23 @@ import com.mairor.backend.common.error.ErrorCode;
 import com.mairor.backend.guides.entity.Guide;
 import com.mairor.backend.guides.repository.GuideRepository;
 import java.time.Clock;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * AI 가이드 생성 결과를 작업·가이드에 반영한다. AI 콜백과 콜백 시간 초과 감시(상태 조회)가 같은 처리를 쓴다.
  *
  * <ul>
- *   <li>COMPLETED: 가이드에 쉬운 설명({@code guide})·영역({@code area})·{@code meshVersion}을 저장하고 검수 PENDING,
- *       작업 COMPLETED · DONE
- *   <li>FAILED: 작업 FAILED, {@code error.code}를 실패 코드로 바꿈(재시도 가능)
+ *   <li>COMPLETED: 맡긴 작업의 결과인지 먼저 본다({@link AiResultCheck}: 영상 · 단계 ID · 영역). 어긋나면 작업 FAILED {@code
+ *       AI_RESULT_MISMATCH}(재시도 불가)로 끝내고 가이드는 저장하지 않는다. 맞으면 가이드에 쉬운 설명({@code guide})·영역({@code
+ *       area})·{@code meshVersion}을 저장하고 검수 PENDING, 작업 COMPLETED · DONE
+ *   <li>FAILED: 작업 FAILED, {@code error.code}를 실패 코드로 바꿈(재시도 가능). {@code error.details}(단계별 이유)를 실패
+ *       메시지에 붙이고, 자르지 않은 전체는 로그에 남긴다
  *   <li>이미 끝난 작업이면 아무것도 바꾸지 않는다(같은 콜백이 다시 올 수 있다)
  * </ul>
  *
@@ -42,16 +46,19 @@ public class AiResultService {
   private final AnalysisJobRepository jobs;
   private final GuideRepository guides;
   private final AnalysisJobNotifier notifier;
+  private final ObjectMapper objectMapper;
   private final Clock clock;
 
   AiResultService(
       AnalysisJobRepository jobs,
       GuideRepository guides,
       AnalysisJobNotifier notifier,
+      ObjectMapper objectMapper,
       Clock clock) {
     this.jobs = jobs;
     this.guides = guides;
     this.notifier = notifier;
+    this.objectMapper = objectMapper;
     this.clock = clock;
   }
 
@@ -73,6 +80,26 @@ public class AiResultService {
           guides
               .findByAnalysisJobId(job.getId())
               .orElseThrow(() -> new IllegalStateException("작업 " + job.getId() + " 의 가이드가 없습니다."));
+      List<String> problems =
+          AiResultCheck.problems(
+              job.getVideo().getYoutubeVideoId(),
+              objectMapper.readTree(guide.getGuideInput()),
+              guide.getFramesManifestKey() != null,
+              result);
+      if (!problems.isEmpty()) {
+        String reason = String.join(" / ", problems);
+        job.fail(
+            AnalysisFailureCode.AI_RESULT_MISMATCH,
+            AnalysisFailureCode.AI_RESULT_MISMATCH.defaultMessage() + " " + reason,
+            clock.instant());
+        log.warn(
+            "AI 결과가 작업과 맞지 않아 실패 처리 jobId={} aiJobId={} problems={}",
+            job.getId(),
+            result.jobId(),
+            reason);
+        notifier.changed(job.getId());
+        return Outcome.APPLIED;
+      }
       JsonNode area = present(result.area()) ? result.area() : null;
       guide.recordAiResult(
           result.guide().toString(), area == null ? null : area.toString(), meshVersion(area));
@@ -86,12 +113,11 @@ public class AiResultService {
           area != null);
     } else {
       String code = result.error() == null ? "" : result.error().path("code").asString("");
-      String message =
-          result.error() == null ? null : result.error().path("message").asString(null);
       AnalysisFailureCode failure =
           "GENERATION_FAILED".equals(code)
               ? AnalysisFailureCode.AI_GENERATION_FAILED
               : AnalysisFailureCode.AI_INTERNAL_ERROR;
+      String message = AiResultCheck.failureMessage(result.error(), failure.defaultMessage());
       job.fail(failure, message, clock.instant());
       log.warn(
           "AI 가이드 생성 실패 jobId={} aiJobId={} code={} message={}",

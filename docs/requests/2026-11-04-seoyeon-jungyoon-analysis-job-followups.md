@@ -53,7 +53,8 @@ UPDATE analysis_jobs SET ai_requested_at = updated_at
 
 ### 3. 콜백 내용 검사
 
-- [ ] `AiResultService.validate` 는 `jobId`·`status`·`guide.steps` 배열만 본다. `videoId` 가 작업 영상과 같은지, `guide.steps` 의 `stepId` 목록이 `guideInput` 과 같은지, 프레임을 보낸 작업의 `COMPLETED` 에 `area` 가 있는지는 보지 않아, 어긋난 결과도 검수 PENDING 이 된다(검수에서 거를 수는 있다)
+- [x] `AiResultService.validate` 는 `jobId`·`status`·`guide.steps` 배열만 본다. `videoId` 가 작업 영상과 같은지, `guide.steps` 의 `stepId` 목록이 `guideInput` 과 같은지, 프레임을 보낸 작업의 `COMPLETED` 에 `area` 가 있는지는 보지 않아, 어긋난 결과도 검수 PENDING 이 된다(검수에서 거를 수는 있다)
+- 처리(S15P31A306-363, 김정윤): 세 가지를 모두 보고(+ `area.videoId`), 어긋나면 재시도 불가 실패 `AI_RESULT_MISMATCH`로 끝내 검수로 보내지 않는다. AI `error.details`는 실패 메시지에 남긴다
 
 ### 4. 로컬 저장소에서는 AI 요청이 늘 실패
 

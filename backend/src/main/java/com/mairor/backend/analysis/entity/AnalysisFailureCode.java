@@ -27,6 +27,11 @@ public enum AnalysisFailureCode {
   AI_GENERATION_FAILED(true, "가이드 설명을 만들지 못했습니다."),
   /** AI 서버의 예기치 않은 오류(콜백 {@code INTERNAL_ERROR}). */
   AI_INTERNAL_ERROR(true, "가이드 생성 중 예기치 않은 오류가 발생했습니다."),
+  /**
+   * AI 결과가 맡긴 작업과 맞지 않는다(다른 영상, 단계 ID 가 가이드 입력과 다름, 프레임을 보냈는데 영역 없음). 같은 입력이면 같은 결과일 가능성이 높아 사람이
+   * 원인을 본다.
+   */
+  AI_RESULT_MISMATCH(false, "가이드 생성 결과가 요청과 맞지 않습니다."),
   /** AI 콜백이 오지 않았다(AI 재시작으로 작업이 사라졌거나 너무 오래 걸림). */
   ANALYSIS_TIMEOUT(true, "분석 시간이 초과되었습니다."),
   /** 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모든 단계가 틀림). API 명세 VIDEO-002. */
