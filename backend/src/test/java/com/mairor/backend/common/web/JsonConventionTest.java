@@ -13,8 +13,8 @@ import org.springframework.context.annotation.Import;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * 노션 공통 규약: camelCase, 열거값 UPPER_SNAKE_CASE, 날짜는 UTC ISO-8601, 값이 없는 필드는 생략하지 않고 null. 오류 응답의
- * details만 없으면 생략한다.
+ * API 명세(docs/references/api-spec.md) 공통 규약: camelCase, 열거값 UPPER_SNAKE_CASE, 날짜는 UTC ISO-8601, 값이
+ * 없는 필드는 생략하지 않고 null. 오류 응답의 details만 없으면 생략한다.
  */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest

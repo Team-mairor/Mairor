@@ -1,7 +1,7 @@
 # 백엔드 서버
 
 Spring Boot 4.1 · Java 21 · Gradle · PostgreSQL 17. 브라우저(FE)는 같은 Origin의 `/api` 로 호출하고, AI 서버는 백엔드가 호출한다.
-기술 선택 이유는 ADR-008(노션 ADR DB)을, API 형식은 노션 [API 명세](https://app.notion.com/p/3fedce3252f680898d36d3f454427d44) 공통 규약을 따른다.
+기술 선택 이유는 ADR-008(노션 ADR DB)을, API 형식은 [API 명세](../docs/references/api-spec.md) 공통 규약을 따른다.
 
 ## 준비
 
@@ -451,7 +451,7 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 - `GET /api/v1/guides/{guideId}`(회원). 검수 승인(APPROVED)만 200, 검수 전 · 반려 · 없음은 404.
 - 단계는 가이드 입력 순서대로, `stepId`로 쉬운 설명(`actions` · `doneWhen`)과 영역(`subSteps`, `shared/guide-area` 그대로)을 붙인다. 설명 · 영역이 없는 단계는 빈 목록 · null.
 - `part` = 화장 종류 10종, `partLabel` = 한국어. `other`만 EXCLUDED(진행률 · `stepCount`에서 빠짐), 마스카라는 영역이 없어도 GUIDE. `previewable`은 아이섀도 · 아이라인 · 블러셔 · 하이라이트 · 립.
-- 명세 v2와 다른 곳(`application` → `subSteps`, `coordinateSystem` → `meshVersion`, `instruction` → `summary` · `actions`)은 `docs/references/api-spec.md`의 "로컬 수정 -312".
+- 명세 v2와 다른 곳(`application` → `subSteps`, `coordinateSystem` → `meshVersion`, `instruction` → `summary` · `actions`)은 `docs/references/api-spec.md`의 API-ANALYSIS-001에 있다(S15P31A306-312).
 
 **분석 상태 (회원)** (S15P31A306-296, 명세 `docs/references/api-spec.md` API-VIDEO-003 · API-VIDEO-008)
 
@@ -473,7 +473,7 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 
 ## 응답 형식
 
-노션 [API 명세](https://app.notion.com/p/3fedce3252f680898d36d3f454427d44) 공통 규약을 AI 서버(`ai/app/core/errors.py`)와 똑같이 따른다.
+[API 명세](../docs/references/api-spec.md) 공통 규약을 AI 서버(`ai/app/core/errors.py`)와 똑같이 따른다.
 
 - 필드명은 camelCase, 열거값은 `UPPER_SNAKE_CASE`, 날짜는 UTC ISO-8601 (`2026-01-02T03:04:05Z`). 값이 없는 필드는 생략하지 않고 `null` 로 내보낸다 (목록은 `[]`).
 - 성공하면 데이터 객체를 그대로 반환한다. 감싸는 봉투는 없다.
@@ -500,7 +500,7 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 | 한도 초과 (`Retry-After` 헤더) | 429 | `TOO_MANY_REQUESTS` |
 | 처리하지 못한 예외 (내부 정보는 응답에 넣지 않음) | 500 | `INTERNAL_ERROR` |
 
-- code와 기본 message는 노션 API 명세 "공통 오류 코드" 표와 `ErrorCode` 가 같다. FE는 message가 아니라 code로 분기한다.
+- code와 기본 message는 [API 명세](../docs/references/api-spec.md) "공통 오류 코드" 표와 `ErrorCode` 가 같다. FE는 message가 아니라 code로 분기한다.
 - 표에 없는 HTTP 오류(406·413·415 등)는 HTTP 상태 이름을 code로 쓴다 (예: 415 `UNSUPPORTED_MEDIA_TYPE`).
 
 코드에서는 이렇게 쓴다.
@@ -534,7 +534,7 @@ backend/
    │  ├─ storage/               파일 저장소 (기능 개발 시)
    │  └─ external/              YouTube · LLM · AI 서버 호출 (기능 개발 시)
    ├─ users/  products/  pouch/  videos/  analysis/
-   └─ guides/  matching/  executions/  history/     노션 기능 ID 와 1:1 인 도메인 패키지
+   └─ guides/  matching/  executions/  history/     기능 ID(docs/references/feature-spec.md)와 1:1 인 도메인 패키지
 ```
 
 - 도메인 패키지 안에서 컨트롤러 → 서비스 → 리포지토리 순으로 의존한다. `common` 은 도메인을 import 하지 않는다.

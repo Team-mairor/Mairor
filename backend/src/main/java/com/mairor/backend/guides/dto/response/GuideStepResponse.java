@@ -5,8 +5,8 @@ import java.util.List;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 가이드 단계(API 명세 v2 GuideStep 을 고친 것 — 로컬 수정 -312). {@code application} 대신 가이드 영역의 하위 단계({@code
- * subSteps}, {@code shared/guide-area} 그대로), {@code instruction} 대신 요약·동작·끝내는 때.
+ * 가이드 단계(API 명세 v2 GuideStep 을 고친 것). {@code application} 대신 가이드 영역의 하위 단계({@code subSteps}, {@code
+ * shared/guide-area} 그대로), {@code instruction} 대신 요약·동작·끝내는 때.
  */
 public record GuideStepResponse(
     @Schema(description = "단계 ID", example = "s8") String stepId,

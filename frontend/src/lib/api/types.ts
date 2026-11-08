@@ -1,4 +1,4 @@
-// BE 코드(common.error·common.web·users) 기준. 노션 API 명세와 다르면 코드를 따른다.
+// BE 코드(common.error·common.web·users) 기준. docs/references/api-spec.md와 다르면 코드를 따른다.
 // 필드명은 camelCase, 열거값은 UPPER_SNAKE_CASE, 날짜는 UTC ISO-8601 문자열이다.
 // BE는 값이 없는 필드도 빼지 않고 null로 보내므로, null이 될 수 있는 필드는 `| null`로 둔다.
 

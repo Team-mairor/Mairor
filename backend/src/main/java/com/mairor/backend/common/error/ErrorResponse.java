@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * 모든 오류 응답의 본문. 노션 API 명세 공통 규약과 AI 서버의 {@code ErrorResponse}와 같은 모양이다.
+ * 모든 오류 응답의 본문. API 명세(docs/references/api-spec.md) 공통 규약과 AI 서버의 {@code ErrorResponse}와 같은 모양이다.
  *
  * <pre>
  * {"code": "VALIDATION_FAILED", "message": "입력값이 올바르지 않습니다.", "details": [{"field": "size", "reason": "..."}]}

@@ -3,8 +3,8 @@ package com.mairor.backend.common.error;
 import org.springframework.http.HttpStatus;
 
 /**
- * 공통 오류 코드. 노션 API 명세 "공통 오류 코드" 표의 code·기본 message와 같다. AI 서버({@code ai/app/core/errors.py})와도 같은
- * 값을 쓰고, 브라우저 세션 전용인 {@link #CSRF_INVALID}만 백엔드에만 있다.
+ * 공통 오류 코드. API 명세(docs/references/api-spec.md) "공통 오류 코드" 표의 code·기본 message와 같다. AI 서버({@code
+ * ai/app/core/errors.py})와도 같은 값을 쓰고, 브라우저 세션 전용인 {@link #CSRF_INVALID}만 백엔드에만 있다.
  *
  * <p>도메인 고유 코드(예: {@code ANALYSIS_IN_PROGRESS})는 여기 넣지 않고 {@link BusinessException}에 상태·코드·메시지를 직접
  * 넘긴다.

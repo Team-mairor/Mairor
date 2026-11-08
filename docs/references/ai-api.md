@@ -1,6 +1,6 @@
 # AI 서버 API (BE ↔ AI)
 
-BE가 부르는 AI 서버 API다. 노션 원본은 없고 이 파일이 원본이다. FE가 부르는 API는 [api-spec.md](api-spec.md)에 있다.
+BE가 부르는 AI 서버 API다. 이 파일이 원본이다. FE가 부르는 API는 [api-spec.md](api-spec.md)에 있다.
 
 - 필드명은 camelCase, 오류는 `{code, message, details}`로 api-spec.md의 공통 규약과 같다.
 - 요청·콜백 본문의 JSON Schema는 [shared/guide-job](../../shared/guide-job/README.md)에 있고, BE와 AI가 같은 파일로 검사한다.

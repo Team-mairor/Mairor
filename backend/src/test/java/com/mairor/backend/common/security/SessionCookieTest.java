@@ -14,7 +14,7 @@ import org.springframework.session.web.http.CookieSerializer;
 import org.springframework.session.web.http.CookieSerializer.CookieValue;
 
 /**
- * 서비스 세션 쿠키 속성 (노션 API 명세 인증·배포 상세): {@code __Host-sessionId},
+ * 서비스 세션 쿠키 속성 (docs/references/api-spec.md 인증·배포 상세): {@code __Host-sessionId},
  * HttpOnly·Secure·SameSite=Strict·Path=/. Spring Session이 쓰는 {@link CookieSerializer}는 Boot가 {@code
  * server.servlet.session.cookie.*} 설정으로 만든다.
  *

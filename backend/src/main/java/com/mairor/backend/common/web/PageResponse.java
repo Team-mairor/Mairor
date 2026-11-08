@@ -4,7 +4,7 @@ import java.util.List;
 import org.springframework.data.domain.Page;
 
 /**
- * 목록 API의 공통 응답 {@code {items, page, size, hasNext}} (노션 API 명세). 전체 개수는 주지 않는다.
+ * 목록 API의 공통 응답 {@code {items, page, size, hasNext}} (docs/references/api-spec.md). 전체 개수는 주지 않는다.
  *
  * @param <T> 항목 타입
  */

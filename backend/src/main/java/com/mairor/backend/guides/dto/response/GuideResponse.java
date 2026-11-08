@@ -5,8 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 검수 승인된 가이드(API-ANALYSIS-001, API 명세 v2 Guide 를 가이드 영역 형식으로 고친 것 — 로컬 수정 -312). 좌표는 {@code
- * coordinateSystem} 대신 얼굴 메시 판({@code meshVersion})이다.
+ * 검수 승인된 가이드(API-ANALYSIS-001, API 명세 v2 Guide 를 가이드 영역 형식으로 고친 것). 좌표는 {@code coordinateSystem} 대신
+ * 얼굴 메시 판({@code meshVersion})이다.
  */
 public record GuideResponse(
     @Schema(description = "가이드 ID") UUID guideId,

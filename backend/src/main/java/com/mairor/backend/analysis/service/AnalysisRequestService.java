@@ -29,8 +29,7 @@ import org.springframework.stereotype.Service;
  *
  * <ol>
  *   <li>내부 영상이 없으면 404
- *   <li>YouTube 에서 공개 · CC BY 등을 다시 확인한다(라이선스는 저장하지 않고 요청 때마다, 로컬 수정 -361). 어긋나면 409, YouTube 실패는
- *       503
+ *   <li>YouTube 에서 공개 · CC BY 등을 다시 확인한다(라이선스는 저장하지 않고 요청 때마다). 어긋나면 409, YouTube 실패는 503
  *   <li>승인 가이드가 있으면 재사용(작업 없음, 한도 차감 없음)
  *   <li>진행 중 작업이 있으면 합류(한도 차감 없음), 없으면 일일 한도를 보고 새 작업 — {@link AnalysisJobWriter}의 한 트랜잭션
  * </ol>

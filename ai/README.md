@@ -157,7 +157,7 @@ docker compose up -d   # ai/ 에서. http://localhost:6006
 
 ## 응답 형식
 
-노션 [API 명세](https://app.notion.com/p/3fedce3252f680898d36d3f454427d44)의 공통 규약을 백엔드와 똑같이 따릅니다.
+[API 명세](../docs/references/api-spec.md)의 공통 규약을 백엔드와 똑같이 따릅니다.
 
 - 필드명은 camelCase입니다. 모델은 `CamelModel`을 상속하면 코드에서는 snake_case, JSON에서는 camelCase가 됩니다.
 - 성공하면 데이터 객체를 그대로 반환합니다.

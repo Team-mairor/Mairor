@@ -17,7 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** 시큐리티 필터 단계의 오류 응답 (노션 API 명세 공통 오류 코드). */
+/** 시큐리티 필터 단계의 오류 응답 (docs/references/api-spec.md 공통 오류 코드). */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest
 @AutoConfigureMockMvc

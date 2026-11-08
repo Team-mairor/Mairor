@@ -8,7 +8,8 @@ import org.springframework.data.domain.Pageable;
 /**
  * 목록 API의 공통 쿼리 파라미터 {@code ?page=0&size=20}. 컨트롤러에서 {@code @Valid @ModelAttribute PageQuery}로 받는다.
  *
- * <p>규약(노션 API 명세): page는 0부터, size는 기본 20·최대 100. 범위를 벗어나면 400 VALIDATION_FAILED.
+ * <p>규약(docs/references/api-spec.md): page는 0부터, size는 기본 20·최대 100. 범위를 벗어나면 400
+ * VALIDATION_FAILED.
  */
 public record PageQuery(
     @Min(value = 0, message = "0 이상이어야 합니다.") Integer page,
