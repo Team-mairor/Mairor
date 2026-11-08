@@ -312,3 +312,14 @@ def test_collect_never_works_around_a_block() -> None:
 
     with pytest.raises(BlockedError):
         cafe24_collect(client, f"{BASE}/product/b/2/")
+
+
+def test_the_product_option_select_wins_over_shipping_and_language_selects() -> None:
+    result = parse_generic_options(fixtures.CAFE24_REAL_STRUCTURE)
+
+    assert result.raw == {"select": "option1"}
+    assert "MULTIPLE_OPTION_SELECTS" not in result.warnings
+    assert [(s.option_id, s.name, s.image_url) for s in result.shades] == [
+        ("01 포멜로 스킨", "01 포멜로 스킨", None),
+        ("02 누카다미아", "02 누카다미아", "//cdn.example/swatch02.jpg"),
+    ]

@@ -192,3 +192,22 @@ CAFE24_SELECT = page(
     "<script>var EC_FRONT_JS_CONFIG = {};</script><title>롬앤 쥬시 | 쇼핑몰</title>",
 )
 NO_OPTIONS = page("<h1>단일 크림</h1>", '<meta property="og:title" content="단일 크림">')
+
+
+CAFE24_REAL_STRUCTURE = page(
+    "<h1>롬앤 더 쥬시 래스팅 틴트</h1>"
+    '<select class="xans-element- xans-layout xans-layout-multishopshippingcountrylist">'
+    + "".join(f'<option value="C{i}">SHIPPING TO : 나라 {i}</option>' for i in range(30))
+    + "</select>"
+    '<select option_product_no="958" option_select_element="ec-option-select-finder" '
+    'option_sort_no="1" option_type="T" option_title="선택" product_type="product_option" '
+    'name="option1" id="product_option_id1" class="ProductOption0" option_style="select">'
+    '<option value="*" selected link_image="">- [필수] 옵션을 선택해 주세요 -</option>'
+    '<option value="**" disabled link_image="">-------------------</option>'
+    '<option value="01 포멜로 스킨" link_image="">01 포멜로 스킨</option>'
+    '<option value="02 누카다미아" link_image="//cdn.example/swatch02.jpg">02 누카다미아</option>'
+    "</select>"
+    '<select class="xans-element- xans-layout xans-layout-multishopshippinglanguagelist">'
+    '<option value="ko">한국어</option><option value="en">English</option></select>',
+    "<script>var EC_FRONT_JS_CONFIG = {};</script>",
+)
