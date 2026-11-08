@@ -695,8 +695,9 @@ flowchart LR
 - 후보 선정
   - 내 화장품 안에서만 선정
   - 기준 통과 후보 없음 → '없음', 3개 미만 → 있는 만큼 제공 (최대 3개 유지)
-  - 추천 알고리즘·동점·최소 기준: 설계에서 확정 (확인 필요 2)
+  - <b>로컬 수정 -325</b>: 색상 거리는 CIEDE2000(ΔE2000) 오름차순으로 정렬하고 동점은 pouchItemId 오름차순으로 고정한다. 사용 가능한 색과 소분류 호환성을 통과한 후보에서 최대 3개를 반환하며 별도 거리 임계값은 두지 않는다. 거리값은 응답에 노출하지 않는다.
   - 색상 유사도 수치는 정렬에만 사용, 화면에는 순위(추천 1·2·3)만 노출
+- <b>로컬 수정 -325</b>: BE 자동 대체 후보 소분류 호환 묶음은 다음과 같다. foundation = CUSHION·FOUNDATION; eyeshadow = EYESHADOW_PALETTE; eyeliner = EYELINER; mascara = MASCARA; brow = BROW_PENCIL; blush = BLUSHER; highlight = HIGHLIGHTER; lip = LIPSTICK·LIP_TINT·LIQUID_LIP·LIP_GLOSS. 서로 다른 묶음은 추천하지 않는다. contour는 대응 type이 없어 제외한다. BASE_STICK·CONCEALER·SUNSCREEN·POWDER·COMPACT·LIP_BALM 및 보관 전용 카테고리는 후보에 넣지 않는다.
 - 수동 선택
   - 추천 외 같은 카테고리 보유 제품 전체 직접 선택 가능 (GUIDE-004)
   - 다른 카테고리 제품 선택 불가
