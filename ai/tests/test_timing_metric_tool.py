@@ -115,8 +115,9 @@ def test_measure_step_finds_when_the_inside_changed_and_keeps_the_outside_flat(m
     area = block(slice(40, 60), slice(40, 60))
     monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
     monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+    monkeypatch.setattr(timing_metric, "match_sizes", lambda before, after: (before, after))
 
-    def load_map(rows):
+    def load_map(rows, side):
         t = rows[0]
         level = min(max((t - 20000) / 20000, 0.0), 1.0) * 10
         photo = np.zeros((100, 100), dtype=np.float32)
@@ -153,8 +154,9 @@ def test_measure_step_leaves_cells_hidden_in_every_photo_out_of_the_means(monkey
     hand = block(slice(40, 60), slice(40, 50)) | block(slice(70, 80), slice(0, 100))
     monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
     monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+    monkeypatch.setattr(timing_metric, "match_sizes", lambda before, after: (before, after))
 
-    def load_map(rows):
+    def load_map(rows, side):
         level = 10.0 if rows[0] > 30000 else 0.0
         photo = np.zeros((100, 100), dtype=np.float32)
         photo[area] = level
@@ -237,3 +239,145 @@ def test_parts_pass_the_occlusion_finder_to_the_part_code(monkeypatch):
         part.find(None, 0, 1000, None, part.sides[0], "occlusion")
 
     assert seen == ["occlusion"] * 5
+
+
+def test_measure_step_measures_the_drawn_area_with_the_same_maps(monkeypatch):
+    """나가는 영역도 같은 시각·같은 지도로 재야 쪽별 값과 나란히 견줄 수 있다.
+
+    쪽마다는 못 찾았지만 화면에는 그려지는 쪽(반대쪽을 뒤집어 쓴 경우)이 대표라
+    오른쪽은 쪽마다 못 찾고 나가는 영역만 있게 했다.
+    지도를 쪽별·나가는 영역에서 따로 만들지 않는지 load_map 부른 횟수로 본다.
+    """
+    area = block(slice(40, 60), slice(40, 60))
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+    monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+    monkeypatch.setattr(timing_metric, "match_sizes", lambda before, after: (before, after))
+    calls = []
+
+    def load_map(rows, side):
+        calls.append(rows[0])
+        t = rows[0]
+        level = min(max((t - 20000) / 20000, 0.0), 1.0) * 10
+        photo = np.zeros((100, 100), dtype=np.float32)
+        photo[area] = level
+        return photo, np.zeros((100, 100), dtype=bool)
+
+    part = timing_metric.Part(
+        "brow",
+        "brow",
+        ("leftBrow", "rightBrow"),
+        1000,
+        1000,
+        lambda side: [side],
+        lambda *args: None,
+        lambda before, after, unknown: after - before,
+    )
+
+    left, right = timing_metric.measure_step(
+        part,
+        None,
+        20000,
+        40000,
+        load_map,
+        lambda side: area if side == "leftBrow" else None,
+        lambda side: area,
+    )
+
+    assert right["found"] is False and right["output"]["found"] is True
+    assert right["output"]["insideFinal"] == left["insideFinal"] == 10.0
+    assert left["output"]["keepRatio"] == left["keepRatio"]
+    assert len(calls) == 2 * (1 + len(timing_metric.time_points(20000, 40000, 1000)))
+
+
+def test_measure_step_skips_a_time_whose_face_size_cannot_be_matched(monkeypatch):
+    """확대 장면처럼 얼굴 가로가 직전의 두 배인 시각은 서비스라면 faceSizeMismatch로 기본 가이드를
+    쓰므로, 그 시각은 값을 비우고 크기로 뺀 시각(sizeSkipped)으로 센다.
+
+    크기 맞추기는 서비스 match_sizes를 그대로 쓴다. 직전은 100px, 단계 중간 한 시각만 200px이고
+    나머지는 100px이라 그 한 시각만 빠져야 한다. 확대 시각의 지도는 값이 튀게 해서, 빠지지 않으면
+    안쪽 값에 드러나게 했다.
+    """
+    area = block(slice(40, 60), slice(40, 60))
+    zoom_ms = 31000
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+
+    def rows(result, start, end, regions):
+        width = 200.0 if end == zoom_ms else 100.0
+        return [SimpleNamespace(frame_index=end, measures={"faceWidthPx": width})]
+
+    monkeypatch.setattr(timing_metric, "usable_rows", rows)
+
+    def load_map(photos, side):
+        t = photos[0].frame_index
+        photo = np.zeros((100, 100), dtype=np.float32)
+        photo[area] = 99.0 if t == zoom_ms else (10.0 if t > 20000 else 0.0)
+        return photo, np.zeros((100, 100), dtype=bool)
+
+    part = timing_metric.Part(
+        "brow",
+        "brow",
+        ("leftBrow",),
+        1000,
+        1000,
+        lambda side: [side],
+        lambda *args: None,
+        lambda before, after, unknown: after - before,
+    )
+
+    (row,) = timing_metric.measure_step(part, None, 20000, 40000, load_map, lambda side: area)
+
+    zoomed = [p for p in row["points"] if p["ms"] == zoom_ms]
+    assert zoomed == [{"ms": zoom_ms, "inside": None, "outside": None}]
+    assert row["sizeSkipped"] == 1
+    assert max(p["inside"] for p in row["points"] if p["inside"] is not None) == 10.0
+
+
+def test_only_the_lip_skips_size_matching_like_the_service():
+    """서비스 립은 직후 사진만 보고 직전 묶음이 없어 크기를 맞추지 않는다. 다른 부위는 맞춘다."""
+    pair = {p.name: p.pair_sizes for p in timing_metric.PARTS}
+
+    assert pair == {"brow": True, "eyeshadow": True, "eyeliner": True, "blush": True, "lip": False}
+
+
+def test_measure_step_skips_caution_times_but_keeps_the_service_window(monkeypatch):
+    """조심할 구간(확대·마무리 등)에 걸린 시각은 색 비교가 흔들려 빼되, 서비스가 영역을 만드는
+    끝 시각은 걸려도 잰다.
+
+    시험 영상 립 s27처럼 끝 직후부터 마무리 장면인 경우라, 끝 값은 남고 유지 비만 못 잼이어야 한다.
+    단계 중간 한 시각(31초)과 끝 시각(41초)부터 끝 뒤 전부를 조심할 구간으로 두었다.
+    걸린 시각의 지도는 값이 튀게 해서, 빠지지 않으면 안쪽 값에 드러나게 했다.
+    """
+    area = block(slice(40, 60), slice(40, 60))
+    cautions = [(30500, 31000), (40500, 60000)]
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+    monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+    monkeypatch.setattr(timing_metric, "match_sizes", lambda before, after: (before, after))
+
+    def load_map(rows, side):
+        t = rows[0]
+        photo = np.zeros((100, 100), dtype=np.float32)
+        photo[area] = 99.0 if t == 31000 or t > 41000 else (10.0 if t > 20000 else 0.0)
+        return photo, np.zeros((100, 100), dtype=bool)
+
+    part = timing_metric.Part(
+        "brow",
+        "brow",
+        ("leftBrow",),
+        1000,
+        1000,
+        lambda side: [side],
+        lambda *args: None,
+        lambda before, after, unknown: after - before,
+    )
+
+    (row,) = timing_metric.measure_step(
+        part, None, 20000, 40000, load_map, lambda side: area, None, cautions
+    )
+
+    assert [p for p in row["points"] if p["ms"] == 31000] == [
+        {"ms": 31000, "inside": None, "outside": None}
+    ]
+    assert row["insideFinal"] == 10.0 and row["outsideRatio"] == 0.0
+    assert max(p["inside"] for p in row["points"] if p["inside"] is not None) == 10.0
+    assert row["cautionSkipped"] == 5
+    assert row["keepRatio"] is None and row["notMeasured"] == ["keepRatio"]

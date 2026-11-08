@@ -147,3 +147,86 @@ def test_score_counts_not_found_steps_apart_and_needs_every_step_and_noise_to_pa
     assert brow["passed"] is False
     lip = next(p for p in result["parts"] if p["part"] == "lip")
     assert lip["noisePassed"] is False and lip["passed"] is False
+
+
+def test_score_judges_the_drawn_area_and_keeps_the_side_result_for_reference():
+    """사용자는 나가는 영역을 보므로 판정은 output 값으로 하고, 쪽마다 판정은 참고로 남긴다.
+
+    쪽마다는 못 찾았지만 반대쪽을 뒤집어 그린 쪽(섀도 s10, 아이라인 s13에서 실제로 있던 경우)과,
+    쪽마다는 헛것이 없지만 화면에는 헛것이 나간 잡음 줄을 골랐다.
+    """
+    timing = {k: BROW_S8[k] for k in ("outsideRatio", "keepRatio", "t50", "strongShare")}
+    stability = {
+        "part": "brow",
+        "stepId": "s8",
+        "side": "rightBrow",
+        "found": 0,
+        "total": 9,
+        "baseFound": False,
+        "shiftRatio": None,
+        "output": {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.033},
+    }
+    docs = {
+        "noise.json": {
+            "summary": [
+                {
+                    "part": "brow",
+                    "side": "rightBrow",
+                    "pairs": 100,
+                    "falsePositives": 0,
+                    "outputFalsePositives": 20,
+                }
+            ]
+        },
+        "stability.json": {"steps": [stability]},
+        "boundary.json": {
+            "steps": [
+                {
+                    "part": "brow",
+                    "stepId": "s8",
+                    "side": "rightBrow",
+                    "found": False,
+                    "output": {"found": True, "cover": 0.84, "overflow": 0.19},
+                }
+            ]
+        },
+        "timing.json": {
+            "steps": [
+                {
+                    "part": "brow",
+                    "stepId": "s8",
+                    "side": "rightBrow",
+                    "found": False,
+                    "output": {"found": True, **timing},
+                }
+            ]
+        },
+    }
+
+    result = guide_scorecard.score(docs)
+
+    (noise,) = result["noise"]
+    assert noise["passed"] is False and noise["sidePassed"] is True
+    (step,) = result["steps"]
+    assert (step["status"], step["sideStatus"]) == ("passed", "notFound")
+    assert step["sideChecks"] == []
+
+
+def test_a_line_that_could_not_be_measured_is_left_out_but_a_missing_value_still_fails():
+    """조심할 구간 때문에 잴 시각이 없던 유지 비는 못 잼으로 두고 판정에서 뺀다(시험 영상 립 s27).
+
+    같은 빈 값이라도 못 잼으로 적히지 않았으면 지금처럼 불합격이어야 찾기 실패 같은 진짜 문제를
+    놓치지 않는다. 시간 결과의 notMeasured가 판정까지 이어지는지 step_status로 본다.
+    """
+    stability = {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.044}
+    boundary = {"cover": 0.999, "overflow": 0.155}
+    timing = {"outsideRatio": 0.018, "keepRatio": None, "t50": 0.815, "strongShare": 0.758}
+
+    status, checks = guide_scorecard.step_status(
+        "lip", stability, boundary, timing | {"notMeasured": ["keepRatio"]}
+    )
+
+    assert status == "passed"
+    assert by_name(checks)["keepRatio"]["passed"] is None
+    assert "keepRatio 못 잼" in guide_scorecard.describe(checks)
+    assert guide_scorecard.step_status("lip", stability, boundary, timing)[0] == "failed"

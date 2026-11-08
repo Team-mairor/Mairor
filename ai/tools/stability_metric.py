@@ -6,6 +6,9 @@
 찾음/못 찾음이 뒤집히는지를 센다. 겹침은 영역 모양에 따라 같은 흔들림에도 다르게 나오므로,
 서비스 그대로의 영역을 몇 칸 옮겨야 같은 겹침이 되는지(흔들린 칸)와
 그 칸 ÷ 영역 세로(흔들림 비율)도 낸다.
+쪽마다 찾은 영역과 함께, 조합마다 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py)
+FE로 나가는 영역도 같은 방법으로 재 output 칸에 둔다. 아이라인은 앞 아이라인 단계의 서비스 창
+결과로 안내한 칸을 빼고 본다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
 실행 (ai/ 폴더에서):
@@ -31,6 +34,7 @@ from app.tasks.area.landmarks.reference_input import load_reference_input, read_
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import PhotoLoader
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
+from tools.output_area import Area, found_side, not_found_reason, output_area
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "stability.json"
@@ -38,12 +42,13 @@ SHIFTS_MS = (0, 1000, 2000)
 MAX_SHIFT_CELLS = 60
 
 Finder = Callable[[int, int], tuple[np.ndarray | None, str | None]]
+ComboResult = tuple[int, int, np.ndarray | None, str | None]
 
 
 @dataclass(frozen=True)
 class Part:
     """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로
-    (영역, 못 찾은 이유)를 낸다.
+    서비스 부위 코드의 찾기 결과(BrowArea 등)를 낸다.
 
     before_shift가 False면 직전 창을 쓰지 않는 부위(립)라 직후 창만 옮긴다.
     """
@@ -53,13 +58,8 @@ class Part:
     sides: tuple[RegionName, ...]
     before_shift: bool
     find: Callable[
-        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None],
-        tuple[np.ndarray | None, str | None],
+        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None], Area
     ]
-
-
-def _pair(area) -> tuple[np.ndarray | None, str | None]:
-    return area.mask, area.reason
 
 
 PARTS = (
@@ -68,15 +68,15 @@ PARTS = (
         "brow",
         brow_area.BROWS,
         True,
-        lambda r, s, e, load, side, occ: _pair(brow_area.find_brow_area(r, s, e, load, side, occ)),
+        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ),
     ),
     Part(
         "eyeshadow",
         "eyeshadow",
         eyeshadow_area.EYES,
         True,
-        lambda r, s, e, load, side, occ: _pair(
-            eyeshadow_area.find_eyeshadow_area(r, s, e, load, side, occ)
+        lambda r, s, e, load, side, occ: eyeshadow_area.find_eyeshadow_area(
+            r, s, e, load, side, occ
         ),
     ),
     Part(
@@ -84,25 +84,21 @@ PARTS = (
         "eyeliner",
         eyeliner_area.EYES,
         True,
-        lambda r, s, e, load, side, occ: _pair(
-            eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ)
-        ),
+        lambda r, s, e, load, side, occ: eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ),
     ),
     Part(
         "blush",
         "blush",
         blush_area.CHEEKS,
         True,
-        lambda r, s, e, load, side, occ: _pair(
-            blush_area.find_blush_area(r, s, e, load, side, occ)
-        ),
+        lambda r, s, e, load, side, occ: blush_area.find_blush_area(r, s, e, load, side, occ),
     ),
     Part(
         "lip",
         "lip",
         ("lipsOuter",),
         False,
-        lambda r, s, e, load, side, occ: _pair(lip_area.find_lip_area(r, e, load, occ)),
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ),
     ),
 )
 
@@ -154,13 +150,22 @@ def measure_step(
 ) -> dict:
     """한 단계 한 쪽에서 조합마다 영역을 찾고, 찾은 영역끼리의 겹침과 찾음 수를 낸다.
 
-    finder는 (시작 ms, 끝 ms)로 (영역, 못 찾은 이유)를 낸다. 영역이 둘 이상 찾혀야 겹침을 잰다.
+    finder는 (시작 ms, 끝 ms)로 (영역, 못 찾은 이유)를 낸다. 계산은 summarize_combos다.
+    """
+    return summarize_combos(
+        [(before, after, *finder(start_ms - before, end_ms + after)) for before, after in combos]
+    )
+
+
+def summarize_combos(results: Sequence[ComboResult]) -> dict:
+    """조합마다 (직전 창 앞당긴 ms, 직후 창 늦춘 ms, 영역, 못 찾은 이유)로 겹침과 찾음 수를 낸다.
+
+    영역이 둘 이상 찾혀야 겹침을 잰다.
     서비스 그대로(두 창 모두 안 옮긴) 영역이 있으면 흔들린 칸과 영역 세로 대비 비율도 낸다.
     """
     rows, masks = [], []
     base_mask = None
-    for before, after in combos:
-        mask, reason = finder(start_ms - before, end_ms + after)
+    for before, after, mask, reason in results:
         if before == 0 and after == 0:
             base_mask = mask
         rows.append(
@@ -185,7 +190,7 @@ def measure_step(
     return {
         "combos": rows,
         "found": len(masks),
-        "total": len(combos),
+        "total": len(results),
         "meanIoU": None if mean_iou is None else round(mean_iou, 3),
         "minIoU": round(float(np.min(pair_ious)), 3) if pair_ious else None,
         "baseFound": None if base is None else base["found"],
@@ -193,6 +198,40 @@ def measure_step(
         "shiftCells": None if shift is None else round(shift, 2),
         "shiftRatio": None if shift is None or not size else round(shift / size, 4),
     }
+
+
+def measure_part_step(
+    part: Part,
+    find: Callable[[int, int, RegionName], Area],
+    start_ms: int,
+    end_ms: int,
+    drawn: np.ndarray | None = None,
+) -> tuple[list[dict], np.ndarray | None]:
+    """한 단계에서 쪽마다 찾은 영역과 나가는 영역의 흔들림을 잰다.
+
+    find는 (시작 ms, 끝 ms, 쪽)으로 찾기 결과를 낸다. 조합마다 두 쪽을 한 번씩만 찾고,
+    그 결과를 쪽별 숫자와 나가는 영역(output) 숫자에 함께 쓴다.
+    drawn은 앞 아이라인 단계들에서 안내한 칸이다.
+    (쪽 순서대로 줄, 서비스 창 결과까지 더한 안내한 칸)을 낸다.
+    """
+    side_results: dict[RegionName, list[ComboResult]] = {side: [] for side in part.sides}
+    output_results: dict[RegionName, list[ComboResult]] = {side: [] for side in part.sides}
+    guided = drawn
+    for before, after in shift_combos(part.before_shift):
+        areas = {side: find(start_ms - before, end_ms + after, side) for side in part.sides}
+        masks, sub_step, next_drawn = output_area(part.makeup, areas, drawn)
+        if before == 0 and after == 0:
+            guided = next_drawn
+        for side in part.sides:
+            side_results[side].append((before, after, areas[side].mask, areas[side].reason))
+            out = found_side(masks, side)
+            reason = None if out is not None else (not_found_reason(sub_step) or "sideNotDrawn")
+            output_results[side].append((before, after, out, reason))
+    rows = [
+        summarize_combos(side_results[side]) | {"output": summarize_combos(output_results[side])}
+        for side in part.sides
+    ]
+    return rows, guided
 
 
 def main() -> None:
@@ -217,23 +256,25 @@ def main() -> None:
 
     out = []
     for part in PARTS:
-        combos = shift_combos(part.before_shift)
-        for step in reference.manifest.steps:
+        drawn = None
+        for step in sorted(reference.manifest.steps, key=lambda s: s.order):
             if step.makeup != part.makeup:
                 continue
             start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
-            for side in part.sides:
 
-                def finder(s: int, e: int, part=part, side=side):
-                    return part.find(result, s, e, load_photo, side, occlusion)
+            def find(s: int, e: int, side: RegionName, part=part) -> Area:
+                return part.find(result, s, e, load_photo, side, occlusion)
 
-                row = {"part": part.name, "stepId": step.step_id, "side": side}
-                row |= measure_step(finder, start, end, combos)
+            rows, drawn = measure_part_step(part, find, start, end, drawn)
+            for side, measured in zip(part.sides, rows, strict=True):
+                row = {"part": part.name, "stepId": step.step_id, "side": side} | measured
                 out.append(row)
+                output = row["output"]
                 print(
                     f"{part.name:9} {step.step_id:4} {side:10} 찾음 {row['found']}/{row['total']}"
-                    f"  평균 겹침 {row['meanIoU']}  최소 겹침 {row['minIoU']}"
-                    f"  흔들림 {row['shiftCells']}칸 / 세로 {row['sizeCells']}칸"
+                    f"  평균 겹침 {row['meanIoU']}  흔들림 비율 {row['shiftRatio']}"
+                    f"  | 나가는 영역 찾음 {output['found']}/{output['total']}"
+                    f"  평균 겹침 {output['meanIoU']}  흔들림 비율 {output['shiftRatio']}"
                 )
 
     path = output_dir(folder, occlusion_name) / OUTPUT_FILE

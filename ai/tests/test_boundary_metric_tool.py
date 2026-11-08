@@ -5,6 +5,7 @@ import pytest
 
 from app.schemas.landmarks import Face, Point, Pose
 from app.tasks.area.common.face_map import MAP_SIZE
+from app.tasks.area.parts.lip_area import LipArea
 from tools import boundary_metric
 
 
@@ -109,12 +110,16 @@ def test_measure_part_reports_scores_only_for_found_areas(monkeypatch):
         "lips",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side, occ: found if e == 20000 else None,
+        lambda r, s, e, load, side, occ: (
+            LipArea(mask=found) if e == 20000 else LipArea(mask=None, reason="lipColorNotFound")
+        ),
     )
     steps = [
-        SimpleNamespace(step_id="s1", makeup="lip", start_seconds=10.0, end_seconds=20.0),
-        SimpleNamespace(step_id="s2", makeup="lip", start_seconds=30.0, end_seconds=40.0),
-        SimpleNamespace(step_id="s3", makeup="blush", start_seconds=50.0, end_seconds=60.0),
+        SimpleNamespace(step_id="s1", order=1, makeup="lip", start_seconds=10.0, end_seconds=20.0),
+        SimpleNamespace(step_id="s2", order=2, makeup="lip", start_seconds=30.0, end_seconds=40.0),
+        SimpleNamespace(
+            step_id="s3", order=3, makeup="blush", start_seconds=50.0, end_seconds=60.0
+        ),
     ]
 
     rows = boundary_metric.measure_part(part, None, steps, None, lambda row, label: real)
@@ -122,3 +127,5 @@ def test_measure_part_reports_scores_only_for_found_areas(monkeypatch):
     assert [r["stepId"] for r in rows] == ["s1", "s2"]
     assert rows[0]["cover"] == 1.0 and rows[0]["overflow"] == 0.0
     assert rows[1]["found"] is False and "cover" not in rows[1]
+    assert rows[0]["output"]["found"] is True and rows[0]["output"]["cover"] > 0.9
+    assert rows[1]["output"] == {"found": False, "photos": 1}

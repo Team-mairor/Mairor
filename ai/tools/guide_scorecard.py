@@ -10,6 +10,11 @@ stability_metric.py, boundary_metric.py, timing_metric.py를 실행해 둔다.
 서비스 그대로의 창에서 영역을 못 찾은 쪽은 notFound로 따로 센다.
 진한 칸 비율은 아이라인에 쓰지 않는다. 아이라인 색 값은 바뀜/안 바뀜 두 값이라 늘 1에 가깝다.
 지표마다 선까지의 배수(gap)도 낸다. 1 이하면 합격 쪽이고 클수록 선에서 멀다.
+합격·불합격은 FE로 나가는 영역(지표 결과의 output 칸, 잡음의 outputFalsePositives)으로 판정한다.
+쪽마다 찾은 영역의 판정은 sideStatus·sideChecks에 참고로 남겨 어느 쪽 찾기가 약한지 보게 한다.
+output 칸이 없는 옛 결과 파일은 쪽마다 찾은 영역으로 판정한다.
+시간 결과의 notMeasured에 든 지표(조심할 구간이라 잴 시각이 없던 유지 비)는 못 잼으로 적고
+그 선은 합격·불합격에 넣지 않는다. 다른 까닭으로 값이 없으면 지금처럼 불합격이다.
 실행 (ai/ 폴더에서):
 uv run python tools/guide_scorecard.py samples/local_03_seq [--occlusion <이름>]
 """
@@ -84,19 +89,41 @@ def check(line: Line, value: float | None) -> dict:
     }
 
 
-def judge(part: str, values: dict, lines: Sequence[Line]) -> tuple[bool, list[dict]]:
-    """부위에 적용하는 선마다 값을 견준다. (모두 합격인지, 선마다 결과)를 돌려준다."""
-    checks = [check(line, values.get(line.key)) for line in lines if part in line.parts]
-    return all(c["passed"] for c in checks), checks
+def judge(
+    part: str, values: dict, lines: Sequence[Line], not_measured: frozenset[str] = frozenset()
+) -> tuple[bool, list[dict]]:
+    """부위에 적용하는 선마다 값을 견준다. (모두 합격인지, 선마다 결과)를 돌려준다.
+
+    not_measured에 든 값 이름의 선은 견주지 않고 passed를 None(못 잼)으로 적으며,
+    모두 합격인지 볼 때 빼고 본다.
+    """
+    checks = [
+        (
+            {"name": line.name, "limit": line.limit, "value": None, "passed": None, "gap": None}
+            if line.key in not_measured
+            else check(line, values.get(line.key))
+        )
+        for line in lines
+        if part in line.parts
+    ]
+    return all(c["passed"] for c in checks if c["passed"] is not None), checks
 
 
-def noise_rates(doc: dict) -> dict[tuple[str, str], float | None]:
-    """noise.json의 간격별 줄을 부위·쪽마다 합쳐 헛것 비율(헛것 수 ÷ 쌍 수)을 낸다."""
+def noise_rates(
+    doc: dict, key: str = "falsePositives"
+) -> dict[tuple[str, str], float | None] | None:
+    """noise.json의 간격별 줄을 부위·쪽마다 합쳐 헛것 비율(헛것 수 ÷ 쌍 수)을 낸다.
+
+    key는 헛것 수 칸 이름이다. 나가는 영역 헛것은 outputFalsePositives이고,
+    줄에 그 칸이 없으면(옛 결과) None이다.
+    """
+    if any(key not in row for row in doc["summary"]):
+        return None
     totals: dict[tuple[str, str], tuple[int, int]] = {}
     for row in doc["summary"]:
         found, pairs = totals.get((row["part"], row["side"]), (0, 0))
-        totals[(row["part"], row["side"])] = (found + row["falsePositives"], pairs + row["pairs"])
-    return {key: (found / pairs if pairs else None) for key, (found, pairs) in totals.items()}
+        totals[(row["part"], row["side"])] = (found + row[key], pairs + row["pairs"])
+    return {k: (found / pairs if pairs else None) for k, (found, pairs) in totals.items()}
 
 
 def by_step(doc: dict) -> dict[StepKey, dict]:
@@ -119,24 +146,61 @@ def step_values(stability: dict, boundary: dict, timing: dict) -> dict:
     }
 
 
+def step_status(part: str, stability: dict, boundary: dict, timing: dict) -> tuple[str, list]:
+    """한 단계·쪽의 (상태, 선마다 결과). 서비스 그대로의 창에서 못 찾았으면 notFound다."""
+    if not stability.get("baseFound"):
+        return "notFound", []
+    not_measured = frozenset(timing.get("notMeasured", ()))
+    passed, checks = judge(part, step_values(stability, boundary, timing), STEP_LINES, not_measured)
+    return ("passed" if passed else "failed"), checks
+
+
 def score(docs: dict[str, dict]) -> dict:
-    """결과 파일 네 개(이름 → 내용)로 잡음 판정, 단계 판정, 부위 요약을 낸다."""
+    """결과 파일 네 개(이름 → 내용)로 잡음 판정, 단계 판정, 부위 요약을 낸다.
+
+    판정(passed·status·checks)은 나가는 영역 값으로 하고,
+    쪽마다 찾은 영역 판정은 side로 시작하는 칸에 둔다.
+    """
+    side_rates = noise_rates(docs["noise.json"]) or {}
+    output_rates = noise_rates(docs["noise.json"], "outputFalsePositives")
     noise_rows = []
-    for (part, side), rate in sorted(noise_rates(docs["noise.json"]).items()):
+    for (part, side), side_rate in sorted(side_rates.items()):
+        rate = side_rate if output_rates is None else output_rates[(part, side)]
         passed, checks = judge(part, {"falsePositiveRatio": rate}, [NOISE_LINE])
-        noise_rows.append({"part": part, "side": side, "passed": passed, "checks": checks})
+        side_passed, side_checks = judge(part, {"falsePositiveRatio": side_rate}, [NOISE_LINE])
+        noise_rows.append(
+            {
+                "part": part,
+                "side": side,
+                "passed": passed,
+                "checks": checks,
+                "sidePassed": side_passed,
+                "sideChecks": side_checks,
+            }
+        )
 
     boundary, timing = by_step(docs["boundary.json"]), by_step(docs["timing.json"])
     step_rows = []
     for key, stability in by_step(docs["stability.json"]).items():
         part, step_id, side = key
-        row = {"part": part, "stepId": step_id, "side": side}
-        if not stability.get("baseFound"):
-            step_rows.append(row | {"status": "notFound", "checks": []})
-            continue
-        values = step_values(stability, boundary.get(key, {}), timing.get(key, {}))
-        passed, checks = judge(part, values, STEP_LINES)
-        step_rows.append(row | {"status": "passed" if passed else "failed", "checks": checks})
+        bound, time = boundary.get(key, {}), timing.get(key, {})
+        side_status, side_checks = step_status(part, stability, bound, time)
+        status, checks = side_status, side_checks
+        if "output" in stability:
+            status, checks = step_status(
+                part, stability["output"], bound.get("output", {}), time.get("output", {})
+            )
+        step_rows.append(
+            {
+                "part": part,
+                "stepId": step_id,
+                "side": side,
+                "status": status,
+                "checks": checks,
+                "sideStatus": side_status,
+                "sideChecks": side_checks,
+            }
+        )
 
     parts = []
     for part in PARTS:
@@ -159,13 +223,15 @@ def score(docs: dict[str, dict]) -> dict:
 
 
 def describe(checks: Sequence[dict]) -> str:
-    """불합격한 선만 '이름 값/선(배수)'로 이어 쓴다."""
-    failed = [c for c in checks if not c["passed"]]
-    return "  ".join(
+    """불합격한 선은 '이름 값/선(배수)'로, 못 잰 선은 '이름 못 잼'으로 이어 쓴다."""
+    failed = [
         f"{c['name']} {c['value'] if c['value'] is None else round(c['value'], 3)}/{c['limit']}"
         + ("" if c["gap"] is None else f"({c['gap']}배)")
-        for c in failed
-    )
+        for c in checks
+        if c["passed"] is False
+    ]
+    skipped = [f"{c['name']} 못 잼" for c in checks if c["passed"] is None]
+    return "  ".join(failed + skipped)
 
 
 def main() -> None:
@@ -182,14 +248,18 @@ def main() -> None:
 
     docs = {name: json.loads((folder / name).read_text(encoding="utf-8")) for name in INPUT_FILES}
     result = score(docs)
+    names = {"passed": "합격", "failed": "불합격", "notFound": "못 찾음"}
     for row in result["noise"]:
         status = "합격" if row["passed"] else "불합격"
-        print(f"잡음 {row['part']:9} {row['side']:10} {status}  {describe(row['checks'])}")
-    for row in result["steps"]:
-        status = {"passed": "합격", "failed": "불합격", "notFound": "못 찾음"}[row["status"]]
+        side = "합격" if row["sidePassed"] else "불합격"
         print(
-            f"단계 {row['part']:9} {row['stepId']:4} {row['side']:10} {status}"
-            f"  {describe(row['checks'])}"
+            f"잡음 {row['part']:9} {row['side']:10} {status}  {describe(row['checks'])}"
+            f"  (쪽마다 {side})"
+        )
+    for row in result["steps"]:
+        print(
+            f"단계 {row['part']:9} {row['stepId']:4} {row['side']:10} {names[row['status']]}"
+            f"  {describe(row['checks'])}  (쪽마다 {names[row['sideStatus']]})"
         )
     for row in result["parts"]:
         steps = row["steps"]

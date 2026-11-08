@@ -7,6 +7,8 @@ MODEL_URL에서 받아 경로를 넘기고, 파일 지문이 MODEL_SHA256과 같
 립·눈썹은 덮음(실제 부위 중 찾은 영역이 덮은 비율)과 넘침(찾은 영역 중 실제 부위 밖 비율)을,
 섀도·아이라인은 침범(찾은 영역 중 눈 안 비율)을 잰다. 블러셔는 볼 경계가 모델에 없어 재지 않는다.
 점 테두리(REGION_POINTS)가 실제 부위와 얼마나 맞는지도 같이 적는다.
+쪽마다 찾은 영역과 함께, 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py)
+FE로 나가는 영역도 같은 점수로 재 output 칸에 둔다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 영역을 찾는다
 (tools/occlusion_tables.py).
@@ -38,6 +40,7 @@ from app.tasks.area.landmarks.reference_input import load_reference_input, read_
 from app.tasks.area.parts import brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import PhotoLoader, usable_rows
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
+from tools.output_area import Area, found_side, output_area
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "boundary.json"
@@ -60,7 +63,7 @@ Parser = Callable[[np.ndarray, Face], np.ndarray]
 @dataclass(frozen=True)
 class Part:
     """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로
-    찾은 영역(없으면 None)을 낸다.
+    서비스 부위 코드의 찾기 결과(BrowArea 등)를 낸다.
 
     label은 견줄 실제 부위(LABELS의 키), kind는 "cover"(덮음·넘침) 또는 "intrude"(침범)다.
     regions는 직후 사진을 고를 때 화면 안에 있어야 하는 부위다.
@@ -74,8 +77,7 @@ class Part:
     kind: str
     regions: Callable[[RegionName], list[RegionName]]
     find: Callable[
-        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None],
-        np.ndarray | None,
+        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None], Area
     ]
 
 
@@ -88,7 +90,7 @@ PARTS = (
         "brows",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ).mask,
+        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ),
     ),
     Part(
         "eyeshadow",
@@ -98,8 +100,8 @@ PARTS = (
         "eyes",
         "intrude",
         lambda side: [side, eyeshadow_area.EYE_BROWS[side]],
-        lambda r, s, e, load, side, occ: (
-            eyeshadow_area.find_eyeshadow_area(r, s, e, load, side, occ).mask
+        lambda r, s, e, load, side, occ: eyeshadow_area.find_eyeshadow_area(
+            r, s, e, load, side, occ
         ),
     ),
     Part(
@@ -110,9 +112,7 @@ PARTS = (
         "eyes",
         "intrude",
         lambda side: [side],
-        lambda r, s, e, load, side, occ: (
-            eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ).mask
-        ),
+        lambda r, s, e, load, side, occ: eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ),
     ),
     Part(
         "lip",
@@ -122,7 +122,7 @@ PARTS = (
         "lips",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ).mask,
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ),
     ),
 )
 
@@ -224,6 +224,20 @@ def iou(a: np.ndarray, b: np.ndarray) -> float | None:
     return ratio(a & b, a | b)
 
 
+def side_scores(
+    area: np.ndarray | None, real: np.ndarray | None, photos: int, part: Part, side: RegionName
+) -> dict:
+    """한 쪽 영역의 경계 점수. 영역이나 직후 사진이 없으면 찾음 여부와 사진 수만 적는다."""
+    row = {"found": area is not None, "photos": photos}
+    if area is None or real is None:
+        return row
+    row |= {"areaCells": int(area.sum()), "realCells": int(real.sum())}
+    row |= boundary_scores(area, real, part.kind)
+    if part.kind == "cover":
+        row["pointOutlineIoU"] = iou(point_outline(side), real)
+    return row
+
+
 def measure_part(
     part: Part,
     result: LandmarksResult,
@@ -232,25 +246,30 @@ def measure_part(
     label_map: Callable[[FrameLandmarks, str], np.ndarray],
     occlusion: OcclusionFinder | None = None,
 ) -> list[dict]:
-    """부위 하나의 실제로 바른 단계마다, 쪽마다 경계 점수를 낸다. occlusion은 영역 찾기에 넘긴다."""
+    """부위 하나의 실제로 바른 단계마다, 쪽마다 경계 점수를 낸다. occlusion은 영역 찾기에 넘긴다.
+
+    쪽마다 찾은 영역 점수는 줄에 바로 두고, 나가는 영역 점수는 output 칸에 둔다.
+    단계는 서비스처럼 order 순서로 보고, 아이라인은 앞 단계에서 안내한 칸을 빼고 본다.
+    """
     out = []
-    for step in steps:
+    drawn = None
+    for step in sorted(steps, key=lambda s: s.order):
         if step.makeup != part.makeup:
             continue
         start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
+        areas = {
+            side: part.find(result, start, end, load_photo, side, occlusion) for side in part.sides
+        }
+        output, _, drawn = output_area(part.makeup, areas, drawn)
         for side in part.sides:
-            row = {"part": part.name, "stepId": step.step_id, "side": side}
-            area = part.find(result, start, end, load_photo, side, occlusion)
+            area, drawn_area = areas[side].mask, found_side(output, side)
             rows = usable_rows(result, end, end + part.after_ms, part.regions(side))
-            if area is None or not rows:
-                out.append(row | {"found": area is not None, "photos": len(rows)})
-                continue
-            real = majority([label_map(r, part.label) for r in rows]) & side_half(side)
-            row |= {"found": True, "photos": len(rows), "areaCells": int(area.sum())}
-            row |= {"realCells": int(real.sum())}
-            row |= boundary_scores(area, real, part.kind)
-            if part.kind == "cover":
-                row["pointOutlineIoU"] = iou(point_outline(side), real)
+            real = None
+            if rows and (area is not None or drawn_area is not None):
+                real = majority([label_map(r, part.label) for r in rows]) & side_half(side)
+            row = {"part": part.name, "stepId": step.step_id, "side": side}
+            row |= side_scores(area, real, len(rows), part, side)
+            row["output"] = side_scores(drawn_area, real, len(rows), part, side)
             out.append(row)
     return out
 
@@ -293,11 +312,12 @@ def main() -> None:
         )
         out += rows
         for row in rows:
-            scores = {
-                k: row[k] for k in ("cover", "overflow", "intrude", "pointOutlineIoU") if k in row
-            }
+            keys = ("cover", "overflow", "intrude", "pointOutlineIoU")
+            scores = {k: row[k] for k in keys if k in row}
+            output = {k: row["output"][k] for k in keys if k in row["output"]}
             print(
                 f"{row['part']:9} {row['stepId']:4} {row['side']:10} 찾음 {row['found']}  {scores}"
+                f"  | 나가는 영역 찾음 {row['output']['found']}  {output}"
             )
 
     path = output_dir(folder, occlusion_name) / OUTPUT_FILE

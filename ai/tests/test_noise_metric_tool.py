@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -5,8 +7,15 @@ from app.schemas.manifest import Manifest, Step
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
-from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
-from tools import noise_metric
+from app.tasks.area.parts import (
+    area_preparation,
+    blush_area,
+    brow_area,
+    eyeliner_area,
+    eyeshadow_area,
+    lip_area,
+)
+from tools import noise_metric, timing_metric
 
 SKIN = (224, 186, 168)
 
@@ -180,3 +189,119 @@ def test_eye_parts_leave_out_brow_steps():
     assert brow_steps
     assert not brow_steps & set(noise_metric.UNTOUCHED_STEPS["eyeshadow"])
     assert not brow_steps & set(noise_metric.UNTOUCHED_STEPS["eyeliner"])
+
+
+def test_a_false_find_on_one_cheek_counts_on_both_cheeks_as_output(monkeypatch):
+    """서비스는 한쪽 볼만 찾아도 뒤집어 양쪽에 그리므로, 나가는 영역 헛것은 두 볼 모두에 센다.
+
+    쪽마다 재면 헛것이 없는 볼도 화면에서는 헛것이 보이는 차이를 잡는지 보려고 고른 경우다.
+    """
+    monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
+
+    def measure(before, after, cheek, unknown=None):
+        if cheek == "leftCheek":
+            area = blush_area.BlushArea(mask=blush_area.cheek_range(cheek))
+        else:
+            area = blush_area.BlushArea(mask=None, reason="blushColorNotFound")
+        return noise_metric.Measure(None, 0.0, None, area.mask is not None, area)
+
+    part = noise_metric.Part(
+        "blush", blush_area.CHEEKS, 1000, 1000, 0.5, None, lambda side: [side], measure
+    )
+    steps = [make_step("s8", 0.0, 12.0)]
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    tallies, records = noise_metric.measure_part(
+        part, None, steps, [], lambda rows, side: (skin_map(), empty)
+    )
+
+    left, right = tallies[("leftCheek", 1)], tallies[("rightCheek", 1)]
+    assert left.pairs == right.pairs > 0
+    assert (left.found, right.found) == (left.pairs, 0)
+    assert left.output_found == right.output_found == left.pairs
+    assert all(r["outputFound"] for r in records)
+
+
+def face_row(width: float) -> SimpleNamespace:
+    return SimpleNamespace(frame_index=0, measures={"faceWidthPx": width})
+
+
+def test_pair_whose_face_sizes_cannot_be_matched_is_skipped_like_the_service(monkeypatch):
+    """직전은 얼굴 가로 100px, 직후는 200px처럼 확대가 바뀐 쌍은 서비스가 faceSizeMismatch로 기본
+    가이드를 쓰는 경우다.
+
+    못 찾음으로 세면 헛것 비율이 인위적으로 낮아지므로, 재지 않은 쌍(skipped)과 크기로 뺀 쌍
+    (size_skipped)으로 세는지 본다. 크기 맞추기는 서비스 match_sizes를 그대로 쓴다.
+    직전 창은 쌍 기준 시각(1·5·9초)에서 끝나므로 끝 시각으로 직전·직후를 가른다.
+    """
+
+    def rows(result, start, end, regions):
+        return [face_row(100.0 if end % 4000 == 1000 else 200.0)]
+
+    monkeypatch.setattr(noise_metric, "usable_rows", rows)
+    loads = []
+
+    def measure(before, after, cheek, unknown=None):
+        return noise_metric.Measure(None, 0.0, None, True, blush_area.BlushArea(mask=None))
+
+    part = noise_metric.Part(
+        "blush", blush_area.CHEEKS, 1000, 1000, 0.5, None, lambda side: [side], measure
+    )
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    tallies, records = noise_metric.measure_part(
+        part,
+        None,
+        [make_step("s8", 0.0, 12.0)],
+        [],
+        lambda rows, side: loads.append(side) or (skin_map(), empty),
+    )
+
+    left = tallies[("leftCheek", 1)]
+    assert (left.pairs, left.skipped, left.size_skipped) == (0, 3, 3)
+    assert not loads and not records
+
+
+def test_flats_to_map_matches_the_service_map_and_drops_a_crowded_photo(monkeypatch):
+    """도구가 사진마다 편 지도로 만든 (지도, 모름 칸)이 서비스 rows_to_known_map과 같은지 본다.
+
+    두 장 중 한 장(붉은 장)이 범위를 절반 가렸다. 범위를 넘기면 서비스처럼 그 장이 통째로 빠져
+    가리지 않은 칸까지 피부색만 남아야 한다. 두 장뿐이라 빠지지 않으면 가리지 않은 칸은 두 색의
+    가운데 값이 돼 차이가 드러난다. 사진 펴기는 같은 함수라 그대로 넘기게 바꿔 지도만 견준다.
+    """
+    zone = blush_area.cheek_range("leftCheek")
+    skin, red = skin_map(), with_red(skin_map(), np.ones_like(zone), 40)
+    half = np.zeros_like(zone)
+    half[: int(np.nonzero(zone.any(axis=1))[0].mean())] = True
+    covered = {0: np.zeros_like(zone), 1: half & zone}
+    photos = {0: skin, 1: red}
+    monkeypatch.setattr(area_preparation, "flatten", lambda photo, face: photo)
+    monkeypatch.setattr(area_preparation, "flatten_mask", lambda mask, face: mask)
+    rows = [SimpleNamespace(frame_index=i, face=None) for i in (0, 1)]
+
+    service = area_preparation.rows_to_known_map(
+        rows, lambda row: photos[row.frame_index], lambda row, photo: covered[row.frame_index], zone
+    )
+    tool = noise_metric.flats_to_map([(photos[i], covered[i]) for i in (0, 1)], zone)
+
+    assert np.array_equal(tool[0], service[0]) and np.array_equal(tool[1], service[1])
+    assert np.array_equal(tool[0], skin) and not tool[1].any()
+
+
+@pytest.mark.parametrize("parts", [noise_metric.PARTS, timing_metric.PARTS])
+def test_parts_build_maps_over_the_service_ranges(parts):
+    """지도를 만들 때 넘기는 범위가 서비스 부위 찾기가 rows_to_known_map에 넘기는 것과 같아야
+    범위를 많이 가린 사진을 서비스와 똑같이 뺀다.
+    """
+    service = {
+        "brow": brow_area.brow_range,
+        "eyeshadow": eyeshadow_area.eyeshadow_range,
+        "eyeliner": eyeliner_area.eyeliner_range,
+        "blush": blush_area.cheek_range,
+        "lip": lambda side: lip_area._lips(),
+    }
+
+    for part in parts:
+        for side in part.sides:
+            assert np.array_equal(part.zone(side), service[part.name](side))

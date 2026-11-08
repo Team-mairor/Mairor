@@ -163,7 +163,7 @@ def _eyeshadow_template_id(step: Step | GuideInputStep) -> TemplateId:
 
     단계 글은 partLabel·facts.area다.
     eyeZone이 upper·under·both이면 그 값(EYE_ZONE_TEMPLATES)을 먼저 쓴다.
-    waterline(점막)은 아이섀도 자리가 아니라서, 값이 없을 때처럼 글로 고른다.
+    waterline(아이라인 윗점막)은 아이섀도 자리가 아니라서, 값이 없을 때처럼 글로 고른다.
     띄어쓰기를 지운 글에 윗눈두덩 낱말(UPPER_EYE_WORDS)만 있으면 eyeshadowUpper,
     눈 밑 낱말(UNDER_EYE_WORDS)만 있으면 eyeshadowUnder, 둘 다 있거나 둘 다 없으면
     위아래 모두인 eyeshadow다. 점막·눈꼬리는 위아래를 가르지 않아 낱말에 넣지 않았다.

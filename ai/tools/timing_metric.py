@@ -10,6 +10,16 @@
 끝 시각 지도에서 영역 칸 중 진하게 바뀐 칸의 비율(진한 칸 비율)도 낸다.
 진한 칸 비율이 낮으면 너무 넓게 잡은 것이다.
 바깥 띠는 부위 코드의 흐림이 번지는 거리(흐림 폭 × BLUR_GAP_RATIO) 밖에서 시작한다.
+쪽마다 찾은 영역과 함께, 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py)
+FE로 나가는 영역도 같은 지도로 재 output 칸에 둔다.
+지도에 쓸 사진은 서비스 부위 찾기와 같이 고른다. 시각마다 직전·직후 묶음의 얼굴 크기를 맞추고
+(match_sizes, 립은 서비스에 직전 창이 없어 맞추지 않는다), 맞출 사진이 없는 시각은 재지 않고
+크기로 뺀 시각(sizeSkipped)으로 센다. 지도를 만들 때 부위 범위를 넘겨 범위를 많이 가린 사진은
+통째로 뺀다.
+조심할 구간(caution_ranges.json의 확대·얼굴 없음·광고·마무리)에 걸린 시각은 재지 않고
+cautionSkipped로 센다. 서비스가 영역을 만드는 사진 창(직전 창, 끝 시각)은 걸려도 잰다.
+끝 뒤 시각이 모두 조심할 구간이라 유지 비를 못 내면 notMeasured에 keepRatio를 적어,
+판정 도구가 그 선은 빼고 보게 한다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
 실행 (ai/ 폴더에서): uv run python tools/timing_metric.py samples/local_03_seq [--occlusion <이름>]
@@ -39,11 +49,21 @@ from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     known_cells,
-    known_median_map,
+    match_sizes,
     usable_rows,
 )
-from tools.noise_metric import blush_reddening, lip_redness
+from tools.noise_metric import (
+    CAUTION_FILE,
+    Flat,
+    Span,
+    blush_reddening,
+    caution_spans,
+    flats_to_map,
+    lip_redness,
+    overlaps,
+)
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
+from tools.output_area import Area, found_side, output_area
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "timing.json"
@@ -58,17 +78,20 @@ STRONG_LEVEL = 0.5
 LIP_BEFORE_MS = 1000
 MAP_CACHE = 64
 
-MapLoader = Callable[[Sequence[FrameLandmarks]], tuple[np.ndarray, np.ndarray]]
+MapLoader = Callable[[Sequence[FrameLandmarks], RegionName], tuple[np.ndarray, np.ndarray]]
 AreaFinder = Callable[[RegionName], np.ndarray | None]
 
 
 @dataclass(frozen=True)
 class Part:
-    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로 찾은 영역
-    (못 찾으면 None)을, change는 (직전 지도, 그 시각 지도, 모름 칸)으로 칸마다 색 값 지도를 낸다.
+    """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로 서비스 부위 코드의
+    찾기 결과(BrowArea 등)를 낸다.
+    change는 (직전 지도, 그 시각 지도, 모름 칸)으로 칸마다 색 값 지도를 낸다.
     blur_sigma는 부위 코드가 색 값 지도를 흐리는 폭(칸)이고, 흐리지 않으면 0이다.
 
     립은 서비스에 직전 창이 없어 before_ms로 LIP_BEFORE_MS를 쓴다.
+    zone은 쪽을 받아 서비스 부위 찾기가 rows_to_known_map에 넘기는 범위(지도 크기 표)를 낸다.
+    pair_sizes가 참이면 서비스처럼 직전·직후 묶음의 얼굴 크기를 맞춘다(립은 거짓).
     """
 
     name: str
@@ -78,11 +101,12 @@ class Part:
     after_ms: int
     regions: Callable[[RegionName], list[RegionName]]
     find: Callable[
-        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None],
-        np.ndarray | None,
+        [LandmarksResult, int, int, PhotoLoader, RegionName, OcclusionFinder | None], Area
     ]
     change: Callable[[np.ndarray, np.ndarray, np.ndarray | None], np.ndarray]
     blur_sigma: float = 0.0
+    zone: Callable[[RegionName], np.ndarray] | None = None
+    pair_sizes: bool = True
 
 
 def eyeliner_change(
@@ -107,9 +131,10 @@ PARTS = (
         brow_area.BEFORE_WINDOW_MS,
         brow_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ).mask,
+        lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ),
         brow_area.brow_darkening,
         brow_area.BLUR_SIGMA,
+        brow_area.brow_range,
     ),
     Part(
         "eyeshadow",
@@ -118,11 +143,12 @@ PARTS = (
         eyeshadow_area.BEFORE_WINDOW_MS,
         eyeshadow_area.AFTER_WINDOW_MS,
         lambda side: [side, eyeshadow_area.EYE_BROWS[side]],
-        lambda r, s, e, load, side, occ: (
-            eyeshadow_area.find_eyeshadow_area(r, s, e, load, side, occ).mask
+        lambda r, s, e, load, side, occ: eyeshadow_area.find_eyeshadow_area(
+            r, s, e, load, side, occ
         ),
         eyeshadow_area.eyeshadow_reddening,
         eyeshadow_area.BLUR_SIGMA,
+        eyeshadow_area.eyeshadow_range,
     ),
     Part(
         "eyeliner",
@@ -131,11 +157,10 @@ PARTS = (
         eyeliner_area.BEFORE_WINDOW_MS,
         eyeliner_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side, occ: (
-            eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ).mask
-        ),
+        lambda r, s, e, load, side, occ: eyeliner_area.find_eyeliner_area(r, s, e, load, side, occ),
         eyeliner_change,
         eyeliner_area.BLUR_SIGMA,
+        eyeliner_area.eyeliner_range,
     ),
     Part(
         "blush",
@@ -144,9 +169,10 @@ PARTS = (
         blush_area.BEFORE_WINDOW_MS,
         blush_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side, occ: blush_area.find_blush_area(r, s, e, load, side, occ).mask,
+        lambda r, s, e, load, side, occ: blush_area.find_blush_area(r, s, e, load, side, occ),
         blush_reddening,
         blush_area.BLUR_SIGMA,
+        blush_area.cheek_range,
     ),
     Part(
         "lip",
@@ -155,8 +181,10 @@ PARTS = (
         LIP_BEFORE_MS,
         lip_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ).mask,
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ),
         lip_change,
+        zone=lambda side: lip_area._lips(),
+        pair_sizes=False,
     ),
 )
 
@@ -288,67 +316,116 @@ def measure_step(
     end_ms: int,
     load_map: MapLoader,
     find: AreaFinder,
+    output: AreaFinder | None = None,
+    cautions: Sequence[Span] = (),
 ) -> list[dict]:
     """한 단계를 쪽마다 잰다. find는 쪽을 받아 부위 코드가 찾은 영역(못 찾으면 None)을 낸다.
 
+    output이 있으면 쪽을 받아 나가는 영역(없으면 None)을 내고, 같은 지도로 재 output 칸에 둔다.
     쪽마다 직전 지도와 바깥 띠를 먼저 만들고, 시각 순서로 지도를 만들어 두 쪽을 같이 잰다.
+    load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
+    pair_sizes인 부위는 시각마다 직전 사진과 그 시각 사진의 얼굴 크기를 서비스처럼 맞추고,
+    맞춘 직전 사진이 처음과 같으면 직전 지도를 다시 쓴다. 맞출 사진이 없는 시각은 값을 비우고
+    sizeSkipped로 센다.
     직전이나 그 시각 사진 모두에서 가려진 칸(모름 칸)은 영역 안·바깥 띠 평균에서 뺀다.
+    cautions는 조심할 구간(ms)이다. 끝 시각이 아닌 시각의 사진 창이 걸리면 값을 비우고
+    cautionSkipped로 센다. 끝 뒤 시각이 모두 빠져 유지 비를 못 내면 notMeasured에 적는다.
     """
     final_ms = end_ms + part.after_ms
     times = time_points(start_ms, end_ms, part.after_ms)
-    rows: dict[RegionName, dict] = {}
-    ready: dict[RegionName, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {}
+    caution_times = {t for t in times if t != final_ms and overlaps(t - part.after_ms, t, cautions)}
+    after_times = [t for t in times if t > final_ms]
+    keep_cut = bool(after_times) and all(t in caution_times for t in after_times)
+    finders = {"side": find} if output is None else {"side": find, "output": output}
+    rows: dict[tuple[str, RegionName], dict] = {}
+    targets: dict[tuple[str, RegionName], tuple[np.ndarray, np.ndarray]] = {}
+    ready: dict[RegionName, tuple[np.ndarray, np.ndarray]] = {}
+    before_photos: dict[RegionName, list[FrameLandmarks]] = {}
     for side in part.sides:
-        rows[side] = {"part": part.name, "side": side}
-        area = find(side)
         before_rows = usable_rows(result, start_ms - part.before_ms, start_ms, part.regions(side))
-        if area is None:
-            rows[side] |= {"found": False, "reason": "areaNotFound"}
-        elif not before_rows:
-            rows[side] |= {"found": True, "reason": "noBeforePhoto"}
-        else:
-            ring = ring_around(area, not_skin(), ring_gap(part))
-            ready[side] = (*load_map(before_rows), area, ring)
-            rows[side] |= {
-                "found": True,
-                "areaCells": int(area.sum()),
-                "ringGapCells": ring_gap(part),
-                "ringCells": int(ring.sum()),
-            }
+        for kind, finder in finders.items():
+            row = {"part": part.name, "side": side} if kind == "side" else {}
+            area = finder(side)
+            if area is None:
+                row |= {"found": False, "reason": "areaNotFound"}
+            elif not before_rows:
+                row |= {"found": True, "reason": "noBeforePhoto"}
+            else:
+                ring = ring_around(area, not_skin(), ring_gap(part))
+                targets[(kind, side)] = (area, ring)
+                row |= {
+                    "found": True,
+                    "areaCells": int(area.sum()),
+                    "ringGapCells": ring_gap(part),
+                    "ringCells": int(ring.sum()),
+                }
+            rows[(kind, side)] = row
+        if any((kind, side) in targets for kind in finders):
+            ready[side] = load_map(before_rows, side)
+            before_photos[side] = list(before_rows)
 
-    points: dict[RegionName, list[dict]] = {side: [] for side in ready}
+    points: dict[tuple[str, RegionName], list[dict]] = {key: [] for key in targets}
+    size_skipped = dict.fromkeys(targets, 0)
     for t in times:
-        for side, (before, before_unknown, area, ring) in ready.items():
-            photos = usable_rows(result, t - part.after_ms, t, part.regions(side))
-            if not photos:
-                points[side].append({"ms": t, "inside": None, "outside": None})
+        for side, (before, before_unknown) in ready.items():
+            keys = [(kind, side) for kind in finders if (kind, side) in targets]
+            if t in caution_times:
+                for key in keys:
+                    points[key].append({"ms": t, "inside": None, "outside": None})
                 continue
-            after, after_unknown = load_map(photos)
+            photos = usable_rows(result, t - part.after_ms, t, part.regions(side))
+            if photos and part.pair_sizes:
+                kept, photos = match_sizes(before_photos[side], photos)
+                if not kept or not photos:
+                    for key in keys:
+                        size_skipped[key] += 1
+                        points[key].append({"ms": t, "inside": None, "outside": None})
+                    continue
+                if kept != before_photos[side]:
+                    before, before_unknown = load_map(kept, side)
+            if not photos:
+                for key in keys:
+                    points[key].append({"ms": t, "inside": None, "outside": None})
+                continue
+            after, after_unknown = load_map(photos, side)
             unknown = before_unknown | after_unknown
             change = part.change(before, after, unknown)
-            inside, outside = known_cells(area, unknown), known_cells(ring, unknown)
-            if t == final_ms:
-                share = strong_share(change, inside)
-                rows[side]["strongShare"] = None if share is None else round(share, 3)
-            points[side].append(
-                {
-                    "ms": t,
-                    "inside": float(change[inside].mean()) if inside.any() else None,
-                    "outside": float(change[outside].mean()) if outside.any() else None,
-                }
-            )
+            for key in keys:
+                area, ring = targets[key]
+                inside, outside = known_cells(area, unknown), known_cells(ring, unknown)
+                if t == final_ms:
+                    share = strong_share(change, inside)
+                    rows[key]["strongShare"] = None if share is None else round(share, 3)
+                points[key].append(
+                    {
+                        "ms": t,
+                        "inside": float(change[inside].mean()) if inside.any() else None,
+                        "outside": float(change[outside].mean()) if outside.any() else None,
+                    }
+                )
 
-    for side, side_points in points.items():
-        rows[side] |= summarize(side_points, start_ms, end_ms, final_ms)
-        rows[side]["points"] = [
+    for key, key_points in points.items():
+        rows[key] |= summarize(key_points, start_ms, end_ms, final_ms)
+        rows[key]["sizeSkipped"] = size_skipped[key]
+        rows[key]["cautionSkipped"] = len(caution_times)
+        final_inside = rows[key]["insideFinal"]
+        if keep_cut and final_inside is not None and final_inside > 0:
+            rows[key]["notMeasured"] = ["keepRatio"]
+        rows[key]["points"] = [
             {
                 "ms": p["ms"],
                 "inside": None if p["inside"] is None else round(p["inside"], 3),
                 "outside": None if p["outside"] is None else round(p["outside"], 3),
             }
-            for p in side_points
+            for p in key_points
         ]
-    return list(rows.values())
+    out = []
+    for side in part.sides:
+        row = rows[("side", side)]
+        if output is not None:
+            row["output"] = rows[("output", side)]
+        out.append(row)
+    return out
 
 
 def main() -> None:
@@ -368,45 +445,71 @@ def main() -> None:
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     rows_by_index = {row.frame_index: row for row in result.frames}
     occlusion = table_finder(folder, occlusion_name)
+    cautions = caution_spans(json.loads((folder / CAUTION_FILE).read_text(encoding="utf-8")))
 
     def load_photo(row: FrameLandmarks) -> np.ndarray:
         return read_frame_rgb(reference, frames[row.frame_index])
 
     @lru_cache(maxsize=MAP_CACHE)
-    def flat(index: int) -> tuple[np.ndarray, np.ndarray | None]:
+    def flat(index: int) -> Flat:
         row = rows_by_index[index]
         photo = load_photo(row)
         covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
         return flatten(photo, row.face), covered
 
-    @lru_cache(maxsize=4)
-    def median_of(indices: tuple[int, ...]) -> tuple[np.ndarray, np.ndarray]:
-        flats = [flat(index) for index in indices]
-        covered = None if occlusion is None else [mask for _, mask in flats]
-        return known_median_map([face_map for face_map, _ in flats], covered)
+    zones = {
+        (part.name, side): None if part.zone is None else part.zone(side)
+        for part in PARTS
+        for side in part.sides
+    }
 
-    def load_map(rows: Sequence[FrameLandmarks]) -> tuple[np.ndarray, np.ndarray]:
-        return median_of(tuple(row.frame_index for row in rows))
+    @lru_cache(maxsize=4)
+    def median_of(
+        indices: tuple[int, ...], part_name: str, side: RegionName
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return flats_to_map([flat(index) for index in indices], zones[(part_name, side)])
 
     out = []
     for part in PARTS:
-        for step in reference.manifest.steps:
+
+        def load_map(
+            rows: Sequence[FrameLandmarks], side: RegionName, part=part
+        ) -> tuple[np.ndarray, np.ndarray]:
+            return median_of(tuple(row.frame_index for row in rows), part.name, side)
+
+        drawn = None
+        for step in sorted(reference.manifest.steps, key=lambda s: s.order):
             if step.makeup != part.makeup:
                 continue
             start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
+            areas = {
+                side: part.find(result, start, end, load_photo, side, occlusion)
+                for side in part.sides
+            }
+            drawn_areas, _, drawn = output_area(part.makeup, areas, drawn)
 
-            def find(side: RegionName, part=part, start=start, end=end) -> np.ndarray | None:
-                return part.find(result, start, end, load_photo, side, occlusion)
+            def find(side: RegionName, areas=areas) -> np.ndarray | None:
+                return areas[side].mask
 
-            for row in measure_step(part, result, start, end, load_map, find):
+            def output(side: RegionName, drawn_areas=drawn_areas) -> np.ndarray | None:
+                return found_side(drawn_areas, side)
+
+            for row in measure_step(part, result, start, end, load_map, find, output, cautions):
                 record = {"stepId": step.step_id, **row}
                 out.append(record)
+                drawn_row = record["output"]
                 print(
                     f"{part.name:9} {step.step_id:4} {record['side']:10}"
-                    f"  절반 {record.get('t50')}  90% {record.get('t90')}"
-                    f"  안 {record.get('insideFinal')}  바깥 비 {record.get('outsideRatio')}"
+                    f"  절반 {record.get('t50')}  바깥 비 {record.get('outsideRatio')}"
                     f"  유지 비 {record.get('keepRatio')}  진한 칸 {record.get('strongShare')}"
                     f"  {record.get('reason') or ''}"
+                    f"  | 나가는 영역 절반 {drawn_row.get('t50')}"
+                    f"  바깥 비 {drawn_row.get('outsideRatio')}"
+                    f"  유지 비 {drawn_row.get('keepRatio')}"
+                    f"  진한 칸 {drawn_row.get('strongShare')}  {drawn_row.get('reason') or ''}"
+                    f"  크기로 뺀 시각 {record.get('sizeSkipped')}"
+                    f"  조심할 구간으로 뺀 시각 {record.get('cautionSkipped')}"
+                    f"  못 잼 {record.get('notMeasured', [])}"
                 )
 
     path = output_dir(folder, occlusion_name) / OUTPUT_FILE

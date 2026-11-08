@@ -4,6 +4,13 @@
 사진 쌍을 만들고 두 사진 사이를 GAPS_SECONDS만큼 띄운다. 쌍마다 부위 코드와 같은 계산을 해서
 나온 값은 모두 잡음이다. 립은 전후 비교가 아니라 바른 뒤 사진 한 장을 보므로,
 맨입술 순간의 사진만 쓴다. 조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
+사진은 서비스 부위 찾기와 같이 고른다. 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
+맞출 사진이 없는 쌍은 서비스에서 기본 가이드(faceSizeMismatch)로 가므로
+재지 않은 쌍(크기로 뺀 쌍)으로 센다. 지도를 만들 때 부위 범위(zone)를 넘겨
+범위를 많이 가린 사진은 통째로 뺀다.
+쌍마다 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py), FE로 나가는 영역이
+생기는지도 센다(나가는 영역 헛것).
+아이라인은 그 시각 전에 끝난 아이라인 단계들이 안내한 칸을 빼고 본다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
 실행 (ai/ 폴더에서): uv run python tools/noise_metric.py samples/local_03_seq [--occlusion <이름>]
@@ -33,11 +40,20 @@ from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow
 from app.tasks.area.parts.area_preparation import (
     known_cells,
     known_median_map,
+    match_sizes,
     remove_lighting,
     rgb_to_lab,
     usable_rows,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
+from tools.output_area import (
+    Area,
+    drawn_before,
+    eyeliner_drawn,
+    found_side,
+    missing_area,
+    output_area,
+)
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 CAUTION_FILE = "caution_ranges.json"
@@ -56,7 +72,9 @@ UNTOUCHED_STEPS: dict[str, tuple[str, ...]] = {
 }
 
 Span = tuple[int, int]
-MapLoader = Callable[[Sequence[FrameLandmarks]], tuple[np.ndarray, np.ndarray]]
+MapLoader = Callable[[Sequence[FrameLandmarks], RegionName], tuple[np.ndarray, np.ndarray]]
+Flat = tuple[np.ndarray, np.ndarray | None]
+DrawnAt = Callable[[int], np.ndarray | None]
 
 
 @dataclass(frozen=True)
@@ -64,13 +82,14 @@ class Measure:
     """쌍 하나(립은 순간 하나)의 잡음. values는 살펴볼 범위 칸의 값이고 값이 없는 부위는 None이다.
 
     over는 범위 칸 중 기준값을 넘은 칸의 비율, gate는 찾음/못 찾음을 가르는 값,
-    found는 부위 찾기가 바른 곳을 내놓았는지다.
+    found는 부위 찾기가 바른 곳을 내놓았는지, area는 부위 코드의 찾기 결과다.
     """
 
     values: np.ndarray | None
     over: float
     gate: float | None
     found: bool
+    area: Area | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +98,7 @@ class Part:
 
     립은 직전 지도가 None이다. 살펴볼 범위가 모두 모름 칸이면 measure는 None을 내고
     그 쌍은 건너뛴다.
+    zone은 쪽을 받아 서비스 부위 찾기가 rows_to_known_map에 넘기는 범위(지도 크기 표)를 낸다.
     """
 
     name: str
@@ -91,15 +111,18 @@ class Part:
     measure: Callable[
         [np.ndarray | None, np.ndarray, RegionName, np.ndarray | None], Measure | None
     ]
+    zone: Callable[[RegionName], np.ndarray] | None = None
 
 
 @dataclass
 class Tally:
-    """부위·쪽·간격 하나에 모은 결과."""
+    """부위·쪽·간격 하나에 모은 결과. size_skipped는 skipped 중 얼굴 크기를 못 맞춰 뺀 쌍이다."""
 
     pairs: int = 0
     skipped: int = 0
+    size_skipped: int = 0
     found: int = 0
+    output_found: int = 0
     hist: np.ndarray = field(default_factory=lambda: np.zeros(len(HIST_EDGES) + 1, dtype=np.int64))
     overs: list[float] = field(default_factory=list)
     gates: list[float] = field(default_factory=list)
@@ -173,9 +196,13 @@ def measure_brow(
         return None
     darkening = brow_area.brow_darkening(before, after, unknown)
     values = darkening[cells]
-    found = brow_area.check_brow_area(darkening, brow, unknown).mask is not None
+    area = brow_area.check_brow_area(darkening, brow, unknown)
     return Measure(
-        values, float((values > brow_area.DARKENING_MIN).mean()), float(np.median(values)), found
+        values,
+        float((values > brow_area.DARKENING_MIN).mean()),
+        float(np.median(values)),
+        area.mask is not None,
+        area,
     )
 
 
@@ -191,8 +218,9 @@ def measure_eyeshadow(
     reddening = eyeshadow_area.eyeshadow_reddening(before, after, unknown)
     values = reddening[cells]
     gate = float(np.percentile(values, eyeshadow_area.TOP_PERCENTILE))
-    found = eyeshadow_area.check_eyeshadow_area(reddening, eye, unknown).mask is not None
-    return Measure(values, float((values > eyeshadow_area.REDDENING_MIN).mean()), gate, found)
+    area = eyeshadow_area.check_eyeshadow_area(reddening, eye, unknown)
+    over = float((values > eyeshadow_area.REDDENING_MIN).mean())
+    return Measure(values, over, gate, area.mask is not None, area)
 
 
 def measure_eyeliner(
@@ -205,8 +233,8 @@ def measure_eyeliner(
     if not cells.any():
         return None
     changed = eyeliner_area.eyeliner_color_change(before, after, unknown)
-    found = eyeliner_area.check_eyeliner_area(changed, eye, unknown).mask is not None
-    return Measure(None, float(changed[cells].mean()), None, found)
+    area = eyeliner_area.check_eyeliner_area(changed, eye, unknown)
+    return Measure(None, float(changed[cells].mean()), None, area.mask is not None, area)
 
 
 def blush_reddening(
@@ -230,11 +258,12 @@ def measure_blush(
     reddening = blush_reddening(before, after, unknown)
     values = reddening[cells]
     area = cells & (reddening > blush_area.REDDENING_MIN)
-    found = blush_area.check_blush_area(area, cheek, unknown).mask is not None
+    found = blush_area.check_blush_area(area, cheek, unknown)
     return Measure(
         values,
         float((values > blush_area.REDDENING_MIN).mean()),
         blush_area.found_ratio(area, cheek, unknown),
+        found.mask is not None,
         found,
     )
 
@@ -272,11 +301,12 @@ def measure_lip(
         return None
     values = redness[cells]
     area = cells & (redness > lip_area.REDNESS_MIN)
-    found = lip_area.check_lip_area(area, unknown).mask is not None
+    found = lip_area.check_lip_area(area, unknown)
     return Measure(
         values,
         float((values > lip_area.REDNESS_MIN).mean()),
         lip_area.found_ratio(area, unknown),
+        found.mask is not None,
         found,
     )
 
@@ -291,6 +321,7 @@ PARTS = (
         brow_area.FOUND_MEDIAN_MIN,
         lambda side: [side],
         measure_brow,
+        brow_area.brow_range,
     ),
     Part(
         "eyeshadow",
@@ -301,6 +332,7 @@ PARTS = (
         eyeshadow_area.FOUND_TOP_MIN,
         lambda side: [side, eyeshadow_area.EYE_BROWS[side]],
         measure_eyeshadow,
+        eyeshadow_area.eyeshadow_range,
     ),
     Part(
         "eyeliner",
@@ -311,6 +343,7 @@ PARTS = (
         None,
         lambda side: [side],
         measure_eyeliner,
+        eyeliner_area.eyeliner_range,
     ),
     Part(
         "blush",
@@ -321,6 +354,7 @@ PARTS = (
         blush_area.MIN_FOUND_RATIO,
         lambda side: [side],
         measure_blush,
+        blush_area.cheek_range,
     ),
     Part(
         "lip",
@@ -331,6 +365,7 @@ PARTS = (
         lip_area.MIN_FOUND_RATIO,
         lambda side: [side],
         measure_lip,
+        lambda side: lip_area._lips(),
     ),
 )
 
@@ -341,10 +376,18 @@ def measure_part(
     steps: Sequence[Step],
     cautions: Sequence[Span],
     load_map: MapLoader,
+    drawn_at: DrawnAt | None = None,
 ) -> tuple[dict[tuple[str, int], Tally], list[dict]]:
     """부위 하나를 간격마다 잰다. (모은 결과, 쌍마다 기록)을 돌려준다.
 
     립은 간격 대신 순간 하나씩(간격 0)이다.
+    직전 창이 있는 부위는 서비스처럼 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
+    한쪽이라도 남는 사진이 없으면 그 쪽은 재지 않은 것(skipped, size_skipped)으로 센다.
+    load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
+    쌍마다 쪽을 다 잰 뒤 서비스처럼 하위 단계로 바꿔 쪽마다 나가는 영역이 생기는지 센다.
+    재지 못한 쪽은 서비스처럼 못 찾음(noUsableFrame)으로 넘기고, 나가는 영역 헛것은 그 쪽을 잰
+    쌍에서만 센다.
+    drawn_at은 쌍 기준 시각에 앞 아이라인 단계들이 안내한 칸을 내고 아이라인에만 쓴다.
     """
     tallies: dict[tuple[str, int], Tally] = {}
     records: list[dict] = []
@@ -354,6 +397,7 @@ def measure_part(
             for t in pair_starts(
                 span_, gap * 1000, part.before_ms, part.after_ms, STRIDE_MS, cautions
             ):
+                measures: dict[RegionName, Measure] = {}
                 for side in part.sides:
                     tally = tallies.setdefault((side, gap), Tally())
                     after_rows = usable_rows(
@@ -367,15 +411,22 @@ def measure_part(
                     if not after_rows or (part.before_ms and not before_rows):
                         tally.skipped += 1
                         continue
-                    after, unknown = load_map(after_rows)
+                    if part.before_ms:
+                        before_rows, after_rows = match_sizes(before_rows, after_rows)
+                        if not before_rows or not after_rows:
+                            tally.skipped += 1
+                            tally.size_skipped += 1
+                            continue
+                    after, unknown = load_map(after_rows, side)
                     before = None
                     if part.before_ms:
-                        before, before_unknown = load_map(before_rows)
+                        before, before_unknown = load_map(before_rows, side)
                         unknown = unknown | before_unknown
                     m = part.measure(before, after, side, unknown)
                     if m is None:
                         tally.skipped += 1
                         continue
+                    measures[side] = m
                     tally.pairs += 1
                     tally.found += m.found
                     tally.overs.append(m.over)
@@ -383,6 +434,17 @@ def measure_part(
                         tally.gates.append(m.gate)
                     if m.values is not None:
                         add_values(tally.hist, m.values)
+                if not measures:
+                    continue
+                areas = {
+                    side: measures[side].area if side in measures else missing_area(part.name)
+                    for side in part.sides
+                }
+                drawn = None if drawn_at is None else drawn_at(t)
+                output, _, _ = output_area(part.name, areas, drawn)
+                for side, m in measures.items():
+                    output_found = found_side(output, side) is not None
+                    tallies[(side, gap)].output_found += output_found
                     records.append(
                         {
                             "part": part.name,
@@ -395,9 +457,26 @@ def measure_part(
                             if m.values is None
                             else round(float(np.percentile(m.values, 99)), 3),
                             "found": m.found,
+                            "outputFound": output_found,
                         }
                     )
     return tallies, records
+
+
+def flats_to_map(flats: Sequence[Flat], zone: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
+    """사진마다 편 (지도, 가린 칸 표)들로 (지도, 모름 칸)을 낸다. 서비스 rows_to_known_map과 같다.
+
+    가린 칸 표가 하나라도 None이면(가림 표 없이 잴 때) 가림을 빼지 않는다.
+    zone(부위 범위)을 known_median_map에 그대로 넘겨, 범위를 OCCLUDED_MAX보다 많이 가린 사진은
+    서비스처럼 통째로 뺀다.
+    """
+    covered = None if any(mask is None for _, mask in flats) else [mask for _, mask in flats]
+    return known_median_map([face_map for face_map, _ in flats], covered, zone)
+
+
+def part_zones(part: Part) -> dict[RegionName, np.ndarray | None]:
+    """부위의 쪽마다 범위를 한 번씩 만들어 둔다. zone이 없는 부위는 None이다."""
+    return {side: None if part.zone is None else part.zone(side) for side in part.sides}
 
 
 def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
@@ -413,6 +492,7 @@ def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
                 "gapSeconds": gap,
                 "pairs": t.pairs,
                 "skipped": t.skipped,
+                "sizeSkipped": t.size_skipped,
                 "threshold": part.threshold,
                 **pct,
                 "thresholdOverP99": None if not p99 or p99 <= 0 else round(part.threshold / p99, 2),
@@ -421,6 +501,10 @@ def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
                 "gateP99": round(float(np.percentile(t.gates, 99)), 3) if t.gates else None,
                 "falsePositives": t.found,
                 "falsePositiveRatio": round(t.found / t.pairs, 3) if t.pairs else None,
+                "outputFalsePositives": t.output_found,
+                "outputFalsePositiveRatio": (
+                    round(t.output_found / t.pairs, 3) if t.pairs else None
+                ),
             }
         )
     return rows
@@ -446,21 +530,42 @@ def main() -> None:
     occlusion = table_finder(folder, occlusion_name)
 
     @lru_cache(maxsize=MAP_CACHE)
-    def flat(index: int) -> tuple[np.ndarray, np.ndarray | None]:
+    def flat(index: int) -> Flat:
         row = rows_by_index[index]
         photo = read_frame_rgb(reference, frames[index])
         covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
         return flatten(photo, row.face), covered
 
-    def load_map(rows: Sequence[FrameLandmarks]) -> tuple[np.ndarray, np.ndarray]:
-        flats = [flat(row.frame_index) for row in rows]
-        covered = None if occlusion is None else [mask for _, mask in flats]
-        return known_median_map([face_map for face_map, _ in flats], covered)
+    def load_photo(row: FrameLandmarks) -> np.ndarray:
+        return read_frame_rgb(reference, frames[row.frame_index])
+
+    def find_eyeliner(step: Step, eye: RegionName) -> eyeliner_area.EyelinerArea:
+        start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
+        return eyeliner_area.find_eyeliner_area(
+            result, start, end, load_photo, eye, occlusion=occlusion
+        )
+
+    timeline = eyeliner_drawn(reference.manifest.steps, find_eyeliner)
+
+    def eyeliner_drawn_at(start_ms: int) -> np.ndarray | None:
+        return drawn_before(timeline, start_ms)
 
     summary, records = [], []
     for part in PARTS:
+        zones = part_zones(part)
+
+        def load_map(
+            rows: Sequence[FrameLandmarks], side: RegionName, zones=zones
+        ) -> tuple[np.ndarray, np.ndarray]:
+            return flats_to_map([flat(row.frame_index) for row in rows], zones[side])
+
         tallies, part_records = measure_part(
-            part, result, reference.manifest.steps, cautions, load_map
+            part,
+            result,
+            reference.manifest.steps,
+            cautions,
+            load_map,
+            eyeliner_drawn_at if part.name == "eyeliner" else None,
         )
         summary += summarize(part, tallies)
         records += part_records
@@ -469,6 +574,8 @@ def main() -> None:
                 f"{row['part']:9} {row['side']:9} 간격 {row['gapSeconds']:>3}초"
                 f"  쌍 {row['pairs']:>3}  잡음 99%선 {row['p99']}  기준 {row['threshold']}"
                 f"  헛것 {row['falsePositives']}/{row['pairs']}"
+                f"  크기로 뺀 쌍 {row['sizeSkipped']}"
+                f"  나가는 영역 헛것 {row['outputFalsePositives']}/{row['pairs']}"
             )
 
     path = output_dir(folder, occlusion_name) / OUTPUT_FILE
