@@ -13,3 +13,5 @@ export const MIN_KEY_REGIONS_IN_VIEW = 2;
 
 /** 이 각도(라디안)를 넘게 돌리면 반대쪽 부위를 보이지 않는 것으로 본다. */
 export const DEFAULT_MAX_YAW = 0.6;
+
+export const FRAME_STALE_MS = 300;

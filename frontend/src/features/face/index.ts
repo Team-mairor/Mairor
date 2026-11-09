@@ -37,6 +37,7 @@ export {
   StartCamera,
   useCamera,
   useFaceFrame,
+  useFaceRender,
   useHiddenVideo,
   type CameraStatus,
 } from "./camera-provider";
@@ -55,7 +56,8 @@ export {
   RECOVER_IN_FRAME_MARGIN,
 } from "./visibility";
 export { REGION_NAMES, regionNamesError, REGIONS } from "./regions";
-export { KEY_REGIONS } from "./tracking-rules";
+export { FRAME_STALE_MS, KEY_REGIONS } from "./tracking-rules";
+export { DEFAULT_PREDICTION, FacePredictor, type PredictionOptions } from "./prediction";
 export {
   DEFAULT_SMOOTHING,
   FaceTracker,

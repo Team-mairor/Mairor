@@ -27,6 +27,10 @@ export interface LandmarkerPreference {
 
 const preference: LandmarkerPreference = { delegate: "auto", blendshapes: true };
 
+export function landmarkerPreference() {
+  return { ...preference, confidence: { ...DEFAULT_CONFIDENCE } };
+}
+
 /** 실제로 만든 추적 모델의 실행 방식과 GPU 이름 (확인 화면 표시용) */
 export const landmarkerInfo: { delegate: Delegate | null; gpu: string | null } = {
   delegate: null,

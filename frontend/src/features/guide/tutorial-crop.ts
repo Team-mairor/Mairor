@@ -72,7 +72,7 @@ export function cropTransform(
 
 /** 크롭 좌표는 거울 방향이다. 인식 좌표는 그대로 두고 표시 부위만 판정한다. */
 export function isStepInCrop(
-  step: GuideStep | null,
+  step: Pick<GuideStep, "regions"> | null,
   frame: FaceFrame,
   crop: NormalizedRect,
   recoverRatio = 0,
@@ -85,8 +85,8 @@ export function isStepInCrop(
         return sum + p.x * next.y - next.x * p.y;
       }, 0),
     ) / 2;
+  // 고개 돌림은 부위 표시 진하기(guideRegionAlpha)가 서서히 숨기므로 여기서는 크롭과 겹치는지만 본다
   return regions.some((name) => {
-    if (name !== "faceOval" && !frame.regionVisibility[name].facing) return false;
     const points = frame.regions[name].indices.map((i) => ({
       x: 1 - frame.landmarks[i].x,
       y: frame.landmarks[i].y,

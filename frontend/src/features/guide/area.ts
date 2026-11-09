@@ -19,7 +19,11 @@ export function resolveSubStep(sub: AreaSubStep, defaults: GuideSet | null): Gui
         regions: [...new Set(sub.guideSets.map((set) => set.region))],
         // 빼는 부위는 그 부위별 묶음의 도형에만 붙인다
         guides: sub.guideSets.flatMap((set) =>
-          set.guides.map((g) => (set.exclude?.length ? { ...g, exclude: set.exclude } : g)),
+          set.guides.map((g) => ({
+            ...g,
+            region: set.region,
+            ...(set.exclude?.length ? { exclude: set.exclude } : {}),
+          })),
         ),
         source: sub.guideSets.every((set) => set.source === "manual") ? "manual" : "extracted",
       };

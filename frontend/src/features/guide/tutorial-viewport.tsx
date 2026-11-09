@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
-import { useCamera, useFaceFrame, type NormalizedRect } from "@/features/face";
+import { useCamera, useFaceRender, type NormalizedRect } from "@/features/face";
 
 import { GuideOverlay } from "./guide-overlay";
 import {
@@ -61,11 +61,15 @@ export function CropView({
   step,
   video = true,
   face = false,
+  predictionStrength,
+  showStats,
 }: {
   crop: NormalizedRect;
   step: GuideStep | null;
   video?: boolean;
   face?: boolean;
+  predictionStrength?: number;
+  showStats?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const cropRef = useRef(crop);
@@ -73,7 +77,7 @@ export function CropView({
   useEffect(() => {
     cropRef.current = crop;
   }, [crop]);
-  useFaceFrame(() => {
+  useFaceRender(() => {
     const crop = cropRef.current;
     const c = canvas.current,
       source = videoRef.current;
@@ -111,7 +115,13 @@ export function CropView({
   return (
     <div className="relative h-full w-full overflow-hidden">
       <canvas ref={canvas} className="absolute inset-0 h-full w-full mirror:invisible" />
-      <GuideOverlay step={step} crop={crop} face={face} />
+      <GuideOverlay
+        step={step}
+        crop={crop}
+        face={face}
+        predictionStrength={predictionStrength}
+        showStats={showStats}
+      />
     </div>
   );
 }

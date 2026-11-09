@@ -20,7 +20,15 @@ import type { GuideStep } from "./types";
 const FULL = { x0: 0, y0: 0, x1: 1, y1: 1 };
 const clamp = (n: number, max: number) => Math.max(0, Math.min(max, n));
 
-export function TutorialCropEditor({ step }: { step: GuideStep | null }) {
+export function TutorialCropEditor({
+  step,
+  predictionStrength,
+  showStats,
+}: {
+  step: GuideStep | null;
+  predictionStrength?: number;
+  showStats?: boolean;
+}) {
   const { crop: saved, save } = useTutorialCrop();
   const { videoRef, status } = useCamera();
   const [rect, setRect] = useState<NormalizedRect>(saved ?? { x0: 0.1, y0: 0.3, x1: 0.9, y1: 0.7 });
@@ -145,7 +153,12 @@ export function TutorialCropEditor({ step }: { step: GuideStep | null }) {
         ref={box}
         style={{ aspectRatio: imageRatio ?? 4 / 3 }}
       >
-        <CropView crop={FULL} step={step} />
+        <CropView
+          crop={FULL}
+          step={step}
+          predictionStrength={predictionStrength}
+          showStats={showStats}
+        />
         {cameraReady && (
           <div
             role="group"
@@ -212,7 +225,12 @@ export function TutorialCropEditor({ step }: { step: GuideStep | null }) {
                 className="absolute inset-x-0 overflow-hidden outline-2 outline-yellow-300 outline-dashed"
                 style={{ top: TUTORIAL_TOP, bottom: TUTORIAL_BOTTOM }}
               >
-                <CropView crop={rect} step={step} />
+                <CropView
+                  crop={rect}
+                  step={step}
+                  predictionStrength={predictionStrength}
+                  showStats={showStats}
+                />
               </div>
               <p className="absolute inset-x-0 bottom-8 text-center">하단 안내 영역 · 372px</p>
             </div>

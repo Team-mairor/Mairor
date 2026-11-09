@@ -3,27 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  DEFAULT_PREDICTION,
+  FacePredictor,
   faceFitTransform,
-  MIN_IN_FRAME_RATIO,
+  faceWidthRatio,
+  MIN_FACE_WIDTH_RATIO,
   rescaleAround,
-  RECOVER_IN_FRAME_MARGIN,
   regionNamesError,
   REGIONS,
   toScreen,
   useCamera,
   useFaceFrame,
+  useFaceRender,
   type GuideShape,
   type MeshAnchor,
   type NormalizedRect,
   type ViewTransform,
+  type TrackingIssue,
 } from "@/features/face";
 import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 import { buildDefaultGuideSet } from "./default-guides";
-import { GuideRenderer, isStepVisible } from "./renderer";
-import { cropTransform, isStepInCrop } from "./tutorial-crop";
+import { GuideRenderer } from "./renderer";
+import { cropTransform } from "./tutorial-crop";
 import type { AreaSubStep, GuideArea, GuideSet, GuideStep } from "./types";
+import { GuideVisibility, GUIDE_STALE_MS, GUIDE_TURN } from "./visibility";
 
 function anchorsOf(guide: GuideShape): MeshAnchor[] {
   switch (guide.type) {
@@ -62,9 +67,11 @@ export async function loadGuideSet(url: string): Promise<GuideSet> {
     ...step,
     guides: step.guides.filter((guide) => {
       const anchors = anchorsOf(guide) ?? [];
-      const error = anchors.length
-        ? anchors.map((anchor) => anchorError(anchor, mesh)).find(Boolean)
-        : "기준점 없음";
+      const error =
+        (guide.region ? regionNamesError([guide.region]) : null) ??
+        (anchors.length
+          ? anchors.map((anchor) => anchorError(anchor, mesh)).find(Boolean)
+          : "기준점 없음");
       if (error) console.warn(`${step.stepId} 가이드 도형을 그릴 수 없어 뺍니다: ${error}`);
       return !error;
     }),
@@ -144,10 +151,11 @@ export function loadDefaultGuideSet(): Promise<GuideSet> {
 
 /**
  * 지금 단계 부위가 화면 안에 보이는지. 바뀔 때만 다시 그린다.
- * 추적이 불안정할 때는 추적 판정이 따로 안내하므로 직전 값을 유지한다.
+ * 부위별 표시 기준을 실제 관측에 적용하고 hold 동안에는 직전 판정을 유지한다.
  */
 export function useStepInView(step: GuideStep | null, crop: NormalizedRect | null = null): boolean {
   const [inView, setInView] = useState(true);
+  const visibility = useRef(new GuideVisibility());
   const stepRef = useRef(step);
   const cropRef = useRef(crop);
   useEffect(() => {
@@ -155,23 +163,41 @@ export function useStepInView(step: GuideStep | null, crop: NormalizedRect | nul
     cropRef.current = crop;
   }, [step, crop]);
   useFaceFrame((frame) => {
-    if (frame?.trackingState !== "tracking") return;
-    // 추적기처럼 한번 숨긴 뒤에는 조금 더 들어와야 다시 보이게 해 경계에서 깜빡이지 않게 한다.
-    setInView((prev) => {
-      const limit = MIN_IN_FRAME_RATIO + (prev ? 0 : RECOVER_IN_FRAME_MARGIN);
-      const next =
-        (!stepRef.current || isStepVisible(stepRef.current, frame, limit)) &&
-        (!cropRef.current ||
-          isStepInCrop(
-            stepRef.current,
-            frame,
-            cropRef.current,
-            prev ? 0 : RECOVER_IN_FRAME_MARGIN,
-          ));
-      return prev === next ? prev : next;
-    });
+    const next =
+      !stepRef.current ||
+      visibility.current.update(stepRef.current, frame, frame?.timestamp, cropRef.current);
+    setInView((prev) => (prev === next ? prev : next));
   });
   return inView;
+}
+
+export function useGuideTrackingIssue(
+  step: GuideStep | null,
+  crop: NormalizedRect | null = null,
+): TrackingIssue | null {
+  const [issue, setIssue] = useState<TrackingIssue | null>("lost");
+  const visibility = useRef(new GuideVisibility());
+  const stepRef = useRef(step);
+  const cropRef = useRef(crop);
+  useEffect(() => {
+    stepRef.current = step;
+    cropRef.current = crop;
+  }, [step, crop]);
+  useFaceRender((frame, _stats, now) => {
+    const current = stepRef.current;
+    let next: TrackingIssue | null = null;
+    if (
+      !frame ||
+      frame.trackingState === "lost" ||
+      now - (frame.detectedAt ?? frame.timestamp) > GUIDE_STALE_MS
+    )
+      next = "lost";
+    else if (current && !visibility.current.update(current, frame, now, cropRef.current)) {
+      next = Math.abs(frame.pose.yaw) >= GUIDE_TURN.hidden ? "turned" : "out-of-frame";
+    } else if (faceWidthRatio(frame) < MIN_FACE_WIDTH_RATIO) next = "far";
+    setIssue((prev) => (prev === next ? prev : next));
+  });
+  return issue;
 }
 
 /** fit일 때 얼굴이 캔버스를 채우는 비율, 확대가 따라가는 빠르기(프레임마다 남은 차이의 몇 배) */
@@ -198,11 +224,15 @@ export function GuideOverlay({
   fit = false,
   face = fit,
   crop,
+  predictionStrength,
+  showStats = false,
 }: {
   step: GuideStep | null;
   fit?: boolean;
   face?: boolean;
   crop?: NormalizedRect;
+  predictionStrength?: number;
+  showStats?: boolean;
 }) {
   const { viewTransform } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -216,6 +246,20 @@ export function GuideOverlay({
   const fitScaleRef = useRef(0);
   const iodRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
+  const predictor = useRef(new FacePredictor());
+  const predictedStep = useRef(step);
+  const lastDraw = useRef(0);
+  const perfStart = useRef(0);
+  const drawCount = useRef(0);
+  const strength = useRef(DEFAULT_PREDICTION.strength);
+  const [perf, setPerf] = useState("");
+
+  useEffect(() => {
+    const value = new URLSearchParams(window.location.search).get("prediction");
+    if (value === "off") strength.current = 0;
+    else if (value !== null && Number.isFinite(Number(value)))
+      strength.current = Math.max(0, Math.min(1, Number(value)));
+  }, []);
 
   useEffect(() => {
     stepRef.current = step;
@@ -244,7 +288,18 @@ export function GuideOverlay({
     };
   }, []);
 
-  useFaceFrame((frame) => {
+  useFaceRender((observed, stats, now) => {
+    if (predictedStep.current !== stepRef.current) {
+      predictor.current.reset();
+      predictedStep.current = stepRef.current;
+    }
+    predictor.current.sample(observed);
+    const frame = predictor.current.predict(now, {
+      ...DEFAULT_PREDICTION,
+      strength: predictionStrength ?? strength.current,
+    });
+    const elapsed = lastDraw.current ? Math.min(250, now - lastDraw.current) : 125;
+    lastDraw.current = now;
     const canvas = canvasRef.current;
     const crop = cropRef.current;
     let view = viewRef.current;
@@ -267,7 +322,8 @@ export function GuideOverlay({
       // 얼굴 가운데는 계속 따라가고, 배율만 붙잡아 둔 값을 쓴다
       const goal = rescaleAround(target, fitScaleRef.current, size);
       const prev = fitRef.current;
-      const follow = (a: number, b: number) => a + (b - a) * FIT_FOLLOW;
+      const follow = (a: number, b: number) =>
+        a + (b - a) * (1 - Math.pow(1 - FIT_FOLLOW, elapsed / 125));
       view = fitRef.current = prev
         ? {
             scale: follow(prev.scale, goal.scale),
@@ -296,6 +352,8 @@ export function GuideOverlay({
     }
     rendererRef.current?.render({
       frame,
+      observedFrame: frame ? observed : null,
+      crop: cropRef.current,
       step: stepRef.current,
       mesh: meshRef.current,
       face: faceRef.current,
@@ -304,13 +362,39 @@ export function GuideOverlay({
         frame && view
           ? { toPx: (p) => toScreen(p, frame.imageSize, view), unit: iod * view.scale }
           : null,
-      now: performance.now(),
+      now,
     });
+    drawCount.current++;
+    if (!perfStart.current) perfStart.current = now;
+    if (showStats && now - perfStart.current >= 500) {
+      setPerf(
+        [
+          `추론 ${stats.fps} FPS · ${stats.backend ?? "-"}`,
+          `그리기 ${((drawCount.current * 1000) / (now - perfStart.current)).toFixed(0)} FPS`,
+          `관측 경과 ${Math.round(now - (observed?.detectedAt ?? now))}ms · 예측 ${predictionStrength ?? strength.current}`,
+          `상태 ${observed?.trackingState ?? "없음"} · yaw ${Math.round(((observed?.pose.yaw ?? 0) * 180) / Math.PI)}°`,
+          `표시 부위 ${rendererRef.current?.visibleRegions.join(", ") || "없음"}`,
+          `부분 허용 ${observed?.usableRegions?.join(", ") || "없음"}`,
+          observed
+            ? `화면 안 비율 눈 L ${observed.regionVisibility.leftEye.inFrameRatio.toFixed(2)} · R ${observed.regionVisibility.rightEye.inFrameRatio.toFixed(2)} · 입 ${observed.regionVisibility.lipsOuter.inFrameRatio.toFixed(2)}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+      drawCount.current = 0;
+      perfStart.current = now;
+    }
   });
 
   return (
     <>
       <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+      {showStats && (
+        <pre className="pointer-events-none absolute top-24 right-2 left-2 rounded bg-black/70 p-2 text-xs whitespace-pre-wrap text-white">
+          {perf}
+        </pre>
+      )}
       {error && (
         <p className="absolute inset-x-0 bottom-4 text-center text-sm text-destructive">{error}</p>
       )}

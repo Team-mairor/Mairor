@@ -56,6 +56,10 @@ export interface FaceFrame {
   eyes: { left: EyeState; right: EyeState };
   regions: Record<RegionName, RegionInfo>;
   regionVisibility: Record<RegionName, RegionVisibility>;
+  /** 마지막 실제 검출 시각. hold에서도 바꾸지 않는다. */
+  detectedAt?: number;
+  /** 전체 얼굴이 잘려도 연속 관측에서 형태가 안정적인 부위 */
+  usableRegions?: RegionName[];
 }
 
 /** 원본 프레임 정규화 좌표(0~1)의 사각형 */

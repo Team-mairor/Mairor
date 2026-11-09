@@ -1,18 +1,18 @@
 import {
-  HoldVisibility,
   isGuideVisible,
-  isRegionInView,
-  MIN_IN_FRAME_RATIO,
   REGIONS,
   type FaceFrame,
   type GuideShape,
   type Point,
   type RegionName,
+  type NormalizedRect,
 } from "@/features/face";
 import { resolveAnchor, type FaceMesh } from "@/features/overlay";
 
 import { isThinArea } from "./thin-area";
 import type { GuideItem, GuideStep } from "./types";
+import { FAR_SIDE_TURN, GuideVisibility, turnAlpha } from "./visibility";
+export { isStepVisible } from "./visibility";
 
 type Px = { x: number; y: number };
 
@@ -67,23 +67,6 @@ const STYLE = {
 };
 
 /**
- * 정확하지 않은 가이드는 보여주지 않는다. 공용 규칙(isGuideVisible)대로 추적이 안정적일 때만 보이고,
- * 단계 부위가 모두 가려지면 숨긴다. 깜빡임(hold) 때의 유지는 GuideRenderer가 직전 판정으로 처리한다.
- */
-export function isStepVisible(
-  step: GuideStep,
-  frame: FaceFrame | null,
-  minInFrameRatio = MIN_IN_FRAME_RATIO,
-): boolean {
-  if (!frame || !isGuideVisible(frame)) return false;
-  if (step.regions.length === 0) return true;
-  // 얼굴 전체(faceOval)는 가까이 가면 늘 잘리고, 화면 밖 부분은 그릴 때 알아서 빠지므로 숨기지 않는다.
-  return step.regions.some(
-    (region) => region === "faceOval" || isRegionInView(frame, region, minInFrameRatio),
-  );
-}
-
-/**
  * 얼굴 위에 튜토리얼 가이드를 그린다. 도형마다 모양을 달리해 한 단계 안에서 겹쳐도 구분되게 한다.
  * - 영역(polygon): 둥근 점선 테두리 (멈춤). 아이라인처럼 얇은 띠는 작은 점.
  *   빼는 부위(exclude)는 안쪽을 지우고 그 테두리를 구멍으로 그린다
@@ -96,8 +79,19 @@ export class GuideRenderer {
   private readonly ctx: CanvasRenderingContext2D;
   private dpr = 1;
   // 직전에 보이던 가이드만 깜빡임(hold) 동안 유지한다.
-  private readonly visibility = new HoldVisibility();
+  private readonly visibility = new GuideVisibility();
   private stepId: string | null = null;
+  private preparedFor: { step: GuideStep; mesh: FaceMesh } | null = null;
+  private prepared: {
+    guide: GuideItem;
+    wide: boolean;
+    thin: boolean;
+    region: RegionName;
+    side: Side;
+    /** 단계 부위 어디에도 속하지 않는 가운데 도형. 단계가 보이면 고개 각도로만 숨긴다 */
+    between: boolean;
+  }[] = [];
+  visibleRegions: RegionName[] = [];
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -121,6 +115,8 @@ export class GuideRenderer {
 
   render(options: {
     frame: FaceFrame | null;
+    observedFrame?: FaceFrame | null;
+    crop?: NormalizedRect;
     step: GuideStep | null;
     mesh: FaceMesh | null;
     projection: Projection | null;
@@ -136,7 +132,14 @@ export class GuideRenderer {
       this.stepId = step?.stepId ?? null;
       this.visibility.reset();
     }
-    const visible = !!step && this.visibility.update(frame, () => isStepVisible(step, frame));
+    const observed = options.observedFrame === undefined ? frame : options.observedFrame;
+    const visible = this.visibility.update(step, observed, now, options.crop);
+    this.visibleRegions =
+      visible && step
+        ? (step.regions.length ? step.regions : ["faceOval" as const]).filter(
+            (name) => this.visibility.alpha(name) > 0,
+          )
+        : [];
     if (!frame || !projection) return;
 
     const ctx = this.ctx;
@@ -144,6 +147,7 @@ export class GuideRenderer {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     // 윤곽은 단계에 가이드가 없어도(영역 실패 등) 그려 가운데가 비지 않게 한다. 숨길지는 부르는 쪽이 face로 정한다
+    // 윤곽은 조금만 어긋나도 어색하므로, 부위별 가이드와 달리 얼굴 전체 추적이 안정적일 때만 그린다
     if (face && isGuideVisible(frame)) this.drawFace(frame, projection);
     if (!step || !mesh || !visible) return;
 
@@ -164,28 +168,48 @@ export class GuideRenderer {
     };
 
     // 붓 자국은 다른 도형보다 먼저 깔아 시작점·화살표가 위에 보이게 한다.
-    const ordered = [...step.guides].sort((a, b) => Number(isBrush(b)) - Number(isBrush(a)));
+    if (this.preparedFor?.step !== step || this.preparedFor.mesh !== mesh) {
+      this.preparedFor = { step, mesh };
+      this.prepared = [...step.guides]
+        .sort((a, b) => Number(isBrush(b)) - Number(isBrush(a)))
+        .map((guide) => ({
+          guide,
+          wide: spans(guide, mesh),
+          thin: isThinArea(guide, mesh),
+          region: guide.region ?? regionOf(guide, mesh, step),
+          side: sideOf(guide, mesh),
+          between: !guide.region && isBetween(guide, mesh, step),
+        }));
+    }
     const brow =
       step.regions.length > 0 &&
       step.regions.every((region) => region === "rightBrow" || region === "leftBrow");
     const brushMin = this.brushMin ?? (brow ? STYLE.browBrushMin : STYLE.brushMin);
     const yaw = frame.pose.yaw;
     const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
-    for (const guide of ordered) {
-      const areaDot = isThinArea(guide, mesh)
-        ? Math.max(STYLE.dot.min, dot * STYLE.thinDot.scale)
-        : dot;
+    for (const { guide, wide, thin, region, side, between } of this.prepared) {
+      const areaDot = thin ? Math.max(STYLE.dot.min, dot * STYLE.thinDot.scale) : dot;
       const draw = () => {
         if (guide.type === "polygon" && guide.exclude?.length)
           this.drawPolygonWithHoles(guide, guide.exclude.map(holeOf), at, areaDot);
         else this.drawGuide(guide, at, projection.unit, dashOffset, areaDot, brushMin);
       };
       // 얼굴 윤곽처럼 양쪽 끝까지 걸친 도형은 먼 쪽 절반만 옅게 한다
-      if (spans(guide, mesh)) {
-        this.drawHalves(draw, toPx(MIDLINE[0]), toPx(MIDLINE[1]), toPx(LEFT_EDGE), yaw);
+      if (wide && (!guide.region || guide.region === "faceOval")) {
+        this.drawHalves(
+          draw,
+          toPx(MIDLINE[0]),
+          toPx(MIDLINE[1]),
+          toPx(RIGHT_EDGE),
+          toPx(LEFT_EDGE),
+          yaw,
+        );
         continue;
       }
-      const alpha = turnFade(guide, mesh, yaw);
+      // 얼굴 윤곽 단계의 한쪽 도형(볼 화살표 등)도 윤곽의 먼 쪽과 함께 숨긴다
+      const farSide =
+        region === "faceOval" && side !== "center" ? turnAlpha(yaw, side, FAR_SIDE_TURN) : 1;
+      const alpha = between ? turnAlpha(yaw, "center") : this.visibility.alpha(region) * farSide;
       if (alpha <= 0) continue;
       ctx.globalAlpha = alpha;
       draw();
@@ -212,16 +236,21 @@ export class GuideRenderer {
   }
 
   /** 얼굴 가운데 선(top → bottom)으로 나눠 반쪽마다 고개 각도에 맞는 진하기로 그린다 */
-  private drawHalves(draw: () => void, top: Px, bottom: Px, leftEdge: Px, yaw: number) {
+  private drawHalves(
+    draw: () => void,
+    top: Px,
+    bottom: Px,
+    rightEdge: Px,
+    leftEdge: Px,
+    yaw: number,
+  ) {
     const ctx = this.ctx;
     const len = Math.hypot(bottom.x - top.x, bottom.y - top.y) || 1;
     const d = { x: (bottom.x - top.x) / len, y: (bottom.y - top.y) / len };
-    // 본인 기준 왼쪽 반쪽을 향하는 법선
-    let n = { x: -d.y, y: d.x };
-    if ((leftEdge.x - top.x) * n.x + (leftEdge.y - top.y) * n.y < 0) n = { x: d.y, y: -d.x };
+    const n = leftNormal(d, rightEdge, leftEdge);
     const far = HALF_PLANE;
     for (const side of [1, -1]) {
-      const alpha = 1 - smoothstep(AWAY_FADE.side[0], AWAY_FADE.side[1], side * yaw);
+      const alpha = turnAlpha(yaw, side === 1 ? "left" : "right", FAR_SIDE_TURN);
       if (alpha <= 0) continue;
       const a = { x: top.x - d.x * far, y: top.y - d.y * far };
       const b = { x: bottom.x + d.x * far, y: bottom.y + d.y * far };
@@ -391,10 +420,9 @@ export class GuideRenderer {
   }
 }
 
-// 고개를 돌리면 먼 쪽 점은 얼굴 뒤로 넘어가 어긋나므로, 이 각도(라디안) 사이에서 옅어지다 숨긴다
-const AWAY_FADE = { side: [0.15, 0.35], center: [0.4, 0.6] } as const;
-/** 얼굴 가운데 선(이마 위, 턱 끝)과 본인 기준 왼쪽 끝 랜드마크 */
+/** 얼굴 가운데 선(이마 위, 턱 끝)과 본인 기준 오른쪽·왼쪽 끝 랜드마크 */
 const MIDLINE = [10, 152] as const;
+const RIGHT_EDGE = 234;
 const LEFT_EDGE = 454;
 /** 반쪽 영역을 화면 밖까지 덮는 길이 (px) */
 const HALF_PLANE = 10000;
@@ -423,22 +451,41 @@ function spans(guide: GuideShape, mesh: FaceMesh) {
   return us.length > 0 && Math.min(...us) < 0.25 && Math.max(...us) > 0.75;
 }
 
-/** 고개 각도에 따른 진하기. UV 가로 0.5가 코, 클수록 본인 기준 왼쪽 */
-function turnFade(guide: GuideShape, mesh: FaceMesh, yaw: number) {
-  const us = uvXs(guide, mesh);
-  if (!us.length) return 1;
-  const mean = us.reduce((a, b) => a + b, 0) / us.length;
-  if (Math.abs(mean - 0.5) < 0.08)
-    return 1 - smoothstep(AWAY_FADE.center[0], AWAY_FADE.center[1], Math.abs(yaw));
-  // yaw +면 본인 기준 왼쪽이 멀어진다
-  const away = mean > 0.5 ? yaw : -yaw;
-  return 1 - smoothstep(AWAY_FADE.side[0], AWAY_FADE.side[1], away);
+/**
+ * 가운데 선 방향 d에 수직이고 본인 기준 왼쪽 반쪽을 향하는 단위 벡터.
+ * 먼 쪽 끝점은 크게 돌리면 가운데 선을 넘어가므로 가운데 선이 아니라 양 끝을 잇는 방향으로 정한다
+ */
+export function leftNormal(d: Px, rightEdge: Px, leftEdge: Px): Px {
+  const n = { x: -d.y, y: d.x };
+  const toLeft = (leftEdge.x - rightEdge.x) * n.x + (leftEdge.y - rightEdge.y) * n.y;
+  return toLeft < 0 ? { x: d.y, y: -d.x } : n;
 }
 
-const smoothstep = (lo: number, hi: number, x: number) => {
-  const t = Math.max(0, Math.min(1, (x - lo) / (hi - lo)));
-  return t * t * (3 - 2 * t);
-};
+type Side = "left" | "right" | "center";
+
+/** 도형이 얼굴 어느 쪽에 있는지. UV 가로 0.5가 코, 클수록 본인 기준 왼쪽 */
+function sideOf(guide: GuideShape, mesh: FaceMesh): Side {
+  const us = uvXs(guide, mesh);
+  if (!us.length) return "center";
+  const mean = us.reduce((a, b) => a + b, 0) / us.length;
+  return Math.abs(mean - 0.5) < 0.08 ? "center" : mean > 0.5 ? "left" : "right";
+}
+
+/**
+ * 눈·입술을 함께 판정하는 단계의 콧대·턱 끝처럼, 좌우 부위가 있는 단계의 가운데 도형인지.
+ * 가운데 부위(입술)에 묶으면 입술만 잘려도 콧대가 사라지므로 따로 다룬다
+ */
+function isBetween(guide: GuideShape, mesh: FaceMesh, step: GuideStep) {
+  return (
+    sideOf(guide, mesh) === "center" && step.regions.some((name) => REGIONS[name].side !== "center")
+  );
+}
+
+/** 기존 파일의 도형을 단계 부위에 연결한다 */
+function regionOf(guide: GuideShape, mesh: FaceMesh, step: GuideStep): RegionName {
+  const side = sideOf(guide, mesh);
+  return step.regions.find((name) => REGIONS[name].side === side) ?? step.regions[0] ?? "faceOval";
+}
 
 /** 영역 대비 이보다 작은 구멍은 무시한다 */
 const MIN_HOLE_AREA = 0.03;

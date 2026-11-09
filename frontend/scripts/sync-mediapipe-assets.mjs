@@ -1,4 +1,4 @@
-// MediaPipe wasm(설치된 tasks-vision과 버전이 같아야 함)과 공유 모델·메시 파일을 public/으로 복사한다.
+// MediaPipe wasm·vision_bundle(설치된 tasks-vision과 버전이 같아야 함)과 얼굴 추론 Worker, 공유 모델·메시 파일을 public/으로 복사한다.
 // 공유하지 않는 모델은 저장소에 두지 않고 공식 주소에서 받아 SHA-256으로 확인한다.
 // 받는 모델은 없어도 추적은 동작하는 부가 기능용이라, 받지 못하면 경고만 남기고 계속한다.
 import { createHash } from "node:crypto";
@@ -19,6 +19,14 @@ import { fileURLToPath } from "node:url";
 const frontendDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const copies = [
+  {
+    from: join(frontendDir, "node_modules/@mediapipe/tasks-vision/vision_bundle.js"),
+    to: join(frontendDir, "public/mediapipe/vision_bundle.js"),
+  },
+  {
+    from: join(frontendDir, "scripts/face-worker.js"),
+    to: join(frontendDir, "public/mediapipe/face-worker.js"),
+  },
   {
     from: join(frontendDir, "node_modules/@mediapipe/tasks-vision/wasm"),
     to: join(frontendDir, "public/mediapipe/wasm"),

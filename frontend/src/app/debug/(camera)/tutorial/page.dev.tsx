@@ -42,11 +42,21 @@ export default function TutorialPage() {
   const [items, setItems] = useState<Item[] | null>(null);
   const [index, setIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [prediction, setPrediction] = useState(0.6);
+  const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const value = params.get("prediction");
     const area = params.get("area");
     const guides = params.get("guides");
+    // 가이드 파일을 못 불러와도 주소창 값은 적용한다. 주소창 값은 브라우저에서만 읽을 수 있다
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (value === "off") setPrediction(0);
+    else if (value !== null && Number.isFinite(Number(value)))
+      setPrediction(Math.max(0, Math.min(1, Number(value))));
+    setShowStats(params.has("stats"));
+    /* eslint-enable react-hooks/set-state-in-effect */
     const load = async (): Promise<Item[]> => {
       if (area) {
         const [data, defaults] = await Promise.all([loadGuideArea(area), loadDefaultGuideSet()]);
@@ -90,9 +100,25 @@ export default function TutorialPage() {
         )}
       </header>
 
-      <TutorialCropEditor step={item?.step ?? null} />
+      <TutorialCropEditor
+        step={item?.step ?? null}
+        predictionStrength={prediction}
+        showStats={showStats}
+      />
 
       <nav className="relative flex items-center justify-between gap-3">
+        <label className="rounded bg-black/70 p-2 text-sm text-white">
+          예측 {prediction.toFixed(1)}
+          <input
+            aria-label="위치 예측 강도"
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={prediction}
+            onChange={(event) => setPrediction(Number(event.target.value))}
+          />
+        </label>
         <Button size="lg" variant="outline" asChild>
           <Link href="/debug/preview">처음으로</Link>
         </Button>

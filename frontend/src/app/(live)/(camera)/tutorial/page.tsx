@@ -13,7 +13,7 @@ import {
   resolveStep,
   toGuideArea,
   useGuide,
-  useStepInView,
+  useGuideTrackingIssue,
   useTutorialCrop,
   type GuideArea,
   type GuideModel,
@@ -234,10 +234,15 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     () => resolveStep(info.stepId, subs, defaults),
     [info.stepId, subs, defaults],
   );
-  // 가까이 다가가 지금 단계 부위만 잘려도 화면 밖으로 잘린 것으로 안내하고 측정을 멈춘다
+  // 가이드가 있는 단계는 지금 단계 부위의 판정(놓침·고개 돌림·잘림·너무 멂)으로 안내하고 측정을 멈춘다
   const { crop } = useTutorialCrop();
-  const stepInView = useStepInView(guideStep, crop);
-  const { note, canRender, canMeasure } = useLiveState(alert, stepInView ? null : "out-of-frame");
+  const guideIssue = useGuideTrackingIssue(guideStep, crop);
+  // 가이드가 없는 단계(해당 없음·실패)는 공통 얼굴 판정으로 안내하고 측정을 막는다
+  const { note, canRender, canMeasure } = useLiveState(
+    alert,
+    null,
+    guideStep ? { issue: guideIssue } : undefined,
+  );
   // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가 (CAMERA-004 · GUIDE-013)
   const blocked = !canMeasure;
 

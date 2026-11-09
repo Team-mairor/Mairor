@@ -54,10 +54,12 @@ export function useLiveState(
   alert?: LiveAlert | null,
   /** 화면별 추가 판정. 공통 추적 판정에 문제가 없을 때만 쓴다 */
   extraIssue?: TrackingIssue | null,
+  /** 튜토리얼은 현재 단계 부위의 판정으로 공통 얼굴 전체 판정을 대체한다. */
+  trackingOverride?: { issue: TrackingIssue | null },
 ): LiveState {
   const { status } = useCamera();
   const { face, issue: trackIssue } = useFaceState();
-  const issue = trackIssue ?? extraIssue ?? null;
+  const issue = trackingOverride ? trackingOverride.issue : (trackIssue ?? extraIssue ?? null);
   const err = useCameraErrorNote(face);
   const off = { canRender: false, canMeasure: false };
   if (err) return { note: err, ...off, reason: "error" };

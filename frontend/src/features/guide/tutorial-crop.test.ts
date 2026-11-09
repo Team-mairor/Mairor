@@ -143,10 +143,10 @@ describe("크롭 화면 밖 판정", () => {
   it("가이드 없는 단계도 얼굴 윤곽을 기준으로 판정한다", () => {
     expect(isStepInCrop(null, frameFor(box(0.01, 0.15)), display)).toBe(false);
   });
-  it("카메라에서 가려진 부위는 크롭 안에 있어도 표시 대상으로 보지 않는다", () => {
+  it("고개 돌림과 무관하게 크롭과 겹치는지만 판정한다", () => {
     const frame = frameFor(box(0.3, 0.5));
     frame.regionVisibility.rightEye.facing = false;
-    expect(isStepInCrop(step, frame, display)).toBe(false);
+    expect(isStepInCrop(step, frame, display)).toBe(true);
   });
 });
 describe("미리보기 크기와 저장 실패", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveStep } from "./area";
+import { resolveStep, resolveSubStep } from "./area";
 import type { AreaSubStep, GuideItem, GuideSet, GuideStep, TemplateId } from "./types";
 
 const point = (triangle: number): GuideItem => ({
@@ -38,6 +38,23 @@ const sub = (order: number, templateId: TemplateId): AreaSubStep => ({
 });
 
 describe("resolveStep 아이섀도 템플릿", () => {
+  it("AI 영역 묶음의 부위 정보를 각 도형에 유지한다", () => {
+    const polygon = {
+      type: "polygon" as const,
+      outline: [{ triangle: 1, bary: [1, 0, 0] as [number, number, number] }],
+    };
+    const resolved = resolveSubStep(
+      {
+        ...sub(1, "eyeshadow"),
+        status: "extracted",
+        guideSets: [
+          { region: "rightEye", source: "extracted", guides: [polygon], exclude: ["rightEye"] },
+        ],
+      },
+      defaults,
+    );
+    expect(resolved?.guides[0]).toEqual({ ...polygon, region: "rightEye", exclude: ["rightEye"] });
+  });
   it("eyeshadow와 바른 자리별 템플릿이 함께 오면 띠를 한 번만 그린다", () => {
     const step = resolveStep("s1", [sub(1, "eyeshadow"), sub(2, "eyeshadowUpper")], defaults);
     expect(step?.guides).toEqual([upper, under]);

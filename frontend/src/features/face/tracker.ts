@@ -1,10 +1,4 @@
-import type {
-  Detection,
-  FaceDetector,
-  FaceLandmarker,
-  FaceLandmarkerResult,
-  NormalizedLandmark,
-} from "@mediapipe/tasks-vision";
+import type { Detection, FaceLandmarkerResult, NormalizedLandmark } from "@mediapipe/tasks-vision";
 
 import {
   computeRegion,
@@ -13,7 +7,8 @@ import {
   poseFromMatrix,
   regionVisibility,
 } from "./geometry";
-import { createFaceDetector, createFaceLandmarker } from "./landmarker";
+import { createFaceInference, FrameCaptureError, type FaceInference } from "./inference";
+import { RegionStability } from "./region-stability";
 import { REGION_NAMES } from "./regions";
 import { LandmarkSmoother, type SmoothingOptions } from "./smoothing";
 import { DEFAULT_MAX_YAW, KEY_REGIONS, MIN_KEY_REGIONS_IN_VIEW } from "./tracking-rules";
@@ -92,6 +87,7 @@ export function formatTiming(timing: TrackerTiming): string {
 
 export interface TrackerStats {
   fps: number;
+  backend?: "worker" | "main";
   timing: TrackerTiming;
   /** 입력 축소 배율 (1이면 근접 모드 꺼짐) */
   inputScale: number;
@@ -132,6 +128,8 @@ const SEARCH_SWITCH_FRAMES = 10;
 const STALL_MS = 2000;
 // 다시 재생해도 이만큼 연속으로 멈춰 있으면 오류로 알린다.
 const MAX_STALL_RETRIES = 3;
+// 영상 이미지를 만들지 못한 프레임은 건너뛰되, 이만큼 연속으로 실패하면 멈추고 알린다.
+const MAX_CAPTURE_FAILURES = 30;
 // 추적 중인 얼굴이 가장 큰 얼굴인지 이 간격마다 확인한다. 한 번에 갤럭시탭 S6 Lite에서 35~55ms라
 // 사람이 바뀌는 드문 경우를 위해 자주 돌리지 않는다.
 const LARGEST_CHECK_MS = 1500;
@@ -157,8 +155,16 @@ export class VideoStalledError extends Error {
 }
 
 export class FaceTracker {
-  private landmarker: FaceLandmarker | null = null;
-  private detector: FaceDetector | null = null;
+  private inference: FaceInference | null = null;
+  /** 불러오는 중인 추론. 시작과 메인 스레드 전환이 겹쳐도 하나만 만든다. */
+  private loading: Promise<FaceInference> | null = null;
+  /** 추적 중 Worker가 실패하면 false로 바꿔 이후에는 메인 스레드에서 추론한다. */
+  private useWorker = true;
+  /** 마지막 요청이 start인지. 모델을 불러오는 동안 stop·start가 오가도 마지막 요청을 따른다 */
+  private wanted = false;
+  private generation = 0;
+  private busy = false;
+  private lastVideoTime = -1;
   private lastCheckAt = -Infinity;
   /** 얼굴을 처음 또는 놓쳤다가 다시 잡은 시각 */
   private foundAt = -Infinity;
@@ -184,9 +190,11 @@ export class FaceTracker {
   private starting: Promise<void> | null = null;
   private lastTickAt = 0;
   private stallRetries = 0;
+  private captureFailures = 0;
   private watchdog: ReturnType<typeof setInterval> | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private smoother: LandmarkSmoother | null = null;
+  private regionStability = new RegionStability();
   private options: TrackerOptions;
 
   stats: TrackerStats = {
@@ -208,6 +216,7 @@ export class FaceTracker {
   }
 
   start(): Promise<void> {
+    this.wanted = true;
     // 동시에 두 번 불러도 모델과 루프는 하나만 만든다.
     this.starting ??= this.doStart().finally(() => {
       this.starting = null;
@@ -216,33 +225,19 @@ export class FaceTracker {
   }
 
   private async doStart() {
-    // 가장 큰 얼굴 확인은 부가 기능이라, 검출기를 불러오지 못해도 추적은 계속한다.
-    const detecting = this.detector
-      ? Promise.resolve(this.detector)
-      : createFaceDetector().catch((e) => {
-          console.warn("얼굴 검출기를 불러오지 못해 가장 큰 얼굴 확인 없이 추적합니다", e);
-          return null;
-        });
-    let landmarker: FaceLandmarker;
-    try {
-      landmarker = this.landmarker ?? (await createFaceLandmarker());
-    } catch (e) {
-      if (!this.detector) (await detecting)?.close();
-      throw e;
-    }
-    const detector = await detecting;
+    const inference = this.inference ?? (await this.loadInference());
     // 모델을 불러오는 동안 dispose되었으면 시작하지 않는다.
     if (this.disposed) {
-      landmarker.close();
-      detector?.close();
+      inference.dispose();
       return;
     }
-    this.landmarker = landmarker;
-    this.detector = detector;
-    if (this.running) return;
+    this.inference = inference;
+    this.stats.backend = inference.backend;
+    if (!this.wanted || this.running) return;
     this.running = true;
     this.lastTickAt = performance.now();
     this.stallRetries = 0;
+    this.captureFailures = 0;
     document.addEventListener("visibilitychange", this.onVisibilityChange);
     this.watchdog = setInterval(this.checkStall, STALL_MS / 2);
     this.scheduleNext();
@@ -258,6 +253,9 @@ export class FaceTracker {
   };
 
   private readonly checkStall = () => {
+    // 추론 응답을 기다리거나 메인 스레드 추론으로 바꾸는 동안은 영상이 멈춘 것이 아니다.
+    // 응답이 오지 않으면 추론 쪽 시간 초과가 처리한다.
+    if (this.busy || !this.inference) return;
     if (!this.running || document.visibilityState !== "visible") return;
     if (performance.now() - this.lastTickAt < STALL_MS) return;
     if (++this.stallRetries > MAX_STALL_RETRIES) {
@@ -288,6 +286,8 @@ export class FaceTracker {
   }
 
   stop() {
+    this.wanted = false;
+    this.generation++;
     this.running = false;
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     if (this.watchdog) clearInterval(this.watchdog);
@@ -299,6 +299,10 @@ export class FaceTracker {
 
   /** 카메라·해상도를 바꿨을 때처럼 이전 프레임 기준 상태를 버린다. */
   reset() {
+    this.generation++;
+    this.lastVideoTime = -1;
+    this.captureFailures = 0;
+    this.regionStability.reset();
     this.smoother?.reset();
     this.lastFrame = null;
     this.lastState = null;
@@ -312,10 +316,8 @@ export class FaceTracker {
   dispose() {
     this.disposed = true;
     this.stop();
-    this.landmarker?.close();
-    this.landmarker = null;
-    this.detector?.close();
-    this.detector = null;
+    this.inference?.dispose();
+    this.inference = null;
   }
 
   setOptions(options: Partial<TrackerOptions>) {
@@ -331,7 +333,8 @@ export class FaceTracker {
   }
 
   private scheduleNext() {
-    if (!this.running) return;
+    // 이미 예약돼 있으면 루프가 두 개 돌지 않게 새로 예약하지 않는다.
+    if (!this.running || this.busy || this.frameHandle) return;
     if ("requestVideoFrameCallback" in this.video) {
       this.frameHandle = {
         kind: "video",
@@ -342,13 +345,22 @@ export class FaceTracker {
     }
   }
 
-  private tick() {
-    if (!this.running || !this.landmarker) return;
+  private async tick() {
+    this.frameHandle = null;
+    if (!this.running || !this.inference || this.busy) return;
     this.lastTickAt = performance.now();
     this.stallRetries = 0;
 
     const video = this.video;
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+    if (
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      video.videoWidth > 0 &&
+      video.currentTime !== this.lastVideoTime
+    ) {
+      this.lastVideoTime = video.currentTime;
+      this.busy = true;
+      const generation = this.generation;
+      const imageSize = { width: video.videoWidth, height: video.videoHeight };
       // detectForVideo는 단조 증가하는 타임스탬프가 필요하다.
       const now = Math.max(performance.now(), this.lastTimestamp + 1);
       this.lastTimestamp = now;
@@ -357,7 +369,11 @@ export class FaceTracker {
       let frame: FaceFrame | null;
       let input: HTMLVideoElement | HTMLCanvasElement;
       let scale: number;
+      let detections: Detection[] | undefined;
       if (this.lastTickEnd !== null) this.recordTiming("idle", now - this.lastTickEnd);
+      // 추론 호출에서 난 예외만 Worker 실패로 보고, 입력 준비·결과 변환 예외는 그대로 알린다.
+      let inferring = false;
+      let skipped = false;
       try {
         this.updateInputScale();
         scale = this.inputScale;
@@ -365,22 +381,51 @@ export class FaceTracker {
         const inputEnd = performance.now();
         this.recordTiming("input", inputEnd - now);
 
-        const result = this.landmarker.detectForVideo(input, now);
+        const interval = now - this.foundAt < REFOUND_MS ? REFOUND_CHECK_MS : LARGEST_CHECK_MS;
+        const checkLargest = !lockBox && now - this.lastCheckAt >= interval;
+        if (checkLargest) this.lastCheckAt = now;
+        inferring = true;
+        const result = await this.inference.detect(input, now, checkLargest);
+        inferring = false;
+        this.captureFailures = 0;
+        if (!this.running || generation !== this.generation) return;
+        if (video.videoWidth !== imageSize.width || video.videoHeight !== imageSize.height) {
+          this.reset();
+          return;
+        }
         const detectEnd = performance.now();
-        this.recordTiming("detect", detectEnd - inputEnd);
+        this.recordTiming("detect", result.detectMs);
+        if (checkLargest) this.recordTiming("largest", result.largestMs);
+        detections = result.detections;
         this.stats.inputScale = scale;
         this.updateFps(now);
-        frame = this.toFrame(result, now, scale);
+        frame = this.toFrame(result.result, now, scale);
         this.recordTiming("frame", performance.now() - detectEnd);
       } catch (e) {
+        if (!this.running || generation !== this.generation) return;
+        if (e instanceof FrameCaptureError && ++this.captureFailures < MAX_CAPTURE_FAILURES) {
+          skipped = true;
+          return;
+        }
+        if (
+          inferring &&
+          !(e instanceof FrameCaptureError) &&
+          this.inference?.backend === "worker"
+        ) {
+          void this.fallbackToMain(e);
+          return;
+        }
         // GPU 컨텍스트 손실처럼 대개 다시 해도 실패하므로 멈추고 알린다.
         this.stop();
         this.onError?.(e);
         return;
+      } finally {
+        this.busy = false;
+        if (skipped || generation !== this.generation) this.scheduleNext();
       }
 
       if (lockBox) this.updateLock(frame, now);
-      else this.checkLargestFace(input, frame, now, scale);
+      else if (detections) this.checkLargestFace(detections, frame, now, scale);
 
       // 화면 쪽 처리에서 난 예외 때문에 추적이 멈추지 않게 한다.
       const listenersStart = performance.now();
@@ -394,6 +439,42 @@ export class FaceTracker {
       this.timedTicks++;
     }
 
+    this.scheduleNext();
+  }
+
+  private loadInference() {
+    this.loading ??= createFaceInference({ worker: this.useWorker }).finally(() => {
+      this.loading = null;
+    });
+    return this.loading;
+  }
+
+  /** 추적 중 Worker가 실패하면 한 번만 메인 스레드 추론으로 바꿔 이어 간다. */
+  private async fallbackToMain(error: unknown) {
+    console.warn("Worker 추론이 실패해 메인 스레드로 이어서 추적합니다", error);
+    this.useWorker = false;
+    this.inference?.dispose();
+    this.inference = null;
+    this.stats.backend = undefined;
+    let inference: FaceInference;
+    try {
+      inference = await this.loadInference();
+    } catch (e) {
+      if (this.disposed || !this.running) return;
+      this.stop();
+      this.onError?.(e);
+      return;
+    }
+    if (this.disposed) {
+      inference.dispose();
+      return;
+    }
+    this.inference = inference;
+    this.stats.backend = inference.backend;
+    // 불러오는 동안 reset돼도 루프는 이어 간다. 멈췄다 다시 시작했다면 start가 이미 예약했다.
+    if (!this.running) return;
+    this.lastTickAt = performance.now();
+    this.lastTickEnd = null;
     this.scheduleNext();
   }
 
@@ -429,30 +510,14 @@ export class FaceTracker {
   // 랜드마크 추적은 얼굴 하나만 따라가서, 가림 뒤에 다른 얼굴로 넘어가면 그대로 남는다.
   // 검출기로 가장 큰 얼굴을 찾아 지금 얼굴과 다르면 그 주변만 남겨 다시 잡게 한다.
   private checkLargestFace(
-    input: HTMLVideoElement | HTMLCanvasElement,
+    detections: Detection[],
     frame: FaceFrame | null,
     now: number,
     scale: number,
   ) {
-    const interval = now - this.foundAt < REFOUND_MS ? REFOUND_CHECK_MS : LARGEST_CHECK_MS;
-    if (!this.detector || now - this.lastCheckAt < interval) return;
-    this.lastCheckAt = now;
     // 잠깐 가려진 동안은 바꾸지 않는다.
     if (frame?.trackingState === "hold") {
       this.switchConfirms = 0;
-      return;
-    }
-
-    let detections: Detection[];
-    const start = performance.now();
-    try {
-      ({ detections } = this.detector.detectForVideo(input, now));
-      this.recordTiming("largest", performance.now() - start);
-    } catch (e) {
-      // 부가 기능이라 실패하면 끄고 추적은 계속한다.
-      console.warn("얼굴 검출기가 실패해 가장 큰 얼굴 확인을 끕니다", e);
-      this.detector.close();
-      this.detector = null;
       return;
     }
 
@@ -538,16 +603,14 @@ export class FaceTracker {
     timestamp: number,
     scale: number,
   ): FaceFrame | null {
-    const raw = result.faceLandmarks[0];
+    const candidate = result.faceLandmarks[0];
+    const raw =
+      candidate?.length >= 478 &&
+      candidate.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))
+        ? candidate
+        : undefined;
 
-    if (!raw) {
-      if (!this.lastFrame) return null;
-      const state: TrackingState =
-        timestamp - this.lastSeenAt <= this.options.holdMs ? "hold" : "lost";
-      if (state === "lost") this.smoother?.reset();
-      this.lastState = state;
-      return { ...this.lastFrame, timestamp, trackingState: state };
-    }
+    if (!raw) return this.missingFrame(timestamp);
 
     const imageSize = { width: this.video.videoWidth, height: this.video.videoHeight };
     // 카메라·해상도가 바뀌면 이전 픽셀 좌표가 남지 않도록 떨림 보정을 새로 시작한다.
@@ -560,9 +623,11 @@ export class FaceTracker {
       ? this.smoother.apply(unpadded, imageSize, timestamp)
       : unpadded;
     const iod = interocularDistance(landmarks, imageSize);
+    if (!Number.isFinite(iod) || iod < 1) return this.missingFrame(timestamp);
 
     const matrix = result.facialTransformationMatrixes[0];
     const pose: Pose = matrix ? poseFromMatrix(matrix.data) : { yaw: 0, pitch: 0, roll: 0 };
+    if (!Object.values(pose).every(Number.isFinite)) return this.missingFrame(timestamp);
 
     const blend = new Map(
       (result.faceBlendshapes[0]?.categories ?? []).map((c) => [c.categoryName, c.score]),
@@ -598,6 +663,7 @@ export class FaceTracker {
       version: "0.2",
       meshVersion: "v1",
       timestamp,
+      detectedAt: timestamp,
       imageSize,
       trackingState: degraded ? "degraded" : "tracking",
       landmarks,
@@ -610,12 +676,26 @@ export class FaceTracker {
       regions,
       regionVisibility: visibility,
     };
+    frame.usableRegions = this.regionStability.update(
+      frame,
+      scale >= scaleLimit && inView >= 1 && Number.isFinite(iod) && iod > 0,
+    );
 
     if (this.lastState === null || this.lastState === "lost") this.foundAt = timestamp;
     this.lastFrame = frame;
     this.lastState = frame.trackingState;
     this.lastSeenAt = timestamp;
     return frame;
+  }
+
+  private missingFrame(timestamp: number): FaceFrame | null {
+    this.regionStability.reset();
+    if (!this.lastFrame) return null;
+    const state: TrackingState =
+      timestamp - this.lastSeenAt <= this.options.holdMs ? "hold" : "lost";
+    if (state === "lost") this.smoother?.reset();
+    this.lastState = state;
+    return { ...this.lastFrame, timestamp, trackingState: state };
   }
 }
 

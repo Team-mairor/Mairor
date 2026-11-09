@@ -82,9 +82,11 @@ npm run dev:https
 - 이마 영역 색(Lab)과 흔들림: 카메라 설정과 조명이 색 측정에 충분히 안정적인지 확인
 - 회색으로 표시된 부위는 추적이 불안정해 가이드를 보여주지 않는 상태
 - 안내: 가이드·화장을 숨긴 이유(얼굴 놓침·고개 돌림·화면 밖으로 잘림)와 너무 먼 경우. 화면에서는 `useTrackingIssue()`로 같은 값을 받아 안내 문구(`TRACKING_ISSUE_TEXT`)를 띄운다
+- 튜토리얼은 `useGuideTrackingIssue(step)`로 현재 부위의 표시와 안내를 맞춘다. `/debug/tutorial?stats&prediction=off`와 `?stats&prediction=0.6`으로 예측을 비교하고 강도 슬라이더로 조정한다. 추론 FPS와 그리기 FPS는 별개다. 조건과 실기기 확인 항목은 [얼굴 추적 문서](docs/FACE_CAMERA_OVERLAY.md#위치-예측과-비교)를 참고한다.
 - 판정 기준값 (갤럭시탭 S6 Lite, 640×480)
-  - 핵심 부위 2개 이상 보여야 추적 유지 (하나만 보이면 좌표가 어긋남)
+  - 얼굴 전체 판정은 핵심 부위 2개 이상. 튜토리얼은 연속 관측에서 안정적인 부위만 따로 표시한다
   - 고개 회전 0.6 rad (약 35°)
+  - 튜토리얼 가이드는 먼 쪽 부위를 0.45~0.75 rad에서 옅게 하다 숨기고, 1.05 rad 이상이면 모두 숨긴다. 고개 돌림 안내는 0.75 rad부터다 (갤럭시탭 S6에서 확인)
   - 너무 멂: 얼굴 폭 / 영상 폭 0.4 미만 (평소 0.75 안팎). 카메라 설정을 바꾸면 다시 잰다
 - 카메라는 640×480(4:3)으로 받아 자르지 않고 보여 준다. 1280×720보다 넓게 보이고 빠르다 (fps 3 → 5~7)
 
@@ -113,7 +115,7 @@ npm run dev:https
 - 모양: `polygon`(부위 외곽선, `exclude`로 빼기), `polyline`(`MeshAnchor` 경로), `uvMask`(얼굴 메시 UV 마스크)
 - 섞기: `normal` = 피부×(1−a) + 색×a, `multiply` = 피부×(1−a) + 피부×색×a. a = `opacity` × 마스크 값
 - `feather`는 가우시안 흐림으로 근사한다 (σ ≈ feather / 4)
-- 가이드와 같은 공용 규칙으로, 추적이 불안정하거나(`degraded`) 얼굴을 놓치면(`lost`) 그리지 않는다. 레이어 부위가 모두 화면 밖이어도 그리지 않는다. 깜빡임 같은 짧은 놓침(`hold`)은 직전에 보이던 경우에만 유지한다
+- 얼굴 전체 추적 판정으로, 추적이 불안정하거나(`degraded`) 얼굴을 놓치면(`lost`) 그리지 않는다. 레이어 부위가 모두 화면 밖이어도 그리지 않는다. 깜빡임 같은 짧은 놓침(`hold`)은 직전에 보이던 경우에만 유지한다
 - 레이어 파일은 불러올 때 `meshVersion`, 부위 이름, 기준점(삼각형 번호·무게중심 합)을 확인하고, 쓸 수 없는 레이어만 경고 후 뺀다. 불러오지 못하면 5초마다 다시 시도한다
 - 고개를 돌리면 먼 쪽 화장은 각도와 화면에서 눌린 정도에 따라 서서히 옅어진다
 - 파운데이션은 얼굴 메시로 칠하고, 이마는 위로 늘리며 턱선 쪽은 옅게 한다
@@ -143,7 +145,7 @@ npm run dev:https
 - 하프미러(검은 배경) 위에 흰 선과 옅은 흰 빛만 그린다. 화면이 밝은 곳은 거울 속 얼굴이 흐려지므로 영역을 채우지 않는다
 - 하프미러 필름 너머로 보이도록 선·점은 IOD에 맞춰 굵게 그린다
 - 아이라인처럼 따라 그리는 것은 경로, 쉐딩·하이라이트처럼 바르는 곳은 영역으로 정의한다. 바른 정도는 채점하지 않는다
-- 화장 레이어와 같은 공용 규칙으로 숨기고, 단계를 바꾸면 직전 판정을 버린다
+- 화장 레이어와 달리 `GuideVisibility`로 부위별로 숨긴다. 얼굴 전체 추적이 `degraded`여도 안정적으로 관측된 부위(`usableRegions`)는 표시하고, 단계를 바꾸면 직전 판정을 버린다. 영상 대신 까는 옅은 얼굴 윤곽은 조금만 어긋나도 어색하므로 얼굴 전체 추적이 안정적(`tracking`)일 때만 그린다
 - 불러올 때 부위 이름과 기준점을 확인하고, 쓸 수 없는 단계·도형만 경고 후 뺀다
 
 ### 기본 가이드
@@ -166,7 +168,7 @@ npm run dev:https
 
 - 좌우는 사용자 신체 기준이고, 좌우 대칭인 랜드마크 쌍으로 정의한다
 - 숨김 판정 부위 중 하나라도 보이면 그린다. 얼굴 윤곽은 가까이 가면 늘 잘리므로 화장 레이어처럼 판정에서 뺀다
-- 고개를 돌리면 먼 쪽 도형은 옅어지다 숨는다. 얼굴 윤곽은 먼 쪽 절반만 숨고, 가운데 도형(립 등)은 더 늦게 숨는다
+- 고개를 돌리면 먼 쪽 도형은 옅어지다 숨는다. 얼굴 윤곽은 먼 쪽 절반과 그쪽 도형만 더 일찍 숨고, 가운데 도형(립 등)은 먼 쪽 부위와 같은 각도에서 숨는다
 - 아이라인 경로는 미리보기 픽스처 레이어와 같은 계산을 쓴다
 
 ## 폴더 구조
@@ -209,7 +211,8 @@ src/
 │  └─ api/                    # BE API 클라이언트·모의 응답
 ├─ mocks/                     # API 연동 전 샘플 데이터. 화면(app/)·layout·개발용 dev-nav만 가져온다(예외: lib/api/mock.ts)
 scripts/
-├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시를 public/에 준비
+├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시·추론 Worker를 public/에 준비
+├─ face-worker.js             # 얼굴 추론 classic Worker (public/mediapipe/로 복사)
 └─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
 public/
 ├─ ill/                       # 파우치 종류 일러스트
@@ -230,13 +233,14 @@ public/
 
 얼굴 추적(MediaPipe Face Landmarker)은 빌드한 뒤에는 인터넷 없이도 동작하도록 wasm과 모델 파일을 직접 서빙한다.
 
-| 파일        | 원본                                                               | 서빙 경로                                  |
-| ----------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| wasm        | `node_modules/@mediapipe/tasks-vision/wasm`                        | `/mediapipe/wasm/`                         |
-| 모델        | `../shared/face-mesh/face_landmarker.task` (AI와 공유)             | `/models/face_landmarker.task`             |
-| 메시        | `../shared/face-mesh/triangles.v1.json`, `uv.v1.json`              | `/models/*.v1.json`                        |
-| 얼굴 검출기 | MediaPipe 공식 주소에서 내려받음 (SHA-256 확인)                    | `/models/blaze_face_short_range.tflite`    |
-| 피부 분할   | Google 공식 주소에서 내려받음 (`../shared/segmentation/README.md`) | `/models/selfie_multiclass_256x256.tflite` |
+| 파일        | 원본                                                                              | 서빙 경로                                                  |
+| ----------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| wasm        | `node_modules/@mediapipe/tasks-vision/wasm`                                       | `/mediapipe/wasm/`                                         |
+| 모델        | `../shared/face-mesh/face_landmarker.task` (AI와 공유)                            | `/models/face_landmarker.task`                             |
+| 메시        | `../shared/face-mesh/triangles.v1.json`, `uv.v1.json`                             | `/models/*.v1.json`                                        |
+| 얼굴 검출기 | MediaPipe 공식 주소에서 내려받음 (SHA-256 확인)                                   | `/models/blaze_face_short_range.tflite`                    |
+| 피부 분할   | Google 공식 주소에서 내려받음 (`../shared/segmentation/README.md`)                | `/models/selfie_multiclass_256x256.tflite`                 |
+| 추론 Worker | `node_modules/@mediapipe/tasks-vision/vision_bundle.js`, `scripts/face-worker.js` | `/mediapipe/vision_bundle.js`, `/mediapipe/face-worker.js` |
 
 - `npm run dev`, `npm run dev:https`, `npm run build` 전에 자동으로 `public/`에 준비된다. 직접 하려면 `npm run sync:mediapipe`.
 - 얼굴 검출기는 여러 얼굴 중 가장 큰 얼굴을 따라가는지 확인하는 데 쓴다. 이미 받은 파일이 맞으면 다시 받지 않는다.

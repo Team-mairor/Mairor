@@ -23,6 +23,7 @@ import { containTransform, visibleRect } from "./view-transform";
 export type CameraStatus = "idle" | "starting" | "ready" | "error";
 
 type FrameListener = (frame: FaceFrame | null, stats: TrackerStats) => void;
+type RenderListener = (frame: FaceFrame | null, stats: TrackerStats, now: number) => void;
 
 interface CameraContextValue {
   status: CameraStatus;
@@ -38,12 +39,19 @@ interface CameraContextValue {
   start: () => Promise<void>;
   stop: () => void;
   subscribe: (listener: FrameListener) => () => void;
+  subscribeRender: (listener: RenderListener) => () => void;
 }
 
 const CameraContext = createContext<CameraContextValue | null>(null);
 
 // 전면 센서가 4:3이라 좌우가 덜 잘리고, 1280×720보다 빠르다.
 const VIDEO_SIZE = { width: 640, height: 480 };
+const EMPTY_STATS: TrackerStats = {
+  fps: 0,
+  inputScale: 1,
+  blink: { left: 0, right: 0 },
+  timing: { input: 0, detect: 0, frame: 0, largest: 0, listeners: 0, idle: 0 },
+};
 
 // 카메라와 얼굴 추적을 한 번만 시작해 하위 페이지가 함께 쓴다.
 export function CameraProvider({
@@ -62,6 +70,9 @@ export function CameraProvider({
   // 화면을 떠날 때는 videoRef가 먼저 비워져, 끌 스트림을 따로 들고 있는다.
   const streamRef = useRef<MediaStream | null>(null);
   const listeners = useRef(new Set<FrameListener>());
+  const renderListeners = useRef(new Set<RenderListener>());
+  const latest = useRef<{ frame: FaceFrame | null; stats: TrackerStats } | null>(null);
+  const renderHandle = useRef<number | null>(null);
 
   const [status, setStatus] = useState<CameraStatus>("idle");
   const [error, setError] = useState<CameraError | null>(null);
@@ -110,6 +121,7 @@ export function CameraProvider({
   const pausedRef = useRef(false);
 
   const release = useCallback(() => {
+    latest.current = null;
     pausedRef.current = false;
     trackerRef.current?.dispose();
     trackerRef.current = null;
@@ -174,6 +186,7 @@ export function CameraProvider({
       const tracker = new FaceTracker(
         video,
         (frame, stats) => {
+          latest.current = { frame, stats };
           for (const listener of listeners.current) {
             try {
               listener(frame, stats);
@@ -210,7 +223,7 @@ export function CameraProvider({
   const syncTracking = useCallback(() => {
     const tracker = trackerRef.current;
     if (!tracker || startingRef.current) return;
-    const wanted = listeners.current.size > 0;
+    const wanted = listeners.current.size + renderListeners.current.size > 0;
     if (!wanted && !pausedRef.current) {
       tracker.stop();
       pausedRef.current = true;
@@ -221,6 +234,7 @@ export function CameraProvider({
       if (video?.paused)
         video.play().catch((e) => console.warn("카메라 영상을 다시 재생하지 못했습니다", e));
       tracker.reset();
+      latest.current = null;
       tracker.start().then(
         // 다시 시작하는 사이 또 쉬게 됐으면 시작한 루프를 멈춘다
         () => {
@@ -248,6 +262,37 @@ export function CameraProvider({
       syncTracking();
       return () => {
         listeners.current.delete(listener);
+        syncTracking();
+      };
+    },
+    [syncTracking],
+  );
+
+  const subscribeRender = useCallback(
+    (listener: RenderListener) => {
+      renderListeners.current.add(listener);
+      syncTracking();
+      const draw = (now: number) => {
+        renderHandle.current = null;
+        if (document.visibilityState === "visible") {
+          const { frame, stats } = latest.current ?? { frame: null, stats: EMPTY_STATS };
+          for (const callback of renderListeners.current) {
+            try {
+              callback(frame, stats, now);
+            } catch (error) {
+              console.error(error);
+            }
+          }
+        }
+        if (renderListeners.current.size) renderHandle.current = requestAnimationFrame(draw);
+      };
+      if (renderHandle.current === null) renderHandle.current = requestAnimationFrame(draw);
+      return () => {
+        renderListeners.current.delete(listener);
+        if (!renderListeners.current.size && renderHandle.current !== null) {
+          cancelAnimationFrame(renderHandle.current);
+          renderHandle.current = null;
+        }
         syncTracking();
       };
     },
@@ -303,8 +348,19 @@ export function CameraProvider({
       start,
       stop,
       subscribe,
+      subscribeRender,
     }),
-    [status, error, viewTransform, showVideo, setCoverPanel, start, stop, subscribe],
+    [
+      status,
+      error,
+      viewTransform,
+      showVideo,
+      setCoverPanel,
+      start,
+      stop,
+      subscribe,
+      subscribeRender,
+    ],
   );
 
   return (
@@ -357,7 +413,7 @@ export function StartCamera() {
   return null;
 }
 
-/** 프레임마다 호출된다. 화면 그리기처럼 리렌더 없이 처리할 일에 쓴다. */
+/** 실제 추론 결과마다 호출된다. 주사율로 그릴 때는 `useFaceRender`를 쓴다. */
 export function useFaceFrame(listener: FrameListener) {
   const { subscribe } = useCamera();
   const listenerRef = useRef(listener);
@@ -367,4 +423,17 @@ export function useFaceFrame(listener: FrameListener) {
   }, [listener]);
 
   useEffect(() => subscribe((frame, stats) => listenerRef.current(frame, stats)), [subscribe]);
+}
+
+/** 최신 실제 관측을 화면 주사율로 전달한다. 예측은 그리는 쪽에서만 적용한다. */
+export function useFaceRender(listener: RenderListener) {
+  const { subscribeRender } = useCamera();
+  const listenerRef = useRef(listener);
+  useEffect(() => {
+    listenerRef.current = listener;
+  }, [listener]);
+  useEffect(
+    () => subscribeRender((frame, stats, now) => listenerRef.current(frame, stats, now)),
+    [subscribeRender],
+  );
 }
