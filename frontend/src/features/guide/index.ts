@@ -10,10 +10,12 @@ export {
 export {
   GuideContractError,
   MAKEUP_LABEL,
+  MATCH_CATEGORIES,
   toGuideArea,
   toGuideModel,
   type GuideModel,
   type GuideStepModel,
+  type MatchCategory,
 } from "./guide-model";
 export {
   checkGuideArea,

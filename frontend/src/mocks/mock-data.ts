@@ -150,15 +150,36 @@ export const CHAPTERS: Chapter[] = PLAY_STEPS.map((s) => ({
   label: s.part,
 }));
 
+/** 화장 종류 → 샘플 파우치 종류 */
+const POUCH_TYPE: Partial<Record<Makeup, string>> = {
+  foundation: "파운데이션",
+  eyeshadow: "섀도우 팔레트",
+  eyeliner: "아이라이너",
+  mascara: "마스카라",
+  brow: "브로우 펜슬",
+  blush: "블러셔",
+  highlight: "하이라이터",
+  lip: "립틴트",
+};
+
 /** 샘플 파우치. 보유로 보여 줄 단계(HAVE)의 영상 제품과 대체 추천 제품(SUBS)을 넣는다 */
 export const DEFAULT_POUCH: PouchItem[] = [
-  ...REF_PRODUCTS.filter((r) => r.have).map((r) => ({
-    cat: r.matchCat,
-    brand: r.brand,
-    name: r.name,
-    color: r.color,
-  })),
-  ...REF_PRODUCTS.flatMap((r) => (r.sub ? [{ cat: r.matchCat, ...r.sub }] : [])),
+  ...REF_PRODUCTS.flatMap((r, i) =>
+    r.have
+      ? [
+          {
+            cat: r.matchCat,
+            type: POUCH_TYPE[PLAY_STEPS[i].makeup],
+            brand: r.brand,
+            name: r.name,
+            color: r.color,
+          },
+        ]
+      : [],
+  ),
+  ...REF_PRODUCTS.flatMap((r, i) =>
+    r.sub ? [{ cat: r.matchCat, type: POUCH_TYPE[PLAY_STEPS[i].makeup], ...r.sub }] : [],
+  ),
 ].map((p, i) => ({ id: `p${i + 1}`, ...p }));
 
 export const DEFAULT_REPORTS: ReportSummary[] = [

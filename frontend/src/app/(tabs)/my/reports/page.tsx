@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { PillButton } from "@/components/ui/pill-button";
 import { MyHeader } from "@/features/my";
+import { PhotoSlot, pickedCount } from "@/features/report";
 import { useSession } from "@/features/session";
 import { useQuery } from "@/lib/hooks/use-query";
 
@@ -18,7 +19,7 @@ const ROT = [-1.6, 1.4, 1.2, -1.2];
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
 
-/** 마이페이지 · 리포트 목록 (REPORT-002) */
+/** 마이페이지 · 리포트 목록 */
 export default function MyReportsPage() {
   const { state } = useSession();
   const query = useQuery();
@@ -52,6 +53,8 @@ export default function MyReportsPage() {
                   <div className="absolute inset-0 flex items-center justify-center bg-cream font-display text-[26px] text-ink">
                     미촬영
                   </div>
+                ) : top.guide ? (
+                  <PhotoSlot label="마지막 단계 사진" />
                 ) : (
                   <img
                     src="/images/sample-face.png"
@@ -81,7 +84,11 @@ export default function MyReportsPage() {
                 </div>
                 <span className="text-[16px] text-line-2">
                   {top.steps} / {top.steps} STEP 완료
-                  {top.subs ? ` · 대체 제품 ${top.subs}개 사용` : " · 내 제품으로만"}
+                  {top.guide
+                    ? ` · 고른 제품 ${pickedCount(top.guide)}개`
+                    : top.subs
+                      ? ` · 대체 제품 ${top.subs}개 사용`
+                      : " · 내 제품으로만"}
                 </span>
               </div>
             </Link>
@@ -106,6 +113,8 @@ export default function MyReportsPage() {
                         <div className="absolute inset-0 flex items-center justify-center text-[16px] font-bold text-mute">
                           미촬영
                         </div>
+                      ) : r.guide ? (
+                        <PhotoSlot label="마지막 단계 사진" />
                       ) : (
                         <img
                           src="/images/sample-face.png"

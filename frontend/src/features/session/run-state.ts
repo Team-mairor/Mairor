@@ -17,7 +17,7 @@ export interface RunState {
   choice: Record<string, Choice>;
   subOn: Record<string, boolean>;
   photoOk: boolean;
-  captures: number[];
+  captures: string[];
 }
 
 export const EMPTY_RUN: RunState = {

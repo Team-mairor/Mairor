@@ -1,11 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
-import { matchFor, useSession, type MatchResult, type ReportStep } from "@/features/session";
+import { guideReportRows, PhotoSlot, SHOW_STEP_PHOTOS, type ReportRow } from "@/features/report";
+import {
+  matchFor,
+  useSession,
+  type MatchResult,
+  type ReportStep,
+  type ReportSummary,
+  type SessionState,
+} from "@/features/session";
 import { useQuery } from "@/lib/hooks/use-query";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
@@ -19,7 +27,71 @@ const snapOf = (m: MatchResult): ReportStep => ({
   used: m.p ? { brand: m.p.brand, name: m.p.name } : null,
 });
 
-/** 리포트 상세 (REPORT-003 · REPORT-004). ?id=<리포트 id> */
+/** 단계 사진 자리. 값마다 한 가지 모양 */
+function StepPhoto({ photo }: { photo: ReportRow["photo"] }): ReactElement {
+  switch (photo) {
+    case "none":
+      return (
+        <div className="absolute inset-0 z-[1] flex items-center justify-center bg-cream text-[16px] font-bold text-mute">
+          미촬영
+        </div>
+      );
+    case "slot":
+      return (
+        <div className="absolute inset-0 flex items-center justify-center bg-cream-2 text-[16px] font-bold text-navy">
+          촬영함
+        </div>
+      );
+    case "bare":
+      return (
+        <img
+          src="/images/sample-face-bare.png"
+          alt=""
+          className="absolute top-0 h-auto w-[193.9%] max-w-none"
+          style={{ left: "-73.6%", marginTop: "-72.7%" }}
+        />
+      );
+    case "sample":
+      return (
+        <img
+          src="/images/sample-face.png"
+          alt=""
+          className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
+          style={{ marginTop: "-86.7%" }}
+        />
+      );
+  }
+}
+
+/** 샘플 기록: 저장 당시 items가 있으면 그것을, 없으면 지금 파우치로 매칭한다 */
+function sampleRows(
+  rep: ReportSummary | undefined,
+  { run, pouch }: Pick<SessionState, "run" | "pouch">,
+): ReportRow[] {
+  return (rep ? GUIDE_STEPS.slice(0, rep.steps) : []).map((x, i) => {
+    const m = rep?.items?.[i] ?? snapOf(matchFor(REF_PRODUCTS[i], run, pouch));
+    const used = m.used;
+    const r = REF_PRODUCTS[i];
+    // 단계 사진: captures가 없는 샘플 기록은 전부 있음으로 본다
+    const noPhoto = !!rep?.noPhoto || (rep?.captures ? !rep.captures.includes(i) : false);
+    return {
+      no: i + 1,
+      title: x.title,
+      guide: x.guide,
+      ref: `${r.brand} ${r.name}`,
+      usedKind:
+        m.kind === "same"
+          ? "내가 쓴 제품 · 동일 제품"
+          : m.kind === "sub"
+            ? "내가 쓴 제품 · 대체"
+            : "내가 쓴 제품",
+      used: !used ? "없음 · 설명만" : `${used.brand} ${used.name}`,
+      photo: noPhoto ? "none" : x.makeup === "foundation" ? "bare" : "sample",
+    };
+  });
+}
+
+/** 리포트 상세·삭제. ?id=<리포트 id> */
 export default function ReportPage() {
   const router = useRouter();
   const query = useQuery();
@@ -36,31 +108,11 @@ export default function ReportPage() {
     if (missing) router.replace("/my/reports");
   }, [missing, router]);
 
-  // ponytail: 저장 당시 snapshot(items)이 있으면 그것을, 샘플 기록은 현재 파우치 기준 매칭을 쓴다.
-  const steps = (rep ? GUIDE_STEPS.slice(0, rep.steps) : []).map((x, i) => {
-    const snap = rep?.items?.[i];
-    const m = snap ?? snapOf(matchFor(REF_PRODUCTS[i], state.run, state.pouch));
-    const used = m.used;
-    const r = REF_PRODUCTS[i];
-    return {
-      no: i + 1,
-      title: x.title,
-      guide: x.guide,
-      ref: `${r.brand} ${r.name}`,
-      usedKind:
-        m.kind === "same"
-          ? "내가 쓴 제품 · 동일 제품"
-          : m.kind === "sub"
-            ? "내가 쓴 제품 · 대체"
-            : "내가 쓴 제품",
-      used: !used ? "없음 · 설명만" : `${used.brand} ${used.name}`,
-      // 단계 사진: captures가 없는 샘플 기록은 전부 있음으로 본다
-      noPhoto: !!rep?.noPhoto || (rep?.captures ? !rep.captures.includes(i) : false),
-      bare: x.makeup === "foundation",
-    };
-  });
+  const steps = rep?.guide ? guideReportRows(rep.guide) : sampleRows(rep, state);
   // 최종 사진: 샘플 기록은 있음으로 본다
   const hasFinal = !!rep && !rep.noPhoto && (rep.finalPhoto ?? true);
+  // 단계 사진 목록. 실제 가이드 기록은 보여 줄지를 따로 정한다
+  const showSteps = !rep?.guide || SHOW_STEP_PHOTOS;
 
   if (!rep) return null;
 
@@ -109,6 +161,8 @@ export default function ReportPage() {
                 {rep.noPhoto ? "사진 없이 완료한 메이크업이에요" : "마지막 단계 사진이 없어요"}
               </span>
             </div>
+          ) : rep.guide ? (
+            <PhotoSlot label="마지막 단계 사진" />
           ) : (
             <img
               src="/images/sample-face.png"
@@ -122,57 +176,41 @@ export default function ReportPage() {
           </span>
         </div>
 
-        <section className="flex flex-col gap-3.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="flex items-baseline gap-2.5">
-              <span className="font-serif text-[26px] leading-none text-ink italic">
-                Step captures
+        {showSteps && (
+          <section className="flex flex-col gap-3.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="flex items-baseline gap-2.5">
+                <span className="font-serif text-[26px] leading-none text-ink italic">
+                  Step captures
+                </span>
+                <span className="text-[16px] text-mute">스텝별 내 얼굴</span>
               </span>
-              <span className="text-[16px] text-mute">스텝별 내 얼굴</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setExpanded((e) => !e)}
-              className="text-[17px] font-semibold text-navy"
-              aria-expanded={expanded}
-            >
-              {expanded ? "접기" : "펼쳐보기"}
-            </button>
-          </div>
-          {expanded && (
-            <div className="grid grid-cols-4 gap-2.5">
-              {steps.map((c) => (
-                <div key={c.no} className="flex flex-col gap-1.5">
-                  <div className="relative aspect-square overflow-hidden rounded-[14px] border border-line">
-                    {c.noPhoto ? (
-                      <div className="absolute inset-0 z-[1] flex items-center justify-center bg-cream text-[16px] font-bold text-mute">
-                        미촬영
-                      </div>
-                    ) : c.bare ? (
-                      <img
-                        src="/images/sample-face-bare.png"
-                        alt=""
-                        className="absolute top-0 h-auto w-[193.9%] max-w-none"
-                        style={{ left: "-73.6%", marginTop: "-72.7%" }}
-                      />
-                    ) : (
-                      <img
-                        src="/images/sample-face.png"
-                        alt=""
-                        className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
-                        style={{ marginTop: "-86.7%" }}
-                      />
-                    )}
-                    <span className="absolute top-2 left-2 rounded-full bg-white px-2 py-[3px] font-serif text-[18px] text-ink">
-                      {c.no}
-                    </span>
-                  </div>
-                  <span className="text-[16px] text-ink">{c.title}</span>
-                </div>
-              ))}
+              <button
+                type="button"
+                onClick={() => setExpanded((e) => !e)}
+                className="text-[17px] font-semibold text-navy"
+                aria-expanded={expanded}
+              >
+                {expanded ? "접기" : "펼쳐보기"}
+              </button>
             </div>
-          )}
-        </section>
+            {expanded && (
+              <div className="grid grid-cols-4 gap-2.5">
+                {steps.map((c) => (
+                  <div key={c.no} className="flex flex-col gap-1.5">
+                    <div className="relative aspect-square overflow-hidden rounded-[14px] border border-line">
+                      <StepPhoto photo={c.photo} />
+                      <span className="absolute top-2 left-2 rounded-full bg-white px-2 py-[3px] font-serif text-[18px] text-ink">
+                        {c.no}
+                      </span>
+                    </div>
+                    <span className="text-[16px] text-ink">{c.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="flex flex-col">
           <div className="flex items-baseline gap-2.5 pb-3">

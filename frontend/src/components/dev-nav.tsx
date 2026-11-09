@@ -19,7 +19,7 @@ type Item = {
   prep?: (s: SessionState) => Partial<SessionState>;
 };
 
-const ALL = GUIDE_STEPS.map((_, i) => i);
+const ALL = GUIDE_STEPS.map((s) => s.stepId);
 const loggedIn = { loggedIn: true, email: "hello@mairor.app" };
 const run =
   (patch: Partial<SessionState["run"]>) =>
@@ -40,6 +40,42 @@ const faceRegistered = (s: SessionState) => {
   const prepared = run({ replay: null, faceReg: true })(s);
   saveFacePhoto(prepared.run.id, new Blob());
   return prepared;
+};
+
+/** 모의 가이드를 끝까지 따라 한 상태. 둘째 단계는 건너뛰고, 그 단계만 사진이 없다 */
+const MOCK_GUIDE_STEP_IDS = [
+  "s5",
+  "s7",
+  "s9",
+  "s10",
+  "s11",
+  "s12",
+  "s13",
+  "s14",
+  "s15",
+  "s16",
+  "s17",
+  "s18",
+  "s19",
+];
+const guideDone = (s: SessionState): Pick<SessionState, "loggedIn" | "email" | "run"> => {
+  // 개발 모드는 갱신 함수를 두 번 부르므로, 얼굴 사진과 맞도록 실행 id를 고정한다
+  const prepared = createRun({ kind: "guide", guideId: MOCK_GUIDE_ID }, "dev-guide-done");
+  saveFacePhoto(prepared.id, new Blob());
+  return {
+    ...loggedIn,
+    run: {
+      ...prepared,
+      faceReg: true,
+      phase: "completed",
+      photoOk: true,
+      choice: {
+        ...(s.pouch[0] ? { s5: { kind: "pouch", id: s.pouch[0].id } } : {}),
+        s7: { kind: "none" },
+      },
+      captures: MOCK_GUIDE_STEP_IDS.filter((id) => id !== "s7"),
+    },
+  };
 };
 
 /** 프로토타입 왼쪽 '화면 바로가기' 목록. 개발 모드에서만 보인다 */
@@ -123,6 +159,12 @@ const ITEMS: Item[] = [
     sub: "다시 시도 · 중복 저장 방지",
     href: "/done?fail=1",
     prep: run({ photoOk: true, captures: ALL }),
+  },
+  {
+    label: "완성 · API 가이드",
+    sub: "단계 스냅샷 기록 (API 목업 필요)",
+    href: `/done?guideId=${MOCK_GUIDE_ID}`,
+    prep: guideDone,
   },
   {
     label: "완성 · 사진 없음",

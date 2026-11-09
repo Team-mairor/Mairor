@@ -206,6 +206,7 @@ src/
 │  ├─ overlay/                # 화장 레이어 합성 ('use client')
 │  ├─ guide/                  # 튜토리얼 가이드 ('use client')
 │  ├─ live/                   # 카메라 화면 공통: 추적 상태 · 안내 문구 · 상태 훅 · 패널
+│  ├─ report/                 # 완료 화면 · 리포트 단계 스냅샷
 │  └─ auth/(약관 원문 포함) · select/ · loading/ · check/ · tutorial/ · my/   # 화면 전용 조각
 ├─ lib/                       # validation · 공통 유틸 · hooks/(여러 화면이 쓰는 훅. 파일 이름은 use-*.ts)
 │  └─ api/                    # BE API 클라이언트·모의 응답

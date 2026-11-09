@@ -12,7 +12,7 @@ describe("실행 진입과 초기화", () => {
       guideVersion: 3,
       faceReg: true,
       photoOk: true,
-      captures: [1],
+      captures: ["s2"],
       choice: { s1: { kind: "none" as const } },
     };
     const next = createRun({ kind: "guide", guideId: A.toUpperCase(), replay: "report" }, "new");
@@ -27,7 +27,7 @@ describe("실행 진입과 초기화", () => {
       subOn: {},
       phase: "preparing",
     });
-    expect(old.captures).toEqual([1]);
+    expect(old.captures).toEqual(["s2"]);
     expect(invalidateRun(old)).toMatchObject({
       id: "old",
       guideId: A,

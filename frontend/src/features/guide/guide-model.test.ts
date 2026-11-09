@@ -72,6 +72,18 @@ describe("toGuideModel", () => {
     expect(s.product).toEqual({ name: "롬앤 베러 댄 팔레트", shade: "06 포멜로 로즈" });
   });
 
+  it("파우치 대분류는 아는 값만 보존한다", () => {
+    const steps = toGuideModel(
+      guide([
+        step("s1", 1),
+        step("s2", 2, { matchCategory: null }),
+        step("s3", 3, { matchCategory: "cheek" }),
+      ]),
+      ID,
+    ).steps;
+    expect(steps.map((s) => s.matchCategory)).toEqual(["CHEEK", null, null]);
+  });
+
   it("요청한 가이드가 아니면 쓰지 않는다", () => {
     expect(() => toGuideModel(guide([]), "other-id")).toThrow(GuideContractError);
   });

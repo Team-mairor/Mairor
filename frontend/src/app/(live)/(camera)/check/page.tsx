@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { PillButton } from "@/components/ui/pill-button";
 import {
   GROUPS,
+  GuideCheck,
   similarity,
   SwapPanel,
   TAG_BG,
@@ -36,11 +37,14 @@ import { REF_PRODUCTS, TRY_STEPS } from "@/mocks/mock-data";
 
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
 
-/**
- * 08 제품 체크 ↔ 입혀보며 고르기 (GUIDE-001 · GUIDE-004 · RECOMMEND-001/002).
- * 한 화면의 두 보기. 선택값은 세션 run.choice에 공유된다. ?view=try 로 입혀보기부터 연다.
- */
+/** 08 제품 체크 */
 export default function CheckPage() {
+  const { state } = useSession();
+  return state.run.mode === "guide" ? <GuideCheck /> : <SampleCheck />;
+}
+
+/** 샘플 제품 체크. ?view=try 로 입혀보기부터 연다 */
+function SampleCheck() {
   const router = useRouter();
   const query = useQuery();
   const { state, updateRun } = useSession();
@@ -252,8 +256,14 @@ export default function CheckPage() {
         >
           {swapFor != null && (
             <SwapPanel
-              r={REF_PRODUCTS[swapFor]}
-              cur={m(swapFor)}
+              title={`${REF_PRODUCTS[swapFor].cat} 바꾸기`}
+              refProduct={{
+                name: `${REF_PRODUCTS[swapFor].brand} ${REF_PRODUCTS[swapFor].name}`,
+                color: REF_PRODUCTS[swapFor].color,
+              }}
+              curId={m(swapFor).p?.id ?? null}
+              skipped={m(swapFor).kind === "none"}
+              ranked
               list={candidates(REF_PRODUCTS[swapFor])}
               onPick={(id) => {
                 setChoice(REF_PRODUCTS[swapFor].id, id);
@@ -690,7 +700,11 @@ export default function CheckPage() {
 
       <StartModal
         open={skipAsk}
-        missing={noneRows.map(({ r }) => r)}
+        missing={noneRows.map(({ r }) => ({
+          key: r.id,
+          label: `${r.brand} ${r.name}`,
+          color: r.color,
+        }))}
         onRecheck={() => {
           setSkipAsk(false);
           setGroup("none");

@@ -79,4 +79,26 @@ export interface ReportSummary {
   videoId?: string;
   /** 저장 당시 단계별 확정 제품. 샘플은 없으면 현재 파우치로 매칭한다 */
   items?: ReportStep[];
+  /** 실제 가이드 기록의 완료 시점 스냅샷. 있으면 리포트는 이것만 읽는다 */
+  guide?: GuideReport;
+}
+
+export interface GuideReport {
+  videoId: string;
+  youtubeVideoId: string | null;
+  channelTitle: string;
+  steps: GuideReportStep[];
+}
+
+export interface GuideReportStep {
+  stepId: string;
+  title: string;
+  summary: string | null;
+  /** 영상 제품 이름·호수 그대로 */
+  ref: { name: string | null; shade: string | null } | null;
+  pick: "picked" | "skipped" | "undecided";
+  /** 고른 파우치 제품의 당시 값 */
+  used: { brand: string; name: string; shade: string | null } | null;
+  /** 단계 사진을 남겼는지 */
+  photo: boolean;
 }

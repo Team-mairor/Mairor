@@ -170,7 +170,7 @@ describe("루트 실행·가이드 연동", () => {
     await registerFace();
     const old = session.state.run.id;
     await act(async () => {
-      session.updateRun({ photoOk: true, captures: [0], choice: { s1: { kind: "none" } } });
+      session.updateRun({ photoOk: true, captures: ["s1"], choice: { s1: { kind: "none" } } });
     });
     await act(async () => {
       session.startRun({ kind: "guide", guideId: A });
@@ -268,7 +268,7 @@ describe("루트 실행·가이드 연동", () => {
         email: "test@example.com",
         reports: [{ id: "old-report" }],
         pouch: [{ id: "old-pouch" }],
-        run: { id: "old", photoOk: true, faceReg: true, captures: [0] },
+        run: { id: "old", photoOk: true, faceReg: true, captures: ["s1"] },
       }),
     );
     await navigate(`/loading?guideId=${A}`);
@@ -303,7 +303,7 @@ describe("루트 실행·가이드 연동", () => {
     const newId = session.state.run.id;
     await registerFace();
     await act(async () => {
-      session.updateRun({ photoOk: true, captures: [1] }, oldId);
+      session.updateRun({ photoOk: true, captures: ["s2"] }, oldId);
       session.enterTutorial(oldId, true);
       session.completeRun(oldId);
       session.endRun(oldId);
@@ -321,7 +321,7 @@ describe("루트 실행·가이드 연동", () => {
     await navigate(`/loading?guideId=${A}`);
     await registerFace();
     await act(async () => {
-      session.updateRun({ photoOk: true, captures: [1], choice: { s1: { kind: "none" } } });
+      session.updateRun({ photoOk: true, captures: ["s2"], choice: { s1: { kind: "none" } } });
     });
     fetch.mockRejectedValueOnce(new ApiError(404, "NOT_FOUND", "없음"));
     await act(async () => {
@@ -392,23 +392,47 @@ describe("루트 실행·가이드 연동", () => {
     expect(session.state.run.id).toBe("");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
-  it.each(["/preview", "/check", "/done"])(
-    "미연결 %s에서 샘플 본문·기록을 실행하지 않는다",
-    async (path) => {
-      await navigate(`/loading?guideId=${A}`);
-      await registerFace();
-      if (path === "/done")
-        await act(async () => {
-          const id = session.state.run.id;
-          session.enterTutorial(id, false);
-          session.completeRun(id);
-        });
-      await navigate(`${path}?guideId=${A}`);
-      expect(element.querySelector('[data-testid="body"]')).toBeNull();
-      expect(element.textContent).toContain(
-        path === "/done" ? "완료 기록을 아직 저장" : "아직 이용할 수 없어요",
-      );
-      expect(session.state.reports).toHaveLength(0);
-    },
-  );
+  it("제품 확인은 같은 실행의 가이드로 본문을 연다", async () => {
+    await navigate(`/loading?guideId=${A}`);
+    await registerFace();
+    await navigate(`/check?guideId=${A}`);
+    expect(element.querySelector('[data-testid="body"]')?.textContent).toBe("13");
+  });
+  it("완료는 같은 실행의 가이드로 본문을 연다", async () => {
+    await navigate(`/loading?guideId=${A}`);
+    await registerFace();
+    await act(async () => {
+      const id = session.state.run.id;
+      session.enterTutorial(id, false);
+      session.completeRun(id);
+    });
+    await navigate(`/done?guideId=${A}`);
+    expect(element.querySelector('[data-testid="body"]')?.textContent).toBe("13");
+  });
+  it("완료 후 실행 밖으로 나가면 실행을 해제하고 같은 가이드로 다시 들어오면 새로 시작한다", async () => {
+    await navigate(`/loading?guideId=${A}`);
+    await registerFace();
+    const done = session.state.run.id;
+    await act(async () => {
+      session.enterTutorial(done, false);
+      session.completeRun(done);
+    });
+    await navigate(`/done?guideId=${A}`);
+    await navigate("/my/reports");
+    expect(session.state.run.id).toBe("");
+    nav.router.replace.mockClear();
+    await navigate(`/loading?guideId=${A}`);
+    expect(session.state.run.id).not.toBe("");
+    expect(session.state.run.id).not.toBe(done);
+    expect(session.state.run.phase).toBe("preparing");
+    expect(nav.router.replace).not.toHaveBeenCalledWith(expect.stringContaining("/done"));
+  });
+  it("미연결 미리보기에서 샘플 본문·기록을 실행하지 않는다", async () => {
+    await navigate(`/loading?guideId=${A}`);
+    await registerFace();
+    await navigate(`/preview?guideId=${A}`);
+    expect(element.querySelector('[data-testid="body"]')).toBeNull();
+    expect(element.textContent).toContain("아직 이용할 수 없어요");
+    expect(session.state.reports).toHaveLength(0);
+  });
 });

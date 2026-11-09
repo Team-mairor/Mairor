@@ -2,19 +2,21 @@
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
-import type { RefProduct } from "@/features/session";
+import { cn } from "@/lib/utils";
 
-/** 제품 체크에서 시작 확인. 없는 제품이 있으면 건너뛸 목록을 보여 준다 */
+/** 제품 체크 시작 확인 */
 export function StartModal({
   open,
   missing,
+  noun = "없는 제품",
   onRecheck,
   onStart,
   onClose,
 }: {
   open: boolean;
-  /** 내 파우치에 없어 설명만 보여 줄 영상 속 제품 */
-  missing: RefProduct[];
+  /** 제품 없이 진행할 단계 */
+  missing: { key: string; label: string; color: string | null }[];
+  noun?: string;
   /** 없음 목록으로 돌아가 다시 확인 */
   onRecheck: () => void;
   onStart: () => void;
@@ -29,7 +31,7 @@ export function StartModal({
     >
       <div className="flex flex-col gap-3">
         <h2 className="font-display text-[36px] leading-[1.25]">
-          {n ? `없는 제품 ${n}개는` : "이대로"}
+          {n ? `${noun} ${n}개는` : "이대로"}
           <br />
           {n ? "건너뛰고 시작할까요?" : "시작할까요?"}
         </h2>
@@ -39,15 +41,19 @@ export function StartModal({
       </div>
       {n > 0 && (
         <div className="flex flex-col gap-2.5">
-          {missing.map((r) => (
+          {missing.map((m) => (
             <div
-              key={r.id}
+              key={m.key}
               className="flex items-center gap-4 rounded-[22px] border-2 border-dashed border-ash px-5 py-4"
             >
-              <span className="size-12 shrink-0 rounded-full" style={{ background: r.color }} />
-              <span className="min-w-0 flex-1 truncate text-[22px] font-bold">
-                {r.brand} {r.name}
-              </span>
+              <span
+                className={cn(
+                  "size-12 shrink-0 rounded-full",
+                  !m.color && "border-[2.5px] border-dashed border-ash",
+                )}
+                style={m.color ? { background: m.color } : undefined}
+              />
+              <span className="min-w-0 flex-1 truncate text-[22px] font-bold">{m.label}</span>
             </div>
           ))}
         </div>

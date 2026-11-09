@@ -21,6 +21,8 @@ export {
 export {
   REF_STATE_LABEL,
   type GuideAction,
+  type GuideReport,
+  type GuideReportStep,
   type GuideStepInfo,
   type RefProduct,
   type RefState,

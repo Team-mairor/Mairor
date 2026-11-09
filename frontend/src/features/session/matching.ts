@@ -7,8 +7,8 @@ export type MatchKind = "same" | "sub" | "none";
 
 export interface MatchResult {
   kind: MatchKind;
-  /** 내가 쓸 제품. 없음이면 null */
-  p: { brand: string; name: string; shade?: string; color?: string | null } | null;
+  /** 내가 쓸 제품. 없음이면 null. 파우치 제품이면 id가 있다 */
+  p: { id?: string; brand: string; name: string; shade?: string; color?: string | null } | null;
 }
 
 /** 대소문자·공백 차이만 있으면 같은 이름으로 본다 */

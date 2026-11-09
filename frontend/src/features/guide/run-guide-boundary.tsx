@@ -90,30 +90,16 @@ export function RunGuideBoundary({
     return <GuideStatus title="따라 할 단계가 없는 가이드예요" action={home} />;
   if (path !== "/loading" && run.phase !== "completed" && !facePhoto(run.id))
     return <GuideStatus title="얼굴을 다시 등록해 주세요" />;
-  // 연결 전인 미리보기·제품 체크·완료는 샘플 대신 안내를 보여 준다
-  if (["/preview", "/check", "/done"].includes(path))
+  // 연결 전인 미리보기는 샘플 대신 안내를 보여 준다
+  if (path === "/preview")
     return (
       <GuideStatus
-        title={
-          path === "/done"
-            ? "완료 기록을 아직 저장할 수 없어요"
-            : path === "/preview"
-              ? "미리보기를 아직 이용할 수 없어요"
-              : "제품 확인을 아직 이용할 수 없어요"
-        }
-        body={
-          path === "/done"
-            ? "진행한 내용은 기록으로 남지 않아요. 홈으로 돌아가 주세요."
-            : "단계 안내는 계속 확인할 수 있어요."
-        }
-        action={
-          path === "/done"
-            ? home
-            : {
-                label: "단계 안내 보기",
-                onClick: () => router.push(runHref("/tutorial/guide", run.guideId)),
-              }
-        }
+        title="미리보기를 아직 이용할 수 없어요"
+        body="제품 확인은 계속할 수 있어요."
+        action={{
+          label: "제품 확인으로",
+          onClick: () => router.push(runHref("/check", run.guideId)),
+        }}
       />
     );
   const paused = load.checking || !!load.error;

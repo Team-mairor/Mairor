@@ -27,8 +27,13 @@ export interface GuideStepModel {
   doneWhen: string | null;
   /** 영상에 나온 제품 이름과 호수. 둘 다 없으면 null */
   product: { name: string | null; shade: string | null } | null;
+  /** 모르는 값이면 null */
+  matchCategory: MatchCategory | null;
   subSteps: AreaSubStep[];
 }
+
+export const MATCH_CATEGORIES = ["BASE", "EYE", "BROW", "CHEEK", "LIP"] as const;
+export type MatchCategory = (typeof MATCH_CATEGORIES)[number];
 
 /** 화면이 쓰는 가이드. 단계는 GUIDE만 order 순으로 담는다 */
 export interface GuideModel {
@@ -57,6 +62,8 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const text = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
 const isMakeup = (v: unknown): v is Makeup =>
   typeof v === "string" && Object.hasOwn(MAKEUP_LABEL, v);
+const isMatchCategory = (v: unknown): v is MatchCategory =>
+  (MATCH_CATEGORIES as readonly unknown[]).includes(v);
 const AREA_STATUSES = new Set<unknown>(["extracted", "template", "notApplicable", "failed"]);
 
 function actionsOf(v: unknown): GuideActionDto[] {
@@ -139,6 +146,7 @@ export function toGuideModel(raw: unknown, guideId: string): GuideModel {
       actions: actionsOf(step.actions),
       doneWhen: text(step.doneWhen),
       product: productOf(step.referenceProduct),
+      matchCategory: isMatchCategory(step.matchCategory) ? step.matchCategory : null,
       subSteps: subStepsOf(stepId, step.subSteps),
     });
   }

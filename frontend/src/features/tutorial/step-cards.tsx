@@ -2,6 +2,7 @@ import { CircleCheck, Lightbulb, TriangleAlert } from "lucide-react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
+import type { StepPick } from "@/features/check";
 import {
   REF_STATE_LABEL,
   type GuideStepInfo,
@@ -77,6 +78,7 @@ export function PrepCard({
   info,
   refProduct,
   match,
+  pick = null,
   onStart,
 }: {
   step: number;
@@ -87,9 +89,24 @@ export function PrepCard({
   refProduct: StepProduct | null;
   /** 내 파우치와 맞춰 본 결과. 아직 맞춰 보지 않은 가이드면 null */
   match: MatchResult | null;
+  /** 실제 가이드의 선택. 있으면 match 대신 쓴다 */
+  pick?: StepPick | null;
   onStart: () => void;
 }) {
-  const mine = match?.p ?? null;
+  const mine = pick ? (pick.kind === "picked" ? pick.item : null) : (match?.p ?? null);
+  const status = pick
+    ? pick.kind === "picked"
+      ? "이 제품을 준비해 주세요 · 내가 고른 제품"
+      : pick.kind === "skipped"
+        ? "제품 없이 진행해요"
+        : "고른 제품이 없어요"
+    : !match
+      ? "제품 매칭 전이에요"
+      : match.kind === "same"
+        ? "이 제품을 준비해 주세요 · 내 파우치"
+        : match.kind === "sub"
+          ? "이 제품을 준비해 주세요 · 대체 제품"
+          : "내 파우치에 맞는 제품이 없어요";
   return (
     <Modal
       open
@@ -118,15 +135,7 @@ export function PrepCard({
             style={mine ? { background: mine.color ?? "#fff" } : undefined}
           />
           <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[14px] font-semibold text-navy">
-              {!match
-                ? "제품 매칭 전이에요"
-                : match.kind === "same"
-                  ? "이 제품을 준비해 주세요 · 내 파우치"
-                  : match.kind === "sub"
-                    ? "이 제품을 준비해 주세요 · 대체 제품"
-                    : "내 파우치에 맞는 제품이 없어요"}
-            </span>
+            <span className="text-[14px] font-semibold text-navy">{status}</span>
             {mine ? (
               <>
                 <span className="text-[20px] leading-tight font-bold">
@@ -136,14 +145,14 @@ export function PrepCard({
               </>
             ) : (
               <span className="text-[17px] leading-[1.45] text-pretty text-mute">
-                {match
+                {match || pick?.kind === "skipped" || (pick && !refProduct)
                   ? "설명을 보고 따라 하거나 건너뛸 수 있어요"
                   : "영상 속 제품을 참고해 준비해 주세요"}
               </span>
             )}
           </div>
         </div>
-        {refProduct && match?.kind !== "same" && (
+        {refProduct && (pick || match?.kind !== "same") && (
           <div className="flex items-center gap-2 border-t border-line pt-3 text-[15px] text-mute">
             <span
               className={cn(

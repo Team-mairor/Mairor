@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
+import { pickOf } from "@/features/check";
 import { useHiddenVideo } from "@/features/face";
 import {
   checkGuideArea,
@@ -229,6 +230,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const info = steps[step];
   // 샘플은 내 파우치와 맞춰 본다. 가이드 조회 응답은 아직 맞춰 보지 않아(제품 매칭 전) null
   const pr = info.ref ? matchFor(info.ref, run, state.pouch) : null;
+  // 실제 가이드의 선택은 표시만 하고 촬영·게이지 판단에는 쓰지 않는다
+  const pick = info.ref ? null : pickOf(info.stepId, run.choice, state.pouch);
   const hasProduct = !!pr && pr.kind !== "none";
   // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다
   const paced = hasProduct || !pr;
@@ -309,11 +312,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setReady(!prep);
     setGauge(10);
   };
-  // 사진 저장에 동의했고 제품을 쓴 단계면 넘길 때 사진을 남긴다
-  const photo = run.photoOk && hasProduct && !run.captures.includes(step);
+  // 사진 저장에 동의했고 제품을 쓰는 단계면 넘길 때 사진을 남긴다. 실제 가이드는 건너뛴 단계만 뺀다
+  const usesProduct = pick ? pick.kind !== "skipped" : hasProduct;
+  const photo = run.photoOk && usesProduct && !run.captures.includes(info.stepId);
   const advance = () => {
     if (!isCurrentRun(run.id)) return;
-    if (photo) updateRun({ captures: [...run.captures, step] }, run.id);
+    if (photo) updateRun({ captures: [...run.captures, info.stepId] }, run.id);
     if (last) {
       completeRun(run.id);
       router.push(runHref("/done", run.guideId));
@@ -365,8 +369,14 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         onGoStep={(i) => goStep(i, i > step)}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
-      {!note && info.product && (
-        <ProductChip refProduct={info.product} mine={hasProduct ? pr.p : null} pending={!pr} />
+      {/* 영상 제품 정보가 없어도 고른 제품이 있으면 보여 준다 */}
+      {!note && (info.product || pick?.kind === "picked") && (
+        <ProductChip
+          refProduct={info.product}
+          mine={hasProduct ? pr.p : null}
+          pending={!pr}
+          pick={pick}
+        />
       )}
       <LiveNote note={note} />
 
@@ -440,6 +450,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           info={info}
           refProduct={info.product}
           match={pr}
+          pick={pick}
           onStart={() => setReady(true)}
         />
       )}
