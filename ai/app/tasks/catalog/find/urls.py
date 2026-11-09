@@ -16,6 +16,7 @@ _SHOPIFY_PATH = re.compile(r"/products/([^/?#]+)")
 _WOO_PATH = re.compile(r"^/product/([^/]+)/?$")
 _CAFE24_CATEGORY = re.compile(r"^/category/[^/]+/(\d+)/?$")
 _CAFE24_LIST_PATH = re.compile(r"^/product/list\d*\.html$")
+_CAFE24_MAIN_CATEGORY_PATH = "/product/maincatedetail.html"
 _SHOPIFY_COLLECTION = re.compile(r"^/collections/([^/]+)/?$")
 _WOO_CATEGORY = re.compile(r"^/product-category/.+")
 
@@ -78,6 +79,19 @@ def product_id(platform: Platform, url: str, rules: UrlRules | None = None) -> s
             return None
 
 
+def normalize_category_url(platform: Platform, url: str) -> str:
+    """홈이 노출하는 카테고리 주소를 목록 주소로 바꾼다.
+
+    Cafe24의 maincatedetail.html?cate_code=N은 같은 번호의 list.html?cate_no=N으로 목록이 나온다.
+    """
+    parts = urlsplit(url)
+    if platform is Platform.CAFE24 and parts.path == _CAFE24_MAIN_CATEGORY_PATH:
+        number = parse_qs(parts.query).get("cate_code", [None])[0]
+        if number and number.isdigit():
+            return parts._replace(path="/product/list.html", query=f"cate_no={number}").geturl()
+    return url
+
+
 def is_category_url(platform: Platform, url: str, rules: UrlRules | None = None) -> bool:
     parts = urlsplit(url)
     path = parts.path
@@ -88,7 +102,9 @@ def is_category_url(platform: Platform, url: str, rules: UrlRules | None = None)
             if _CAFE24_CATEGORY.match(path):
                 return True
             number = parse_qs(parts.query).get("cate_no", [None])[0]
-            return bool(_CAFE24_LIST_PATH.match(path) and number and number.isdigit())
+            if _CAFE24_LIST_PATH.match(path) and number and number.isdigit():
+                return True
+            return normalize_category_url(platform, url) != url
         case Platform.SHOPIFY:
             return bool(_SHOPIFY_COLLECTION.match(path))
         case Platform.WOOCOMMERCE:

@@ -3,6 +3,7 @@ from app.tasks.catalog.find.match import PickStatus, pick
 from app.tasks.catalog.find.site_search import clean_listing_title, links_to_candidates
 from app.tasks.catalog.find.urls import (
     is_category_url,
+    normalize_category_url,
     page_url,
     title_from_product_url,
 )
@@ -81,3 +82,19 @@ def test_a_cate_no_category_pages_with_a_page_query() -> None:
 
     assert page_url(Platform.CAFE24, url, 1) == url
     assert page_url(Platform.CAFE24, url, 3) == f"{url}&page=3"
+
+
+def test_the_cafe24_main_category_form_is_turned_into_the_list_form() -> None:
+    url = "https://romand.co.kr/product/maincatedetail.html?cate_code=289"
+
+    assert is_category_url(Platform.CAFE24, url)
+    assert normalize_category_url(Platform.CAFE24, url) == (
+        "https://romand.co.kr/product/list.html?cate_no=289"
+    )
+    assert normalize_category_url(Platform.CAFE24, "https://s.example/category/lip/88/") == (
+        "https://s.example/category/lip/88/"
+    )
+    assert not is_category_url(
+        Platform.CAFE24, "https://s.example/product/maincatedetail.html?cate_code=x"
+    )
+    assert normalize_category_url(Platform.SHOPIFY, url) == url

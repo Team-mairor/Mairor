@@ -4,7 +4,12 @@ from collections.abc import Awaitable, Callable
 
 from app.tasks.catalog.discover.registry import BrandSite, Platform, UrlRules
 from app.tasks.catalog.find.site_search import links_to_candidates
-from app.tasks.catalog.find.urls import Candidate, is_category_url, page_url
+from app.tasks.catalog.find.urls import (
+    Candidate,
+    is_category_url,
+    normalize_category_url,
+    page_url,
+)
 from app.tasks.catalog.html import decode_html, extract_links
 from app.tasks.catalog.http import BlockedError, HttpFailure, PoliteClient
 
@@ -26,7 +31,7 @@ async def find_category_urls(
     urls: dict[str, None] = {}
     for link in extract_links(decode_html(response), home):
         if is_category_url(platform, link.url, site.url_rules):
-            urls.setdefault(link.url.split("#", 1)[0], None)
+            urls.setdefault(normalize_category_url(platform, link.url.split("#", 1)[0]), None)
     return list(urls)[:MAX_CATEGORIES]
 
 
