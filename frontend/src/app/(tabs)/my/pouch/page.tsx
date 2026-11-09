@@ -23,7 +23,7 @@ import { ApiError, errorMessage, isAbortError } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
 
-/** 마이페이지 · 내 파우치 (POUCH-004). 로그인 전에는 샘플 파우치. ?add=1 등록, ?edit=<id> 수정 시트 */
+/** 마이페이지 · 내 파우치. 로그인 전에는 샘플 파우치. ?add=1 등록, ?edit=<id> 수정 시트 */
 export default function MyPouchPage() {
   const { state, sessionChecked, expireSession } = useSession();
   const router = useRouter();

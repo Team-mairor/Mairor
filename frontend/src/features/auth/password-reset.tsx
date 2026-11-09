@@ -22,7 +22,7 @@ const SUBTITLE: Record<ResetStep, (email: string) => string> = {
 };
 const STEP_NO: Record<ResetStep, number> = { email: 1, code: 2, pw: 3 };
 
-/** 비밀번호 재설정 3단계 (USERS-005, API-USERS-008~010). 이메일 → 인증 코드 → 새 비밀번호 */
+/** 비밀번호 재설정 3단계. 이메일 → 인증 코드 → 새 비밀번호 */
 export function PasswordReset({
   initialEmail,
   onBack,

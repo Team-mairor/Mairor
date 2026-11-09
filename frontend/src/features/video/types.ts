@@ -9,7 +9,7 @@ export interface VideoItem {
   dur: string;
 }
 
-/** 영상 상태 (API-VIDEO-001) */
+/** 영상 상태 */
 export type VideoState = "new" | "guide" | "running" | "blocked" | "quota";
 
 export interface Chapter {

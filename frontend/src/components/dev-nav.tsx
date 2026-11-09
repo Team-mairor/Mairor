@@ -78,6 +78,13 @@ const guideDone = (s: SessionState): Pick<SessionState, "loggedIn" | "email" | "
   };
 };
 
+/** 모의 가이드로 얼굴 등록까지 마친 상태 */
+const guidePreview = (): Pick<SessionState, "loggedIn" | "email" | "run"> => {
+  const prepared = createRun({ kind: "guide", guideId: MOCK_GUIDE_ID }, "dev-guide-preview");
+  saveFacePhoto(prepared.id, new Blob());
+  return { ...loggedIn, run: { ...prepared, faceReg: true } };
+};
+
 /** 프로토타입 왼쪽 '화면 바로가기' 목록. 개발 모드에서만 보인다 */
 const ITEMS: Item[] = [
   { label: "인트로", sub: "로고 모션", href: "/" },
@@ -115,6 +122,12 @@ const ITEMS: Item[] = [
     sub: "이탈 · 회전 · 가림 · 거리 · 조명",
     href: "/preview?alert=lost",
     prep: run({}),
+  },
+  {
+    label: "미리보기 · API 가이드",
+    sub: "대상 단계 · 색상 미제공 (API 목업 필요)",
+    href: `/preview?guideId=${MOCK_GUIDE_ID}`,
+    prep: guidePreview,
   },
   { label: "제품 체크", sub: "보유 · 대체 · 없음", href: "/check", prep: run({}) },
   {

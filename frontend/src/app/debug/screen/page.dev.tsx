@@ -41,7 +41,7 @@ function measure(): Row[] {
   ];
 }
 
-/** 화면 크기 확인 (S15P31A306-315). 창 크기·방향·주소창이 바뀌면 다시 잰다 */
+/** 화면 크기 확인. 창 크기·방향·주소창이 바뀌면 다시 잰다 */
 export default function ScreenDebugPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [fullscreenError, setFullscreenError] = useState("");

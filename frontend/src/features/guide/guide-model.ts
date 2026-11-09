@@ -29,6 +29,8 @@ export interface GuideStepModel {
   product: { name: string | null; shade: string | null } | null;
   /** 모르는 값이면 null */
   matchCategory: MatchCategory | null;
+  /** 미리보기 대상 화장 종류. 색이 준비됐다는 뜻은 아니다 */
+  previewable: boolean;
   subSteps: AreaSubStep[];
 }
 
@@ -147,14 +149,20 @@ export function toGuideModel(raw: unknown, guideId: string): GuideModel {
       doneWhen: text(step.doneWhen),
       product: productOf(step.referenceProduct),
       matchCategory: isMatchCategory(step.matchCategory) ? step.matchCategory : null,
+      previewable: step.previewable === true,
       subSteps: subStepsOf(stepId, step.subSteps),
     });
   }
   guided.sort((a, b) => a.order - b.order);
   // 서버와 세는 규칙이 어긋나도 화면은 실제 단계로 돈다. 차이만 알린다
-  if (raw.stepCount !== guided.length)
+  if (typeof raw.stepCount === "number" && raw.stepCount !== guided.length)
     console.warn(
       `stepCount(${String(raw.stepCount)})와 GUIDE 단계 수(${guided.length})가 다릅니다`,
+    );
+  const previewable = guided.filter((s) => s.previewable).length;
+  if (typeof raw.previewableStepCount === "number" && raw.previewableStepCount !== previewable)
+    console.warn(
+      `previewableStepCount(${String(raw.previewableStepCount)})와 미리보기 단계 수(${previewable})가 다릅니다`,
     );
 
   return {

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { facePhoto } from "@/features/face";
-import { isRunPath, runHref, useSession, type RunRouteAction } from "@/features/session";
+import { isRunPath, useSession, type RunRouteAction } from "@/features/session";
 import { GuideStatus } from "@/features/tutorial";
 
 import { useGuide } from "./use-guide";
@@ -90,18 +90,6 @@ export function RunGuideBoundary({
     return <GuideStatus title="따라 할 단계가 없는 가이드예요" action={home} />;
   if (path !== "/loading" && run.phase !== "completed" && !facePhoto(run.id))
     return <GuideStatus title="얼굴을 다시 등록해 주세요" />;
-  // 연결 전인 미리보기는 샘플 대신 안내를 보여 준다
-  if (path === "/preview")
-    return (
-      <GuideStatus
-        title="미리보기를 아직 이용할 수 없어요"
-        body="제품 확인은 계속할 수 있어요."
-        action={{
-          label: "제품 확인으로",
-          onClick: () => router.push(runHref("/check", run.guideId)),
-        }}
-      />
-    );
   const paused = load.checking || !!load.error;
   return (
     <>

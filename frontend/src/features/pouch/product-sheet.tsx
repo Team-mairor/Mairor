@@ -58,7 +58,7 @@ function saveFailText(e: unknown) {
   return failText(e);
 }
 
-/** 제품 등록·수정 시트 (POUCH-002·003·005·006). 저장 본문은 draft.ts, 서버 응답으로 세션 파우치를 바꾼다 */
+/** 제품 등록·수정 시트. 저장 본문은 draft.ts, 서버 응답으로 세션 파우치를 바꾼다 */
 export function ProductSheet({
   draft,
   onClose,

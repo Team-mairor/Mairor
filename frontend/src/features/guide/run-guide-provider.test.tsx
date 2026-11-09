@@ -427,12 +427,10 @@ describe("루트 실행·가이드 연동", () => {
     expect(session.state.run.phase).toBe("preparing");
     expect(nav.router.replace).not.toHaveBeenCalledWith(expect.stringContaining("/done"));
   });
-  it("미연결 미리보기에서 샘플 본문·기록을 실행하지 않는다", async () => {
+  it("미리보기는 같은 실행의 가이드로 본문을 연다", async () => {
     await navigate(`/loading?guideId=${A}`);
     await registerFace();
     await navigate(`/preview?guideId=${A}`);
-    expect(element.querySelector('[data-testid="body"]')).toBeNull();
-    expect(element.textContent).toContain("아직 이용할 수 없어요");
-    expect(session.state.reports).toHaveLength(0);
+    expect(element.querySelector('[data-testid="body"]')?.textContent).toBe("13");
   });
 });

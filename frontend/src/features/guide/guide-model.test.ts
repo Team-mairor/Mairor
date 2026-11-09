@@ -34,7 +34,10 @@ const guide = (steps: unknown[], extra: Record<string, unknown> = {}) => ({
   meshVersion: "v1",
   referenceImageUrl: null,
   stepCount: steps.filter((s) => (s as { type: string }).type === "GUIDE").length,
-  previewableStepCount: 0,
+  previewableStepCount: steps.filter((s) => {
+    const x = s as { type: string; previewable: unknown };
+    return x.type === "GUIDE" && x.previewable === true;
+  }).length,
   steps,
   ...extra,
 });
@@ -82,6 +85,36 @@ describe("toGuideModel", () => {
       ID,
     ).steps;
     expect(steps.map((s) => s.matchCategory)).toEqual(["CHEEK", null, null]);
+  });
+
+  it("미리보기 대상은 true일 때만이다", () => {
+    const steps = toGuideModel(
+      guide(
+        [
+          step("s1", 1),
+          step("s2", 2, { previewable: false }),
+          step("s3", 3, { previewable: "true" }),
+        ],
+        { previewableStepCount: 1 },
+      ),
+      ID,
+    ).steps;
+    expect(steps.map((s) => s.previewable)).toEqual([true, false, false]);
+  });
+
+  it("미리보기 단계 수가 서버 값과 달라도 실제 단계로 세고 경고만 남긴다", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    toGuideModel(guide([step("s1", 1)], { previewableStepCount: 3 }), ID);
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("단계 수가 응답에 없으면 경고하지 않는다", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    toGuideModel(
+      guide([step("s1", 1)], { stepCount: undefined, previewableStepCount: undefined }),
+      ID,
+    );
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("요청한 가이드가 아니면 쓰지 않는다", () => {

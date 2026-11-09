@@ -15,6 +15,8 @@ import {
   useLiveState,
 } from "@/features/live";
 import { MakeupOverlay } from "@/features/overlay";
+import { GuidePreview } from "@/features/preview";
+import { useSession } from "@/features/session";
 import { cn } from "@/lib/utils";
 import { REF_PRODUCTS, TRY_STEPS } from "@/mocks/mock-data";
 
@@ -28,6 +30,11 @@ const SKIPPED = [
 
 /** 07 미리보기 · 실시간 입혀보기. ?alert=lost|turn|cover|far|light 는 알림 확인용 */
 export default function PreviewPage() {
+  const { state } = useSession();
+  return state.run.mode === "guide" ? <GuidePreview /> : <SamplePreview />;
+}
+
+function SamplePreview() {
   const router = useRouter();
   const query = useQuery();
   const [bare, setBare] = useState(false);

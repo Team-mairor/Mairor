@@ -11,7 +11,7 @@ import { HowItWorksSlide } from "@/features/tutorial";
 import { cn } from "@/lib/utils";
 import { DEFAULT_POUCH } from "@/mocks/mock-data";
 
-/** 온보딩 4장: 기능 소개 3장 + 파우치 담기. 이 기기에서 최초 1회 (POUCH-001) */
+/** 온보딩 4장: 기능 소개 3장 + 파우치 담기. 이 기기에서 최초 1회 */
 export default function OnboardingPage() {
   const router = useRouter();
   const { state, update } = useSession();

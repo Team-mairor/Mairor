@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /**
  * 화면 위 덮개와 카드. onClose를 주면 배경을 탭하거나 Esc를 눌러 닫힌다. 안 주면 닫는 길은 안쪽 버튼뿐이다.
  * 덮개 색·카드 면·그림자는 여기에만 둔다. 화면마다 다른 z 순서·여백은 overlayClassName, 카드 모양은 className으로 준다.
- * ponytail: 포커스 트랩 없음. 접근성 검수(S15P31A306-116)에서 필요하면 radix Dialog로 바꾼다.
+ * ponytail: 포커스 트랩 없음. 접근성 검수에서 필요하면 radix Dialog로 바꾼다.
  */
 export function Modal({
   open,

@@ -9,7 +9,7 @@ import { useTimeout } from "@/lib/hooks/use-timeout";
 
 export type GoogleResult = "ok" | "linked" | "fail" | "cancel";
 
-/** 샘플 Google 계정. 두 번째는 같은 이메일의 자체 계정이 있는 경우 (USERS-004) */
+/** 샘플 Google 계정. 두 번째는 같은 이메일의 자체 계정이 있는 경우 */
 const ACCOUNTS: {
   name: string;
   email: string;
@@ -35,7 +35,7 @@ const ACCOUNTS: {
 
 /**
  * Google 계정 선택 창을 흉내 낸다. 열려 있을 때만 그린다 (닫으면 언마운트).
- * ponytail: 실제 OAuth(API-USERS-006/007)가 붙으면 이 컴포넌트를 지우고 리다이렉트로 바꾼다.
+ * ponytail: 실제 Google OAuth가 붙으면 이 컴포넌트를 지우고 리다이렉트로 바꾼다.
  */
 export function GoogleSheet({ onResult }: { onResult: (r: GoogleResult, email?: string) => void }) {
   const [busy, setBusy] = useState(false);

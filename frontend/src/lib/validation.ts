@@ -1,4 +1,4 @@
-/** 회원 입력 검증 규칙. API-USERS-001 기준 */
+/** 회원 입력 검증 규칙. 회원가입 API 기준 */
 
 export const EMAIL_MAX = 254;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

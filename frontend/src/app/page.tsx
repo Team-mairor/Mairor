@@ -30,7 +30,7 @@ const LABELS: [x: number, y: number, label: string, side: "left" | "right", dela
   [190 + 276, 318 + 225, "BLUSH · PEACH", "right", T + 2450],
 ];
 
-/** 00 인트로. 약 6초 뒤 또는 탭하면 로그인 상태에 따라 홈·로그인으로 간다 (USERS-003) */
+/** 00 인트로. 약 6초 뒤 또는 탭하면 로그인 상태에 따라 홈·로그인으로 간다 */
 export default function IntroPage() {
   const router = useRouter();
   const { state, sessionChecked } = useSession();

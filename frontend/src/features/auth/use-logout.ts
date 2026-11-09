@@ -7,7 +7,7 @@ import { useSession } from "@/features/session";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { useRequest } from "@/lib/hooks/use-request";
 
-/** 로그아웃 (API-USERS-003). 끝나면 로그인 화면으로 보낸다. 세션이 이미 끝났으면(401) 로그아웃된 것으로 본다 */
+/** 로그아웃. 끝나면 로그인 화면으로 보낸다. 세션이 이미 끝났으면(401) 로그아웃된 것으로 본다 */
 export function useLogout() {
   const router = useRouter();
   const { signOut } = useSession();

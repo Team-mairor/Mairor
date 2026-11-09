@@ -37,7 +37,7 @@ const HOLD_MS = 1500;
 type Stage = "ready" | "scan" | "done";
 
 /**
- * 얼굴 등록 모달 (CAMERA-005 · VIDEO-004). 안내 → 카메라 → 실시간 조건 체크 → 조건을 유지하면 자동 촬영.
+ * 얼굴 등록 모달. 안내 → 카메라 → 실시간 조건 체크 → 조건을 유지하면 자동 촬영.
  * 카메라는 (live) 레이아웃의 것을 켜서 쓰고, 등록을 마치면 미리보기에서 그대로 이어 쓴다.
  */
 export function FaceRegisterModal({

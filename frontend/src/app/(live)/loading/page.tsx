@@ -244,10 +244,12 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     ctaGo = () => router.push("/select");
   } else if (!guideOk) ctaLabel = "분석이 끝나면 미리보기를 열 수 있어요";
   else if (!faceOk) {
-    ctaLabel = replay ? "얼굴 등록하고 입혀보기" : "얼굴 등록하고 미리보기";
+    // 실제 가이드는 색상 정보가 없어 입혀 볼 수 없다
+    const tryOn = replay && run.mode !== "guide";
+    ctaLabel = tryOn ? "얼굴 등록하고 입혀보기" : "얼굴 등록하고 미리보기";
     ctaGo = () => setFaceModal(true);
   } else {
-    ctaLabel = replay ? "입혀보기" : "미리보기 보기";
+    ctaLabel = replay && run.mode !== "guide" ? "입혀보기" : "미리보기 보기";
     ctaGo = () => router.push(href("/preview"));
   }
 

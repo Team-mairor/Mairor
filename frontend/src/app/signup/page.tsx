@@ -149,7 +149,7 @@ const onEnter = (action: () => void) => (e: React.KeyboardEvent<HTMLInputElement
   action();
 };
 
-/** 01-1 회원가입 (USERS-001). 이메일 중복 확인 → 이메일 인증(EMAIL_VERIFICATION) → 비밀번호 규칙 → 약관 동의 → 가입 */
+/** 01-1 회원가입. 이메일 중복 확인 → 이메일 인증(EMAIL_VERIFICATION) → 비밀번호 규칙 → 약관 동의 → 가입 */
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -212,7 +212,7 @@ export default function SignupPage() {
     setEmailErr({ kind: "dup" });
   };
 
-  /** API-USERS-011 */
+  /** 이메일 중복 확인 */
   const checkEmail = () => {
     if (!canCheck) return;
     setEmailErr(null);
@@ -235,7 +235,7 @@ export default function SignupPage() {
     );
   };
 
-  /** 인증번호 받기 (API-USERS-012). 이미 가입된 이메일이면 409 */
+  /** 인증번호 받기. 이미 가입된 이메일이면 409 */
   const sendCode = () => {
     setCodeErr(null);
     return run(
@@ -257,7 +257,7 @@ export default function SignupPage() {
     );
   };
 
-  /** 인증번호 확인 (API-USERS-013) */
+  /** 인증번호 확인 */
   const verifyCode = () => {
     setCodeErr(null);
     return run(
@@ -305,7 +305,7 @@ export default function SignupPage() {
     if (e.details.some((d) => !known.includes(d.field))) setFormErr(e.message);
   };
 
-  /** API-USERS-001 */
+  /** 회원가입 */
   const submit = () => {
     if (!canSubmit) return;
     setEmailErr(null);

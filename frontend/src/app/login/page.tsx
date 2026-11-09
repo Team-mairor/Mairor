@@ -27,7 +27,7 @@ import { normalizeEmail } from "@/lib/validation";
 
 type Mode = "pick" | "email" | "reset";
 
-/** 01 로그인 (USERS-002·003·004·005). ?expired=basic|tut, ?signup=done&email= 로 안내를 띄운다 */
+/** 01 로그인. ?expired=basic|tut, ?signup=done&email= 로 안내를 띄운다 */
 export default function LoginPage() {
   const router = useRouter();
   const query = useQuery();
@@ -70,13 +70,13 @@ export default function LoginPage() {
     }
   }, [query]);
 
-  /** 로그인 성공. 이 기기에서 온보딩을 안 봤으면 온보딩으로 (POUCH-001) */
+  /** 로그인 성공. 이 기기에서 온보딩을 안 봤으면 온보딩으로 */
   const finish = (user: Pick<User, "email" | "nickname">, csrfToken?: string) => {
     signIn(user, csrfToken);
     router.replace(state.onboarded ? "/home" : "/onboarding");
   };
 
-  /** API-USERS-002. 반복해서 틀리면 서버가 잠그고(429), 그동안은 Retry-After 초만큼 버튼을 막는다 */
+  /** 이메일 로그인. 반복해서 틀리면 서버가 잠그고(429), 그동안은 Retry-After 초만큼 버튼을 막는다 */
   const submit = () => {
     if (!canLogin) return;
     setCredErr(null);
