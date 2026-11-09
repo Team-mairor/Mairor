@@ -63,6 +63,51 @@ final class CatalogImportApiDocs {
         ]
       }""";
 
+  /** 실행 열기·하트비트·끝내기의 성공 응답. */
+  static final String RUN_RESPONSE =
+      """
+      {
+        "id": "0b6c1c36-6f7a-4d7e-9f8e-2f3c4d5e6a7b",
+        "runId": "5d1f0c2e9a7b4c3e8f6a1b2c3d4e5f60",
+        "status": "RUNNING",
+        "startedAt": "2026-11-08T21:30:00+09:00",
+        "lastHeartbeatAt": "2026-11-08T12:31:10Z",
+        "finishedAt": null,
+        "resumed": false
+      }""";
+
+  /** 건 묶음의 성공 응답. 새로 반영한 건, 재전송으로 돌려준 건, 틀린 건 세 모양을 싣는다. */
+  static final String BATCH_RESPONSE =
+      """
+      {
+        "results": [
+          {
+            "index": 0, "itemKey": "000001", "outcome": "NEW", "partial": false, "reasons": [],
+            "productId": "00000000-0000-4000-8000-000000000101", "colorsApplied": 2,
+            "duplicate": false, "recorded": true, "message": null
+          },
+          {
+            "index": 1, "itemKey": "000002", "outcome": "UPDATE", "partial": false, "reasons": [],
+            "productId": "00000000-0000-4000-8000-000000000102", "colorsApplied": 0,
+            "duplicate": true, "recorded": true, "message": null
+          },
+          {
+            "index": 2, "itemKey": "000003", "outcome": "INVALID", "partial": false,
+            "reasons": ["INVALID_FORMAT"], "productId": null, "colorsApplied": 0,
+            "duplicate": false, "recorded": true,
+            "message": "shades[0].colors[0].hex INVALID_FORMAT: #RRGGBB 대문자여야 한다"
+          }
+        ]
+      }""";
+
+  /** 끝난 실행에 건을 더하려 할 때의 409. */
+  static final String RUN_CLOSED =
+      """
+      {
+        "code": "IMPORT_RUN_CLOSED",
+        "message": "이미 끝난 적재 실행입니다: 5d1f0c2e9a7b4c3e8f6a1b2c3d4e5f60 (ABANDONED)"
+      }""";
+
   /** items 개수가 범위를 벗어난 요청의 400. */
   static final String ITEMS_TOO_MANY =
       """

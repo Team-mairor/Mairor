@@ -38,8 +38,10 @@ import org.hibernate.annotations.UpdateTimestamp;
         @UniqueConstraint(
             name = ProductShadeColor.SHADE_ORDER_UNIQUE,
             columnNames = {"shade_id", "sort_order"}),
-    indexes =
-        @Index(name = ProductShadeColor.SHADE_ORDER_INDEX, columnList = "shade_id, sort_order"))
+    indexes = {
+      @Index(name = ProductShadeColor.SHADE_ORDER_INDEX, columnList = "shade_id, sort_order"),
+      @Index(name = ProductShadeColor.SOURCE_ITEM_INDEX, columnList = "source_item_id")
+    })
 public class ProductShadeColor {
 
   public static final String SHADE_ORDER_UNIQUE = "uk_product_shade_colors_shade_order";
@@ -51,8 +53,12 @@ public class ProductShadeColor {
   public static final String COLOR_HEX_CHECK = "ck_product_shade_colors_hex";
   public static final String COLOR_SOURCE_CHECK = "ck_product_shade_colors_source";
   public static final String REVIEW_CHECK = "ck_product_shade_colors_review";
+  public static final String SOURCE_ITEM_FK = "fk_product_shade_colors_source_item";
+  public static final String SOURCE_PAIR_CHECK = "ck_product_shade_colors_source_pair";
+  public static final String SOURCE_ITEM_INDEX = "idx_product_shade_colors_source_item";
 
   public static final int NAME_MAX_LENGTH = 100;
+  public static final int EVIDENCE_KEY_MAX_LENGTH = 400;
 
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
@@ -85,6 +91,15 @@ public class ProductShadeColor {
   /** 이 색을 만든 수집 시각. 같은 우선순위끼리 더 최신인 값을 고르는 데 쓴다. */
   @Column(name = "source_collected_at")
   private Instant sourceCollectedAt;
+
+  /** 이 칸의 현재 값을 만든 적재 건. 직접 넣은 칸이면 {@code null}이고 {@code sourceEvidenceKey}도 {@code null}이다. */
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "source_item_id", foreignKey = @ForeignKey(name = SOURCE_ITEM_FK))
+  private CatalogImportItem sourceItem;
+
+  /** 그 건의 근거를 실행 결과 파일에서 찾는 키({@code <상품 번호>/<옵션 값>/<칸 순서>}). */
+  @Column(name = "source_evidence_key", length = EVIDENCE_KEY_MAX_LENGTH)
+  private String sourceEvidenceKey;
 
   @CreationTimestamp
   @Column(name = "created_at", nullable = false, updatable = false)
@@ -169,6 +184,29 @@ public class ProductShadeColor {
     this.reviewStatus = reviewStatus;
   }
 
+  /**
+   * 이 칸의 현재 값이 어느 적재 건과 근거 키에서 왔는지 남긴다. 둘은 함께 있어야 한다.
+   *
+   * @throws IllegalArgumentException 근거 키가 비었거나 길면
+   */
+  public void linkSource(CatalogImportItem item, String evidenceKey) {
+    Objects.requireNonNull(item, "item");
+    if (evidenceKey == null || evidenceKey.isBlank()) {
+      throw new IllegalArgumentException("근거 키는 비어 있을 수 없다");
+    }
+    if (evidenceKey.length() > EVIDENCE_KEY_MAX_LENGTH) {
+      throw new IllegalArgumentException("근거 키는 " + EVIDENCE_KEY_MAX_LENGTH + "자까지다");
+    }
+    this.sourceItem = item;
+    this.sourceEvidenceKey = evidenceKey;
+  }
+
+  /** 출처 연결을 지운다(직접 넣은 칸으로 돌린다). */
+  public void clearSource() {
+    this.sourceItem = null;
+    this.sourceEvidenceKey = null;
+  }
+
   /** 서비스에 쓸 수 있는 색이 있는가(API 가 {@code color}를 채우는 칸). */
   public boolean hasUsableColor() {
     return color != null && reviewStatus != null && reviewStatus.isUsable();
@@ -213,6 +251,14 @@ public class ProductShadeColor {
 
   public Instant getSourceCollectedAt() {
     return sourceCollectedAt;
+  }
+
+  public CatalogImportItem getSourceItem() {
+    return sourceItem;
+  }
+
+  public String getSourceEvidenceKey() {
+    return sourceEvidenceKey;
   }
 
   public Instant getCreatedAt() {

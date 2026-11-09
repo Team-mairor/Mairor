@@ -310,7 +310,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | 파일 | 테이블 |
 |---|---|
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
-| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값) |
+| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값), `catalog_import_runs` (카탈로그 적재 실행), `catalog_import_items` (적재 실행의 건) |
 | `db/schema/analysis.sql` | `videos` (유튜브 영상), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
 | `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
 
@@ -322,6 +322,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
 | 개인 파우치·회원별 버전 기반 | S15P31A306-211 | 먼저 `ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;` 다음 `pouch.sql` 전체. 기존 회원도 버전 0으로 시작한다. 기존 카탈로그 테이블은 변경·재적재하지 않는다 |
 | 호수별 색 칸: `products.image_url`·`sale_status`, `product_shades.source_option_id`, 테이블 `product_shade_colors`·`product_shade_option_aliases`, 수집 출처 유니크 인덱스 2개 | S15P31A306-294 | `psql -f db/upgrade/294-product-shade-colors.sql` (컬럼·테이블·인덱스 추가뿐이라 옛 버전 앱과 함께 돌아도 깨지지 않는다. 옛 `product_shades.color_*` 는 지우지 않는다). 적용 전에 ① `SELECT source, source_product_id, count(*) FROM products WHERE source IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;` 가 0건인지(있으면 새 유니크 인덱스가 만들어지지 않아 파일 전체가 롤백된다) ② `SELECT count(*) FROM product_shades WHERE color_hex IS NOT NULL;` 로 옮길 대표 색이 있는지 센다. ②가 0 이 아니면 **같은 시점에** `psql -f db/upgrade/294-product-shade-colors-data.sql` 로 호수마다 색 칸 1개로 옮긴다(다시 적용해도 된다). 옮기지 않으면 그 호수의 `colors` 는 빈 목록으로 나온다 |
+| 카탈로그 적재 실행 기록: 테이블 `catalog_import_runs`·`catalog_import_items`, `product_shade_colors.source_item_id`·`source_evidence_key` (색 칸이 어느 적재 건과 근거 키에서 왔는지 찾아가는 키) | S15P31A306-295 | `psql -f db/upgrade/295-catalog-import-runs.sql` (새 테이블과 NULL 허용 컬럼 추가뿐이라 옛 버전 앱과 함께 돌아도 깨지지 않는다). 적용 전에 294 가 적용됐는지 `SELECT to_regclass('product_shade_colors');` 가 NULL 이 아닌지, 새 테이블이 아직 없는지 `SELECT to_regclass('catalog_import_runs'), to_regclass('catalog_import_items');` 가 둘 다 NULL 인지 확인한다. 적용 후 두 테이블이 0건이고 `SELECT count(*) FROM product_shade_colors WHERE source_item_id IS NOT NULL;` 가 0 인지 본다 |
 | `user_identities` 테이블 (Google `sub` 로 회원을 찾는다) | S15P31A306-208 | `users.sql` 의 `CREATE TABLE user_identities (...)` 문 하나 |
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |

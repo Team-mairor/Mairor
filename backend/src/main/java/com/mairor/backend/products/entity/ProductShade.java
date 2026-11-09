@@ -167,6 +167,16 @@ public class ProductShade {
     return slot;
   }
 
+  /** 별칭에서 옵션 값을 뺀다(그 값이 호수의 대표 옵션 값이 될 때). 없으면 무시한다. */
+  public void removeOptionAlias(String optionId) {
+    optionAliases.remove(optionId);
+  }
+
+  /** 색 칸을 지운다. 칸 구성을 통째로 바꿀 때만 쓴다. 칸은 영구 식별자(colorId)를 가지므로, 참조가 없는 것을 적재 계획이 확인한 뒤에만 부른다. */
+  public void removeColor(ProductShadeColor slot) {
+    colors.remove(slot);
+  }
+
   private static String checkOptionId(String optionId, boolean nullable) {
     if (optionId == null && nullable) {
       return null;

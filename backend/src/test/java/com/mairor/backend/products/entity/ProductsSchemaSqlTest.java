@@ -42,7 +42,9 @@ class ProductsSchemaSqlTest {
             "products",
             "product_shades",
             "product_shade_option_aliases",
-            "product_shade_colors")) {
+            "product_shade_colors",
+            "catalog_import_runs",
+            "catalog_import_items")) {
       assertThat(jdbc.queryForObject("select count(*) from " + table, Integer.class))
           .as(table)
           .isZero();
@@ -150,6 +152,8 @@ class ProductsSchemaSqlTest {
             "color_estimated",
             "review_status",
             "source_collected_at",
+            "source_item_id",
+            "source_evidence_key",
             "created_at",
             "updated_at");
     for (String optional :
@@ -160,7 +164,9 @@ class ProductsSchemaSqlTest {
             "color_source",
             "color_estimated",
             "review_status",
-            "source_collected_at")) {
+            "source_collected_at",
+            "source_item_id",
+            "source_evidence_key")) {
       assertThat(column(columns, optional).get("is_nullable")).as(optional).isEqualTo("YES");
     }
     for (String required : List.of("shade_id", "sort_order", "name_source")) {
@@ -171,6 +177,83 @@ class ProductsSchemaSqlTest {
     assertThat(column(columns, "name_normalized").get("character_maximum_length"))
         .isEqualTo(ProductShadeColor.NAME_MAX_LENGTH * 2);
     assertThat(column(columns, "color_hex").get("character_maximum_length")).isEqualTo(7);
+    assertThat(column(columns, "source_evidence_key").get("character_maximum_length"))
+        .isEqualTo(ProductShadeColor.EVIDENCE_KEY_MAX_LENGTH);
+  }
+
+  @Test
+  void importRunColumnsHaveTheExpectedNullabilityAndLength() {
+    List<Map<String, Object>> columns = columns("catalog_import_runs");
+
+    assertThat(columns)
+        .extracting(c -> c.get("column_name"))
+        .containsExactlyInAnyOrder(
+            "id",
+            "run_id",
+            "seed",
+            "collector_version",
+            "result_file",
+            "status",
+            "collector_started_at",
+            "last_heartbeat_at",
+            "finished_at",
+            "created_at",
+            "updated_at");
+    for (String optional :
+        List.of(
+            "seed", "collector_version", "result_file", "collector_started_at", "finished_at")) {
+      assertThat(column(columns, optional).get("is_nullable")).as(optional).isEqualTo("YES");
+    }
+    for (String required : List.of("run_id", "status", "last_heartbeat_at")) {
+      assertThat(column(columns, required).get("is_nullable")).as(required).isEqualTo("NO");
+    }
+    assertThat(column(columns, "run_id").get("character_maximum_length"))
+        .isEqualTo(CatalogImportRun.RUN_ID_MAX_LENGTH);
+    assertThat(column(columns, "seed").get("character_maximum_length"))
+        .isEqualTo(CatalogImportRun.SEED_MAX_LENGTH);
+    assertThat(column(columns, "collector_version").get("character_maximum_length"))
+        .isEqualTo(CatalogImportRun.COLLECTOR_VERSION_MAX_LENGTH);
+    assertThat(column(columns, "result_file").get("character_maximum_length"))
+        .isEqualTo(CatalogImportRun.RESULT_FILE_MAX_LENGTH);
+  }
+
+  @Test
+  void importItemColumnsHaveTheExpectedNullabilityAndLength() {
+    List<Map<String, Object>> columns = columns("catalog_import_items");
+
+    assertThat(columns)
+        .extracting(c -> c.get("column_name"))
+        .containsExactlyInAnyOrder(
+            "id",
+            "run_id",
+            "item_key",
+            "source",
+            "source_product_id",
+            "outcome",
+            "partial",
+            "reasons",
+            "product_id",
+            "colors_applied",
+            "message",
+            "created_at",
+            "updated_at");
+    for (String optional : List.of("source", "source_product_id", "product_id", "message")) {
+      assertThat(column(columns, optional).get("is_nullable")).as(optional).isEqualTo("YES");
+    }
+    for (String required :
+        List.of("run_id", "item_key", "outcome", "partial", "reasons", "colors_applied")) {
+      assertThat(column(columns, required).get("is_nullable")).as(required).isEqualTo("NO");
+    }
+    assertThat(column(columns, "item_key").get("character_maximum_length"))
+        .isEqualTo(CatalogImportItem.ITEM_KEY_MAX_LENGTH);
+    assertThat(column(columns, "source").get("character_maximum_length"))
+        .isEqualTo(CatalogImportItem.SOURCE_MAX_LENGTH);
+    assertThat(column(columns, "source_product_id").get("character_maximum_length"))
+        .isEqualTo(CatalogImportItem.SOURCE_PRODUCT_ID_MAX_LENGTH);
+    assertThat(column(columns, "reasons").get("character_maximum_length"))
+        .isEqualTo(CatalogImportItem.REASONS_MAX_LENGTH);
+    assertThat(column(columns, "message").get("character_maximum_length"))
+        .isEqualTo(CatalogImportItem.MESSAGE_MAX_LENGTH);
   }
 
   private List<Map<String, Object>> columns(String table) {
