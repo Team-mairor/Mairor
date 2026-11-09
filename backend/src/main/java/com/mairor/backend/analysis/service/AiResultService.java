@@ -8,11 +8,13 @@ import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
 import com.mairor.backend.guides.entity.Guide;
+import com.mairor.backend.guides.event.ReferenceProductReconciliationRequested;
 import com.mairor.backend.guides.repository.GuideRepository;
 import java.time.Clock;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
@@ -48,18 +50,21 @@ public class AiResultService {
   private final AnalysisJobNotifier notifier;
   private final ObjectMapper objectMapper;
   private final Clock clock;
+  private final ApplicationEventPublisher events;
 
   AiResultService(
       AnalysisJobRepository jobs,
       GuideRepository guides,
       AnalysisJobNotifier notifier,
       ObjectMapper objectMapper,
-      Clock clock) {
+      Clock clock,
+      ApplicationEventPublisher events) {
     this.jobs = jobs;
     this.guides = guides;
     this.notifier = notifier;
     this.objectMapper = objectMapper;
     this.clock = clock;
+    this.events = events;
   }
 
   /**
@@ -104,6 +109,7 @@ public class AiResultService {
       guide.recordAiResult(
           result.guide().toString(), area == null ? null : area.toString(), meshVersion(area));
       job.complete(clock.instant());
+      events.publishEvent(new ReferenceProductReconciliationRequested(guide.getId()));
       log.info(
           "AI 가이드 저장 jobId={} aiJobId={} guideId={} steps={} area={}",
           job.getId(),

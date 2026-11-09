@@ -2,17 +2,24 @@ package com.mairor.backend.guides.repository;
 
 import com.mairor.backend.guides.entity.Guide;
 import com.mairor.backend.guides.entity.ReviewStatus;
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface GuideRepository extends JpaRepository<Guide, UUID> {
 
   Optional<Guide> findByAnalysisJobId(UUID analysisJobId);
+
+  /** 연결 결과를 바꾸는 트랜잭션이 같은 가이드의 버전을 직렬화한다. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select g from Guide g where g.id = :guideId")
+  Optional<Guide> findByIdForUpdate(@Param("guideId") UUID guideId);
 
   /** 영상의 가이드 중 가장 큰 판 번호. 없으면 0. */
   @Query("select coalesce(max(g.version), 0) from Guide g where g.video.id = :videoId")

@@ -45,6 +45,7 @@ abstract class AnalysisIntegrationTest {
   @BeforeEach
   void clearAnalysisTables() {
     jdbc.update("delete from llm_calls");
+    jdbc.update("delete from guide_step_product_links");
     jdbc.update("delete from guides");
     jdbc.update("delete from analysis_jobs");
     jdbc.update("delete from videos");

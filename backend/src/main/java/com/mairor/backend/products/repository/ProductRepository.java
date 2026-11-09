@@ -2,6 +2,7 @@ package com.mairor.backend.products.repository;
 
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.support.CatalogTextNormalizer;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,6 +22,15 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
         typeCode, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.normalize(name));
   }
 
+  /** 여러 허용 종류에서 정규화된 브랜드·제품명이 정확히 일치하는 후보를 한 번에 읽는다. */
+  default List<Product> findExact(Collection<String> typeCodes, String brand, String name) {
+    if (typeCodes.isEmpty()) {
+      return List.of();
+    }
+    return findAllByTypeCodeInAndBrandNormalizedAndNameNormalized(
+        typeCodes, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.normalize(name));
+  }
+
   /** 수집 출처의 상품 번호로 찾는다. 같은 출처의 같은 번호는 한 제품이다({@code uk_products_source_product}). */
   @EntityGraph(attributePaths = {"category", "type"})
   Optional<Product> findBySourceAndSourceProductId(String source, String sourceProductId);
@@ -29,6 +39,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   @EntityGraph(attributePaths = {"category", "type"})
   Optional<Product> findByTypeCodeAndBrandNormalizedAndNameNormalized(
       String typeCode, String brandNormalized, String nameNormalized);
+
+  @EntityGraph(attributePaths = {"category", "type"})
+  List<Product> findAllByTypeCodeInAndBrandNormalizedAndNameNormalized(
+      Collection<String> typeCodes, String brandNormalized, String nameNormalized);
 
   /** 제품명 공백을 무시한 후보를 모두 찾는다. 다중 결과는 호출부에서 모호한 검색으로 처리한다. */
   @EntityGraph(attributePaths = {"category", "type"})
@@ -39,4 +53,17 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     return findAllByTypeCodeAndBrandNormalizedAndNameCompact(
         typeCode, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.compact(name));
   }
+
+  /** 여러 허용 종류에서 공백 제거 제품명이 일치하는 후보를 한 번에 읽는다. */
+  default List<Product> findCompact(Collection<String> typeCodes, String brand, String name) {
+    if (typeCodes.isEmpty()) {
+      return List.of();
+    }
+    return findAllByTypeCodeInAndBrandNormalizedAndNameCompact(
+        typeCodes, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.compact(name));
+  }
+
+  @EntityGraph(attributePaths = {"category", "type"})
+  List<Product> findAllByTypeCodeInAndBrandNormalizedAndNameCompact(
+      Collection<String> typeCodes, String brandNormalized, String nameCompact);
 }

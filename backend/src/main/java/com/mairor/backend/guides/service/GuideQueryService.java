@@ -7,8 +7,12 @@ import com.mairor.backend.guides.dto.response.GuideStepResponse;
 import com.mairor.backend.guides.dto.response.GuideStepResponse.StepType;
 import com.mairor.backend.guides.dto.response.ReferenceProductResponse;
 import com.mairor.backend.guides.entity.Guide;
+import com.mairor.backend.guides.entity.GuideStepProductLink;
+import com.mairor.backend.guides.entity.ReferenceMatchLevel;
+import com.mairor.backend.guides.entity.ReferenceMatchReason;
 import com.mairor.backend.guides.entity.ReviewStatus;
 import com.mairor.backend.guides.repository.GuideRepository;
+import com.mairor.backend.guides.repository.GuideStepProductLinkRepository;
 import com.mairor.backend.videos.entity.Video;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -52,10 +56,15 @@ public class GuideQueryService {
   private static final String EXCLUDED_MAKEUP = "other";
 
   private final GuideRepository guides;
+  private final GuideStepProductLinkRepository productLinks;
   private final ObjectMapper objectMapper;
 
-  GuideQueryService(GuideRepository guides, ObjectMapper objectMapper) {
+  GuideQueryService(
+      GuideRepository guides,
+      GuideStepProductLinkRepository productLinks,
+      ObjectMapper objectMapper) {
     this.guides = guides;
+    this.productLinks = productLinks;
     this.objectMapper = objectMapper;
   }
 
@@ -74,11 +83,15 @@ public class GuideQueryService {
     Map<String, JsonNode> explained = byStepId(read(guide.getExplanation()));
     JsonNode area = read(guide.getArea());
     Map<String, JsonNode> areas = byStepId(area);
+    Map<String, GuideStepProductLink> linksByStep = new HashMap<>();
+    for (GuideStepProductLink link : productLinks.findByGuideIdOrderByStepIdAsc(guideId)) {
+      linksByStep.put(link.getStepId(), link);
+    }
 
     List<GuideStepResponse> steps = new ArrayList<>();
     for (JsonNode step : input.path("steps")) {
       String stepId = step.path("stepId").asString("");
-      steps.add(step(step, explained.get(stepId), areas.get(stepId)));
+      steps.add(step(step, explained.get(stepId), areas.get(stepId), linksByStep.get(stepId)));
     }
     int stepCount = (int) steps.stream().filter(s -> s.type() == StepType.GUIDE).count();
     int previewable = (int) steps.stream().filter(GuideStepResponse::previewable).count();
@@ -102,7 +115,8 @@ public class GuideQueryService {
         List.copyOf(steps));
   }
 
-  private GuideStepResponse step(JsonNode step, JsonNode explanation, JsonNode area) {
+  private GuideStepResponse step(
+      JsonNode step, JsonNode explanation, JsonNode area, GuideStepProductLink productLink) {
     String makeup = step.path("makeup").asString("");
     StepType type = EXCLUDED_MAKEUP.equals(makeup) ? StepType.EXCLUDED : StepType.GUIDE;
     JsonNode facts = step.path("facts");
@@ -117,7 +131,7 @@ public class GuideQueryService {
         arrayOrEmpty(explanation == null ? null : explanation.get("actions")),
         explanation == null ? null : text(explanation.path("doneWhen")),
         tool == null ? List.of() : List.of(tool),
-        product(step.path("product")),
+        product(step.path("product"), productLink),
         null,
         new GuideStepResponse.VideoRange(
             step.path("startSeconds").asDouble(), step.path("endSeconds").asDouble()),
@@ -126,7 +140,8 @@ public class GuideQueryService {
         arrayOrEmpty(area == null ? null : area.get("subSteps")));
   }
 
-  private static ReferenceProductResponse product(JsonNode product) {
+  private static ReferenceProductResponse product(
+      JsonNode product, GuideStepProductLink productLink) {
     if (!product.isObject()) {
       return null;
     }
@@ -134,11 +149,30 @@ public class GuideQueryService {
     String name = text(product.path("name"));
     String shade = text(product.path("shade"));
     String fullName = brand == null ? name : name == null ? brand : brand + " " + name;
+    boolean linkConflict =
+        productLink != null && productLink.getReasonCode() == ReferenceMatchReason.LINK_CONFLICT;
     if (fullName == null && shade == null) {
       return null;
     }
+    String productId =
+        productLink == null || linkConflict || productLink.getProduct() == null
+            ? null
+            : productLink.getProduct().getId().toString();
+    String shadeId =
+        productLink == null
+                || linkConflict
+                || (productLink.getMatchLevel() != ReferenceMatchLevel.SHADE
+                    && productLink.getMatchLevel() != ReferenceMatchLevel.SLOT)
+            ? null
+            : productLink.getShade().getId().toString();
+    String matchStatus =
+        productLink != null
+                && productLink.getMatchLevel() == ReferenceMatchLevel.NONE
+                && productLink.getReasonCode() == ReferenceMatchReason.PRODUCT_AMBIGUOUS
+            ? "CANDIDATE"
+            : productId == null ? "UNMATCHED" : "MATCHED";
     return new ReferenceProductResponse(
-        null, null, fullName, shade, "UNMATCHED", "UNKNOWN", List.of(), Boolean.TRUE);
+        productId, shadeId, fullName, shade, matchStatus, "UNKNOWN", List.of(), Boolean.TRUE);
   }
 
   private JsonNode read(String json) {

@@ -10,6 +10,7 @@
 -- JPA 가 표현하지 못해 이 파일에만 있는 규칙 (엔티티를 거치지 않은 데이터도 DB 가 막는다):
 --   uk_analysis_jobs_video_active : 같은 영상의 진행 중(PENDING·RUNNING) 작업은 하나뿐이다 (API-VIDEO-002 "중복 생성하지 않는다")
 --   uk_guides_video_approved      : 같은 영상의 공개(APPROVED) 가이드는 하나뿐이다
+--   increment_guide_reference_version_for_color_change: 연결된 색 칸의 사용 가능 HEX가 바뀌면 guides.reference_version을 증가시키는 트리거
 --
 -- jsonb 칸의 모양은 레포 shared/ 스키마가 정한다. DB 는 JSON 인지만 본다.
 --   guides.guide_input → shared/guide-input/guide_input.v1.schema.json
@@ -107,6 +108,7 @@ CREATE TABLE guides (
     video_id            uuid                        NOT NULL,
     analysis_job_id     uuid                        NOT NULL,
     version             integer                     NOT NULL,
+    reference_version   integer                     NOT NULL DEFAULT 0,
     review_status       varchar(20)                 NOT NULL,
     mesh_version        varchar(10),
     guide_input         jsonb                       NOT NULL,
@@ -124,9 +126,77 @@ CREATE TABLE guides (
     CONSTRAINT uk_guides_analysis_job UNIQUE (analysis_job_id),
     CONSTRAINT uk_guides_video_version UNIQUE (video_id, version),
     CONSTRAINT ck_guides_review_status CHECK (review_status IN ('NOT_READY', 'PENDING', 'APPROVED', 'REJECTED')),
-    CONSTRAINT ck_guides_version CHECK (version >= 1)
+    CONSTRAINT ck_guides_version CHECK (version >= 1),
+    CONSTRAINT ck_guides_reference_version CHECK (reference_version >= 0)
 );
 CREATE UNIQUE INDEX uk_guides_video_approved ON guides (video_id) WHERE review_status = 'APPROVED';
+
+-- 영상 단계별 원본 제품 대조 결과. 단계 입력의 stepId 를 보존하고, 확인한 연결 수준까지만 ID 를 저장한다.
+-- NONE 은 제품/호수/칸 ID 가 모두 NULL, PRODUCT/SHADE/SLOT 은 수준에 맞게 점진적으로 ID 를 채운다.
+CREATE TABLE guide_step_product_links (
+    id              uuid         NOT NULL,
+    guide_id        uuid         NOT NULL,
+    step_id         varchar(200) NOT NULL,
+    product_id      uuid,
+    shade_id        uuid,
+    color_id        uuid,
+    match_level     varchar(20)  NOT NULL,
+    reason_code     varchar(40),
+    created_at      timestamp(6) with time zone NOT NULL,
+    updated_at      timestamp(6) with time zone NOT NULL,
+    CONSTRAINT guide_step_product_links_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_guide_step_product_links_guide FOREIGN KEY (guide_id) REFERENCES guides (id),
+    CONSTRAINT fk_guide_step_product_links_product FOREIGN KEY (product_id) REFERENCES products (id),
+    CONSTRAINT fk_guide_step_product_links_shade FOREIGN KEY (shade_id) REFERENCES product_shades (id),
+    CONSTRAINT fk_guide_step_product_links_color FOREIGN KEY (color_id) REFERENCES product_shade_colors (id),
+    CONSTRAINT uk_guide_step_product_links_guide_step UNIQUE (guide_id, step_id),
+    CONSTRAINT ck_guide_step_product_links_match_level CHECK (
+        (match_level = 'NONE' AND product_id IS NULL AND shade_id IS NULL AND color_id IS NULL)
+        OR (match_level = 'PRODUCT' AND product_id IS NOT NULL AND shade_id IS NULL AND color_id IS NULL)
+        OR (match_level = 'SHADE' AND product_id IS NOT NULL AND shade_id IS NOT NULL AND color_id IS NULL)
+        OR (match_level = 'SLOT' AND product_id IS NOT NULL AND shade_id IS NOT NULL AND color_id IS NOT NULL)
+    ),
+    CONSTRAINT ck_guide_step_product_links_reason_code CHECK (
+        reason_code IS NULL OR reason_code IN (
+            'PRODUCT_NOT_PROVIDED', 'PRODUCT_DATA_INCOMPLETE', 'CATEGORY_UNSUPPORTED', 'PRODUCT_NOT_FOUND',
+            'PRODUCT_AMBIGUOUS', 'SHADE_NOT_PROVIDED',
+            'SHADE_NOT_FOUND', 'SHADE_AMBIGUOUS', 'NO_COLOR_SLOTS',
+            'SLOT_UNIDENTIFIED', 'LINK_CONFLICT'
+        )
+    )
+);
+CREATE INDEX idx_guide_step_product_links_product ON guide_step_product_links (product_id) WHERE product_id IS NOT NULL;
+CREATE INDEX idx_guide_step_product_links_shade ON guide_step_product_links (shade_id) WHERE shade_id IS NOT NULL;
+CREATE INDEX idx_guide_step_product_links_color ON guide_step_product_links (color_id) WHERE color_id IS NOT NULL;
+
+-- 연결된 슬롯의 서비스 색(사용 가능한 HEX)이 바뀌면 reference_version 도 증가해 후속 매칭을 stale 로 판정할 수 있다.
+-- 트리거 함수 본문은 SQL 문자열로 감싸 Spring SQL 초기화기가 하나의 문장으로 실행한다.
+CREATE FUNCTION increment_guide_reference_version_for_color_change_fn()
+RETURNS trigger
+LANGUAGE plpgsql
+AS '
+BEGIN
+    UPDATE guides g
+       SET reference_version = g.reference_version + 1
+     WHERE EXISTS (
+         SELECT 1
+           FROM guide_step_product_links l
+          WHERE l.guide_id = g.id
+            AND l.color_id = NEW.id
+     );
+    RETURN NEW;
+END;
+';
+
+CREATE TRIGGER increment_guide_reference_version_for_color_change
+    AFTER UPDATE OF color_hex, review_status ON product_shade_colors
+    FOR EACH ROW
+    WHEN (
+        (CASE WHEN OLD.review_status IN ('AUTO_APPROVED', 'APPROVED') THEN OLD.color_hex END)
+        IS DISTINCT FROM
+        (CASE WHEN NEW.review_status IN ('AUTO_APPROVED', 'APPROVED') THEN NEW.color_hex END)
+    )
+    EXECUTE FUNCTION increment_guide_reference_version_for_color_change_fn();
 
 -- LLM 호출 기록. 토큰·소요·비용 확인과 응답 원문 보존용. 분석 작업 밖에서 부른 호출은 analysis_job_id 가 NULL.
 CREATE TABLE llm_calls (

@@ -3,6 +3,7 @@ package com.mairor.backend.guides.controller;
 import com.mairor.backend.common.web.OpenApiConfig;
 import com.mairor.backend.guides.dto.request.ReviewGuideRequest;
 import com.mairor.backend.guides.dto.response.InternalGuideResponse;
+import com.mairor.backend.guides.service.GuideReferenceLinkReconciliationDispatcher;
 import com.mairor.backend.guides.service.GuideReviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -10,6 +11,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,9 +28,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalGuideController {
 
   private final GuideReviewService guideReviewService;
+  private final GuideReferenceLinkReconciliationDispatcher reconciliationDispatcher;
 
-  public InternalGuideController(GuideReviewService guideReviewService) {
+  public InternalGuideController(
+      GuideReviewService guideReviewService,
+      GuideReferenceLinkReconciliationDispatcher reconciliationDispatcher) {
     this.guideReviewService = guideReviewService;
+    this.reconciliationDispatcher = reconciliationDispatcher;
   }
 
   @Operation(
@@ -67,5 +73,24 @@ public class InternalGuideController {
   public InternalGuideResponse review(
       @PathVariable UUID guideId, @Valid @RequestBody ReviewGuideRequest request) {
     return InternalGuideResponse.from(guideReviewService.review(guideId, request.decision()));
+  }
+
+  @Operation(
+      summary = "가이드 원본 제품 대조 재실행",
+      description =
+          """
+          AI 콜백 후 가이드 원본 제품을 기존 카탈로그와 비동기로 다시 대조한다.
+
+          - 202 응답은 대조 작업 예약 완료이며, 결과는 가이드 조회 API에서 확인한다.
+          """,
+      security = @SecurityRequirement(name = OpenApiConfig.INTERNAL_TOKEN))
+  @ApiResponse(responseCode = "202", description = "대조 작업 예약")
+  @ApiResponse(responseCode = "401", description = "공유 토큰이 없거나 다름. (UNAUTHORIZED)")
+  @ApiResponse(responseCode = "404", description = "없는 가이드. (NOT_FOUND)")
+  @ApiResponse(responseCode = "503", description = "대조 작업 대기열을 사용할 수 없음. (SERVICE_UNAVAILABLE)")
+  @PostMapping("/{guideId}/reference-links/reconcile")
+  public ResponseEntity<Void> reconcileReferenceLinks(@PathVariable UUID guideId) {
+    reconciliationDispatcher.requestManualReconciliation(guideId);
+    return ResponseEntity.accepted().build();
   }
 }

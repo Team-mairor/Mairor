@@ -77,6 +77,10 @@ public class Guide {
   @Column(nullable = false)
   private int version;
 
+  /** 원본 제품 연결 또는 연결된 슬롯 색 변경 버전. 가이드 콘텐츠 {@link #version}과 별개다. */
+  @Column(name = "reference_version", nullable = false)
+  private int referenceVersion;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "review_status", nullable = false, length = 20)
   private ReviewStatus reviewStatus;
@@ -143,6 +147,15 @@ public class Guide {
 
   public int getVersion() {
     return version;
+  }
+
+  public int getReferenceVersion() {
+    return referenceVersion;
+  }
+
+  /** 연결 결과가 실제로 달라졌을 때 호출한다. 연결 슬롯 색상 변경은 DB 트리거가 올린다. */
+  public void incrementReferenceVersion() {
+    referenceVersion = Math.incrementExact(referenceVersion);
   }
 
   public ReviewStatus getReviewStatus() {
