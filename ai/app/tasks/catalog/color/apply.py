@@ -41,7 +41,7 @@ from app.tasks.catalog.contract import (
 )
 from app.tasks.catalog.detail.images import DetailImage
 from app.tasks.catalog.detail.link import ChartMatch, match_shades
-from app.tasks.catalog.detail.scan import scan_detail_images, scan_to_json
+from app.tasks.catalog.detail.scan import ImageScan, scan_detail_images, scan_to_json
 from app.tasks.catalog.http import PoliteClient
 from app.tasks.catalog.link.shade_link import ShadeImage
 from app.tasks.catalog.text import compact_key, tokens
@@ -297,10 +297,14 @@ async def add_colors(
         detail = [
             DetailImage(entry["url"], entry.get("skip")) for entry in raw.get("detailImages", [])
         ]
-        scans, scan_warnings = await scan_detail_images(client, llm, detail)
+        wanted = {s.source_option_id for s in shades if s.color_status is not ColorStatus.EXTRACTED}
+
+        def all_linked(scans: list[ImageScan]) -> bool:
+            return wanted <= set(match_shades(shades, scans, wanted=wanted).matches)
+
+        scans, scan_warnings = await scan_detail_images(client, llm, detail, is_done=all_linked)
         ctx.warnings.extend(scan_warnings)
         detail_charts = [scan_to_json(scan) for scan in scans]
-        wanted = {s.source_option_id for s in shades if s.color_status is not ColorStatus.EXTRACTED}
         matched = match_shades(shades, scans, wanted=wanted)
         shades = [
             _chart_shade(ctx, product, shade, matched.matches[shade.source_option_id])

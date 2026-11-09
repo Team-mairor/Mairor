@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from app.tasks.catalog.color.pixels import ColorReading
 from app.tasks.catalog.contract import BBox, ImageKind
+from app.tasks.catalog.text import compact_key
 
 CHART_SYSTEM = (
     "화장품 상품 설명 이미지의 한 조각이다. 호수별 색을 보여 주는 색 차트가 있으면 아래만 답한다. "
@@ -27,6 +28,7 @@ CHART_SYSTEM = (
 )
 
 MAX_DUPLICATE_OVERLAP = 0.5
+SAME_LABEL_REACH = 2.0
 
 
 @dataclass(frozen=True)
@@ -54,10 +56,22 @@ def _rank(cell: ChartCell) -> tuple[bool, float, bool]:
     return (cell.reading is not None, quality, cell.label is not None)
 
 
+def _same_cell(a: ChartCell, b: ChartCell) -> bool:
+    """같은 칸을 두 번 읽은 것인가. 영역이 겹치거나, 다른 조각에서 같은 라벨을 가까이서 읽었다."""
+    if overlap(a.box, b.box) > MAX_DUPLICATE_OVERLAP:
+        return True
+    if a.tile == b.tile or not a.label or not b.label:
+        return False
+    if compact_key(a.label) != compact_key(b.label):
+        return False
+    reach = max(a.box.height, b.box.height) * SAME_LABEL_REACH
+    return abs((a.box.y + a.box.height / 2) - (b.box.y + b.box.height / 2)) <= reach
+
+
 def merge_duplicates(cells: list[ChartCell]) -> list[ChartCell]:
     """겹치는 조각이 같은 칸을 두 번 읽은 것을 하나로 합친다. 색이 있고 품질이 높은 쪽을 남긴다."""
     kept: list[ChartCell] = []
     for cell in sorted(cells, key=_rank, reverse=True):
-        if all(overlap(cell.box, other.box) <= MAX_DUPLICATE_OVERLAP for other in kept):
+        if not any(_same_cell(cell, other) for other in kept):
             kept.append(cell)
     return sorted(kept, key=lambda c: (c.box.y, c.box.x))

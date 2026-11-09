@@ -12,7 +12,8 @@
 받기·모델 호출 실패는 그 이미지(조각)만 영향을 받고, 차단(BlockedError)은 그대로 올린다.
 """
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 
 from PIL import Image
 
@@ -24,6 +25,16 @@ from app.tasks.catalog.contract import BBox, ImageKind
 from app.tasks.catalog.detail.chart import CHART_SYSTEM, ChartCell, merge_duplicates
 from app.tasks.catalog.detail.images import DetailImage
 from app.tasks.catalog.detail.overview import SHEET_CAPACITY, build_sheet, find_chart_tiles
+from app.tasks.catalog.detail.snap import (
+    MIN_ROW_CELLS,
+    chip_box,
+    chip_rows,
+    detect_chips,
+    edge_background,
+    group_rows,
+    is_background,
+    match_row,
+)
 from app.tasks.catalog.detail.tiles import (
     Tile,
     crop_tile,
@@ -34,9 +45,10 @@ from app.tasks.catalog.detail.tiles import (
 )
 from app.tasks.catalog.http import PoliteClient
 
-MAX_DOWNLOADS = 16
-MAX_OVERVIEW_CALLS = 8
-MAX_CHART_READS = 12
+MIN_SHEET_FILL = 4
+MAX_DOWNLOADS = 24
+MAX_OVERVIEW_CALLS = 10
+MAX_CHART_READS = 16
 
 SKIP_TOO_SMALL = "IMAGE_TOO_SMALL"
 
@@ -72,20 +84,36 @@ class _Pending:
 
 
 def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
+    """모델이 읽은 칸을 칩에 맞춰 색을 읽는다. 짝을 알 수 없는 줄과 배경을 읽은 칸은 색이 없다."""
     if analysis.confidence == "low" or analysis.kind in (ImageKind.STYLED, ImageKind.OTHER):
         return []
     crop, tile, height = pending.crop, pending.tile, pending.scan.height or 0
-    cells: list[ChartCell] = []
-    for cell in analysis.cells:
-        if touches_inner_edge(cell, tile, height):
+    entries = [
+        (cell, cell_box(cell, crop.size))
+        for cell in analysis.cells
+        if not touches_inner_edge(cell, tile, height)
+    ]
+    boxes = [box for _, box in entries]
+    rows = group_rows(boxes)
+    chips = chip_rows(detect_chips(crop)) if any(len(r) >= MIN_ROW_CELLS for r in rows) else []
+    resolved: dict[int, BBox | None] = {}
+    for row in rows:
+        if len(row) < MIN_ROW_CELLS:
+            resolved.update({index: boxes[index] for index in row})
             continue
-        box = cell_box(cell, crop.size)
-        original = BBox(x=box.x, y=box.y + tile.top, width=box.width, height=box.height)
-        cells.append(
-            ChartCell(
-                cell.label, original, read_cell(crop, box, analysis.kind), analysis.kind, tile.index
-            )
-        )
+        matched = match_row([boxes[i] for i in row], chips)
+        for position, index in enumerate(row):
+            resolved[index] = None if matched is None else chip_box(matched[position])
+    cells: list[ChartCell] = []
+    for index, (cell, model_box) in enumerate(entries):
+        box = resolved[index]
+        used = box or model_box
+        reading = read_cell(crop, box, analysis.kind) if box is not None else None
+        if reading is not None:
+            band = edge_background(crop, int(used.y), int(used.y + used.height))
+            reading = None if is_background(reading.hex, band) else reading
+        original = BBox(x=used.x, y=used.y + tile.top, width=used.width, height=used.height)
+        cells.append(ChartCell(cell.label, original, reading, analysis.kind, tile.index))
     return cells
 
 
@@ -116,14 +144,23 @@ async def _flush(batch: list[_Pending], llm: Llm, budget: ChartBudget, warnings:
         pending.scan.cells.extend(_chart_cells(pending, analysis))
 
 
+def _merged(scans: list[ImageScan]) -> list[ImageScan]:
+    return [replace(scan, cells=merge_duplicates(scan.cells)) for scan in scans]
+
+
 async def scan_detail_images(
     client: PoliteClient,
     llm: Llm,
     images: list[DetailImage],
     *,
     budget: ChartBudget | None = None,
+    is_done: Callable[[list[ImageScan]], bool] | None = None,
 ) -> tuple[list[ImageScan], list[str]]:
-    """사용할 상세 이미지에서 차트 칸을 읽는다. 결과는 이미지 순서, warnings는 사유 코드다."""
+    """사용할 상세 이미지에서 차트 칸을 읽는다. 결과는 이미지 순서, warnings는 사유 코드다.
+
+    is_done은 지금까지 읽은 결과로 더 읽을 필요가 없는지 알려 준다(원하는 호수를 다 이었을 때).
+    참이면 남은 이미지는 받지도 읽지도 않아 모델 호출을 아낀다.
+    """
     budget = budget or ChartBudget()
     scans: list[ImageScan] = []
     warnings: list[str] = []
@@ -131,6 +168,13 @@ async def scan_detail_images(
     usable = [image for image in images if image.skip is None]
     if len(usable) > MAX_DOWNLOADS:
         warnings.append("DETAIL_IMAGE_LIMIT")
+
+    async def flush() -> bool:
+        nonlocal batch
+        await _flush(batch, llm, budget, warnings)
+        batch = []
+        return is_done is not None and is_done(_merged(scans))
+
     for image in usable[:MAX_DOWNLOADS]:
         scan = ImageScan(image.url)
         scans.append(scan)
@@ -146,19 +190,21 @@ async def scan_detail_images(
             continue
         tiles, scan.truncated = plan_tiles(scan.width, scan.height)
         scan.tiles = len(tiles)
+        finished = False
         for tile in tiles:
             crop = crop_tile(loaded.image, tile)
             if is_blank(crop):
                 continue
             batch.append(_Pending(scan, tile, crop))
-            if len(batch) == SHEET_CAPACITY:
-                await _flush(batch, llm, budget, warnings)
-                batch = []
+            if len(batch) == SHEET_CAPACITY and await flush():
+                finished = True
+                break
         del loaded
-    await _flush(batch, llm, budget, warnings)
-    for scan in scans:
-        scan.cells = merge_duplicates(scan.cells)
-    return scans, warnings
+        if finished or (len(batch) >= MIN_SHEET_FILL and await flush()):
+            return _merged(scans), warnings
+    if await flush():
+        return _merged(scans), warnings
+    return _merged(scans), warnings
 
 
 def scan_to_json(scan: ImageScan) -> dict[str, object]:

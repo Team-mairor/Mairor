@@ -6,6 +6,8 @@
 - 번호: 이름 맨 앞의 번호("01 니어", "#03", "05호", "B01"). 맨 앞이 번호가 아니면
   이름 안에 번호가 하나일 때만 쓴다.
 - 호수 쪽 번호가 없거나 한 상품 안에서 겹치면 그 호수들은 잇지 않는다.
+- 번호만 적힌 라벨("2")은 같은 이미지에 서로 다른 번호가 MIN_BARE_NUMBERS개 이상 나열될 때만
+  쓴다. 사용법 이미지의 단계 번호(1·2·3)가 호수에 이어지는 것을 막으려는 것이다.
 - 같은 번호의 칸이 여러 개면(칩 차트와 발색 컷이 둘 다 있는 경우) 칩 > 제품 내용물 > 피부 발색
   순으로 하나만 고른다. 같은 종류가 여럿이면 색이 AGREE_DELTA_E 안에서 같을 때만
   품질이 높은 쪽을 쓰고, 다르면 잇지 않는다.
@@ -23,6 +25,7 @@ from app.tasks.catalog.detail.scan import ImageScan
 from app.tasks.catalog.text import compact_key, tokens
 
 AGREE_DELTA_E = 12.0
+MIN_BARE_NUMBERS = 5
 
 NO_NUMBER = "SHADE_NO_NUMBER"
 NUMBER_DUPLICATE = "SHADE_NUMBER_DUPLICATE"
@@ -72,6 +75,11 @@ def _name_part(text: str) -> str:
     return " ".join(chunk for chunk in _chunks(text) if _CODE.match(chunk) is None)
 
 
+def is_bare_number(label: str | None) -> bool:
+    """번호만 적힌 라벨인가("2"). 이름이 붙은 라벨("02 누카다미아")보다 근거가 약하다."""
+    return bool(label) and not _name_part(label or "")
+
+
 def name_conflict(shade_name: str, label: str) -> bool:
     """번호가 같은 두 이름이 같은 문자로 적혀 있는데 서로 다른가."""
     first, second = _name_part(shade_name), _name_part(label)
@@ -114,10 +122,12 @@ def match_shades(
             counts[key] = counts.get(key, 0) + 1
     groups: dict[NumberKey, list[tuple[ImageScan, ChartCell]]] = {}
     for scan in scans:
+        numbered = {number_key(c.label) for c in scan.cells if c.label} - {None}
         for cell in scan.cells:
             key = number_key(cell.label) if cell.label else None
-            if key is not None:
-                groups.setdefault(key, []).append((scan, cell))
+            if key is None or (is_bare_number(cell.label) and len(numbered) < MIN_BARE_NUMBERS):
+                continue
+            groups.setdefault(key, []).append((scan, cell))
     for shade in shades:
         option_id, key = shade.source_option_id, keys[shade.source_option_id]
         if wanted is not None and option_id not in wanted:

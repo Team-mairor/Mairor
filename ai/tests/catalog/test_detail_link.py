@@ -167,8 +167,8 @@ def test_a_chip_beats_a_skin_swatch_with_the_same_number() -> None:
 
 
 def test_equal_kind_cells_that_agree_use_the_higher_quality_and_that_disagree_do_not() -> None:
-    near = [cell("01", "#C0505A", quality=0.6), cell("01", "#C1515B", quality=0.9)]
-    far = [cell("01", "#C0505A"), cell("01", "#3050C0")]
+    near = [cell("01 니어", "#C0505A", quality=0.6), cell("01 니어", "#C1515B", quality=0.9)]
+    far = [cell("01 니어", "#C0505A"), cell("01 니어", "#3050C0")]
 
     agreed = match_shades([shade("a", "01")], [scan_of(*near)])
     disagreed = match_shades([shade("a", "01")], [scan_of(*far)])
@@ -178,7 +178,7 @@ def test_equal_kind_cells_that_agree_use_the_higher_quality_and_that_disagree_do
 
 
 def test_a_cell_without_a_reliable_color_is_not_linked() -> None:
-    result = match_shades([shade("a", "01")], [scan_of(cell("01", None))])
+    result = match_shades([shade("a", "01")], [scan_of(cell("01 니어", None))])
 
     assert result.reasons == {"a": CELL_UNREADABLE}
 

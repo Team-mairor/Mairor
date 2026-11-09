@@ -68,6 +68,9 @@ def _to_lab(rgb: np.ndarray) -> np.ndarray:
     return np.stack([lightness, 500 * (f[:, 0] - f[:, 1]), 200 * (f[:, 1] - f[:, 2])], axis=1)
 
 
+to_lab = _to_lab
+
+
 def is_neutral_light(hex_value: str) -> bool:
     """거의 무채색이고 밝은 값인가. 배경·흰 케이스·투명 젤을 잘못 잡았을 가능성이 크다."""
     rgb = np.array([[int(hex_value[i : i + 2], 16) for i in (1, 3, 5)]], dtype=np.float64)
