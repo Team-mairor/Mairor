@@ -48,6 +48,8 @@ CREATE TABLE videos (
 -- ai_job_id: AI 서버 POST /api/v1/guide-jobs 가 돌려준 jobId (콜백을 이 값으로 찾는다).
 -- ai_requested_at: AI 에 가이드 생성을 맡긴 시각. 콜백 시간 초과의 기준이다(진행 숫자를 저장해도 바뀌지 않는다).
 -- ai_progress: AI 진행 알림의 숫자 원본 {"explanation": {"done", "total"}, "frames": ..., "landmarks": ..., "area": ...}.
+-- processor_*: 영상 전처리 노트북(S15P31A306-357). lease_until 은 노트북이 가져가 처리 중일 때 임대가 끝나는 시각(지나면 다시 내준다),
+--   claims 는 가져간 횟수, request_key 는 노트북이 끝났다고 알린 AI 요청 JSON 의 저장소 키다.
 CREATE TABLE analysis_jobs (
     id               uuid                        NOT NULL,
     video_id         uuid                        NOT NULL,
@@ -61,6 +63,9 @@ CREATE TABLE analysis_jobs (
     ai_requested_at  timestamp(6) with time zone,
     ai_progress      jsonb,
     requested_by     uuid,
+    processor_lease_until timestamp(6) with time zone,
+    processor_claims      integer                NOT NULL DEFAULT 0,
+    processor_request_key varchar(500),
     attempt          integer                     NOT NULL,
     started_at       timestamp(6) with time zone,
     finished_at      timestamp(6) with time zone,
@@ -75,7 +80,8 @@ CREATE TABLE analysis_jobs (
         'QUEUED', 'LOADING_VIDEO', 'SEGMENTING', 'RECOGNIZING_PRODUCTS',
         'EXTRACTING_STEPS', 'BUILDING_GUIDE', 'DONE')),
     CONSTRAINT ck_analysis_jobs_progress_percent CHECK (progress_percent BETWEEN 0 AND 100),
-    CONSTRAINT ck_analysis_jobs_attempt CHECK (attempt >= 1)
+    CONSTRAINT ck_analysis_jobs_attempt CHECK (attempt >= 1),
+    CONSTRAINT ck_analysis_jobs_processor_claims CHECK (processor_claims >= 0)
 );
 CREATE UNIQUE INDEX uk_analysis_jobs_video_active ON analysis_jobs (video_id)
     WHERE status IN ('PENDING', 'RUNNING');

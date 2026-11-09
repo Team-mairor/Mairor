@@ -231,7 +231,8 @@ API-VIDEO-003 · GET /api/v1/users/me/analysis-jobs/\{jobId\}
 
 - 회원 GET. Path jobId:string 필수, Body 없음. 200 AnalysisJobStatus. 404 NOT\_FOUND(없음·요청/합류 권한 없음).
 - FAILED도 HTTP 200이며 failureCode·failureMessage·retryable로 분기. ANALYSIS\_TIMEOUT은 실패 원인 값. 승인 전 guideAvailable=false·guideId=null.
-- <b>실패 코드 추가 (로컬 수정 -363)</b>: AI\_RESULT\_MISMATCH(retryable=false) — AI 결과가 맡긴 작업과 맞지 않음(다른 영상, 단계 ID 다름, 프레임을 보냈는데 영역 없음). AI 실패(AI\_GENERATION\_FAILED 등)의 failureMessage에는 단계별 이유(`steps.3: …`)가 붙을 수 있다(500자에서 자름). FE는 failureMessage를 그대로 보여 주지 말고 failureCode로 문구를 정한다.
+- <b>실패 코드 추가 (S15P31A306-363)</b>: AI\_RESULT\_MISMATCH(retryable=false) — AI 결과가 맡긴 작업과 맞지 않음(다른 영상, 단계 ID 다름, 프레임을 보냈는데 영역 없음). AI 실패(AI\_GENERATION\_FAILED 등)의 failureMessage에는 단계별 이유(`steps.3: …`)가 붙을 수 있다(500자에서 자름). FE는 failureMessage를 그대로 보여 주지 말고 failureCode로 문구를 정한다.
+- <b>실패 코드 추가 (S15P31A306-357 영상 전처리 노트북)</b>: VIDEO\_DOWNLOAD\_REJECTED(retryable=false) — YouTube가 노트북의 영상 받기를 거절(우회하지 않음). PROCESSOR\_TIMEOUT(retryable=true) — 노트북이 시간 안에 끝내지 못함(꺼짐·멈춤). PROCESSOR\_FAILED(retryable은 노트북 판단) — 노트북이 알려 온 그 밖의 실패. 노트북이 알려 온 VIDEO\_UNAVAILABLE·STEP\_EXTRACTION\_FAILED·FRAME\_EXTRACTION\_FAILED·UPLOAD\_FAILED는 기존 SOURCE\_NOT\_FOUND·LLM\_UNAVAILABLE·FRAME\_EXTRACTION\_FAILED·STORAGE\_UNAVAILABLE로 바꿔 내보낸다. 표는 `processor-api.md`.
 - PENDING/RUNNING은 pollAfterSeconds 후 재조회. COMPLETED+검수 PENDING도 유효한 pollAfterSeconds를 제공하고 검수 상태를 갱신한다. FAILED·APPROVED·REJECTED는 null로 중단. 홈 진입 시 API-VIDEO-007로 재확인.
 - progressPercent·남은 시간은 실제 계산 가능한 경우만 제공하고 알 수 없으면 null. FE는 null일 때 단계·처리 중만 표시. foundProducts의 보유 여부는 조회 시점 파우치로 계산한다.
 - <b>진행 화면은 API-VIDEO-008(SSE)로 받는다</b>: 이 조회는 새로고침·홈 재확인과 SSE를 쓸 수 없을 때(pollAfterSeconds 폴링) 쓴다. 응답은 SSE의 status 이벤트와 같다.

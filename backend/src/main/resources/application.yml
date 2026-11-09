@@ -172,6 +172,10 @@ app:
   internal:
     # 내부 API(/api/v1/internal/**: 운영자 명령·AI 콜백)의 공유 토큰. X-Internal-Token 헤더와 비교한다. 비우면 내부 API 는 모두 401
     token: ${INTERNAL_API_TOKEN:}
+  processor:
+    # 영상 전처리 노트북 API(/api/v1/internal/processor/**)의 토큰. X-Processor-Token 헤더와 비교한다. 운영자 토큰과 다른 값.
+    # 비우면 노트북 API 는 모두 401 (S15P31A306-357)
+    token: ${PROCESSOR_API_TOKEN:}
   storage:
     # local(개발·테스트, 아래 폴더) | s3(운영)
     type: ${APP_STORAGE_TYPE:local}
@@ -191,6 +195,13 @@ app:
       ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
       ffmpeg-timeout: 30m
       upload-concurrency: 8
+    processor:
+      # 영상 전처리 노트북 연결(S15P31A306-357). 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않는다.
+      # 노트북 결과로 AI 에 맡기는 처리(S15P31A306-358)가 붙기 전에는 끈다
+      enabled: ${ANALYSIS_PROCESSOR_ENABLED:false}
+      # 노트북 임대 시간, 같은 작업을 내주는 최대 횟수(넘으면 PROCESSOR_TIMEOUT 실패)
+      lease: ${ANALYSIS_PROCESSOR_LEASE:900s}
+      max-claims: 2
     request:
       # 회원 분석 요청(API-VIDEO-002). 회원 한 명이 하루(Asia/Seoul 0시 초기화)에 만들 수 있는 새 분석 작업 수.
       # 재사용 · 합류는 세지 않는다. 시연 중 걸리지 않게 넉넉히 둔다(S15P31A306-362)

@@ -6,6 +6,7 @@ import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.entity.ProgressStage;
 import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
+import com.mairor.backend.analysis.service.ProcessorProperties;
 import com.mairor.backend.guides.entity.Guide;
 import com.mairor.backend.guides.repository.GuideRepository;
 import com.mairor.backend.videos.entity.Video;
@@ -30,6 +31,7 @@ public class AnalysisJobStore {
   private final VideoRepository videos;
   private final GuideRepository guides;
   private final AnalysisJobNotifier notifier;
+  private final ProcessorProperties processor;
   private final Clock clock;
 
   AnalysisJobStore(
@@ -37,11 +39,13 @@ public class AnalysisJobStore {
       VideoRepository videos,
       GuideRepository guides,
       AnalysisJobNotifier notifier,
+      ProcessorProperties processor,
       Clock clock) {
     this.jobs = jobs;
     this.videos = videos;
     this.guides = guides;
     this.notifier = notifier;
+    this.processor = processor;
     this.clock = clock;
   }
 
@@ -63,9 +67,15 @@ public class AnalysisJobStore {
     return guides.save(new Guide(job, version, guideInputJson)).getId();
   }
 
-  /** 가장 오래 기다린 PENDING 작업을 집어 RUNNING 으로 바꾼다. 없으면 빈 값. */
+  /**
+   * 가장 오래 기다린 PENDING 작업을 집어 RUNNING 으로 바꾼다. 없으면 빈 값. 영상 전처리 노트북 연결 모드면 대기 작업은 노트북이 가져가므로 집지
+   * 않는다(S15P31A306-357).
+   */
   @Transactional
   public Optional<AnalysisContext> claimNext(Path workRoot) {
+    if (processor.enabled()) {
+      return Optional.empty();
+    }
     return jobs.lockNextPending()
         .map(
             job -> {
@@ -126,7 +136,15 @@ public class AnalysisJobStore {
    */
   @Transactional
   public int requeueRunning() {
-    List<AnalysisJob> running = jobs.findByStatusAndAiJobIdIsNull(AnalysisStatus.RUNNING);
+    // 연결 모드면 노트북이 처리 중인 작업은 worker 가 하던 것이 아니라 되돌리지 않는다(임대가 지나면 노트북에 다시 내준다).
+    // 연결 모드를 끈 뒤 다시 뜬 것이면 노트북이 다시 가져가지 않으므로 그 작업도 대기열로 되돌려 worker 가 처리한다.
+    // 노트북이 끝냈다고 알린 작업(요청 키 있음)은 AI 에 맡길 차례라 되돌리지 않는다(S15P31A306-358)
+    boolean processorOn = processor.enabled();
+    List<AnalysisJob> running =
+        jobs.findByStatusAndAiJobIdIsNull(AnalysisStatus.RUNNING).stream()
+            .filter(job -> job.getProcessorRequestKey() == null)
+            .filter(job -> !processorOn || !job.isWithProcessor())
+            .toList();
     for (AnalysisJob job : running) {
       job.requeueAfterCrash();
       notifier.changed(job.getId());

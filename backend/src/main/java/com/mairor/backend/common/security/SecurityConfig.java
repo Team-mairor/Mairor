@@ -149,9 +149,16 @@ public class SecurityConfig {
   static final RequestMatcher AI_CALLBACK =
       PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/ai/**");
 
+  /**
+   * 영상 전처리 노트북 API(S15P31A306-357). 노트북은 인터넷에서 부르므로 운영자 토큰과 다른 토큰({@code X-Processor-Token})으로 지킨다.
+   */
+  static final RequestMatcher PROCESSOR =
+      PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/processor/**");
+
   /** 공유 토큰을 요구하는 내부 API(운영자 명령). */
   static final RequestMatcher INTERNAL_TOKEN_REQUIRED =
-      new AndRequestMatcher(INTERNAL, new NegatedRequestMatcher(AI_CALLBACK));
+      new AndRequestMatcher(
+          INTERNAL, new NegatedRequestMatcher(AI_CALLBACK), new NegatedRequestMatcher(PROCESSOR));
 
   /** 인증 없이 열려 있는 경로 전체. 인가 규칙과 {@link SessionLifetimeFilter}(만료된 세션이어도 이 경로는 막지 않는다)가 같은 목록을 쓴다. */
   private static final RequestMatcher PERMIT_ALL =
@@ -175,7 +182,8 @@ public class SecurityConfig {
       SessionEndNotifier sessionEndNotifier,
       Clock clock,
       CookieSerializer cookieSerializer,
-      InternalApiProperties internalApiProperties)
+      InternalApiProperties internalApiProperties,
+      ProcessorApiProperties processorApiProperties)
       throws Exception {
     http.securityContext(context -> context.securityContextRepository(securityContextRepository))
         // API 서버라 저장된 요청이 필요 없다. 기본값은 미인증 요청마다 익명 세션과 쿠키를 만들어 401 응답마다 세션 행이 쌓인다
@@ -206,6 +214,9 @@ public class SecurityConfig {
         // 내부 API 는 CSRF 대신 공유 토큰으로 막는다. 세션을 읽기 전에 거절한다
         .addFilterBefore(
             new InternalTokenFilter(INTERNAL_TOKEN_REQUIRED, internalApiProperties, errorWriter),
+            SecurityContextHolderFilter.class)
+        .addFilterBefore(
+            new InternalTokenFilter(PROCESSOR, processorApiProperties, errorWriter),
             SecurityContextHolderFilter.class)
         // 세션을 읽은 뒤(SecurityContextHolderFilter), CSRF 검사 전에 절대 만료를 판단하고 쿠키를 갱신한다
         .addFilterAfter(

@@ -36,6 +36,12 @@ public enum AnalysisFailureCode {
   ANALYSIS_TIMEOUT(true, "분석 시간이 초과되었습니다."),
   /** 쓸 수 있는 단계가 하나도 없다(메이크업 영상이 아니거나 모든 단계가 틀림). API 명세 VIDEO-002. */
   NO_VALID_STEPS(false, "영상에서 따라 할 수 있는 메이크업 단계를 찾지 못했습니다."),
+  /** YouTube 가 노트북의 영상 받기를 거절했다(봇 차단 등). 우회하지 않으므로 다시 해도 같다(S15P31A306-357). */
+  VIDEO_DOWNLOAD_REJECTED(false, "영상을 받을 수 없습니다."),
+  /** 노트북이 정해진 시간 안에 끝내지 못했다(임대가 거듭 만료 — 노트북이 꺼졌거나 멈춤). 노트북이 다시 켜지면 된다. */
+  PROCESSOR_TIMEOUT(true, "영상 전처리가 시간 안에 끝나지 않았습니다."),
+  /** 노트북이 알려 온, BE 가 모르는 실패. 재시도 여부는 노트북이 정한다. */
+  PROCESSOR_FAILED(true, "영상 전처리에 실패했습니다."),
   /** 예기치 않은 오류. */
   INTERNAL_ERROR(true, "분석 중 예기치 않은 오류가 발생했습니다.");
 

@@ -45,9 +45,17 @@ import org.springframework.context.annotation.Configuration;
     paramName = "X-Internal-Token",
     description =
         "내부 API(/v1/internal/**) 공유 토큰. 운영자 명령과 AI 서버 콜백이 쓴다. 값은 서버 설정(INTERNAL_API_TOKEN)과 같아야 한다.")
+@SecurityScheme(
+    name = OpenApiConfig.PROCESSOR_TOKEN,
+    type = SecuritySchemeType.APIKEY,
+    in = SecuritySchemeIn.HEADER,
+    paramName = "X-Processor-Token",
+    description =
+        "영상 전처리 노트북 API(/v1/internal/processor/**) 토큰. 운영자 토큰과 다른 값이고 서버 설정(PROCESSOR_API_TOKEN)과 같아야 한다.")
 public class OpenApiConfig {
 
   public static final String INTERNAL_TOKEN = "internalToken";
+  public static final String PROCESSOR_TOKEN = "processorToken";
 
   public static final String SESSION_COOKIE = "sessionCookie";
   public static final String CSRF_TOKEN = "csrfToken";

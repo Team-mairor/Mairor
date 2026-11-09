@@ -14,6 +14,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -30,6 +31,9 @@ import org.hibernate.type.SqlTypes;
  *
  * <p>{@code requestedBy}는 분석을 요청한 회원 ID 이고 운영 명령으로 만든 작업은 {@code null}이다. {@code aiJobId}는 AI 서버가
  * 돌려준 가이드 생성 작업 ID 로, 콜백을 이 값으로 찾는다.
+ *
+ * <p>영상 전처리 노트북(S15P31A306-357)이 작업을 가져가면 임대({@code processorLeaseUntil})가 걸리고, 끝났다고 알리면 AI 요청 JSON
+ * 의 저장소 키({@code processorRequestKey})가 남는다. 임대가 지나면 다른 노트북이 다시 가져갈 수 있다.
  */
 @Entity
 @Table(
@@ -46,6 +50,7 @@ public class AnalysisJob {
   public static final int FAILURE_CODE_MAX_LENGTH = 50;
   public static final int FAILURE_MESSAGE_MAX_LENGTH = 500;
   public static final int AI_JOB_ID_MAX_LENGTH = 64;
+  public static final int PROCESSOR_REQUEST_KEY_MAX_LENGTH = 500;
 
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
@@ -93,6 +98,18 @@ public class AnalysisJob {
 
   @Column(name = "requested_by")
   private UUID requestedBy;
+
+  /** 노트북 임대가 끝나는 시각. 노트북이 가져가 처리 중일 때만 있다. 지나면 다시 내준다. */
+  @Column(name = "processor_lease_until")
+  private Instant processorLeaseUntil;
+
+  /** 노트북이 이 작업을 가져간 횟수. 임대가 거듭 만료되면(노트북 꺼짐) 실패로 끝내는 데 쓴다. */
+  @Column(name = "processor_claims", nullable = false)
+  private int processorClaims;
+
+  /** 노트북이 끝났다고 알린 AI 요청 JSON 의 저장소 키. 이 값이 있으면 BE 가 AI 에 맡길 차례다(S15P31A306-358). */
+  @Column(name = "processor_request_key", length = PROCESSOR_REQUEST_KEY_MAX_LENGTH)
+  private String processorRequestKey;
 
   /** 몇 번째 시도인지. 처음 만들 때 1, 재시도마다 1씩 오른다. */
   @Column(nullable = false)
@@ -167,6 +184,103 @@ public class AnalysisJob {
     this.failureMessage = truncate(message == null ? code.defaultMessage() : message);
     this.retryable = code.retryable();
     this.finishedAt = Objects.requireNonNull(now, "now");
+    this.processorLeaseUntil = null;
+  }
+
+  /**
+   * {@link #fail(AnalysisFailureCode, String, Instant)}와 같지만 재시도 여부를 따로 정한다. 노트북이 보낸 모르는 실패 코드처럼 코드
+   * 하나로 판단할 수 없을 때만 쓴다.
+   */
+  public void fail(AnalysisFailureCode code, String message, boolean retryable, Instant now) {
+    fail(code, message, now);
+    this.retryable = retryable;
+  }
+
+  // --- 영상 전처리 노트북 (S15P31A306-357) ---
+
+  /** 노트북이 가져갈 수 있는가: 대기 중이거나, 노트북이 가져갔는데 임대가 지났다(끝났다는 알림 없이). */
+  public boolean isClaimableByProcessor(Instant now) {
+    return status == AnalysisStatus.PENDING || isProcessorLeaseExpired(now);
+  }
+
+  /** 노트북이 가져가 처리 중인데 임대가 지났다. */
+  public boolean isProcessorLeaseExpired(Instant now) {
+    return status == AnalysisStatus.RUNNING
+        && processorLeaseUntil != null
+        && !processorLeaseUntil.isAfter(now);
+  }
+
+  /** 노트북이 가져가 처리 중이다(임대가 지났어도 아직 아무도 다시 가져가지 않았으면 포함). */
+  public boolean isWithProcessor() {
+    return status == AnalysisStatus.RUNNING && processorLeaseUntil != null;
+  }
+
+  /** 노트북이 끝났다고 알려 BE 가 AI 에 맡길 차례다. */
+  public boolean isProcessed() {
+    return status == AnalysisStatus.RUNNING && processorRequestKey != null && aiJobId == null;
+  }
+
+  /**
+   * 노트북이 가져갔다: RUNNING · LOADING_VIDEO, 임대 시작, 가져간 횟수 1 증가. 대기 중이면 시작 시각을 적고, 임대가 지난 작업을 다시 가져가면
+   * 단계를 처음(LOADING_VIDEO)으로 되돌린다.
+   */
+  public void claimByProcessor(Instant now, Duration lease) {
+    if (!isClaimableByProcessor(now)) {
+      throw new IllegalStateException("분석 작업 " + id + " 은 노트북이 가져갈 수 없는 상태입니다(" + status + ").");
+    }
+    if (status == AnalysisStatus.PENDING) {
+      start(now);
+    }
+    this.progressStage = ProgressStage.LOADING_VIDEO;
+    this.processorLeaseUntil = now.plus(lease);
+    this.processorClaims++;
+  }
+
+  /**
+   * 노트북 진행 알림: 단계를 앞으로만 옮기고(늦게 온 알림이 되돌리지 않게) 임대를 다시 늘린다. 노트북이 처리 중일 때만.
+   *
+   * @param stage {@code LOADING_VIDEO} · {@code EXTRACTING_STEPS} · {@code SEGMENTING} 중 하나
+   * @return 단계가 바뀌었으면 true
+   */
+  public boolean progressByProcessor(ProgressStage stage, Instant now, Duration lease) {
+    if (!isWithProcessor()) {
+      throw new IllegalStateException("분석 작업 " + id + " 은 노트북이 처리 중이 아닙니다.");
+    }
+    int next = processorStageRank(stage);
+    if (next < 0) {
+      throw new IllegalArgumentException("노트북 진행 단계로 " + stage + " 를 쓸 수 없습니다.");
+    }
+    this.processorLeaseUntil = now.plus(lease);
+    if (next <= processorStageRank(progressStage)) {
+      return false;
+    }
+    this.progressStage = stage;
+    return true;
+  }
+
+  /** 노트북이 끝났다: AI 요청 JSON 키를 남기고 임대를 비운다. 단계는 BUILDING_GUIDE. 노트북이 처리 중일 때만. */
+  public void completeByProcessor(String requestKey) {
+    if (!isWithProcessor()) {
+      throw new IllegalStateException("분석 작업 " + id + " 은 노트북이 처리 중이 아닙니다.");
+    }
+    if (requestKey == null
+        || requestKey.isBlank()
+        || requestKey.length() > PROCESSOR_REQUEST_KEY_MAX_LENGTH) {
+      throw new IllegalArgumentException("AI 요청 JSON 키가 비었거나 너무 깁니다.");
+    }
+    this.processorRequestKey = requestKey;
+    this.processorLeaseUntil = null;
+    this.progressStage = ProgressStage.BUILDING_GUIDE;
+  }
+
+  /** 노트북 진행 단계 순서. 노트북은 영상 받기와 단계 추출(Gemini)을 함께 하고 프레임을 마지막에 뽑는다. 그 밖의 단계는 -1. */
+  private static int processorStageRank(ProgressStage stage) {
+    return switch (stage) {
+      case LOADING_VIDEO -> 1;
+      case EXTRACTING_STEPS -> 2;
+      case SEGMENTING -> 3;
+      default -> -1;
+    };
   }
 
   /**
@@ -220,6 +334,8 @@ public class AnalysisJob {
     requireStatus(AnalysisStatus.RUNNING, "재시작 복구");
     this.status = AnalysisStatus.PENDING;
     this.startedAt = null;
+    // 노트북 연결 모드를 끈 뒤 되돌린 노트북 작업이면 임대를 비워 worker 가 처음부터 다시 처리하게 한다
+    this.processorLeaseUntil = null;
   }
 
   private void requireStatus(AnalysisStatus expected, String action) {
@@ -281,6 +397,18 @@ public class AnalysisJob {
 
   public UUID getRequestedBy() {
     return requestedBy;
+  }
+
+  public Instant getProcessorLeaseUntil() {
+    return processorLeaseUntil;
+  }
+
+  public int getProcessorClaims() {
+    return processorClaims;
+  }
+
+  public String getProcessorRequestKey() {
+    return processorRequestKey;
   }
 
   public int getAttempt() {
