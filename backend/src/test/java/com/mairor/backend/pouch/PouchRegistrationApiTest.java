@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.products.entity.ReviewStatus;
 import com.mairor.backend.users.support.AuthenticatedUser;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -82,6 +85,9 @@ class PouchRegistrationApiTest {
   void cleanUp() {
     jdbc.update("delete from pouch_items where user_id = ?", userId);
     for (UUID productId : products) {
+      jdbc.update(
+          "delete from product_shade_colors where shade_id in (select id from product_shades where product_id = ?)",
+          productId);
       jdbc.update("delete from product_shades where product_id = ?", productId);
       jdbc.update("delete from products where id = ?", productId);
     }
@@ -139,6 +145,88 @@ class PouchRegistrationApiTest {
         .andExpect(jsonPath("$.item.color.source").value("CATALOG"))
         .andExpect(jsonPath("$.item.color.estimated").value(true))
         .andExpect(jsonPath("$.pouchVersion").value(1));
+  }
+
+  @Test
+  void singleUsableSlotColorIsCopiedAsCatalogColorWithItsEstimatedFlag() throws Exception {
+    UUID[] selection = productWithShade("Brand", "Slot Product", "01 Slot", null, false);
+    insertSlot(selection[1], 1, "#AB1234", "AUTO_APPROVED", true);
+
+    mockMvc
+        .perform(write(catalogRequest(selection)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.item.color.hex").value("#AB1234"))
+        .andExpect(jsonPath("$.item.color.source").value("CATALOG"))
+        .andExpect(jsonPath("$.item.color.estimated").value(true))
+        .andExpect(jsonPath("$.item.colorSource").value("CATALOG"));
+  }
+
+  @Test
+  void slotsDecideTheColorEvenWhenTheOldShadeColorIsStillThere() throws Exception {
+    UUID[] selection = productWithShade("Brand", "Slot Wins", "01 Slot", "#111111", false);
+    insertSlot(selection[1], 1, "#222222", "AUTO_APPROVED", false);
+
+    mockMvc
+        .perform(write(catalogRequest(selection)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.item.color.hex").value("#222222"))
+        .andExpect(jsonPath("$.item.color.estimated").value(false));
+  }
+
+  @Test
+  void aSlotBelowThresholdGivesNoColorAndTheOldShadeColorIsNotUsedInsteadOfIt() throws Exception {
+    UUID[] selection = productWithShade("Brand", "Below", "01 Below", "#111111", false);
+    insertSlot(selection[1], 1, "#222222", "BELOW_THRESHOLD", true);
+
+    mockMvc
+        .perform(write(catalogRequest(selection)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()))
+        .andExpect(jsonPath("$.item.colorSource").value("NONE"));
+  }
+
+  @Test
+  void aPaletteWithSeveralSlotsHasNoSingleColor() throws Exception {
+    UUID[] selection = productWithShade("Brand", "Palette", "01 Palette", null, false);
+    insertSlot(selection[1], 1, "#AA0000", "AUTO_APPROVED", true);
+    insertSlot(selection[1], 2, "#00AA00", "AUTO_APPROVED", true);
+
+    mockMvc
+        .perform(write(catalogRequest(selection)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()))
+        .andExpect(jsonPath("$.item.colorSource").value("NONE"));
+  }
+
+  @Test
+  void aSlotWithoutAnyColorGivesNoColor() throws Exception {
+    UUID[] selection = productWithShade("Brand", "Empty Slot", "01 Empty", null, false);
+    jdbc.update(
+        "insert into product_shade_colors (id, shade_id, sort_order, name_source, created_at, updated_at) values (?, ?, 1, 'NONE', now(), now())",
+        UUID.randomUUID(),
+        selection[1]);
+
+    mockMvc
+        .perform(write(catalogRequest(selection)))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()));
+  }
+
+  /** SQL 의 쓸 수 있는 상태 목록이 {@link ReviewStatus#isUsable}과 어긋나지 않는지 모든 값으로 확인한다. */
+  @ParameterizedTest
+  @EnumSource(ReviewStatus.class)
+  void theSlotStatusesTheQueryAcceptsMatchReviewStatusUsable(ReviewStatus reviewStatus)
+      throws Exception {
+    UUID[] selection = productWithShade("Brand", "Status " + reviewStatus, "01 S", null, false);
+    insertSlot(selection[1], 1, "#345678", reviewStatus.name(), false);
+
+    var result = mockMvc.perform(write(catalogRequest(selection))).andExpect(status().isCreated());
+
+    if (reviewStatus.isUsable()) {
+      result.andExpect(jsonPath("$.item.color.hex").value("#345678"));
+    } else {
+      result.andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()));
+    }
   }
 
   @Test
@@ -291,6 +379,25 @@ class PouchRegistrationApiTest {
           estimated);
     }
     return new UUID[] {productId, shadeId};
+  }
+
+  private String catalogRequest(UUID[] selection) {
+    return """
+        {"registrationMode":"CATALOG","type":"%s","productId":"%s","shadeId":"%s"}
+        """
+        .formatted(type, selection[0], selection[1]);
+  }
+
+  private void insertSlot(
+      UUID shadeId, int sortOrder, String hex, String reviewStatus, boolean estimated) {
+    jdbc.update(
+        "insert into product_shade_colors (id, shade_id, sort_order, name_source, color_hex, color_source, color_estimated, review_status, created_at, updated_at) values (?, ?, ?, 'NONE', ?, 'PRODUCT_PHOTO', ?, ?, now(), now())",
+        UUID.randomUUID(),
+        shadeId,
+        sortOrder,
+        hex,
+        estimated,
+        reviewStatus);
   }
 
   private void assertThatVersionIs(long expected) {

@@ -91,6 +91,9 @@ class PouchUpdateApiTest {
   void cleanUp() {
     jdbc.update("delete from pouch_items where user_id in (?, ?)", userId, otherUserId);
     for (UUID productId : products) {
+      jdbc.update(
+          "delete from product_shade_colors where shade_id in (select id from product_shades where product_id = ?)",
+          productId);
       jdbc.update("delete from product_shades where product_id = ?", productId);
       jdbc.update("delete from products where id = ?", productId);
     }
@@ -212,6 +215,46 @@ class PouchUpdateApiTest {
         .andExpect(jsonPath("$.pouchVersion").value(3));
 
     assertVersion(3L);
+  }
+
+  @Test
+  void changingTheCatalogShadeRecomputesTheColorFromTheNewShadesSlots() throws Exception {
+    UUID itemId = registerManual(userId, category, type, "Manual Brand", "Manual Item", null, null);
+    ProductSelection single = productWithShade("Brand", "Single", "01", "#111111");
+    ProductSelection palette = productWithShade("Brand", "Palette", "02", "#222222");
+    insertSlot(single.shadeId(), 1, "#ABCDEF", "AUTO_APPROVED");
+    insertSlot(palette.shadeId(), 1, "#AA0000", "AUTO_APPROVED");
+    insertSlot(palette.shadeId(), 2, "#00AA00", "AUTO_APPROVED");
+
+    mockMvc
+        .perform(
+            update(
+                userId,
+                itemId,
+                "{\"registrationMode\":\"CATALOG\",\"productId\":\""
+                    + single.productId()
+                    + "\",\"type\":\""
+                    + type
+                    + "\",\"shadeId\":\""
+                    + single.shadeId()
+                    + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.item.color.hex").value("#ABCDEF"))
+        .andExpect(jsonPath("$.item.color.source").value("CATALOG"));
+
+    mockMvc
+        .perform(
+            update(
+                userId,
+                itemId,
+                "{\"productId\":\""
+                    + palette.productId()
+                    + "\",\"shadeId\":\""
+                    + palette.shadeId()
+                    + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()))
+        .andExpect(jsonPath("$.item.colorSource").value("NONE"));
   }
 
   @Test
@@ -544,6 +587,16 @@ class PouchUpdateApiTest {
         shadeName.toLowerCase(),
         colorHex);
     return new ProductSelection(productId, shadeId);
+  }
+
+  private void insertSlot(UUID shadeId, int sortOrder, String hex, String reviewStatus) {
+    jdbc.update(
+        "insert into product_shade_colors (id, shade_id, sort_order, name_source, color_hex, color_source, color_estimated, review_status, created_at, updated_at) values (?, ?, ?, 'NONE', ?, 'PRODUCT_PHOTO', false, ?, now(), now())",
+        UUID.randomUUID(),
+        shadeId,
+        sortOrder,
+        hex,
+        reviewStatus);
   }
 
   private void assertVersion(long expected) {
