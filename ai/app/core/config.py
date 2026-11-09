@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     frame_download_timeout_seconds: float = Field(default=30, gt=0)
     frame_download_max_retries: int = Field(default=1, ge=0)
     area_max_concurrency: int = Field(default=1, gt=0)
+    area_lines: int = Field(default=2, gt=0)
+    area_onnx_threads: int = Field(default=1, gt=0)
+    area_opencv_threads: int = Field(default=1, gt=0)
     area_work_dir: Path | None = None
 
     catalog_run_dir: Path = DEFAULT_CATALOG_RUN_DIR

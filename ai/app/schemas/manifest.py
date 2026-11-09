@@ -59,7 +59,7 @@ class Manifest(CamelModel):
     video_id: str
     source: VideoSource
     steps: list[Step] = Field(min_length=1)
-    frames: list[Frame] = Field(min_length=1)
+    frames: list[Frame]
 
     @model_validator(mode="after")
     def check_frame_step_ids(self) -> "Manifest":

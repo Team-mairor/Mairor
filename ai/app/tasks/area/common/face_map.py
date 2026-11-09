@@ -141,16 +141,19 @@ def _ratios(p: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.nd
 
 
 def _sample(rgb: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """사진에서 소수점 위치의 색을 주변 네 칸을 섞어 가져온다."""
+    """사진에서 소수점 위치의 색을 주변 네 칸을 섞어 가져온다.
+
+    사진 전체를 소수로 바꾸지 않고 필요한 픽셀만 집어 섞는다. 정수 색은 소수로 바뀔 때 값이
+    그대로라, 전체를 먼저 바꾸던 때와 결과가 같다.
+    """
     height, width = rgb.shape[:2]
     x = np.clip(x, 0, width - 1)
     y = np.clip(y, 0, height - 1)
     x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
     x1, y1 = np.minimum(x0 + 1, width - 1), np.minimum(y0 + 1, height - 1)
     fx, fy = (x - x0)[:, None], (y - y0)[:, None]
-    image = rgb.astype(np.float32)
-    top = image[y0, x0] * (1 - fx) + image[y0, x1] * fx
-    bottom = image[y1, x0] * (1 - fx) + image[y1, x1] * fx
+    top = rgb[y0, x0] * (1 - fx) + rgb[y0, x1] * fx
+    bottom = rgb[y1, x0] * (1 - fx) + rgb[y1, x1] * fx
     return np.round(top * (1 - fy) + bottom * fy).astype(np.uint8)
 
 

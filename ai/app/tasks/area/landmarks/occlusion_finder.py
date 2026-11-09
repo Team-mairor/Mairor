@@ -9,7 +9,7 @@ app/weights/README.md에 있다. onnxruntime(CPU)으로 돌린다.
 """
 
 import hashlib
-from functools import lru_cache
+import threading
 from pathlib import Path
 
 import cv2
@@ -29,18 +29,23 @@ OCCLUDER = 19
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
+_opened: list[onnxruntime.InferenceSession] = []
+_opening = threading.Lock()
+
 
 class OcclusionModelError(RuntimeError):
     """가림 찾기 모델 파일을 쓸 수 없다. 파일이 없거나 지문이 MODEL_SHA256과 다르다."""
 
 
-def load_occlusion_model() -> None:
+def load_occlusion_model(threads: int | None = None) -> None:
     """모델 파일을 확인하고 미리 열어 둔다. 서버가 켜질 때(lifespan) 부른다.
 
     파일이 없거나 지문이 다르면 OcclusionModelError를 내서 서버가 뜨지 않게 한다.
     첫 영역 작업에서야 알게 되면 단계마다 실패가 기본 영역으로 조용히 넘어가기 때문이다.
+    threads는 사진 1장 계산을 나눌 일꾼(intra-op 스레드) 수다. 없으면 onnxruntime 기본값
+    (물리 코어 수)이다. 코어 2개 서버에서 2명이면 서로 기다려 느려져서 서버는 설정값으로 정한다.
     """
-    _session()
+    _session(threads)
 
 
 def check_model_file(path: Path) -> None:
@@ -94,12 +99,22 @@ def _labels(crop: np.ndarray) -> np.ndarray:
     return _session().run(None, {INPUT_NAME: np.ascontiguousarray(x)})[0][0].argmax(0)
 
 
-@lru_cache
-def _session() -> onnxruntime.InferenceSession:
-    """모델 파일 지문을 확인하고 한 번만 열어 두고 다시 쓴다.
+def _session(threads: int | None = None) -> onnxruntime.InferenceSession:
+    """모델 파일 지문을 확인하고 한 번만 열어 두고 다시 쓴다. threads는 처음 열 때만 쓴다.
 
-    여러 영역 작업 스레드가 같이 불러도 된다. 확인에 실패하면 열어 두지 않으므로
+    여러 영역 작업 스레드가 같이 불러도 한 번만 연다. 확인에 실패하면 열어 두지 않으므로
     다음에 부를 때 다시 확인한다.
     """
-    check_model_file(MODEL_PATH)
-    return onnxruntime.InferenceSession(str(MODEL_PATH), providers=["CPUExecutionProvider"])
+    with _opening:
+        if not _opened:
+            check_model_file(MODEL_PATH)
+            options = onnxruntime.SessionOptions()
+            if threads is not None:
+                options.intra_op_num_threads = threads
+                options.inter_op_num_threads = 1
+            _opened.append(
+                onnxruntime.InferenceSession(
+                    str(MODEL_PATH), sess_options=options, providers=["CPUExecutionProvider"]
+                )
+            )
+        return _opened[0]

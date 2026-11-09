@@ -32,3 +32,5 @@
 | [분석 재시도 API와 로딩 화면 확인용 작업](2026-11-06-juyeon-seoyeon-analysis-retry-and-test-job.md) | 2026-11-06 | 최주연 → 김서연 | 요청 |
 | [회원 분석 요청 API(API-VIDEO-002)와 영상 파일 확보 방식](2026-11-06-juyeon-jungyoon-analysis-request-api.md) | 2026-11-06 | 최주연 → 김정윤 | 요청 |
 | [운영 가이드 작업 실행 번호와 실행 시각 공유](2026-11-08-hyeonsoo-jungyoon-guide-job-run-records.md) | 2026-11-08 | 김현수 → 김정윤 | 요청 |
+| [가이드 영역 시간 실측 결과로 콜백 대기 시간 검토](2026-11-08-hyeonsoo-seoyeon-guide-area-time.md) | 2026-11-08 | 김현수 → 김서연 | 요청 |
+| [AI 서버 가이드 영역 설정(줄 수·일꾼 수) 확인](2026-11-08-hyeonsoo-hyeongjun-area-server-settings.md) | 2026-11-08 | 김현수 → 박형준 | 요청 |

@@ -33,7 +33,8 @@ def check_frames(result: LandmarksResult, load_photo: PhotoLoader) -> LandmarksR
     얼굴 크기 비율은 앞뒤 RATIO_WINDOW_MS 안 사진의 얼굴 가로 중앙값과 견준다.
     편집으로 확대한 구간은 그 안에서 견주어 살리고,
     혼자 튀는 사진(얼굴로 잘못 찾은 손 등)만 드러낸다.
-    앞뒤에 얼굴 있는 사진이 없으면 영상 전체 중앙값과 견준다.
+    앞뒤에 얼굴 있는 사진이 없으면 result 전체 중앙값과 견준다.
+    서비스는 영역에 쓰는 사진만 받으므로(reference_area.needed_frames) 이때는 받은 사진 전체다.
     load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다. 선명도를 잴 때만 쓴다.
     부위별 점 번호는 점 번호부 region_points.REGION_POINTS에서 가져온다.
     """

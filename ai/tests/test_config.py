@@ -28,6 +28,20 @@ def test_llm_settings_ignore_claude_code_variables(monkeypatch):
     assert settings.llm_effort == "high"
 
 
+def test_area_defaults_fit_two_core_server():
+    """AI 서버는 2코어다. 단계 두 줄이 가장 빨랐고, 가림 찾기·OpenCV 일꾼은 1명이 가장 빨랐다.
+
+    일꾼 2명이면 코어를 두고 서로 기다려 영역 만들기가 10% 넘게 느려졌다.
+    """
+    settings = Settings(_env_file=None)
+
+    assert (settings.area_lines, settings.area_onnx_threads, settings.area_opencv_threads) == (
+        2,
+        1,
+        1,
+    )
+
+
 def test_settings_read_environment(monkeypatch):
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.setenv("LOG_LEVEL", "DEBUG")

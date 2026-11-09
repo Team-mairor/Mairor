@@ -442,6 +442,7 @@ def test_unfinished_job_can_be_viewed(backend):
 
 
 FRAME_WIDTH, FRAME_HEIGHT = 64, 48
+FRAME_START_MS = 40_000
 
 
 def photo_bytes() -> bytes:
@@ -454,6 +455,7 @@ def photo_bytes() -> bytes:
 def frames_request(backend: FakeBackend, count: int = 3, missing: tuple[int, ...] = ()) -> dict:
     """guide_request에 레퍼런스 사진 count장과 진행 알림 주소를 더한다.
 
+    사진은 립 단계(s2) 끝 FRAME_START_MS부터 0.5초 간격이라, 영역에 쓰는 사진으로 모두 받는다.
     missing 번째 사진은 404다.
     """
     items = []
@@ -464,7 +466,7 @@ def frames_request(backend: FakeBackend, count: int = 3, missing: tuple[int, ...
         items.append(
             {
                 "frameIndex": i * 15,
-                "timestampMs": i * 500,
+                "timestampMs": FRAME_START_MS + i * 500,
                 "stepId": "s1" if i else None,
                 "url": f"{backend.url}{path}",
                 "width": FRAME_WIDTH,
@@ -586,7 +588,7 @@ def test_failed_explanation_stops_area_being_built(backend, tmp_path, monkeypatc
     started = threading.Event()
     folder_seen: list[bool] = []
 
-    def slow_area(guide_input, frames, folder, *, on_landmarks, on_area_step):
+    def slow_area(guide_input, source, items, folder, *, on_landmarks, on_area_step, lines):
         started.set()
         for _ in range(500):
             folder_seen.append(folder.exists())

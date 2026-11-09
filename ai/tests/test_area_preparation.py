@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult, Point
 from app.tasks.area.common.face_map import MAP_SIZE, flatten, median_map
@@ -7,6 +8,7 @@ from app.tasks.area.landmarks.frame_checker import outside_count_name
 from app.tasks.area.parts import area_preparation
 from app.tasks.area.parts.area_preparation import (
     EYE_OPEN_POINTS,
+    RememberedPhotos,
     eye_openness,
     known_median_map,
     match_sizes,
@@ -179,6 +181,69 @@ def test_margin_widens_hidden_cells(monkeypatch):
     _, wide = rows_to_known_map(rows, load_photo, finds_hand_color)
     assert not (tight & ~wide).any()
     assert wide.sum() > tight.sum()
+
+
+def counted(load_photo):
+    """부를 때마다 사진 시각을 적는 사진 읽기 함수와 그 기록을 돌려준다."""
+    reads = []
+
+    def load(row: FrameLandmarks) -> np.ndarray:
+        reads.append(row.timestamp_ms)
+        return load_photo(row)
+
+    return load, reads
+
+
+def test_remembered_photos_read_and_find_each_photo_once():
+    """좌우 짝 부위처럼 같은 사진 묶음을 두 번 넘겨도 사진 읽기와 가림 찾기는 사진마다 한 번이다."""
+    rows, load_photo = photos_with_hands({1000: None, 2000: hand_over(13), 3000: None})
+    load, reads = counted(load_photo)
+    found = []
+
+    def occlusion(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
+        found.append(row.timestamp_ms)
+        return finds_hand_color(row, photo)
+
+    photos = RememberedPhotos(load, keep=64)
+    rows_to_known_map(rows, photos, occlusion)
+    rows_to_known_map(rows[1:], photos, occlusion)
+
+    assert reads == [1000, 2000, 3000]
+    assert found == [1000, 2000, 3000]
+
+
+def test_remembered_photos_give_the_same_maps_as_plain_loader():
+    rows, load_photo = photos_with_hands({1000: None, 2000: hand_over(13), 3000: hand_over(13)})
+    plain_map, plain_unknown = rows_to_known_map(rows, load_photo, finds_hand_color)
+    photos = RememberedPhotos(load_photo, keep=64)
+    rows_to_known_map(rows, photos, finds_hand_color)
+
+    remembered_map, remembered_unknown = rows_to_known_map(rows, photos, finds_hand_color)
+
+    assert np.array_equal(remembered_map, plain_map)
+    assert np.array_equal(remembered_unknown, plain_unknown)
+
+
+def test_remembered_photos_forget_the_oldest_photo_past_keep():
+    rows, load_photo = photos_with_hands({1000: None, 2000: None})
+    load, reads = counted(load_photo)
+    photos = RememberedPhotos(load, keep=1)
+
+    for row in (rows[0], rows[1], rows[0]):
+        photos.face_maps(row, None)
+
+    assert reads == [1000, 2000, 1000]
+
+
+def test_remembered_maps_cannot_be_changed():
+    """기억한 지도를 꺼내 쓰는 쪽이 고치면, 다음에 꺼내 쓰는 쪽이 고친 지도를 받게 된다."""
+    rows, load_photo = photos_with_hands({1000: None})
+    face_map, covered = RememberedPhotos(load_photo, keep=64).face_maps(rows[0], finds_hand_color)
+
+    with pytest.raises(ValueError):
+        face_map[0, 0] = 0
+    with pytest.raises(ValueError):
+        covered[0, 0] = True
 
 
 def test_known_median_map_uses_only_photos_that_show_each_cell():

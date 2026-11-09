@@ -7,6 +7,7 @@ import threading
 from app.clients.progress import send_progress
 from app.core.config import Settings
 from app.schemas.guide_job import Count, GuideJobProgress, GuideJobRequest
+from app.tasks.area.reference_area import needed_frames
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,8 @@ class ProgressCounter:
     """작업 진행 숫자. 가이드 영역은 다른 스레드에서 세므로 잠금으로 묶는다.
 
     무엇을 셀지는 요청으로 정한다. 사진이 없으면 설명만 센다.
+    사진 받기·얼굴 점의 전체 수는 요청 사진 중 영역에 쓰는 사진(needed_frames) 수다.
+    영역 작업이 그 사진만 받고 얼굴 점을 찾으므로, 전체를 요청 사진 수로 두면 끝까지 차지 않는다.
     version은 숫자가 바뀔 때마다 오른다. 진행 알림은 이 값이 바뀌었을 때만 보낸다.
     """
 
@@ -22,7 +25,7 @@ class ProgressCounter:
         steps = len(request.guide_input.steps)
         self._counts = {"explanation": [0, steps]}
         if request.frames is not None:
-            frames = len(request.frames.items)
+            frames = len(needed_frames(request.guide_input.steps, request.frames.items))
             self._counts |= {"frames": [0, frames], "landmarks": [0, frames], "area": [0, steps]}
         self._version = 0
         self._lock = threading.Lock()

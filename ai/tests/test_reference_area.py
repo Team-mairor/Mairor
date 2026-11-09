@@ -1,14 +1,29 @@
 import inspect
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from app.clients.frames import frame_file_name
 from app.schemas.guide import GuideInput
 from app.schemas.guide_job import ReferenceFrames
+from app.schemas.landmarks import LandmarksResult
 from app.tasks.area import reference_area
+from app.tasks.area.guide_area_builder import AREA_FINDERS, build_guide_area, failed_guide_area
+from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
-from app.tasks.area.reference_area import build_reference_area, reference_manifest
+from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
+from app.tasks.area.parts.area_preparation import RememberedPhotos
+from app.tasks.area.reference_area import (
+    FACE_MAP_KEEP,
+    PART_WINDOWS,
+    build_area_in_lines,
+    build_reference_area,
+    needed_frames,
+    photo_ranges,
+    reference_manifest,
+    split_steps,
+)
 from tests.test_area_preparation import make_row
 
 GUIDE_INPUT = GuideInput.model_validate(
@@ -60,8 +75,128 @@ def frames(count: int) -> ReferenceFrames:
     )
 
 
+def guide_input(*steps: tuple[str, str, float, float]) -> GuideInput:
+    """(stepId, makeup, 시작 초, 끝 초) 단계들로 만든 가이드 입력. order는 넣은 순서다."""
+    return GuideInput.model_validate(
+        {
+            "videoId": "test_01",
+            "durationSeconds": 60.0,
+            "steps": [
+                {
+                    "stepId": step_id,
+                    "order": order,
+                    "startSeconds": start,
+                    "endSeconds": end,
+                    "makeup": makeup,
+                    "partLabel": "부위",
+                    "summary": "바릅니다.",
+                    "facts": {"area": {"value": "얼굴", "source": "scene"}},
+                }
+                for order, (step_id, makeup, start, end) in enumerate(steps, start=1)
+            ],
+        }
+    )
+
+
+def frames_every_half_second(until_ms: int) -> ReferenceFrames:
+    """0초부터 until_ms까지 0.5초 간격 사진 목록."""
+    return ReferenceFrames.model_validate(
+        {
+            "source": {"width": 32, "height": 24, "fps": 30},
+            "items": [
+                {
+                    "frameIndex": time // 500 * 15,
+                    "timestampMs": time,
+                    "stepId": None,
+                    "url": f"https://storage.example.com/frames/{time}.jpg",
+                    "width": 32,
+                    "height": 24,
+                }
+                for time in range(0, until_ms + 1, 500)
+            ],
+        }
+    )
+
+
+def test_needed_frames_keep_window_photos_and_one_second_either_side():
+    """블러셔는 직전·직후 1초, 립은 직후 1초 창에 판정 여유 1초씩. 파운데이션은 고르지 않는다."""
+    steps = guide_input(
+        ("s1", "foundation", 0, 5), ("s2", "blush", 10, 20), ("s3", "lip", 30, 40)
+    ).steps
+
+    kept = [
+        item.timestamp_ms for item in needed_frames(steps, frames_every_half_second(45_000).items)
+    ]
+
+    assert kept == [
+        *range(8_000, 11_001, 500),
+        *range(19_000, 22_001, 500),
+        *range(39_000, 42_001, 500),
+    ]
+
+
+def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
+    """부위 분석이 사진을 고르는 구간에 판정 여유를 더해도 photo_ranges 안이다.
+
+    부위 분석의 창이 바뀌었는데 PART_WINDOWS를 그대로 두면, 서비스가 그 사진을 받지 않아
+    결과가 조용히 바뀐다. 실제 build_guide_area가 usable_rows에 묻는 구간을 모두 모아 본다.
+    분석하는 부위를 새로 넣고 PART_WINDOWS에 빠뜨려도 같은 일이 생기므로, 분석하는 부위
+    (AREA_FINDERS와 따로 만드는 아이라인)가 PART_WINDOWS와 같은지도 본다.
+    """
+    assert set(PART_WINDOWS) == set(AREA_FINDERS) | {"eyeliner"}
+    asked = []
+
+    def record(result, start_ms, end_ms, regions):
+        asked.append((start_ms, end_ms))
+        return []
+
+    for part in (blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area):
+        monkeypatch.setattr(part, "usable_rows", record)
+    steps = guide_input(
+        *[(f"s{i}", makeup, 10 * i, 10 * i + 5) for i, makeup in enumerate(PART_WINDOWS, start=1)]
+    ).steps
+
+    build_guide_area(
+        "test_01",
+        steps,
+        LandmarksResult(video_id="test_01", frames=[]),
+        lambda row: pytest.fail("쓸 사진이 없는데 사진을 읽음"),
+    )
+
+    ranges = photo_ranges(steps)
+    after_ends = {round(s.end_seconds * 1000) + PART_WINDOWS[s.makeup][1] for s in steps}
+    assert after_ends <= {end for _, end in asked}
+    for start, end in asked:
+        assert any(
+            low <= start - RATIO_WINDOW_MS and end + RATIO_WINDOW_MS <= high for low, high in ranges
+        ), (start, end)
+
+
+def test_no_needed_photo_still_makes_area_like_before(tmp_path):
+    """고를 사진이 0장이면 얼굴 점 없이, 분석하는 단계는 쓸 사진 없음 기본 가이드가 된다."""
+    guide = guide_input(("s1", "foundation", 0, 5), ("s2", "lip", 10, 20))
+    frames = frames_every_half_second(5_000)
+    items = needed_frames(guide.steps, frames.items)
+
+    area = build_reference_area(
+        guide,
+        frames.source,
+        items,
+        tmp_path,
+        finder=lambda rgb: pytest.fail("사진이 없는데 얼굴 점을 찾음"),
+    )
+
+    assert items == []
+    assert [
+        (step.step_id, sub.status, sub.reasons) for step in area.steps for sub in step.sub_steps
+    ] == [
+        ("s1", "template", ["notAnalyzed"]),
+        ("s2", "template", ["noUsableFrame"]),
+    ]
+
+
 def test_manifest_points_frames_at_downloaded_files():
-    manifest = reference_manifest(GUIDE_INPUT, frames(2))
+    manifest = reference_manifest(GUIDE_INPUT, frames(2).source, frames(2).items)
 
     assert manifest.source.duration_seconds == 60.0
     assert [(step.step_id, step.makeup) for step in manifest.steps] == [
@@ -84,7 +219,8 @@ def test_area_counts_frames_and_steps_and_skips_missing_files(tmp_path):
 
     area = build_reference_area(
         GUIDE_INPUT,
-        frames(2),
+        frames(2).source,
+        frames(2).items,
         tmp_path,
         on_landmarks=count("landmarks"),
         on_area_step=count("area"),
@@ -118,10 +254,100 @@ def test_same_photo_goes_to_the_occlusion_model_once_per_job(monkeypatch, tmp_pa
 
     monkeypatch.setattr(reference_area, "build_guide_area", build)
     build_reference_area(
-        GUIDE_INPUT, frames(1), tmp_path, finder=lambda rgb: [], occlusion=finds_nothing
+        GUIDE_INPUT,
+        frames(1).source,
+        frames(1).items,
+        tmp_path,
+        finder=lambda rgb: [],
+        occlusion=finds_nothing,
     )
     photo = np.zeros((600, 800, 3), dtype=np.uint8)
     for row in (make_row(1000), make_row(1000), make_row(2000)):
         seen["occlusion"](row, photo)
 
     assert calls == [1000, 2000]
+
+
+def test_area_flattens_photos_through_remembered_photos(monkeypatch, tmp_path):
+    """영역 만들기에 FACE_MAP_KEEP장짜리 사진 꾸러미를 넘겨, 같은 사진을 다시 펴지 않게 한다.
+
+    시험 영상에서 한 단계 창 안 사진은 가장 많을 때 40장이라 64장이면 한 단계를 다 담는다.
+    """
+    seen = []
+    real_build = reference_area.build_guide_area
+
+    def build(*args, **kwargs):
+        seen.append(args[3])
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(reference_area, "build_guide_area", build)
+    build_reference_area(
+        GUIDE_INPUT, frames(1).source, frames(1).items, tmp_path, finder=lambda rgb: []
+    )
+
+    (photos,) = seen
+    assert isinstance(photos, RememberedPhotos)
+    assert photos.keep == FACE_MAP_KEEP == 64
+
+
+LINE_STEPS = (
+    ("s1", "foundation", 0, 5),
+    ("s2", "eyeliner", 10, 15),
+    ("s3", "blush", 20, 25),
+    ("s4", "eyeliner", 30, 35),
+    ("s5", "brow", 40, 45),
+    ("s6", "lip", 50, 55),
+)
+
+
+def landmarks_every_half_second(until_ms: int) -> LandmarksResult:
+    return LandmarksResult(
+        video_id="test_01", frames=[make_row(time) for time in range(0, until_ms + 1, 500)]
+    )
+
+
+def test_eyeliner_steps_stay_in_the_first_line_in_order():
+    """아이라인은 앞 아이라인 단계에서 안내한 칸을 이어받아, 줄을 나눠도 한 줄에 차례로 둔다."""
+    steps = guide_input(*LINE_STEPS).steps
+
+    groups = split_steps(steps, landmarks_every_half_second(60_000), 2)
+
+    ids = [[step.step_id for step in group] for group in groups]
+    assert [i for i in ids[0] if i in ("s2", "s4")] == ["s2", "s4"]
+    assert not {"s2", "s4"} & set(ids[1])
+    assert sorted(i for group in ids for i in group) == ["s1", "s2", "s3", "s4", "s5", "s6"]
+    assert ids[-1][-1] == "s1"
+
+
+def test_one_line_keeps_steps_as_given():
+    steps = guide_input(*LINE_STEPS).steps
+
+    assert split_steps(steps, landmarks_every_half_second(60_000), 1) == [list(steps)]
+
+
+def test_lines_get_their_own_memory_and_merge_in_step_order(monkeypatch):
+    """두 줄이 지도 꾸러미·가림 기억을 같이 쓰면 넣고 빼다 꼬일 수 있어 줄마다 따로 쓴다."""
+    seen = []
+
+    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None):
+        seen.append((load_photo, occlusion))
+        return failed_guide_area(video_id, steps)
+
+    monkeypatch.setattr(reference_area, "build_guide_area", build)
+    steps = guide_input(*LINE_STEPS).steps
+
+    area = build_area_in_lines(
+        "test_01",
+        steps,
+        landmarks_every_half_second(60_000),
+        lambda row: np.zeros((24, 32, 3), dtype=np.uint8),
+        find_occlusion,
+        None,
+        2,
+    )
+
+    assert [step.step_id for step in area.steps] == ["s1", "s2", "s3", "s4", "s5", "s6"]
+    (first_photos, first_occlusion), (second_photos, second_occlusion) = seen
+    assert isinstance(first_photos, RememberedPhotos)
+    assert first_photos is not second_photos
+    assert first_occlusion is not second_occlusion

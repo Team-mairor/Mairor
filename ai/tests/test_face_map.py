@@ -9,6 +9,7 @@ from app.tasks.area.common.face_map import (
     BARY_DIGITS,
     MAP_SIZE,
     MESH_DIR,
+    _sample,
     flatten,
     flatten_mask,
     map_points,
@@ -57,6 +58,24 @@ def test_face_already_on_map_comes_back_unchanged():
     gap = np.abs(out.astype(int) - photo.astype(int))[face_cells]
     assert face_cells.sum() > MAP_SIZE * MAP_SIZE // 3
     assert gap.max() <= 1
+
+
+def test_sampling_gives_the_same_colors_as_converting_the_whole_photo_first():
+    """필요한 픽셀만 섞어도, 사진 전체를 소수로 바꾼 뒤 섞던 때와 색이 하나도 다르지 않다."""
+    rng = np.random.default_rng(0)
+    rgb = rng.integers(0, 256, size=(108, 192, 3), dtype=np.uint8)
+    x = rng.uniform(-5, 197, size=5000)
+    y = rng.uniform(-5, 113, size=5000)
+    cx, cy = np.clip(x, 0, 191), np.clip(y, 0, 107)
+    x0, y0 = np.floor(cx).astype(int), np.floor(cy).astype(int)
+    x1, y1 = np.minimum(x0 + 1, 191), np.minimum(y0 + 1, 107)
+    fx, fy = (cx - x0)[:, None], (cy - y0)[:, None]
+    image = rgb.astype(np.float32)
+    top = image[y0, x0] * (1 - fx) + image[y0, x1] * fx
+    bottom = image[y1, x0] * (1 - fx) + image[y1, x1] * fx
+    whole_first = np.round(top * (1 - fy) + bottom * fy).astype(np.uint8)
+
+    assert np.array_equal(_sample(rgb, x, y), whole_first)
 
 
 def test_median_keeps_the_majority_color():

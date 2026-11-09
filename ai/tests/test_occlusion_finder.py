@@ -234,3 +234,24 @@ def test_closed_eyes_are_not_occlusion():
     row, rgb = sample_photo(CLOSED_EYES)
 
     assert not find_occlusion(row, rgb).any()
+
+
+def test_model_opens_once_with_the_given_worker_count(monkeypatch):
+    """서버가 뜰 때 정한 일꾼 수로 한 번만 열고, 그 뒤 영역 작업은 열어 둔 모델을 쓴다."""
+    opened = []
+
+    def fake_session(path, sess_options=None, **kwargs):
+        opened.append(sess_options)
+        return object()
+
+    monkeypatch.setattr(occlusion_finder, "_opened", [])
+    monkeypatch.setattr(occlusion_finder, "check_model_file", lambda path: None)
+    monkeypatch.setattr(occlusion_finder.onnxruntime, "InferenceSession", fake_session)
+
+    occlusion_finder.load_occlusion_model(1)
+    first = occlusion_finder._session()
+    second = occlusion_finder._session(4)
+
+    assert first is second
+    (options,) = opened
+    assert (options.intra_op_num_threads, options.inter_op_num_threads) == (1, 1)

@@ -64,7 +64,7 @@ class FrameLandmarks(CamelModel):
 class LandmarksResult(CamelModel):
     video_id: str
     mesh_version: Literal["v1"] = "v1"
-    frames: list[FrameLandmarks] = Field(min_length=1)
+    frames: list[FrameLandmarks]
 
     @model_validator(mode="after")
     def check_frame_order(self) -> "LandmarksResult":

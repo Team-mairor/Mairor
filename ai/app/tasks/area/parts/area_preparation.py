@@ -4,11 +4,13 @@ check_frames를 거친 결과에서 구간·부위 조건에 맞는 사진을 �
 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
 얼굴 지도에 펴서 칸마다 중앙값을 내고(rows_to_map), 색을 Lab으로 바꾼다(rgb_to_lab).
 가림 찾기 함수가 있으면 사진마다 가린 칸을 빼고 중앙값을 낸다(rows_to_known_map).
+사진 꾸러미(RememberedPhotos)를 넘기면 같은 사진을 얼굴 지도에 한 번만 편다.
 범위의 모름 칸이 너무 많으면 그 범위는 보지 않는다(mostly_unknown).
 전후 사이 조명이 바뀐 만큼은 화장하지 않은 피부로 재서 뺀다(remove_lighting).
 립·블러셔·눈썹 같은 부위 분석이 같이 쓴다. 기준값의 근거는 ai/docs/FRAME_SELECTION.md에 있다.
 """
 
+from collections import OrderedDict
 from collections.abc import Callable, Sequence
 
 import cv2
@@ -41,6 +43,55 @@ SRGB_TO_XYZ = np.array(
 D65_WHITE = np.array([0.950456, 1.0, 1.088754])
 
 PhotoLoader = Callable[[FrameLandmarks], np.ndarray]
+FaceMaps = tuple[np.ndarray, np.ndarray | None]
+
+
+class RememberedPhotos:
+    """사진을 얼굴 지도에 편 결과를 최근 keep장 기억하는 사진 꾸러미. 영역 작업마다 새로 만든다.
+
+    부르면 load_photo처럼 사진을 돌려주므로 PhotoLoader 자리에 그대로 넘긴다.
+    rows_to_known_map은 이 꾸러미를 받으면 face_maps로 사진마다 지도를 한 번만 만든다.
+    좌우 짝 부위(볼·눈썹·눈)는 쪽마다 같은 직전·직후 사진을 차례로 쓰므로,
+    단계 하나 분량만 기억해도 같은 사진을 다시 읽고 펴지 않는다.
+    기억한 지도는 읽기 전용이라, 꺼내 쓰는 쪽이 고치면 오류가 난다.
+    지도는 사진 1장에 약 4MB(얼굴 지도 3MB + 가린 칸 지도 1MB)다.
+    """
+
+    def __init__(self, load_photo: PhotoLoader, keep: int) -> None:
+        self.load_photo = load_photo
+        self.keep = keep
+        self._kept: OrderedDict[tuple[int, bool], FaceMaps] = OrderedDict()
+
+    def __call__(self, row: FrameLandmarks) -> np.ndarray:
+        return self.load_photo(row)
+
+    def face_maps(self, row: FrameLandmarks, occlusion: OcclusionFinder | None) -> FaceMaps:
+        """row 사진의 (얼굴 지도, 가린 칸 지도). occlusion이 None이면 가린 칸 지도도 None이다.
+
+        영역 작업 하나에서 occlusion은 늘 같은 함수라고 보고, 사진 번호와 가림 찾기 여부로 기억한다.
+        """
+        key = (row.frame_index, occlusion is not None)
+        hit = self._kept.get(key)
+        if hit is not None:
+            self._kept.move_to_end(key)
+            return hit
+        maps = make_face_maps(row, self.load_photo, occlusion)
+        for found in maps:
+            if found is not None:
+                found.flags.writeable = False
+        self._kept[key] = maps
+        if len(self._kept) > self.keep:
+            self._kept.popitem(last=False)
+        return maps
+
+
+def make_face_maps(
+    row: FrameLandmarks, load_photo: PhotoLoader, occlusion: OcclusionFinder | None
+) -> FaceMaps:
+    """row 사진을 읽어 (얼굴 지도, 가린 칸 지도)를 만든다. occlusion이 None이면 가린 칸도 None."""
+    photo = load_photo(row)
+    covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
+    return flatten(photo, row.face), covered
 
 
 def usable_rows(
@@ -129,13 +180,17 @@ def rows_to_known_map(
     occlusion은 사진에서 얼굴을 가린 픽셀을 찾는 함수이고, 찾은 곳을 얼굴 지도에 펴서
     known_median_map으로 넘긴다. occlusion이 None이면 지도는 rows_to_map과 같고 모름 칸은 없다.
     zone은 부위 분석이 볼 범위(지도 크기 표)이고 known_median_map에 그대로 넘긴다.
+    load_photo가 RememberedPhotos이면 기억해 둔 지도를 쓰고, 아니면 사진마다 새로 편다.
     """
     maps, covered = [], []
     for row in rows:
-        photo = load_photo(row)
-        maps.append(flatten(photo, row.face))
-        if occlusion is not None:
-            covered.append(flatten_mask(occlusion(row, photo), row.face))
+        if isinstance(load_photo, RememberedPhotos):
+            face_map, hidden = load_photo.face_maps(row, occlusion)
+        else:
+            face_map, hidden = make_face_maps(row, load_photo, occlusion)
+        maps.append(face_map)
+        if hidden is not None:
+            covered.append(hidden)
     return known_median_map(maps, None if occlusion is None else covered, zone)
 
 
