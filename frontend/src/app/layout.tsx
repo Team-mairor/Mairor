@@ -4,6 +4,7 @@ import { Gowun_Dodum, Instrument_Sans, Instrument_Serif } from "next/font/google
 import localFont from "next/font/local";
 import { Suspense } from "react";
 
+import { RunGuideProvider } from "@/features/guide";
 import { SessionProvider } from "@/features/session";
 import { MIRROR_SCRIPT } from "@/lib/mirror";
 import { DEFAULT_POUCH, DEFAULT_REPORTS } from "@/mocks/mock-data";
@@ -81,7 +82,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           {/* 샘플 파우치·리포트. API가 붙으면 seed를 지운다 */}
           <SessionProvider seed={{ pouch: DEFAULT_POUCH, reports: DEFAULT_REPORTS }}>
-            {children}
+            <RunGuideProvider>{children}</RunGuideProvider>
             {/* DevNav의 useSearchParams 경계. 화면 전체를 감싸면 정적 HTML이 비므로 여기만 감싼다 */}
             {DevNav && (
               <Suspense>

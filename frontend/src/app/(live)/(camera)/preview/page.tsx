@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
+import { useRunQuery as useQuery } from "@/features/guide";
 import {
   GlassPanel,
   LiveNote,
@@ -14,7 +15,6 @@ import {
   useLiveState,
 } from "@/features/live";
 import { MakeupOverlay } from "@/features/overlay";
-import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
 import { REF_PRODUCTS, TRY_STEPS } from "@/mocks/mock-data";
 
@@ -26,7 +26,7 @@ const SKIPPED = [
   ...new Set(REF_PRODUCTS.filter((_, i) => !TRY_STEPS.includes(i)).map((r) => r.cat)),
 ].join(" · ");
 
-/** 07 미리보기 · 실시간 입혀보기 (PREVIEW-001 · CAMERA-001 · CAMERA-004). ?alert=lost|turn|cover|far|light 는 알림 확인용 */
+/** 07 미리보기 · 실시간 입혀보기. ?alert=lost|turn|cover|far|light 는 알림 확인용 */
 export default function PreviewPage() {
   const router = useRouter();
   const query = useQuery();
@@ -40,7 +40,7 @@ export default function PreviewPage() {
   const alert = parseAlert(query?.get("alert"));
   const { note, canRender } = useLiveState(alert);
   const layersUrl = query ? (query.get("layers") ?? DEFAULT_LAYERS) : null;
-  // 알림·카메라 오류·얼굴 없음이면 메이크업을 숨긴다 (CAMERA-004)
+  // 알림·카메라 오류·얼굴 없음이면 메이크업을 숨긴다
   const hide = bare || !canRender;
 
   return (

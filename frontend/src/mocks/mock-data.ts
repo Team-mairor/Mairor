@@ -168,7 +168,7 @@ export const DEFAULT_REPORTS: ReportSummary[] = [
   { id: "rp4", title: "음영 섀도 연습", date: "10월 3일", steps: 4, subs: 1 },
 ];
 
-/** 영상 상태 샘플 (API-VIDEO-001 흉내). y2 가이드 있음 · y3 분석 중 · y5 재생 불가 · y6 일일 한도 */
+/** 영상 상태 샘플. y2 가이드 있음 · y3 분석 중 · y5 재생 불가 · y6 일일 한도 */
 export function videoState(v: VideoItem | null): VideoState {
   if (!v) return "new";
   return (

@@ -15,6 +15,7 @@ import {
   StartModal,
 } from "@/features/check";
 import { useHiddenVideo } from "@/features/face";
+import { useRunQuery as useQuery } from "@/features/guide";
 import { GlassPanel, LiveNote, LiveTag, RoundBack, useLiveState } from "@/features/live";
 import { MakeupOverlay } from "@/features/overlay";
 import { emptyDraft, ProductSheet, type PouchItem, type ProductDraft } from "@/features/pouch";
@@ -29,7 +30,6 @@ import {
   type MatchKind,
   type RefProduct,
 } from "@/features/session";
-import { useQuery } from "@/lib/hooks/use-query";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { cn } from "@/lib/utils";
 import { REF_PRODUCTS, TRY_STEPS } from "@/mocks/mock-data";
@@ -150,7 +150,7 @@ export default function CheckPage() {
 
   const noneRows = items.filter((x) => x.pr.kind === "none");
   const layersUrl = query ? (query.get("layers") ?? DEFAULT_LAYERS) : null;
-  // 카메라 오류·얼굴 없음이면 안내를 띄우고 메이크업은 숨긴다 (CAMERA-004)
+  // 카메라 오류·얼굴 없음이면 안내를 띄우고 메이크업은 숨긴다
   const { note, canRender, reason } = useLiveState();
   useHiddenVideo();
 

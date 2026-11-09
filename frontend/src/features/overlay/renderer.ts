@@ -121,15 +121,19 @@ const YAW_FADE = [0.2, 0.45] as const;
 /** UV 가로 위치로 본 꼭짓점이 얼굴 어느 쪽인지. 본인 기준 오른쪽 -1 ~ 왼쪽 +1, 가운데(코) 0 */
 const sideOf = (u: number) => Math.max(-1, Math.min(1, (u - 0.5) * 5));
 
-const WHITE = (() => {
-  if (typeof document === "undefined") return null;
+let white: HTMLCanvasElement | null = null;
+/** 흰 1px 캔버스. 불러올 때가 아니라 처음 그릴 때 만든다 */
+function whiteCanvas() {
+  if (white || typeof document === "undefined") return white;
   const c = document.createElement("canvas");
   c.width = c.height = 1;
-  const ctx = c.getContext("2d")!;
+  const ctx = c.getContext("2d");
+  if (!ctx) return null;
   ctx.fillStyle = "#fff";
   ctx.fillRect(0, 0, 1, 1);
-  return c;
-})();
+  white = c;
+  return white;
+}
 // 부위가 멀어지는 각도(라디안)에서 옅어지다가 사라진다. 가운데(입술)는 옆에서도 보여 더 늦게.
 // 추적기는 maxYaw(0.6)를 넘으면 degraded로 보고 화장을 숨기므로, 그 전에 다 옅어지게 맞춘다.
 const AWAY_FADE = { side: [0.3, 0.55], center: [0.4, 0.6] } as const;
@@ -398,11 +402,12 @@ export class OverlayRenderer {
       // 얼굴 전체는 외곽선 하나로 칠하면 고개를 돌렸을 때 먼 쪽이 얼굴 밖까지 걸친다.
       // 메시 삼각형으로 칠해 눌린 쪽은 옅게 하고, 이마는 위로 늘린다. WebGL이 없으면 외곽선으로 칠한다.
       const gl = layer.regions.includes("faceOval") ? this.getMaskGl() : null;
-      if (gl && WHITE) {
+      const fill = gl ? whiteCanvas() : null;
+      if (gl && fill) {
         const warp = foreheadWarp(outline("faceOval"), (i) => toPx(frame.landmarks[i]), unit);
         const all = mesh.triangles.map((_, i) => i);
         // 턱선 쪽 윤곽 점은 진하기 0으로 두어 자연스럽게 사라지게 한다.
-        const shape = this.meshShape(gl, WHITE, all, (k) => mesh.triangles[k].map(uvPoint(mesh)), {
+        const shape = this.meshShape(gl, fill, all, (k) => mesh.triangles[k].map(uvPoint(mesh)), {
           frame,
           mesh,
           toPx: (p) => warp(toPx(p)),

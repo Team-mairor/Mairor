@@ -81,6 +81,8 @@ const DEFAULT_MOCK =
 type QueryValue = string | number | boolean | null | undefined;
 
 export interface RequestOptions {
+  /** 가이드 재검증 시 브라우저 HTTP 캐시를 우회한다 */
+  cache?: RequestCache;
   /** 값이 null·undefined인 항목은 보내지 않는다. */
   query?: Record<string, QueryValue>;
   /** FormData는 multipart로, Blob·URLSearchParams는 그대로 보내고 그 밖의 값은 JSON으로 보낸다. */
@@ -220,6 +222,7 @@ async function send<T>(
           body: payload,
           signal,
           credentials: "same-origin",
+          cache: options.cache,
         });
   } catch (e) {
     throw toFailure(e, signal);

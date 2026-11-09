@@ -35,6 +35,8 @@ export interface GuideModel {
   guideId: string;
   guideVersion: number;
   videoId: string;
+  youtubeVideoId: string | null;
+  thumbnailUrl: string | null;
   title: string;
   channelTitle: string;
   /** 가이드 영역의 메시 판. 영역이 없으면 null */
@@ -151,6 +153,8 @@ export function toGuideModel(raw: unknown, guideId: string): GuideModel {
     guideId,
     guideVersion: version,
     videoId: text(raw.videoId) ?? "",
+    youtubeVideoId: text(raw.youtubeVideoId),
+    thumbnailUrl: text(raw.thumbnailUrl),
     title: text(raw.title) ?? "",
     channelTitle: text(raw.channelTitle) ?? "",
     meshVersion: text(raw.meshVersion),

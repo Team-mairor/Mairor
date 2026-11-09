@@ -59,6 +59,9 @@ export interface GuideStepInfo {
 }
 
 export interface ReportSummary {
+  /** 실제 가이드 기록에만 있다 */
+  guideId?: string;
+  guideVersion?: number;
   id: string;
   title: string;
   date: string;

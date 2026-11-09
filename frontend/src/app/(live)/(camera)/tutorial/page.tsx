@@ -20,8 +20,15 @@ import {
   type GuideSet,
   type Makeup,
 } from "@/features/guide";
+import { useRunQuery as useQuery } from "@/features/guide";
 import { LiveNote, parseAlert, RoundBack, useLiveState } from "@/features/live";
-import { matchFor, useSession, type GuideAction, type RefProduct } from "@/features/session";
+import {
+  matchFor,
+  runHref,
+  useSession,
+  type GuideAction,
+  type RefProduct,
+} from "@/features/session";
 import {
   ActCard,
   DensityMeter,
@@ -33,7 +40,6 @@ import {
   TutorialTopBar,
   type StepProduct,
 } from "@/features/tutorial";
-import { useQuery } from "@/lib/hooks/use-query";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
@@ -101,17 +107,16 @@ function stepsOf(guide: GuideModel): TutorialStep[] {
 }
 
 /**
- * 10 튜토리얼 (GUIDE-003 · 006 · 007 · 008 · 011 · 013).
+ * 10 튜토리얼.
  * ?guideId=승인된 가이드 ID 면 가이드 조회 API의 단계·설명·영역으로, 없으면 샘플 영상으로 돈다.
  * ?area=경로 는 샘플일 때만 다른 영역 파일을 본다. ?alert=cover 등은 측정 불가 상태 확인용.
  */
 export default function TutorialPage() {
   const query = useQuery();
+  const { state } = useSession();
   if (!query) return null;
-  const guideId = query.get("guideId");
-  // guideId가 바뀌면 화면을 새로 만들어 이전 가이드의 조회 결과·영역이 남지 않게 한다
-  return guideId ? (
-    <GuideTutorial key={guideId} guideId={guideId} />
+  return state.run.mode === "guide" ? (
+    <GuideTutorial />
   ) : (
     <SampleTutorial area={query.get("area")} />
   );
@@ -127,9 +132,9 @@ function SampleTutorial({ area: areaUrl }: { area: string | null }) {
   return <TutorialRun steps={SAMPLE_STEPS} area={area} />;
 }
 
-function GuideTutorial({ guideId }: { guideId: string }) {
+function GuideTutorial() {
   const router = useRouter();
-  const { load, retry } = useGuide(guideId);
+  const { load, retry } = useGuide();
   const guide = load.status === "ready" ? load.guide : null;
   const steps = useMemo(() => (guide ? stepsOf(guide) : []), [guide]);
   const [area, setArea] = useState<GuideArea | null>(null);
@@ -153,6 +158,7 @@ function GuideTutorial({ guideId }: { guideId: string }) {
       return <GuideStatus title="가이드를 불러오고 있어요" />;
     case "invalidId":
       return <GuideStatus title="가이드 주소가 올바르지 않아요" action={home} />;
+    case "invalidated":
     case "notFound":
       return (
         <GuideStatus
@@ -173,7 +179,12 @@ function GuideTutorial({ guideId }: { guideId: string }) {
         <GuideStatus
           title="가이드를 불러오지 못했어요"
           body={load.message}
-          action={{ label: "다시 시도", onClick: retry }}
+          action={{
+            label: "다시 시도",
+            onClick: () => {
+              void retry();
+            },
+          }}
         />
       );
     case "ready":
@@ -185,12 +196,13 @@ function GuideTutorial({ guideId }: { guideId: string }) {
 
 /**
  * 사진 저장에 동의했으면 단계를 넘길 때 확인 창 없이 사진을 남긴다 (동의는 튜토리얼 안내에서 받는다).
- * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. GUIDE-013 측정이 생기면 gauge를 측정값으로 바꾼다.
+ * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. 진하기 측정이 생기면 gauge를 측정값으로 바꾼다.
  */
 function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea | null }) {
   const router = useRouter();
   const query = useQuery();
-  const { state, updateRun, startRun } = useSession();
+  const { state, updateRun, endRun, completeRun, isCurrentRun } = useSession();
+  const { load } = useGuide();
   const run = state.run;
   const alert = parseAlert(query?.get("alert"));
 
@@ -218,7 +230,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 샘플은 내 파우치와 맞춰 본다. 가이드 조회 응답은 아직 맞춰 보지 않아(제품 매칭 전) null
   const pr = info.ref ? matchFor(info.ref, run, state.pouch) : null;
   const hasProduct = !!pr && pr.kind !== "none";
-  // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다 (GUIDE-003)
+  // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다
   const paced = hasProduct || !pr;
   // 진하기 기준이 있고 제품을 쓰는 단계만 게이지를 띄운다
   const target = hasProduct ? info.target : null;
@@ -243,8 +255,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     null,
     guideStep ? { issue: guideIssue } : undefined,
   );
-  // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가 (CAMERA-004 · GUIDE-013)
-  const blocked = !canMeasure;
+  // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가
+  const paused = run.mode === "guide" && (load.status !== "ready" || load.checking || !!load.error);
+  const blocked = !canMeasure || paused;
 
   useEffect(() => {
     if (!ready || blocked || busy || exitAsk || target === null) return;
@@ -276,6 +289,14 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 화면에 띄우고 읽어 줄 동작. 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
   const shownActs = paced ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
 
+  // 가이드를 다시 확인하는 동안 예약한 촬영을 취소한다
+  useEffect(() => {
+    if (!paused) return;
+    timer.clear();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 재검증 중 예약 촬영을 취소한다
+    setBusy(false);
+  }, [paused, timer]);
+
   // 진행바·이전 버튼으로 옮기면 촬영 대기 타이머는 버린다. 예전 step으로 advance가 실행되지 않게
   const cancelTimer = () => {
     timer.clear();
@@ -291,12 +312,15 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 사진 저장에 동의했고 제품을 쓴 단계면 넘길 때 사진을 남긴다
   const photo = run.photoOk && hasProduct && !run.captures.includes(step);
   const advance = () => {
-    if (photo) updateRun({ captures: [...run.captures, step] });
-    if (last) router.push("/done");
-    else goStep(step + 1);
+    if (!isCurrentRun(run.id)) return;
+    if (photo) updateRun({ captures: [...run.captures, step] }, run.id);
+    if (last) {
+      completeRun(run.id);
+      router.push(runHref("/done", run.guideId));
+    } else goStep(step + 1);
   };
   const next = () => {
-    if (busy) return;
+    if (busy || paused) return;
     if (!lastAct) {
       setAct((a) => a + 1);
       return;
@@ -311,7 +335,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   };
   const quit = () => {
     timer.clear();
-    startRun({});
+    endRun(run.id);
     router.push("/home");
   };
 

@@ -23,6 +23,7 @@ export {
   distanceHint,
   eyesClosed,
   faceBox,
+  clearFacePhoto,
   facePhoto,
   MIN_DISTANCE_RATIO,
   NO_CHECK,

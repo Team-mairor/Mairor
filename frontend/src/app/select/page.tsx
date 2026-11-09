@@ -18,7 +18,7 @@ import { CHAPTERS, VIDEOS, videoState } from "@/mocks/mock-data";
 const KEYWORDS = ["데일리", "코랄 블러셔", "봄 웜톤", "10분 메이크업", "무쌍 섀도", "글로시 립"];
 const TOP_VIEWS = ["312만회", "248만회", "196만회", "153만회"];
 
-/** 03 영상 입력 (VIDEO-001 · VIDEO-002 · VIDEO-005) */
+/** 03 영상 입력 */
 export default function SelectPage() {
   const router = useRouter();
   const { startRun } = useSession();
@@ -43,7 +43,7 @@ export default function SelectPage() {
       setQuota(true);
       return;
     }
-    startRun({ picked: v, replay: st === "guide" ? "guide" : null });
+    startRun({ kind: "sample", picked: v, replay: st === "guide" ? "guide" : null });
     router.push(st === "running" ? "/loading?joined=1" : "/loading");
   };
 

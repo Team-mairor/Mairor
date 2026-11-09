@@ -7,6 +7,7 @@ import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
 import { PillButton } from "@/components/ui/pill-button";
 import { facePhoto, useCamera, useHiddenVideo } from "@/features/face";
+import { useGuide, useRunQuery as useQuery } from "@/features/guide";
 import {
   AnalysisProgress,
   FaceRegisterModal,
@@ -19,10 +20,9 @@ import {
   useAnalysisJob,
 } from "@/features/loading";
 import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
-import { hasSame, useSession } from "@/features/session";
+import { hasSame, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
 import { type AnalysisJobStatus, type ApiError } from "@/lib/api";
-import { useQuery } from "@/lib/hooks/use-query";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
 const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composing"];
@@ -42,7 +42,7 @@ function jobFail(error: ApiError | null, job: AnalysisJobStatus | null): Fail {
 }
 
 /**
- * 04 로딩 · 준비 (VIDEO-003 · VIDEO-004). ?jobId=면 그 분석 작업 상태를 받고, 없으면 샘플로 움직인다.
+ * 04 로딩 · 준비. ?jobId=면 그 분석 작업 상태를 받고, 없으면 샘플로 움직인다.
  * 샘플 상태: ?joined=1 · ?fail=timeout|failed · ?review=pending|rejected
  */
 export default function LoadingPage() {
@@ -57,12 +57,14 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const router = useRouter();
   const { state, update, updateRun } = useSession();
   const camera = useCamera();
+  const { load } = useGuide();
   const run = state.run;
   // 실제 작업에는 이전 실행의 '분석 없이 시작'이 섞이지 않게 한다
   const replay = !jobId && !!run.replay;
   const sample = !jobId;
   // 상태 응답에 영상 정보가 없어, 이 작업으로 시작한 실행의 영상만 쓰고 모르면 비워 둔다
   const picked = jobId ? (run.jobId === jobId ? run.picked : null) : (run.picked ?? VIDEOS[0]);
+  const href = (path: string) => runHref(path, run.guideId);
   // 사진은 메모리에만 있어서, 새로 고침으로 사라졌으면 다시 등록해야 한다
   const faceOk = run.faceReg && facePhoto(run.id) !== null;
 
@@ -78,6 +80,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const [form, setForm] = useState<ProductDraft | null>(null);
 
   useEffect(() => {
+    if (run.mode === "guide") return;
     if (query.get("joined")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 상태를 한 번 반영한다
       setJoined(true);
@@ -95,7 +98,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
       setDemoPct(100);
       setFaceShown(true);
     }
-  }, [query]);
+  }, [query, run.mode]);
 
   const live = useAnalysisJob(jobId);
   const job = jobId ? live.job : null;
@@ -158,8 +161,8 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const scanSec = Math.floor(pct * 7.5);
   const scanTime = `${Math.floor(scanSec / 60)}:${String(scanSec % 60).padStart(2, "0")}`;
 
-  // 실제 작업은 제품 인식이 연결되기 전까지 찾은 제품이 비어 있다
-  const rows = (sample ? REF_PRODUCTS : []).map((r, i) => ({
+  // 실제 작업·실제 가이드는 제품 인식이 연결되기 전까지 찾은 제품이 비어 있다
+  const rows = (sample && run.mode !== "guide" ? REF_PRODUCTS : []).map((r, i) => ({
     ...r,
     found: pct >= foundAt(i),
     next: pct < foundAt(i) && (i === 0 || pct >= foundAt(i - 1)),
@@ -215,7 +218,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           }
         : null;
 
-  const guideOk = replay || (done && !notice);
+  const guideOk = run.mode === "guide" ? load.status === "ready" : replay || (done && !notice);
   const guideState = fail
     ? "멈춤"
     : review
@@ -245,7 +248,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     ctaGo = () => setFaceModal(true);
   } else {
     ctaLabel = replay ? "입혀보기" : "미리보기 보기";
-    ctaGo = () => router.push("/preview");
+    ctaGo = () => router.push(href("/preview"));
   }
 
   const barText = replay
@@ -256,7 +259,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
 
   const closePouch = () => {
     setPouchModal(false);
-    if (replay) router.push("/preview");
+    if (replay) router.push(href("/preview"));
   };
 
   return (
@@ -322,6 +325,10 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             </span>
             <span className="text-[18px] leading-[1.5] text-pretty text-mute">{notice.sub}</span>
           </div>
+        ) : run.mode === "guide" && load.status === "ready" ? (
+          <div className="rounded-3xl bg-cream px-7 py-6 text-[20px] text-ink">
+            검수된 가이드 · {load.guide.steps.length}단계가 준비됐어요.
+          </div>
         ) : (
           <FoundProducts
             rows={rows}
@@ -380,7 +387,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             camera.stop();
           }}
           onDone={() => {
-            updateRun({ faceReg: true });
+            updateRun({ faceReg: true }, run.id);
             setFaceModal(false);
             if (pct < 100 || replay) setPouchModal(true);
           }}

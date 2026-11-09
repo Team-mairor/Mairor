@@ -26,3 +26,13 @@ export {
   type RefState,
   type ReportSummary,
 } from "./types";
+
+export {
+  createRun,
+  isGuideId,
+  isRunPath,
+  runHref,
+  runRouteAction,
+  type RunRouteAction,
+  type StartRunInput,
+} from "./run-state";

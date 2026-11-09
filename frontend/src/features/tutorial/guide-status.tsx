@@ -11,7 +11,7 @@ export function GuideStatus({
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-5 px-10 text-center">
+    <main className="flex flex-1 flex-col items-center justify-center gap-5 bg-night px-10 text-center text-white">
       <h1 className="font-display text-[30px] leading-[1.25] text-white">{title}</h1>
       {body && <p className="max-w-[520px] text-[18px] leading-[1.5] text-line-2">{body}</p>}
       {action && (

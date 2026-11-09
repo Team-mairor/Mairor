@@ -1,32 +1,36 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
 import { useHiddenVideo } from "@/features/face";
+import { useGuide, useRunQuery as useQuery } from "@/features/guide";
 import { CameraErrorNote } from "@/features/live";
-import { useSession } from "@/features/session";
+import { runHref, useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial";
-import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
 import { GUIDE_STEPS } from "@/mocks/mock-data";
 
-const CONSENT_ROWS: [string, string][] = [
-  ["저장 항목", `스텝별 얼굴 사진 (최대 ${GUIDE_STEPS.length}장)`],
-  ["쓰는 곳", "내 리포트의 과정 사진 · 비교"],
-  ["삭제", "리포트를 지우면 사진도 함께 지워져요"],
-];
-
 /**
- * 09 튜토리얼 안내 · 사진 저장 동의 (GUIDE-002).
+ * 09 튜토리얼 안내 · 사진 저장 동의.
  * 안내 3장은 이 기기에서 처음 시작할 때만. ?review=1 이면 슬라이드만 보고 튜토리얼로 돌아간다. ?force=1 은 확인용.
  */
 export default function TutorialGuidePage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, update, updateRun } = useSession();
+  const { state, update, enterTutorial, isCurrentRun } = useSession();
+  const { load, retry } = useGuide();
+  const run = state.run;
+  const n =
+    run.mode === "guide" && load.status === "ready" ? load.guide.steps.length : GUIDE_STEPS.length;
+  const consentRows = [
+    ["저장 항목", `스텝별 얼굴 사진 (최대 ${n}장)`],
+    ["쓰는 곳", "내 리포트의 과정 사진 · 비교"],
+    ["삭제", "리포트를 지우면 사진도 함께 지워져요"],
+  ];
+  const href = (path: string) => runHref(path, run.guideId);
   const review = query?.get("review") === "1";
   const [slide, setSlide] = useState(0); // 0~2 안내, 3 동의
   const showSlides = review || query?.get("force") === "1" || !state.tutSeen;
@@ -34,14 +38,25 @@ export default function TutorialGuidePage() {
   useHiddenVideo();
 
   const endSlides = () => {
-    if (review) return router.push("/tutorial");
+    if (review) return router.push(href("/tutorial"));
     update({ tutSeen: true });
     setSlide(3);
   };
-  const consent = (ok: boolean) => {
-    updateRun({ photoOk: ok, captures: [] });
-    router.push("/tutorial");
+  const consenting = useRef(false);
+  const consent = async (ok: boolean) => {
+    if (consenting.current) return;
+    consenting.current = true;
+    try {
+      if (run.mode === "guide" && !(await retry())) return;
+      if (!isCurrentRun(run.id)) return;
+      enterTutorial(run.id, ok);
+      router.push(href("/tutorial"));
+    } finally {
+      consenting.current = false;
+    }
   };
+
+  if (!query) return null;
 
   return (
     <main className="relative flex flex-1 flex-col">
@@ -116,7 +131,7 @@ export default function TutorialGuidePage() {
               </p>
             </div>
             <div className="flex flex-col rounded-[22px] border border-line">
-              {CONSENT_ROWS.map(([k, v], i) => (
+              {consentRows.map(([k, v], i) => (
                 <div
                   key={k}
                   className={cn(

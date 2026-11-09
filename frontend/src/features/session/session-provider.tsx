@@ -6,53 +6,39 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useLayoutEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
+import { clearFacePhoto } from "@/features/face";
 import type { PouchItem } from "@/features/pouch";
 import type { VideoItem } from "@/features/video";
 import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/lib/api";
 
+import {
+  createRun,
+  EMPTY_RUN,
+  invalidateRun as invalidated,
+  type RunPatch,
+  type RunState,
+  type StartRunInput,
+} from "./run-state";
 import type { ReportSummary } from "./types";
+export { EMPTY_RUN, type Choice, type RunState } from "./run-state";
 
-/** 검수 대기 중인 가이드 (홈 카드) */
-export interface PendingGuide {
-  title: string;
-  ytid: string | null;
-  status: "pending" | "approved";
-}
-
-/** 레퍼런스 제품 하나에 대한 선택. none: 없이 진행, pouch: 내 파우치 제품 */
-export type Choice = { kind: "none" } | { kind: "pouch"; id: string };
-
-/** 한 번의 따라 하기 실행 동안 화면을 건너 이어지는 값 */
-export interface RunState {
-  /** 실행 id. 완료 기록을 이 id로 한 번만 만든다 (GUIDE-010) */
-  id: string;
-  picked: VideoItem | null;
-  /** 분석 없이 시작한 경로 */
-  replay: "guide" | "report" | null;
-  /** 이 실행이 요청한 분석 작업. 로딩 화면은 주소의 jobId와 같을 때만 picked를 쓴다 */
-  jobId: string | null;
-  /** 얼굴 등록 완료 */
-  faceReg: boolean;
-  /** 레퍼런스 제품 id → 선택. 없으면 기본 매칭(보유 > 추천 대체) */
-  choice: Record<string, Choice>;
-  /** 추천 대체 제품 켜짐 여부 (기본 켜짐) */
-  subOn: Record<string, boolean>;
-  /** 단계 사진 저장 동의 */
-  photoOk: boolean;
-  /** 사진을 저장한 단계 번호 */
-  captures: number[];
-}
+/** 검수 완료 카드에는 실행에 사용할 guideId가 있어야 한다. */
+export type PendingGuide = { title: string; ytid: string | null } & (
+  { status: "pending"; guideId?: null } | { status: "approved"; guideId: string }
+);
 
 export interface SessionState {
   loggedIn: boolean;
   email: string;
   /** 서버의 닉네임. 없으면 "" */
   nickname: string;
-  /** 로그아웃하지 않았는데 세션이 끝남. 다음 로그인 전까지 인트로가 만료 안내로 보낸다 (API-USERS-004) */
+  /** 로그아웃하지 않았는데 세션이 끝남. 다음 로그인 전까지 인트로가 만료 안내로 보낸다 */
   sessionExpired: boolean;
   /** 이 기기에서 온보딩을 본 적 있음 */
   onboarded: boolean;
@@ -63,18 +49,6 @@ export interface SessionState {
   pendingGuide: PendingGuide | null;
   run: RunState;
 }
-
-export const EMPTY_RUN: RunState = {
-  id: "",
-  picked: null,
-  replay: null,
-  jobId: null,
-  faceReg: false,
-  choice: {},
-  subOn: {},
-  photoOk: false,
-  captures: [],
-};
 
 const EMPTY_STATE: SessionState = {
   loggedIn: false,
@@ -94,20 +68,26 @@ const STORAGE_KEY = "mairor-session-v2";
 
 interface SessionContextValue {
   state: SessionState;
-  /** 브라우저에 저장된 값(파우치·리포트·실행)을 state에 넣었다. 저장 데이터를 보여 주는 화면은 이 값을 기다린다 */
+  /** 브라우저에 저장된 값(파우치·리포트)을 state에 넣었다. 저장 데이터를 보여 주는 화면은 이 값을 기다린다 */
   storageLoaded: boolean;
   /** 내 계정 조회가 끝났다(성공·실패·시간 초과). 로그인 분기는 이 값이 true일 때 결정한다 */
   sessionChecked: boolean;
   update: (patch: Partial<SessionState> | ((prev: SessionState) => Partial<SessionState>)) => void;
-  /** 로그인 성공·세션 확인. 로그인 상태는 이것과 signOut으로만 바꾼다. csrfToken이 없으면(Google 흉내) 토큰은 그대로 */
+  /** 로그인 성공·세션 확인. 로그인 상태는 이것과 signOut·expireSession으로만 바꾼다. csrfToken이 없으면(Google 흉내) 토큰은 그대로 */
   signIn: (user: Pick<User, "email" | "nickname">, csrfToken?: string) => void;
   /** 로그아웃. 토큰을 지우고 로그인 이력도 지운다(만료 안내 없음) */
   signOut: () => void;
-  /** API가 401을 돌려줘 세션이 끝났다. 로그아웃 상태로 바꾸고 다음 로그인 전까지 만료 안내를 띄운다 */
+  /** API가 401을 돌려줘 세션이 끝났다. 실행을 버리고 로그아웃 상태로 바꾸며, 로그인 이력이 있으면 다음 로그인 전까지 만료 안내를 띄운다 */
   expireSession: () => void;
-  updateRun: (patch: Partial<RunState> | ((prev: RunState) => Partial<RunState>)) => void;
-  /** 새 실행 시작. 이전 실행의 진행 데이터는 버린다 (GUIDE-011) */
-  startRun: (run: Partial<RunState>) => void;
+  updateRun: (patch: RunPatch | ((prev: RunState) => RunPatch), expectedRunId?: string) => void;
+  bindGuide: (expectedRunId: string, version: number, picked: VideoItem) => void;
+  enterTutorial: (expectedRunId: string, photoOk: boolean) => void;
+  completeRun: (expectedRunId: string) => void;
+  invalidateRun: (expectedRunId: string) => void;
+  endRun: (expectedRunId: string) => void;
+  isCurrentRun: (expectedRunId: string) => boolean;
+  /** 새 실행 시작. 이전 실행의 진행 데이터는 버린다 */
+  startRun: (input: StartRunInput) => void;
   reset: () => void;
 }
 
@@ -116,7 +96,7 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 // 내 계정 조회가 늦으면 저장된 로그인 상태로 시작한다
 const ME_TIMEOUT_MS = 5000;
 
-// ponytail: 브라우저 저장소 하나에 통째로 저장. loggedIn·email만 서버 세션(내 계정 조회) 기준으로 맞춘다.
+// 실행은 메모리에만 두고 기기 설정·파우치·완료 리포트만 저장한다. 인증은 내 계정 조회로 확인한다.
 export function SessionProvider({
   children,
   seed,
@@ -132,12 +112,21 @@ export function SessionProvider({
   const [state, setState] = useState<SessionState>(initial);
   const [storageLoaded, setStorageLoaded] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const activeRunId = useRef("");
+  const previousRunId = useRef("");
+  useLayoutEffect(() => {
+    if (previousRunId.current !== state.run.id) clearFacePhoto(previousRunId.current);
+    previousRunId.current = state.run.id;
+    activeRunId.current = state.run.phase === "invalidated" ? "" : state.run.id;
+  }, [state.run.id, state.run.phase]);
+  const isCurrentRun = useCallback((id: string) => !!id && activeRunId.current === id, []);
 
   // 같은 계정이 이어질 때만 파우치를 둔다. 아니면 비우고 서버 목록을 기다린다(샘플·다른 계정 목록을 내 제품으로 쓰지 않게)
   const signIn = useCallback<SessionContextValue["signIn"]>((user, csrfToken) => {
     if (csrfToken !== undefined) setCsrfToken(csrfToken);
     setState((prev) => ({
       ...prev,
+      run: prev.email && prev.email !== user.email ? EMPTY_RUN : prev.run,
       loggedIn: true,
       email: user.email,
       nickname: user.nickname ?? "",
@@ -148,9 +137,12 @@ export function SessionProvider({
 
   // 로그아웃·만료 때는 이전 계정 목록을 지우고 처음 샘플로 돌린다
   const signOut = useCallback(() => {
+    activeRunId.current = "";
+    clearFacePhoto();
     setCsrfToken(null);
     setState((prev) => ({
       ...prev,
+      run: EMPTY_RUN,
       loggedIn: false,
       email: "",
       nickname: "",
@@ -160,9 +152,12 @@ export function SessionProvider({
   }, [initial]);
 
   const expireSession = useCallback(() => {
+    activeRunId.current = "";
+    clearFacePhoto();
     setCsrfToken(null);
     setState((prev) => ({
       ...prev,
+      run: EMPTY_RUN,
       loggedIn: false,
       email: "",
       nickname: "",
@@ -174,16 +169,16 @@ export function SessionProvider({
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-      if (saved && typeof saved === "object") {
+      if (saved && typeof saved === "object" && !Array.isArray(saved)) {
         // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소는 브라우저에서만 읽을 수 있다
-        setState({ ...initial, ...saved, run: { ...EMPTY_RUN, ...saved.run } });
+        setState({ ...initial, ...saved, run: EMPTY_RUN });
       }
     } catch {
       // 깨진 저장값은 기본값으로 시작한다
     }
     setStorageLoaded(true);
 
-    // 앱을 다시 열면 세션 쿠키로 로그인 상태를 확인하고 CSRF 토큰을 받는다 (USERS-004).
+    // 앱을 다시 열면 세션 쿠키로 로그인 상태를 확인하고 CSRF 토큰을 받는다.
     // 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하는 등 그 밖의 실패는 저장된 상태를 그대로 쓴다.
     // 저장된 loggedIn이 로그인 이력 플래그다(로그인 성공 때 켜고 로그아웃 때 끈다). 켜진 채 401이면 만료로 본다.
     // AbortSignal.any는 Safari 17.4 미만에 없어 시간 제한도 같은 컨트롤러로 끊는다
@@ -192,8 +187,11 @@ export function SessionProvider({
     const timer = setTimeout(() => controller.abort(), ME_TIMEOUT_MS);
     api
       .get<LoginResponse>("/v1/users/me", { signal: controller.signal })
-      .then(({ user, csrfToken }) => signIn(user, csrfToken))
+      .then(({ user, csrfToken }) => {
+        if (!unmounted) signIn(user, csrfToken);
+      })
       .catch((e) => {
+        if (unmounted) return;
         if (e instanceof ApiError && e.code === "UNAUTHORIZED") expireSession();
       })
       .finally(() => {
@@ -211,7 +209,9 @@ export function SessionProvider({
   useEffect(() => {
     if (!storageLoaded) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const { run: _run, ...persisted } = state;
+      void _run;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
     } catch {
       // 저장 실패는 화면에 영향 없음
     }
@@ -221,18 +221,69 @@ export function SessionProvider({
     setState((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) }));
   }, []);
 
-  const updateRun = useCallback<SessionContextValue["updateRun"]>((patch) => {
+  const updateRun = useCallback<SessionContextValue["updateRun"]>((patch, expectedRunId) => {
     setState((prev) => ({
       ...prev,
-      run: { ...prev.run, ...(typeof patch === "function" ? patch(prev.run) : patch) },
+      run:
+        (expectedRunId !== undefined && prev.run.id !== expectedRunId) ||
+        prev.run.phase === "invalidated"
+          ? prev.run
+          : { ...prev.run, ...(typeof patch === "function" ? patch(prev.run) : patch) },
     }));
   }, []);
 
-  const startRun = useCallback((run: Partial<RunState>) => {
-    setState((prev) => ({ ...prev, run: { ...EMPTY_RUN, id: `run${Date.now()}`, ...run } }));
+  const startRun = useCallback((input: StartRunInput) => {
+    clearFacePhoto();
+    const run = createRun(input, crypto.randomUUID());
+    activeRunId.current = run.id;
+    setState((prev) => ({ ...prev, run }));
   }, []);
 
-  const reset = useCallback(() => setState(initial), [initial]);
+  const endRun = useCallback((expectedRunId: string) => {
+    if (activeRunId.current === expectedRunId) activeRunId.current = "";
+    setState((prev) => (prev.run.id !== expectedRunId ? prev : { ...prev, run: EMPTY_RUN }));
+    clearFacePhoto(expectedRunId);
+  }, []);
+  const invalidateRun = useCallback((expectedRunId: string) => {
+    if (activeRunId.current === expectedRunId) activeRunId.current = "";
+    clearFacePhoto(expectedRunId);
+    setState((prev) =>
+      prev.run.id !== expectedRunId ? prev : { ...prev, run: invalidated(prev.run) },
+    );
+  }, []);
+  const bindGuide = useCallback((expectedRunId: string, version: number, picked: VideoItem) => {
+    setState((prev) => {
+      const r = prev.run;
+      if (
+        r.id !== expectedRunId ||
+        r.mode !== "guide" ||
+        r.phase === "invalidated" ||
+        r.guideVersion === version
+      )
+        return prev;
+      if (r.guideVersion !== null) return { ...prev, run: invalidated(r) };
+      return { ...prev, run: { ...r, guideVersion: version, picked } };
+    });
+  }, []);
+  const enterTutorial = useCallback((expectedRunId: string, photoOk: boolean) => {
+    setState((prev) =>
+      prev.run.id !== expectedRunId || prev.run.phase === "invalidated"
+        ? prev
+        : { ...prev, run: { ...prev.run, photoOk, captures: [], phase: "tutorial" } },
+    );
+  }, []);
+  const completeRun = useCallback((expectedRunId: string) => {
+    setState((prev) =>
+      prev.run.id !== expectedRunId || prev.run.phase !== "tutorial"
+        ? prev
+        : { ...prev, run: { ...prev.run, phase: "completed" } },
+    );
+  }, []);
+  const reset = useCallback(() => {
+    activeRunId.current = "";
+    clearFacePhoto();
+    setState(initial);
+  }, [initial]);
 
   const value = useMemo(
     () => ({
@@ -245,6 +296,12 @@ export function SessionProvider({
       expireSession,
       updateRun,
       startRun,
+      isCurrentRun,
+      endRun,
+      bindGuide,
+      enterTutorial,
+      completeRun,
+      invalidateRun,
       reset,
     }),
     [
@@ -257,6 +314,12 @@ export function SessionProvider({
       expireSession,
       updateRun,
       startRun,
+      isCurrentRun,
+      endRun,
+      bindGuide,
+      enterTutorial,
+      completeRun,
+      invalidateRun,
       reset,
     ],
   );

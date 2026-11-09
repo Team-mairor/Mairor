@@ -8,7 +8,7 @@ import { KEY_REGIONS } from "./tracking-rules";
 import type { FaceFrame, RegionName } from "./types";
 import { MIN_IN_FRAME_RATIO } from "./visibility";
 
-/** 얼굴 등록 필수 촬영 조건 (CAMERA-005). 모달에 표시하는 순서와 같다 */
+/** 얼굴 등록 필수 촬영 조건. 모달에 표시하는 순서와 같다 */
 export const CHECKS = ["light", "distance", "front", "clear"] as const;
 export type CheckName = (typeof CHECKS)[number];
 export type FaceCheck = Record<CheckName, boolean>;
@@ -180,17 +180,7 @@ export function captureFace(video: HTMLVideoElement): Promise<Blob> {
   );
 }
 
-// ponytail: 업로드 API가 생기기 전까지 이번 실행의 등록 사진은 메모리에만 둔다 (새로 고침하면 사라진다).
-let registered: { runId: string; photo: Blob } | null = null;
-
-export function saveFacePhoto(runId: string, photo: Blob) {
-  registered = { runId, photo };
-}
-
-/** 이 실행에서 등록한 얼굴 사진. 다른 실행의 사진은 쓰지 않는다 */
-export function facePhoto(runId: string): Blob | null {
-  return registered?.runId === runId ? registered.photo : null;
-}
+export { clearFacePhoto, facePhoto, saveFacePhoto } from "./registered-photo";
 
 interface Box {
   minX: number;

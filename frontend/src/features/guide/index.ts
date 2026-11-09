@@ -26,8 +26,9 @@ export {
 } from "./guide-overlay";
 export { GuideRenderer, isStepVisible, type Projection } from "./renderer";
 export type * from "./types";
-export { useGuide, type GuideLoad } from "./use-guide";
+export { useGuide, useRunQuery, type GuideLoad } from "./use-guide";
 
 export { CropView, TutorialViewport, useTutorialCrop } from "./tutorial-viewport";
 export { TUTORIAL_TOP, TUTORIAL_BOTTOM } from "./tutorial-crop";
 export { TutorialCropEditor } from "./tutorial-crop-editor";
+export { RunGuideProvider } from "./run-guide-provider";

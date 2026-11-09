@@ -5,21 +5,21 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
+import { useRunQuery as useQuery } from "@/features/guide";
 import { snapshotSteps, useSession, type ReportSummary } from "@/features/session";
-import { useQuery } from "@/lib/hooks/use-query";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { GUIDE_STEPS, VIDEOS, REF_PRODUCTS } from "@/mocks/mock-data";
 
 type Save = "saving" | "saved" | "fail";
 
 /**
- * 11 완성 (GUIDE-010 · REPORT-001). 기록 저장 → 리포트 보기.
- * ?fail=1 은 저장 실패 상태 확인용. ponytail: 저장은 타이머. API-GUIDE-006이 붙으면 같은 실행 id로 재요청해 중복을 막는다.
+ * 11 완성. 기록 저장 → 리포트 보기.
+ * ?fail=1 은 저장 실패 상태 확인용. ponytail: 저장은 타이머. 서버 완료 기록이 붙으면 같은 실행 id로 재요청해 중복을 막는다.
  */
 export default function DonePage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, update, startRun } = useSession();
+  const { state, update, endRun } = useSession();
   const run = state.run;
   const picked = run.picked ?? VIDEOS[0];
   const n = GUIDE_STEPS.length;
@@ -40,6 +40,7 @@ export default function DonePage() {
     const d = new Date();
     update((prev) => {
       const r = prev.run;
+      if (r.id !== run.id || r.mode === "guide") return {};
       const id = r.id ? `rp-${r.id}` : fallbackId;
       const video = r.picked ?? VIDEOS[0];
       const items = snapshotSteps(REF_PRODUCTS, r, prev.pouch);
@@ -82,7 +83,7 @@ export default function DonePage() {
 
   const openReport = () => {
     if (save !== "saved") return;
-    startRun({});
+    endRun(run.id);
     router.replace(`/my/report?id=${reportId}`);
   };
 
@@ -176,7 +177,7 @@ export default function DonePage() {
         <button
           type="button"
           onClick={() => {
-            startRun({});
+            endRun(run.id);
             router.push("/home");
           }}
           aria-label="홈"

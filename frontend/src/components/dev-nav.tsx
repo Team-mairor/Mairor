@@ -6,9 +6,10 @@ import { useState } from "react";
 
 import { MirrorToggle } from "@/components/mirror-toggle";
 import { saveFacePhoto } from "@/features/face";
-import { useSession, type SessionState } from "@/features/session";
+import { createRun, useSession, type SessionState } from "@/features/session";
 import { cn } from "@/lib/utils";
 import { GUIDE_STEPS, VIDEOS } from "@/mocks/mock-data";
+import { MOCK_GUIDE_ID } from "@/mocks/mock-guide-api";
 
 type Item = {
   label: string;
@@ -20,14 +21,25 @@ type Item = {
 
 const ALL = GUIDE_STEPS.map((_, i) => i);
 const loggedIn = { loggedIn: true, email: "hello@mairor.app" };
-const run = (patch: Partial<SessionState["run"]>) => (s: SessionState) => ({
-  ...loggedIn,
-  run: { ...s.run, picked: s.run.picked ?? VIDEOS[0], ...patch },
-});
+const run =
+  (patch: Partial<SessionState["run"]>) =>
+  (s: SessionState): Pick<SessionState, "loggedIn" | "email" | "run"> => ({
+    ...loggedIn,
+    run: {
+      ...createRun({ kind: "sample", picked: s.run.picked ?? VIDEOS[0] }, crypto.randomUUID()),
+      phase: patch.captures?.length
+        ? "completed"
+        : patch.photoOk !== undefined
+          ? "tutorial"
+          : "preparing",
+      ...patch,
+    },
+  });
 /** 얼굴 등록을 마친 상태. 등록 완료는 사진이 있어야 인정하므로 빈 사진을 넣어 둔다 */
 const faceRegistered = (s: SessionState) => {
-  saveFacePhoto(s.run.id, new Blob());
-  return run({ replay: null, faceReg: true })(s);
+  const prepared = run({ replay: null, faceReg: true })(s);
+  saveFacePhoto(prepared.run.id, new Blob());
+  return prepared;
 };
 
 /** 프로토타입 왼쪽 '화면 바로가기' 목록. 개발 모드에서만 보인다 */
@@ -163,6 +175,40 @@ const ITEMS: Item[] = [
     prep: () => ({
       ...loggedIn,
       pendingGuide: { title: VIDEOS[0].title, ytid: VIDEOS[0].ytid, status: "pending" },
+    }),
+  },
+  {
+    label: "홈 · 승인된 API 가이드",
+    sub: "얼굴 등록부터 같은 가이드 사용 (API 목업 필요)",
+    href: "/home",
+    prep: () => ({
+      ...loggedIn,
+      pendingGuide: {
+        title: "모의 가이드",
+        ytid: VIDEOS[0].ytid,
+        status: "approved",
+        guideId: MOCK_GUIDE_ID,
+      },
+    }),
+  },
+  {
+    label: "홈 · API 가이드 다시 하기",
+    sub: "리포트 guideId로 새 실행 (API 목업 필요)",
+    href: "/home",
+    prep: () => ({
+      ...loggedIn,
+      reports: [
+        {
+          id: "guide-report-demo",
+          title: "모의 가이드",
+          date: "11월 7일",
+          steps: 13,
+          subs: 0,
+          guideId: MOCK_GUIDE_ID,
+          guideVersion: 1,
+          noPhoto: true,
+        },
+      ],
     }),
   },
   {

@@ -11,10 +11,9 @@ import { FieldError } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { useLogout } from "@/features/auth";
 import { PouchBoard, usePouchSync } from "@/features/pouch";
-import { displayName, useSession } from "@/features/session";
+import { displayName, isGuideId, runHref, useSession } from "@/features/session";
 import { videoThumb } from "@/features/video";
 import { useQuery } from "@/lib/hooks/use-query";
-import { VIDEOS } from "@/mocks/mock-data";
 
 const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 const MONTHS = [
@@ -34,11 +33,11 @@ const MONTHS = [
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
 
-/** 02 홈 (REPORT-002 · REPORT-005 · POUCH-004 · VIDEO-003 검수 카드) */
+/** 02 홈. 최근 리포트·다시 하기·파우치·검수 카드 */
 export default function HomePage() {
   const router = useRouter();
-  const { state, sessionChecked, update, startRun } = useSession();
-  // 로그인했으면 파우치 보드를 서버 목록으로 맞춘다 (API-POUCH-003)
+  const { state, sessionChecked, startRun } = useSession();
+  // 로그인했으면 파우치 보드를 서버 목록으로 맞춘다
   const sync = usePouchSync();
   const [account, setAccount] = useState(false);
   const { logout, pending: logoutPending, error: logoutError } = useLogout();
@@ -55,19 +54,23 @@ export default function HomePage() {
   const last = reports[0];
   const pg = empty ? null : state.pendingGuide;
   const approved = pg?.status === "approved";
+  // 승인됐어도 guideId가 올바르지 않으면 시작하지 않고 다시 확인을 안내한다
+  const ready = approved && isGuideId(pg?.guideId);
+  const pendingText = ready
+    ? "검수 완료 · 지금 따라 할 수 있어요"
+    : approved
+      ? "가이드 정보를 다시 확인해 주세요"
+      : "검수 중 · 끝나면 여기서 바로 시작해요";
 
-  /** 다시 따라 하기: 분석 없이 준비 단계(얼굴 등록 → 파우치 확인)부터 */
   const replayLast = () => {
-    // 기록에 남은 영상으로 다시 시작한다. 샘플 기록처럼 영상 id가 없으면 첫 영상
-    const v = VIDEOS.find((x) => x.id === last?.videoId) ?? VIDEOS[0];
-    startRun({ picked: v, replay: "report" });
-    router.push("/loading");
+    if (!isGuideId(last?.guideId)) return router.push("/select");
+    startRun({ kind: "guide", guideId: last.guideId, replay: "report" });
+    router.push(runHref("/loading", last.guideId));
   };
   const startPending = () => {
-    const v = VIDEOS.find((x) => x.ytid === pg?.ytid) ?? VIDEOS[0];
-    startRun({ picked: v, replay: "guide" });
-    update({ pendingGuide: null });
-    router.push("/loading");
+    if (pg?.status !== "approved" || !isGuideId(pg.guideId)) return router.push("/select");
+    startRun({ kind: "guide", guideId: pg.guideId, replay: "guide" });
+    router.push(runHref("/loading", pg.guideId));
   };
 
   return (
@@ -186,7 +189,7 @@ export default function HomePage() {
                     {last.date} 완료 · {last.steps}단계
                   </span>
                   <PillButton size="md" className="mt-1 h-12 text-[18px]" onClick={replayLast}>
-                    다시 하기
+                    {isGuideId(last.guideId) ? "다시 하기" : "영상 다시 선택"}
                   </PillButton>
                 </div>
               </div>
@@ -224,15 +227,11 @@ export default function HomePage() {
               <span className="truncate font-display text-[20px] leading-[1.3] text-ink">
                 {pg.title}
               </span>
-              <span className="truncate text-[16px] text-mute">
-                {approved
-                  ? "검수 완료 · 지금 따라 할 수 있어요"
-                  : "검수 중 · 끝나면 여기서 바로 시작해요"}
-              </span>
+              <span className="truncate text-[16px] text-mute">{pendingText}</span>
             </div>
             {approved && (
               <PillButton size="md" className="h-14 shrink-0 text-[18px]" onClick={startPending}>
-                따라 하기
+                {ready ? "따라 하기" : "다시 확인"}
               </PillButton>
             )}
           </div>

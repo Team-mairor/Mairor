@@ -69,5 +69,8 @@ export interface GuideDto {
  * 응답은 검사하지 않은 채 돌려주므로 toGuideModel로 확인해서 쓴다.
  */
 export function fetchGuide(guideId: string, signal?: AbortSignal) {
-  return api.get<unknown>(`/v1/guides/${encodeURIComponent(guideId)}`, { signal });
+  return api.get<unknown>(`/v1/guides/${encodeURIComponent(guideId)}`, {
+    signal,
+    cache: "no-store",
+  });
 }
