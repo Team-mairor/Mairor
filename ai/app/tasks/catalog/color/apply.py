@@ -10,6 +10,9 @@
   - 그 밖의 UNVERIFIED는 색을 만들지 않는다. 여러 호수가 같은 사진을 쓰면 칸 하나가 모든 호수에
     똑같이 붙어 버리기 때문이다(실제 투쿨포스쿨 상품에서 호수 4개가 같은 색으로 나왔다).
 
+  - 위 사진들로 색을 못 얻은 호수는 상품 상세 설명 이미지의 컬러 차트에서 호수 번호가 같은 칸을
+    찾아 LABEL_IN_IMAGE로 잇는다(detail/). 모델이 있을 때만 하고, 근거가 약하면 잇지 않는다.
+
 근거(evidence)는 raw["evidence"]에, 사진 종류 판정은 raw["vision"]에 남긴다.
 모델 호출은 사진 하나당 한 번이다(분석 결과는 주소별로 남긴다). 받기는 디코드한 사진을 최근 몇 장만
 들고 있어서, 캐시에서 밀려난 사진을 다시 쓰면 다시 받을 수 있다.
@@ -23,14 +26,9 @@ from typing import Any
 from PIL import Image
 
 from app.clients.llm import Llm, LlmError
+from app.tasks.catalog.color.cell_reading import cell_box, read_cell
 from app.tasks.catalog.color.images import ImageUnusableError, LoadedImage, load_image
-from app.tasks.catalog.color.pixels import (
-    METHOD,
-    METHOD_VERSION,
-    ColorReading,
-    is_neutral_light,
-    read_color,
-)
+from app.tasks.catalog.color.pixels import METHOD, METHOD_VERSION, ColorReading, read_color
 from app.tasks.catalog.color.vision import Analysis, Cell, analyze_image
 from app.tasks.catalog.contract import (
     BBox,
@@ -46,6 +44,9 @@ from app.tasks.catalog.contract import (
     SlotOrderBasis,
     evidence_key,
 )
+from app.tasks.catalog.detail.images import DetailImage
+from app.tasks.catalog.detail.link import ChartMatch, match_shades
+from app.tasks.catalog.detail.scan import ImageScan, scan_detail_images, scan_to_json
 from app.tasks.catalog.http import PoliteClient
 from app.tasks.catalog.link.shade_link import ShadeImage
 from app.tasks.catalog.text import compact_key, tokens
@@ -54,11 +55,8 @@ MAX_IMAGES = 60
 MAX_DECODED_IMAGES = 4
 MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
-CELL_INSET = 0.15
-MIN_CELL_HOMOGENEITY = 0.45
-SKIN_QUALITY_CAP = 0.4
-NEUTRAL_QUALITY_CAP = 0.3
 VISION_METHOD = "vision_box_pixel_median_lab"
+CHART_METHOD = "detail_chart_box_pixel_median_lab"
 
 
 @dataclass
@@ -81,17 +79,6 @@ class _Context:
     evidence: list[EvidenceRecord] = field(default_factory=list)
     vision: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-
-
-def _cell_box(cell: Cell, image: Image.Image) -> BBox:
-    """모델이 잡은 칸의 안쪽만 읽도록 가장자리를 줄인다. 값은 원본 사진의 픽셀이다."""
-    width, height = image.size
-    return BBox(
-        x=(cell.x + cell.width * CELL_INSET) * width,
-        y=(cell.y + cell.height * CELL_INSET) * height,
-        width=max(1.0, cell.width * (1 - 2 * CELL_INSET) * width),
-        height=max(1.0, cell.height * (1 - 2 * CELL_INSET) * height),
-    )
 
 
 def _match_label(shade_name: str, cells: tuple[Cell, ...]) -> Cell | None:
@@ -134,15 +121,8 @@ async def _analysis(ctx: _Context, loaded: LoadedImage) -> Analysis | None:
 def _read_cells(cells: tuple[Cell, ...], image: Image.Image, kind: ImageKind) -> list[_Slot]:
     slots: list[_Slot] = []
     for index, cell in enumerate(cells, start=1):
-        box = _cell_box(cell, image)
-        reading = read_color(image, box)
-        if reading is None or reading.scores["homogeneity"] < MIN_CELL_HOMOGENEITY:
-            reading = None
-        elif kind is ImageKind.SKIN_SWATCH and reading.quality > SKIN_QUALITY_CAP:
-            reading = ColorReading(reading.hex, SKIN_QUALITY_CAP, reading.scores)
-        elif is_neutral_light(reading.hex) and reading.quality > NEUTRAL_QUALITY_CAP:
-            reading = ColorReading(reading.hex, NEUTRAL_QUALITY_CAP, reading.scores)
-        slots.append(_Slot(index, reading, cell.label, box, kind))
+        box = cell_box(cell, image.size)
+        slots.append(_Slot(index, read_cell(image, box, kind), cell.label, box, kind))
     return slots
 
 
@@ -283,6 +263,46 @@ async def _color_shade(
     return _finish(ctx, product, shade, loaded, link, slots, link.link, METHOD)
 
 
+def _chart_shade(
+    ctx: _Context, product: CollectedProduct, shade: Shade, match: ChartMatch
+) -> Shade:
+    """상세 이미지 차트에서 번호로 이은 칸 하나를 호수의 색 칸으로 붙인다."""
+    cell, reading = match.cell, match.cell.reading
+    if reading is None:
+        return shade
+    chip = cell.kind is ImageKind.SWATCH_CHIP
+    key = evidence_key(product.source_product_id, shade.source_option_id, 1)
+    ctx.evidence.append(
+        EvidenceRecord(
+            evidence_key=key,
+            image_url=match.scan.url,
+            image_hash=match.scan.sha256,
+            image_kind=cell.kind,
+            bbox=cell.box,
+            method=CHART_METHOD,
+            method_version=METHOD_VERSION,
+            scores=reading.scores,
+        )
+    )
+    color = Color(
+        sort_order=1,
+        name=cell.label,
+        name_source=NameSource.IMAGE_PRINT if cell.label else NameSource.NONE,
+        hex=reading.hex,
+        color_source=ColorSource.SWATCH_CHIP if chip else ColorSource.PRODUCT_PHOTO,
+        shade_link=ShadeLink.LABEL_IN_IMAGE,
+        color_quality=reading.quality,
+        evidence_key=key,
+    )
+    return shade.model_copy(
+        update={
+            "color_status": ColorStatus.EXTRACTED,
+            "slot_order_basis": SlotOrderBasis.GRID,
+            "colors": [color],
+        }
+    )
+
+
 async def add_colors(
     client: PoliteClient,
     product: CollectedProduct,
@@ -301,11 +321,40 @@ async def add_colors(
         await _color_shade(ctx, product, shade, links.get(shade.source_option_id))
         for shade in product.shades
     ]
+    detail_charts: list[dict[str, Any]] = []
+    detail_links: list[dict[str, Any]] = []
+    if llm is not None and any(shade.color_status is not ColorStatus.EXTRACTED for shade in shades):
+        detail = [
+            DetailImage(entry["url"], entry.get("skip")) for entry in raw.get("detailImages", [])
+        ]
+        wanted = {s.source_option_id for s in shades if s.color_status is not ColorStatus.EXTRACTED}
+
+        def all_linked(scans: list[ImageScan]) -> bool:
+            return wanted <= set(match_shades(shades, scans, wanted=wanted).matches)
+
+        scans, scan_warnings = await scan_detail_images(client, llm, detail, is_done=all_linked)
+        ctx.warnings.extend(scan_warnings)
+        detail_charts = [scan_to_json(scan) for scan in scans]
+        matched = match_shades(shades, scans, wanted=wanted)
+        shades = [
+            _chart_shade(ctx, product, shade, matched.matches[shade.source_option_id])
+            if shade.source_option_id in matched.matches
+            else shade
+            for shade in shades
+        ]
+        ctx.warnings.extend(f"{why}:{option}" for option, why in matched.reasons.items())
+        detail_links = [
+            {"optionId": option, "label": match.cell.label, "imageUrl": match.scan.url}
+            for option, match in matched.matches.items()
+        ]
     updated = product.model_copy(update={"shades": shades, "warnings": ctx.warnings[:MAX_WARNINGS]})
     result = {
         **raw,
         "evidence": [item.model_dump(mode="json", by_alias=True) for item in ctx.evidence],
     }
+    if detail_charts:
+        result["detailCharts"] = detail_charts
+        result["detailLinks"] = detail_links
     if ctx.vision:
         result["vision"] = ctx.vision
     return CollectedProduct.model_validate(updated.model_dump()), result

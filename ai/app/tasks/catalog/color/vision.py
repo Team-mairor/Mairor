@@ -129,11 +129,11 @@ def clean_cells(cells: list[Cell]) -> tuple[list[Cell], int]:
     return order_cells(kept), dropped
 
 
-async def analyze_image(llm: Llm, image: Image.Image) -> Analysis:
+async def analyze_image(llm: Llm, image: Image.Image, *, system: str = VISION_SYSTEM) -> Analysis:
     """사진을 모델에 보여 종류와 칸 위치를 받는다. LlmError는 그대로 올린다."""
     prepared = prepare_for_model(image)
     result = await llm.generate(
-        system=VISION_SYSTEM,
+        system=system,
         text="이 사진을 분석해 줘.",
         images=[prepared],
         output=ImageAnalysis,
