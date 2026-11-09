@@ -108,6 +108,11 @@ function buildUrl(path: string, query?: RequestOptions["query"]) {
   return `${BASE_URL}${path}${search ? `?${search}` : ""}`;
 }
 
+/** fetch가 아닌 곳(EventSource 등)에서 쓸 API 주소. path는 /api 뒤의 경로다 */
+export function apiUrl(path: string) {
+  return buildUrl(path.startsWith("/") ? path : `/${path}`);
+}
+
 function isErrorBody(value: unknown): value is ApiErrorBody {
   if (typeof value !== "object" || value === null) return false;
   const { code, message, details } = value as Record<string, unknown>;

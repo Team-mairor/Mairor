@@ -104,3 +104,45 @@ export interface PasswordResetVerified {
   resetToken: string;
   expiresAt: string;
 }
+
+/** 분석 작업의 지금 단계 안에서 센 수 (StageProgress). 전체 %가 아니다. 지금은 BUILDING_GUIDE에서만 온다 */
+export interface StageProgress {
+  item: "FRAMES" | "LANDMARKS" | "AREA" | "EXPLANATION";
+  done: number;
+  total: number;
+}
+
+/** 분석 작업 상태 (AnalysisJobStatus). 상태 조회(GET /v1/users/me/analysis-jobs/{jobId})와 SSE status 이벤트가 같다 */
+export interface AnalysisJobStatus {
+  jobId: string;
+  videoId: string;
+  status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+  /** FAILED면 멈춘 단계 */
+  progressStage:
+    | "QUEUED"
+    | "LOADING_VIDEO"
+    | "SEGMENTING"
+    | "RECOGNIZING_PRODUCTS"
+    | "EXTRACTING_STEPS"
+    | "BUILDING_GUIDE"
+    | "DONE";
+  /** 지금은 COMPLETED일 때만 100 */
+  progressPercent: number | null;
+  /** 지금은 늘 null */
+  estimatedRemainingSeconds: number | null;
+  stageProgress: StageProgress | null;
+  retryable: boolean;
+  reviewStatus: "NOT_READY" | "PENDING" | "APPROVED" | "REJECTED";
+  guideAvailable: boolean;
+  guideId: string | null;
+  /** 제품 인식이 연결되기 전에는 늘 빈 목록 */
+  foundProducts: unknown[];
+  foundProductCount: number;
+  totalProductCount: number | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  /** 폴링할 때 다음 조회까지의 초. null이면 더 바뀌지 않는다 */
+  pollAfterSeconds: number | null;
+  createdAt: string;
+  completedAt: string | null;
+}

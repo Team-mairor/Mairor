@@ -25,7 +25,8 @@ export function ScanPreview({
   rows,
   foundCount,
 }: {
-  ytid: string;
+  /** 모르면 null. 썸네일 없이 어두운 바탕만 보여 준다 */
+  ytid: string | null;
   title: string;
   /** 왼쪽 아래 상태 글씨 */
   status: string;
@@ -40,10 +41,12 @@ export function ScanPreview({
       data-dark
       className="relative aspect-video w-full shrink-0 overflow-hidden rounded-3xl bg-ink"
     >
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url(${videoThumb(ytid)})` }}
-      />
+      {ytid && (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${videoThumb(ytid)})` }}
+        />
+      )}
       <div className="absolute inset-0 bg-night/20" />
       <div className="absolute inset-7">
         <span className="absolute top-0 left-0 size-[34px] rounded-tl-[10px] border-t-2 border-l-2 border-white" />

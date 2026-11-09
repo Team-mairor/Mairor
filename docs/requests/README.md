@@ -25,8 +25,9 @@
 | [가이드 작업 결과·진행 받기와 분석 상태 SSE](2026-11-03-hyeongjun-jungyoon-guide-job-progress-sse.md) | 2026-11-03 | 박형준 → 김정윤 | 진행 중 (콜백·AI 요청 김정윤 !85, 진행 알림·003·SSE 김서연 S15P31A306-296) |
 | [가이드 작업 진행 알림·SSE 회신과 진행 알림 보완 제안](2026-11-04-seoyeon-hyeongjun-guide-job-progress-reply.md) | 2026-11-04 | 김서연 → 박형준 | 요청 |
 | [분석 상태 SSE 머지 전 확인과 AI 가이드 요청(!85) 후속 확인](2026-11-04-seoyeon-jungyoon-analysis-job-followups.md) | 2026-11-04 | 김서연 → 김정윤 | 요청 |
-| [분석 로딩 화면을 분석 상태 SSE 로 연결](2026-11-04-seoyeon-juyeon-analysis-status-sse.md) | 2026-11-04 | 김서연 → 최주연 | 요청 |
 | [화장품 소분류(종류) 추가 논의](2026-11-04-seoyeon-juyeon-missing-product-types.md) | 2026-11-04 | 김서연 → 최주연·팀 | 논의 대기 |
 | [눈 화장 단계에 바른 자리(eyeZone) 보내기](2026-11-05-hyeonsoo-jungyoon-eye-zone.md) | 2026-11-05 | 김현수 → 김정윤 | 요청 |
 | [아이라인 꼬리 없는 윗선·아래 선 기본 가이드 추가](2026-11-06-hyeonsoo-seoyun-eyeliner-waterline-under-template.md) | 2026-11-06 | 김현수 → 한서윤 | 요청 |
 | [찾은 영역과 기본 가이드가 섞인 단계도 둘 다 그리기](2026-11-06-hyeonsoo-seoyun-draw-extracted-and-template.md) | 2026-11-06 | 김현수 → 한서윤 | 요청 |
+| [분석 재시도 API와 로딩 화면 확인용 작업](2026-11-06-juyeon-seoyeon-analysis-retry-and-test-job.md) | 2026-11-06 | 최주연 → 김서연 | 요청 |
+| [회원 분석 요청 API(API-VIDEO-002)와 영상 파일 확보 방식](2026-11-06-juyeon-jungyoon-analysis-request-api.md) | 2026-11-06 | 최주연 → 김정윤 | 요청 |

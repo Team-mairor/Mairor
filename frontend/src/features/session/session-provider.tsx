@@ -33,6 +33,8 @@ export interface RunState {
   picked: VideoItem | null;
   /** 분석 없이 시작한 경로 */
   replay: "guide" | "report" | null;
+  /** 이 실행이 요청한 분석 작업. 로딩 화면은 주소의 jobId와 같을 때만 picked를 쓴다 */
+  jobId: string | null;
   /** 얼굴 등록 완료 */
   faceReg: boolean;
   /** 레퍼런스 제품 id → 선택. 없으면 기본 매칭(보유 > 추천 대체) */
@@ -66,6 +68,7 @@ export const EMPTY_RUN: RunState = {
   id: "",
   picked: null,
   replay: null,
+  jobId: null,
   faceReg: false,
   choice: {},
   subOn: {},
