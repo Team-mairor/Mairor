@@ -1,0 +1,169 @@
+# 처음 넣을 사이트 목록(정책 문서 2-5 조사표). 표에 없는 브랜드도 공식 홈을 찾아 수집할 수 있다.
+# platform: CAFE24 SHOPIFY WOOCOMMERCE MAKESHOP GODOMALL YOUNGCART SITECORE CUSTOM UNKNOWN
+# technical: 구조를 확인했는가. OK PARTIAL(렌더링·간격 조절 필요) UNKNOWN NO(공식 홈 없음·봇 차단)
+# policy: 수집해도 되는지 확인했는가. UNCONFIRMED(기본) TERMS_CHECKED PERMISSION(허락 기록 있음)
+# enabled: 운영 수집에 쓰는가. policy 가 TERMS_CHECKED 또는 PERMISSION 이고 technical 이 OK 또는 PARTIAL 일 때만 true.
+# robots_exempt: robots.txt 예외. policy 가 PERMISSION 일 때만 true. 수집 도구가 읽어 이 도메인의 robots 검사를
+#   건너뛴다(설정 CATALOG_ROBOTS_EXEMPT_HOSTS 와 합쳐진다).
+# search_path: 사이트 검색 경로 템플릿({query}). 비우면 플랫폼 기본 경로를 쓰고, 기본이 없으면 검색을 건너뛴다.
+# product_pattern: 상품 상세 주소의 경로 정규식(캡처 그룹 하나 = 상품 번호). 플랫폼 기본과 다른 사이트만 적는다.
+# category_pattern: 카테고리 목록 주소의 경로 정규식. 플랫폼 기본과 다른 사이트만 적는다.
+# 지금 모든 사이트는 policy UNCONFIRMED, enabled false 다.
+- brand: 롬앤
+  aliases: [romand, 롬앤]
+  domain: romand.co.kr
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 투쿨포스쿨
+  aliases: [too cool for school, toocoolforschool, 투쿨포스쿨]
+  domain: toocoolforschool.com
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 에뛰드
+  aliases: [etude, etude house, 에뛰드하우스, 에뛰드]
+  domain: www.etude.com
+  language: ko
+  platform: WOOCOMMERCE
+  technical: OK
+  product_pattern: '^/shop/category/[^/]+/([^/]+)/?$'
+  category_pattern: '^/product/category/.+'
+- brand: 힌스
+  aliases: [hince, 힌스]
+  domain: hince.co.kr
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 네이밍
+  aliases: [naming, 네이밍]
+  domain: naming.co.kr
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 하트퍼센트
+  aliases: [heart percent, heartpercent, 하트퍼센트]
+  domain: heartpercent.co.kr
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 넘버즈인
+  aliases: [numbuzin, 넘버즈인]
+  domain: numbuzin.com
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 디어에이
+  aliases: [dear.a, deara, 디어에이]
+  domain: deara.co.kr
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 페리페라
+  aliases: [peripera, 페리페라]
+  domain: clubclio.co.kr
+  language: ko
+  platform: CUSTOM
+  technical: OK
+- brand: 클리오
+  aliases: [clio, 클리오]
+  domain: clubclio.co.kr
+  language: ko
+  platform: CUSTOM
+  technical: OK
+- brand: 바닐라코
+  aliases: [banila co, banilaco, 바닐라코]
+  domain: banila.com
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 퓌
+  aliases: [fwee, 퓌]
+  domain: fwee.kr
+  language: ko
+  platform: CAFE24
+  technical: OK
+- brand: 디어달리아
+  aliases: [dear dahlia, deardahlia, 디어달리아]
+  domain: deardahlia.com
+  language: en
+  platform: SHOPIFY
+  technical: OK
+- brand: 에스쁘아
+  aliases: [espoir, 에스쁘아]
+  domain: espoir.com
+  language: ko
+  platform: CUSTOM
+  technical: PARTIAL
+- brand: 3CE
+  aliases: [3ce, 3ce cosmetics]
+  domain: 3cecosmetics.com
+  language: ko
+  platform: SITECORE
+  technical: OK
+- brand: 더샘
+  aliases: [the saem, thesaem, 더샘]
+  domain: thesaemcosmetic.com
+  language: ko
+  platform: YOUNGCART
+  technical: OK
+- brand: 정샘물
+  aliases: [jung saem mool, jungsaemmool, jsm, 정샘물]
+  domain: jsmbeauty.com
+  language: ko
+  platform: MAKESHOP
+  technical: OK
+- brand: 오프라
+  aliases: [ofra, ofra cosmetics, 오프라]
+  domain: ofracosmetics.com
+  language: en
+  platform: SHOPIFY
+  technical: PARTIAL
+- brand: VDL
+  aliases: [vdl]
+  domain: vdlcosmetics.com
+  language: ko
+  platform: UNKNOWN
+  technical: UNKNOWN
+- brand: 삐아
+  aliases: [bbia, 삐아]
+  domain: bbia.co.kr
+  language: ko
+  platform: GODOMALL
+  technical: UNKNOWN
+- brand: 데이지크
+  aliases: [dasique, 데이지크]
+  domain: dasique.co.kr
+  language: ko
+  platform: CAFE24
+  technical: UNKNOWN
+- brand: 러브라이너
+  aliases: [loveliner, 러브라이너]
+  domain: loveliner.jp
+  language: ja
+  platform: UNKNOWN
+  technical: UNKNOWN
+- brand: 말루윌즈
+  aliases: [maluwilz, 말루윌즈]
+  domain: maluwilz.de
+  language: de
+  platform: UNKNOWN
+  technical: UNKNOWN
+- brand: 베네피트
+  aliases: [benefit, benefit cosmetics, 베네피트]
+  domain: benefitcosmetics.com
+  language: en
+  platform: UNKNOWN
+  technical: "NO"
+- brand: 컬러그램
+  aliases: [colourgram, colorgram, 컬러그램]
+  domain: null
+  language: ko
+  platform: UNKNOWN
+  technical: "NO"
+- brand: 웨이크메이크
+  aliases: [wakemake, 웨이크메이크]
+  domain: null
+  language: ko
+  platform: UNKNOWN
+  technical: "NO"

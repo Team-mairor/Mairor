@@ -285,9 +285,10 @@ API-POUCH-001 · GET /api/v1/products
 - <b>검색 계약</b>: 정규화한 brand·name과 type이 정확히 같은 제품을 0\~1건 제공하고, 0건은 200 \{items:\[\]\}(404 아님)이며 화면은 직접 입력으로 전환한다. 위 "최대5개(정확 일치 우선)"에서 부분 일치를 빼고 줄인 결정이다(검색 결과 목록 UI 없음, (type, brand, name) 유니크). 목록 응답 형태는 유지하며, 다건 검색을 도입하면 FE 처리와 계약을 별도로 조정한다.
 - <b>오류 필드</b>: 형식 오류는 필드마다 details에 모두 담는다. 코드 검사는 카테고리가 없으면 field=category(종류가 있어도), 종류가 없거나 다른 카테고리 소속이면 field=type.
 - <b>공백·길이</b>: 빈 값 판정과 앞뒤 공백 제거는 PouchWrite 정규화와 같은 유니코드 공백 기준(NBSP·전각 공백 포함)이다. 길이는 앞뒤 공백을 지운 원문을 NFC 전 String.length()로 센다(카탈로그 엔티티와 같은 단위). <b>name 상한은 200자</b>(카탈로그 저장 상한과 같게, 기존 100자), brand는 100자.
-- <b>응답</b>: brand·name은 카탈로그 원문. shades는 sort\_order, 이름 순. color.source는 항상 CATALOG(내부 출처값 비노출), 색을 모르면 color=null.
+- <b>응답</b>: brand·name은 카탈로그 원문. shades는 sort\_order, 이름 순. color.source는 항상 CATALOG(내부 출처값 비노출), 색을 모르면 color=null. color=null은 수집하지 못했거나 근거가 약해 서버가 쓰지 않은 색이다(틀린 색보다 없는 색을 택한다).
 - <b>색 칸</b>: 각 호수는 `colors:ShadeColor[]`(칸마다 colorId·name·sortOrder·color)를 함께 준다. 칸은 sortOrder 순. 서버는 사람의 승인을 기다리지 않고 자동 판정(연결 근거·품질 기준)으로 색을 채우며, 못 넘으면 그 칸의 color=null이다. 호수 선택이 없는 카테고리는 shades=\[\].
 - <b>구현</b>: `colors`는 칸 순서대로 오고 칸이 아직 없는 호수는 빈 목록이다(옛 대표 색만 있는 호수는 이관 SQL로 칸을 만든 뒤 나온다). `color`는 자동 승인·운영 승인 색일 때만 채우고, 품질 미달·거절 색은 값이 있어도 null이다. 칸의 `colorId`는 칸을 지우고 다시 만들지 않는 한 바뀌지 않는다.
+- <b>색 칸 채움</b>: 칸은 브랜드 공식 홈 수집·적재가 채운다(S15P31A306-293·295·383). 적재는 같은 데이터를 다시 보내도 칸을 중복으로 만들지 않고, 서비스에 보이는 색(`color`)이 바뀔 때만 변경 이벤트를 낸다. 이 API의 색 칸은 위 설명대로 읽고, 파우치 등록·조회가 읽는 색을 칸으로 바꾸는 일과 `pouchVersion`·`referenceVersion` 갱신은 후속이다(S15P31A306-384).
 - <b>공백 무시 비교</b>: 정확 일치가 없으면 정규화한 이름에서 공백을 모두 뺀 값으로 한 번 더 찾는다(FE `sameName`과 같은 기준). 이렇게 찾은 제품이 **둘 이상이면 0건**(`items=[]`)으로 응답해 0~1건 계약을 유지하고, 어느 쪽을 고를지는 서버가 추측하지 않는다. 정확 일치 결과는 지금과 같다.
 </toggle>
 
@@ -921,7 +922,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | PasswordResetVerification <b>v2</b> | resetToken:string, expiresAt:datetime. |
 | ColorInfo | colorSpace:'sRGB', hex:string(#RRGGBB), source:string, estimated:boolean. 보유 제품 source=CATALOG\|USER\_INPUT, 목표 발색은 VIDEO\_ESTIMATE\|CATALOG\|MANUAL\_REVIEW. 색상이 없으면 객체 자체를 null. |
 | Shade | shadeId:string, name:string, colors:ShadeColor\[\]. 기존 `color:ColorInfo\|null` 한 칸을 `colors`(한 호수 안의 색을 모두 담는 목록)로 바꾼다. 듀오·팔레트도 대표색 하나로 줄이지 않으며 단색 호수는 칸 1개다. FE는 아직 목 데이터라 호환 칸을 따로 두지 않는다. |
-| ShadeColor <b>신규</b> | colorId:string(칸의 영구 ID, 칸 순서가 바뀌어도 그대로), name:string\|null(칸 이름, 모르면 null), sortOrder:integer(표시 순서), color:ColorInfo\|null. 칸은 순서 번호가 아니라 `colorId`로 가리킨다. `color`는 서버가 자동 판정으로 쓸 수 있다고 본 색만 채우고(근거 부족·품질 미달이면 null), ColorInfo.source는 항상 CATALOG, estimated는 저장값(사진·추정에서 얻은 색은 true). |
+| ShadeColor <b>신규</b> | colorId:string(칸의 영구 ID, 칸 순서가 바뀌어도 그대로), name:string\|null(칸 이름, 모르면 null), sortOrder:integer(표시 순서), color:ColorInfo\|null. 칸은 순서 번호가 아니라 `colorId`로 가리킨다. `color`는 서버가 자동 판정으로 쓸 수 있다고 본 색만 채우고(근거 부족·품질 미달이면 null), ColorInfo.source는 항상 CATALOG, estimated는 저장값(사진·추정에서 얻은 색은 true). 색은 브랜드 공식 홈에서 수집하며, 수집 방식·판정 기준은 기능명세와 내부 수집 계약(`shared/catalog-import`)에 있고 이 응답에는 노출하지 않는다. |
 | Product <b>v2</b> | productId:string, brand:string, name:string, category:string, type:string, shades:Shade\[\]. 호수 선택이 없는 카테고리는 shades=\[\]. type은 카탈로그 제품마다 필수(기존 string\|null). |
 | ProductCategory <b>v2</b> | code:string, label:string, matchable:boolean, shadeSelectable:boolean, types:ProductType\[\], compatibleParts:string\[\]. ProductType = code:string, label:string. 9개 카테고리·종류 목록은 기능명세 POUCH-004 기준. |
 | PouchItem <b>v2</b> | pouchItemId:string, registrationMode:CATALOG\|MANUAL, productId:string\|null, shadeId:string\|null, brand:string, name:string, category:string, type:string, shadeName:string\|null, color:ColorInfo\|null, colorSource:CATALOG\|USER\_INPUT\|NONE, createdAt:datetime, updatedAt:datetime. MANUAL의 productId·shadeId는 null. <b>로컬 수정 -211</b>: 표시값·색상은 개인 저장 복사본이며 카탈로그를 실시간 참조하지 않는다(-292의 `colors[]`만 예외). brand/name/shadeName은 앞뒤 유니코드 공백 제거 후 최대 100/200/100자, shadeName 공백은 null. 색이 없으면 color=null·colorSource=NONE. <b>로컬 수정 -292</b>: `colors:ShadeColor\[\]`를 더한다. 역할을 나눈다: `colors[]`는 카탈로그 칸과 그 색(CATALOG 항목은 shadeId로 읽은 칸 목록, 단색은 1칸, MANUAL은 \[\]), `color`는 **실제로 쓰는 색**, `colorSource`는 그 색의 출처다. 사용자 입력 색이 있으면(MANUAL, 또는 자동 연결된 단색·팔레트 항목) `color`=사용자 색·`colorSource=USER_INPUT`이고 특정 칸에 붙이지 않는다. 사용자 색이 없으면 단색은 `color`=그 칸의 색·`CATALOG`, 칸이 2개 이상인 팔레트는 `color=null`·`colorSource=NONE`이며 칸별 색은 `colors`에 있다. 대체 후보 제외는 `color`도 없고 `colors[]`에 사용 가능한 칸도 없을 때다. 매칭·실행의 기준색은 단색 항목이면 `color`(사용자 색 우선), 팔레트면 서버가 정한 칸의 색이다. |
@@ -978,9 +979,9 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
 | 얼굴 등록 | 촬영 조건 서버 재검증 여부, 미연결 등록 정리 시점, 저장 위치·암호화·보관 기간, 정면·좌·우 3장 확장(P1)(확인 필요 7) |
-| 제품·색상·추천 | DB 범위·출처·대표 색상, 직접 입력 색상 확보, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |
+| 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, 파우치 등록 색을 호수 색 칸에서 읽도록 전환, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |
 | 실행·준비 | 분석/얼굴 추적 준비 시점 차이에 따른 별도 준비 화면·대기 상한(확인 필요 7), 온보딩·튜토리얼 안내를 계정 단위로 바꿀지(확인 필요 9) |
 | 게이지(P0) | 기준 색·진하기, 피부색/조명 영향(등록 이미지 보정), 부위별 방식·표시 단위·임계값, 데이터 표현·기기/서버 분담(확인 필요 8) |
 | 사진·리포트 | 단계 사진 보관 기간(개인정보 처리방침), 미완료 임시 데이터 정리 시점·삭제 완료 기준 |
 | 영상 입력 화면 | v11 '내 가이드 목록 · 이어서 하기'는 이어 하기 미제공 정책(GUIDE-011)과 충돌 → 삭제 또는 '다시 시작'으로 의미 변경 전까지 API 미정의 |
-| 구현·내부 운영 | 표준 얼굴 좌표 버전·랜드마크 매핑, ERD 키·배포 주소·OpenAPI, 카탈로그 구축·검수·만료 탐지·삭제 재시도 권한/절차 |
+| 구현·내부 운영 | 표준 얼굴 좌표 버전·랜드마크 매핑, ERD 키·배포 주소·OpenAPI, 카탈로그 초기 적재 운영·만료 탐지·삭제 재시도 권한/절차(수집·적재 내부 API는 구현됨, FE에 노출하지 않음) |

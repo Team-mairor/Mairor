@@ -120,6 +120,30 @@ def test_settings_choose_model_effort_and_max_tokens():
     assert body["max_tokens"] == 2000
 
 
+def test_model_and_effort_can_be_chosen_per_client():
+    seen: list[httpx2.Request] = []
+
+    def record(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return httpx2.Response(200, json=message_json())
+
+    http = anthropic.DefaultAsyncHttpxClient(transport=httpx2.MockTransport(record))
+    llm = ClaudeLlm(make_settings(), http_client=http, model="claude-sonnet-4-6", effort="low")
+
+    asyncio.run(llm.generate(system="지시문", text="글", images=[], output=Answer))
+
+    body = json.loads(seen[0].content)
+    assert body["model"] == "claude-sonnet-4-6"
+    assert body["output_config"]["effort"] == "low"
+
+
+def test_catalog_llm_defaults_to_its_own_model():
+    settings = make_settings()
+
+    assert settings.catalog_llm_model == "claude-sonnet-4-6"
+    assert settings.catalog_llm_effort == "low"
+
+
 def test_missing_key_fails_without_calling():
     requests: list[httpx2.Request] = []
 

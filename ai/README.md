@@ -127,6 +127,23 @@ docker compose up -d   # ai/ 에서. http://localhost:6006
 
 운영 기록은 https://k15a306.p.ssafy.io/phoenix 에서 봅니다. 계정은 Phoenix 관리자가 만들어 줍니다([infra/README.md](../infra/README.md#접속)).
 
+## 화장품 수집기
+
+브랜드 공식 홈에서 제품·호수·색을 모아 실행 결과 파일(JSONL)로 남기는 명령줄 도구입니다. AI 서버의 API가 아니고 BE가 부르지 않습니다. 결과 파일 형식은 [shared/catalog-import](../shared/catalog-import/README.md)의 계약을 따릅니다.
+
+```bash
+uv run python tools/collect_catalog.py sites                      # 사이트 목록과 상태
+uv run python tools/collect_catalog.py find --brand 롬앤 --name "제품명" --allow-disabled
+uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --allow-disabled
+uv run python tools/collect_catalog.py collect --brand 롬앤 --products p.jsonl --name romand --render --colors --vision
+uv run python tools/report_catalog_colors.py run <실행 결과 파일>   # 실행 요약
+```
+
+- 실제 사이트에 요청하려면 `CATALOG_CONTACT`가 필요합니다. 운영 수집은 사이트 목록(`app/resources/brand_sites.yaml`)에서 켜진(`enabled`) 사이트에만 하고, 켜지지 않은 사이트는 구조를 확인하는 소량 요청에 한해 `--allow-disabled`로 접근합니다.
+- `--colors`는 호수 사진에서 색(HEX)을 계산하고, `--vision`은 모델이 사진 종류와 칸 위치를 찾게 합니다(모델 호출 발생). 색 값은 모델이 아니라 픽셀에서 계산합니다. `--estimate`는 이름 기반 추정 색(`LLM_ESTIMATE`)을 더하며 기본 꺼짐입니다.
+- robots.txt를 따르고, 사이트마다 동시 요청 1건과 요청 간격을 지키며, 차단(403·확인 페이지)을 받으면 우회하지 않고 그 사이트 수집을 멈춥니다.
+- 모델 호출에는 `GMS_API_KEY`가 필요합니다. 네트워크와 모델을 쓰지 않는 리포트 도구는 `tools/report_catalog_colors.py`입니다.
+
 ## 환경변수
 
 `.env.example`을 `.env`로 복사해서 씁니다. `.env`는 git에 올라가지 않습니다.
@@ -150,6 +167,17 @@ docker compose up -d   # ai/ 에서. http://localhost:6006
 | `CALLBACK_RETRY_DELAY_SECONDS` | `1` | 첫 재시도 전 대기. 다음부터 5배씩 늘어남 |
 | `TRACING_ENDPOINT` | | 호출 기록을 보낼 Phoenix 주소. 비우면 보내지 않음 |
 | `TRACING_PROJECT` | `ai-guide` | Phoenix에서 기록이 모이는 프로젝트 이름 |
+| `CATALOG_CONTACT` | | 화장품 수집기가 요청마다 User-Agent에 싣는 연락처(이메일). 사이트 서버 로그에 남음. 실제 사이트에 요청할 때 필요 |
+| `CATALOG_RUN_DIR` | `ai/catalog-runs` | 수집 실행 결과 파일(JSONL)을 쓰는 폴더. BE가 같은 폴더(공유 볼륨)에서 읽음 |
+| `CATALOG_RUN_KEEP_DAYS` | `30` | 실행 결과 파일 보관 일수 |
+| `CATALOG_MIN_INTERVAL_SECONDS` | `1.5` | 같은 사이트에 요청 사이에 두는 최소 간격(초). 429를 받으면 그 사이트만 늘림 |
+| `CATALOG_REQUEST_TIMEOUT_SECONDS` | `30` | 요청 한 번의 제한 시간 |
+| `CATALOG_MAX_RETRIES` | `3` | 5xx·시간 초과·연결 실패일 때 다시 시도하는 횟수 |
+| `CATALOG_RETRY_BASE_DELAY_SECONDS` | `1` | 첫 재시도 전 대기. 다음부터 두 배씩 늘어남 |
+| `CATALOG_MAX_INTERVAL_SECONDS` | `30` | 429로 늘어난 간격의 상한 |
+| `CATALOG_ROBOTS_EXEMPT_HOSTS` | (없음) | robots.txt 검사를 건너뛸 도메인. 사이트 주인의 허락 기록이 있는 곳만 적음. 사이트 목록의 `robots_exempt`와 합쳐짐 |
+| `CATALOG_LLM_MODEL` | `claude-sonnet-4-6` | 수집기가 쓰는 Claude 모델(사진 종류·칸 위치 판독, 추정 색) |
+| `CATALOG_LLM_EFFORT` | `low` | 수집기 모델의 생각 수준. `low` · `medium` · `high` · `xhigh` · `max` |
 
 `CLAUDE_`로 시작하는 이름은 쓰지 않습니다. Claude Code가 `CLAUDE_EFFORT` 같은 환경변수를 넣어 두어서 설정이 바뀝니다.
 

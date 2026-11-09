@@ -70,9 +70,10 @@
 | `samples/romand_single_unverified.json` | 단색 상품. 옵션 이미지가 없어 `shadeLink=UNVERIFIED` 인 칸과, 색을 못 찾은 호수(`NOT_FOUND`)가 있다 | 적재: 연결 근거 부족 → 서비스에 색 없음 |
 | `samples/romand_duo_shade.json` | 한 호수에 색이 2개(듀오)이고 이름이 없는 칸 | 칸 2개 저장, 칸 순서 규칙 |
 | `samples/etude_option_image.json` | 호수마다 사진이 있어 `shadeLink=OPTION_IMAGE` | 적재: 자동 사용 판정 통과 경로 |
+| `samples/romand_named_palette.json` | 칸 이름이 있는 팔레트(`nameSource` `SITE_TEXT`·`IMAGE_PRINT`)와 색을 못 구한 칸 | 칸 이름 근거 저장, 색 없는 칸 |
 | `samples/invalid_incomplete_source.json` | 일부러 깨뜨린 건: `sourceProductId` 가 없고 `hex` 형식이 틀리다 | 적재: 그 건만 `INVALID` 로 기록, 나머지는 계속 |
 
-JSON Schema(`collected_product.v1.schema.json`)는 수집기 모델에서 만들어 이 폴더에 둔다 (S15P31A306-293). 스키마가 생기면 이 샘플들이 통과하는지(깨뜨린 건은 실패하는지) 양쪽 테스트에서 본다.
+JSON Schema(`collected_product.v1.schema.json`)는 수집기 모델(`ai/app/tasks/catalog/contract.py`)에서 만든다. 모델을 바꾸면 `cd ai && uv run python tools/export_catalog_schema.py` 로 파일을 다시 만든다. 수집기 테스트는 이 파일이 모델과 같은지, 샘플이 통과하는지(깨뜨린 건은 실패하는지)를 본다. 스키마는 필드 모양만 검사하고, 칸 이름과 근거의 일치·`evidenceKey` 꼴 같은 건 간 규칙은 모델과 백엔드 검증이 본다.
 
 ## 형식을 바꿀 때
 

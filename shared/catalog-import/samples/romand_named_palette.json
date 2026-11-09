@@ -1,0 +1,65 @@
+{
+  "contractVersion": 1,
+  "itemKey": "000005",
+  "source": "OFFICIAL:romand.co.kr",
+  "sourceProductId": "9005",
+  "sourceUrl": "https://romand.co.kr/product/detail.html?product_no=9005",
+  "sourceLanguage": "ko",
+  "collectedAt": "2026-11-05T10:34:00+09:00",
+  "brand": "롬앤",
+  "name": "예시 아이섀도 팔레트",
+  "sourceCategoryPath": ["아이"],
+  "categoryHint": "EYE",
+  "typeHint": "EYESHADOW_PALETTE",
+  "imageUrl": "https://example.com/images/9005/main.jpg",
+  "saleStatus": "ON_SALE",
+  "shades": [
+    {
+      "sourceOptionId": "01 예시 더스크",
+      "name": "01 예시 더스크",
+      "sortOrder": 1,
+      "slotOrderBasis": "GRID",
+      "colorStatus": "EXTRACTED",
+      "variantHints": {
+        "volume": null,
+        "composition": null,
+        "formulation": null,
+        "optionAttributes": null,
+        "listPrice": null
+      },
+      "colors": [
+        {
+          "sortOrder": 1,
+          "name": "예시 샌드",
+          "nameSource": "SITE_TEXT",
+          "hex": "#D9B8A0",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "OPTION_IMAGE",
+          "colorQuality": 0.9,
+          "evidenceKey": "9005/01 예시 더스크/1"
+        },
+        {
+          "sortOrder": 2,
+          "name": "예시 로즈",
+          "nameSource": "IMAGE_PRINT",
+          "hex": "#B76E79",
+          "colorSource": "PRODUCT_PHOTO",
+          "shadeLink": "OPTION_IMAGE",
+          "colorQuality": 0.86,
+          "evidenceKey": "9005/01 예시 더스크/2"
+        },
+        {
+          "sortOrder": 3,
+          "name": null,
+          "nameSource": "NONE",
+          "hex": null,
+          "colorSource": null,
+          "shadeLink": null,
+          "colorQuality": null,
+          "evidenceKey": "9005/01 예시 더스크/3"
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}
