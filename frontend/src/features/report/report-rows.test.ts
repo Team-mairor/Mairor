@@ -43,7 +43,7 @@ describe("guideReportRows", () => {
     expect(row.ref).toBe("영상에서 제품 정보를 찾지 못했어요");
   });
 
-  it("선택·건너뜀·미확정을 동일·대체 라벨 없이 나눠 보여 준다", () => {
+  it("선택·생략·미확정을 동일·대체 라벨 없이 나눠 보여 준다", () => {
     const rows = guideReportRows(
       report([
         step("s1", { pick: "picked", used: { brand: "클리오", name: "블러셔", shade: null } }),
@@ -53,7 +53,7 @@ describe("guideReportRows", () => {
     );
     expect(rows.map((r) => [r.usedKind, r.used])).toEqual([
       ["내가 고른 제품", "클리오 블러셔"],
-      ["건너뜀", "제품 없이 진행"],
+      ["생략", "이 단계는 제품을 쓰지 않았어요"],
       ["사용 제품", "기록 없음"],
     ]);
     expect(rows.some((r) => /동일|대체/.test(r.usedKind))).toBe(false);

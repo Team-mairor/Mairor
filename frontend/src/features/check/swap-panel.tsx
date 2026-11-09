@@ -159,7 +159,7 @@ export function SwapPanel({
             skipped ? "border-blush" : "border-white/30",
           )}
         >
-          이 제품 없이 진행
+          제품 생략
         </button>
         {onClear && (
           <button

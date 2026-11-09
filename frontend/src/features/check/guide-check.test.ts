@@ -4,7 +4,7 @@ import type { GuideStepModel } from "@/features/guide";
 import type { PouchItem } from "@/features/pouch";
 import { createRun } from "@/features/session/run-state";
 
-import { candidatesFor, checkRows, pickCounts, pickOf, withChoice } from "./guide-check";
+import { candidatesFor, checkRows, pickCounts, pickOf, markNoFit, withChoice } from "./guide-check";
 
 const step = (stepId: string, extra: Partial<GuideStepModel> = {}): GuideStepModel => ({
   stepId,
@@ -45,7 +45,7 @@ describe("pickOf", () => {
     });
   });
 
-  it("없이 진행은 건너뜀이다", () => {
+  it("없이 진행은 생략이다", () => {
     expect(pickOf("s1", { s1: { kind: "none" } }, pouch)).toEqual({ kind: "skipped" });
   });
 
@@ -130,5 +130,30 @@ describe("새 실행", () => {
   it("새 실행은 이전 선택 없이 시작한다", () => {
     const run = createRun({ kind: "guide", guideId: "a0000000-0000-4000-8000-000000000001" }, "r2");
     expect(run.choice).toEqual({});
+  });
+});
+
+describe("markNoFit", () => {
+  const steps = [
+    { stepId: "a", order: 1, makeup: "blush", matchCategory: "CHEEK", label: "블러셔" },
+    { stepId: "b", order: 2, makeup: "mascara", matchCategory: "EYE", label: "마스카라" },
+    { stepId: "c", order: 3, makeup: "mascara", matchCategory: "EYE", label: "마스카라" },
+  ] as unknown as GuideStepModel[];
+  const blush: PouchItem = {
+    id: "p",
+    cat: "치크",
+    type: "블러셔",
+    brand: "B",
+    name: "치크",
+    color: null,
+  };
+
+  it("맞는 제품이 없고 고르지 않은 단계만 자동으로 생략한다", () => {
+    const rows = markNoFit(checkRows(steps, { c: { kind: "none" } }, [blush]), [blush]);
+    expect(rows.map((r) => [r.step.stepId, r.pick.kind, r.noFit ?? false])).toEqual([
+      ["a", "undecided", false],
+      ["b", "skipped", true],
+      ["c", "skipped", false],
+    ]);
   });
 });

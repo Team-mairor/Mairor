@@ -9,14 +9,17 @@ export function StartModal({
   open,
   missing,
   noun = "없는 제품",
+  note,
   onRecheck,
   onStart,
   onClose,
 }: {
   open: boolean;
-  /** 제품 없이 진행할 단계 */
+  /** 제품을 생략할 단계 */
   missing: { key: string; label: string; color: string | null }[];
   noun?: string;
+  /** 목록 위에 덧붙일 안내 */
+  note?: string;
   /** 없음 목록으로 돌아가 다시 확인 */
   onRecheck: () => void;
   onStart: () => void;
@@ -38,13 +41,14 @@ export function StartModal({
         <p className="text-[20px] leading-[1.5] text-mute">
           {n ? "이 단계들은 설명만 보여 드리고 넘어가요. " : ""}시작하면 제품을 바꿀 수 없어요.
         </p>
+        {note && <p className="text-[18px] leading-[1.5] font-semibold text-mute">{note}</p>}
       </div>
       {n > 0 && (
-        <div className="flex flex-col gap-2.5">
+        <div className="-mx-1 flex max-h-[420px] min-h-0 flex-col gap-2.5 overflow-y-auto px-1">
           {missing.map((m) => (
             <div
               key={m.key}
-              className="flex items-center gap-4 rounded-[22px] border-2 border-dashed border-ash px-5 py-4"
+              className="flex shrink-0 items-center gap-4 rounded-[22px] border-2 border-dashed border-ash px-5 py-4"
             >
               <span
                 className={cn(

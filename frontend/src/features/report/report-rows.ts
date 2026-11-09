@@ -14,7 +14,7 @@ export interface ReportRow {
 
 const PICK_LABEL = {
   picked: { kind: "내가 고른 제품", empty: "" },
-  skipped: { kind: "건너뜀", empty: "제품 없이 진행" },
+  skipped: { kind: "생략", empty: "이 단계는 제품을 쓰지 않았어요" },
   undecided: { kind: "사용 제품", empty: "기록 없음" },
 } as const;
 

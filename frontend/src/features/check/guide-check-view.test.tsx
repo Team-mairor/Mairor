@@ -61,6 +61,8 @@ const guide: GuideModel = {
       label: "하이라이터",
       product: { name: null, shade: "02" },
     }),
+    // 파우치에 마스카라가 없어 고를 수 없는 단계
+    step("s9", 4, { makeup: "mascara", label: "마스카라", matchCategory: "EYE" }),
   ],
 };
 const pouch: PouchItem[] = [
@@ -140,7 +142,7 @@ describe("실제 가이드 제품 체크", () => {
     expect(text()).toContain("영상에서 제품 정보를 찾지 못했어요");
     expect(text()).toContain("STEP 3 · 하이라이터");
     // 파우치에 같은 이름 제품이 있어도 미확정이다
-    expect(text()).toContain("0/3");
+    expect(text()).toContain("0/4");
     expect(text()).not.toMatch(/보유|대체|추천|내 파우치에 없음/);
   });
 
@@ -151,24 +153,30 @@ describe("실제 가이드 제품 체크", () => {
     expect(text()).not.toContain("글로우");
     await click(button("베러 댄 치크"));
     expect(session.state.run.choice).toEqual({ s2: { kind: "pouch", id: "same" } });
-    expect(text()).toContain("1/3");
+    expect(text()).toContain("1/4");
   });
 
-  it("건너뜀과 선택 해제를 구분한다", async () => {
+  it("제품 생략과 선택 해제를 구분한다", async () => {
     await click(button("고르기", element.querySelector('[data-step="s5"]')!));
-    await click(button("이 제품 없이 진행"));
+    await click(button("제품 생략"));
     expect(session.state.run.choice).toEqual({ s5: { kind: "none" } });
-    await click(button("건너뜀"));
+    await click(button("생략", element.querySelector('[role="tablist"]')!));
     await click(button("바꾸기", element.querySelector('[data-step="s5"]')!));
     await click(button("선택 해제"));
     expect(session.state.run.choice).toEqual({});
   });
 
-  it("고르지 않은 단계가 있어도 시작 때 건너뜀으로 바꾸지 않는다", async () => {
+  it("파우치에 맞는 제품이 없는 단계는 생략 탭에 보여 준다", async () => {
+    await click(button("생략", element.querySelector('[role="tablist"]')!));
+    const row = element.querySelector('[data-step="s9"]')!;
+    expect(row.textContent).toContain("파우치에 맞는 제품이 없어 생략");
+  });
+
+  it("고를 수 있는 단계는 시작 때 생략으로 바꾸지 않고, 맞는 제품이 없는 단계만 생략한다", async () => {
     await click(button("이 조합으로 시작"));
     expect(text()).toContain("고르지 않은 단계 3개는");
     await click(button("건너뛰고 시작"));
-    expect(session.state.run.choice).toEqual({});
+    expect(session.state.run.choice).toEqual({ s9: { kind: "none" } });
     expect(router.push).toHaveBeenCalledWith(`/tutorial/guide?guideId=${GUIDE_ID}`);
   });
 
@@ -176,11 +184,11 @@ describe("실제 가이드 제품 체크", () => {
     await act(async () => {
       session.updateRun({ choice: { s2: { kind: "pouch", id: "same" } } }, session.state.run.id);
     });
-    expect(text()).toContain("1/3");
+    expect(text()).toContain("1/4");
     await act(async () => {
       session.startRun({ kind: "guide", guideId: GUIDE_ID });
     });
     expect(session.state.run.choice).toEqual({});
-    expect(text()).toContain("0/3");
+    expect(text()).toContain("0/4");
   });
 });

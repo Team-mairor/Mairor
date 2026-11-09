@@ -25,7 +25,7 @@ export function ProductChip({
     : mine;
   const emptyLabel =
     pick?.kind === "skipped"
-      ? "제품 없이 진행"
+      ? "제품 생략"
       : pick?.kind === "undecided"
         ? "고른 제품 없음"
         : "내 파우치에 없음";

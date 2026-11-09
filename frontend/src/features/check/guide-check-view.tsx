@@ -14,7 +14,14 @@ import { useTimeout } from "@/lib/hooks/use-timeout";
 import { cn } from "@/lib/utils";
 
 import { COMPAT_TYPES, isCompatible } from "./compat";
-import { candidatesFor, checkRows, pickCounts, withChoice, type PickKind } from "./guide-check";
+import {
+  candidatesFor,
+  checkRows,
+  markNoFit,
+  pickCounts,
+  withChoice,
+  type PickKind,
+} from "./guide-check";
 import { PouchModal } from "./pouch-modal";
 import { StartModal } from "./start-modal";
 import { SwapPanel } from "./swap-panel";
@@ -24,14 +31,14 @@ import { Toast } from "./toast";
 const PICK_GROUPS: Record<PickKind, { label: string; dot: string; bg: string }> = {
   undecided: { label: "미확정", dot: "var(--color-blush)", bg: "bg-blush" },
   picked: { label: "선택", dot: "var(--color-mint)", bg: "bg-mint" },
-  skipped: { label: "건너뜀", dot: "var(--color-ash)", bg: "bg-cream-3" },
+  skipped: { label: "생략", dot: "var(--color-ash)", bg: "bg-cream-3" },
 };
 const PICK_TABS = Object.keys(PICK_GROUPS) as PickKind[];
 
 const productText = (step: GuideStepModel) =>
   [step.product?.name, step.product?.shade].filter(Boolean).join(" ") || null;
 
-/** 실제 가이드의 제품 체크. 보유·대체를 판정하지 않고 사용자가 고른 것만 남긴다 */
+/** 실제 가이드의 제품 체크. 보유·대체를 판정하지 않고 사용자가 고른 것만 남긴다. 파우치에 맞는 제품이 없는 단계는 제품을 생략한다 */
 export function GuideCheck() {
   const router = useRouter();
   const { state, updateRun } = useSession();
@@ -50,7 +57,8 @@ export function GuideCheck() {
   useHiddenVideo();
 
   if (load.status !== "ready") return null;
-  const rows = checkRows(load.guide.steps, run.choice, pouch);
+  const rows = markNoFit(checkRows(load.guide.steps, run.choice, pouch), pouch);
+  const noFit = rows.filter((r) => r.noFit);
   const counts = pickCounts(rows);
   const active = group ?? (counts.undecided ? "undecided" : "picked");
   const shown = rows.filter((r) => r.pick.kind === active);
@@ -103,7 +111,7 @@ export function GuideCheck() {
               closeSwap();
             }}
             onClear={
-              swapRow.pick.kind === "undecided"
+              swapRow.pick.kind === "undecided" || swapRow.noFit
                 ? undefined
                 : () => {
                     setChoice(swapRow.step.stepId, null);
@@ -188,13 +196,13 @@ export function GuideCheck() {
           })}
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-8">
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-8">
           {shown.length === 0 ? (
             <div className="py-10 text-center text-[20px] font-semibold text-ash">
               {PICK_GROUPS[active].label} 단계가 없어요
             </div>
           ) : (
-            shown.map(({ step, pick }) => {
+            shown.map(({ step, pick, noFit: noFitRow }) => {
               const product = productText(step);
               return (
                 <div
@@ -249,7 +257,9 @@ export function GuideCheck() {
                       </span>
                     )}
                     {pick.kind === "skipped" && (
-                      <span className="text-[19px] font-bold text-mute">→ 제품 없이 진행</span>
+                      <span className="text-[19px] font-bold text-mute">
+                        {noFitRow ? "→ 파우치에 맞는 제품이 없어 생략" : "→ 제품 생략"}
+                      </span>
                     )}
                   </span>
                   <button
@@ -257,7 +267,7 @@ export function GuideCheck() {
                     onClick={() => setSwapFor(step.stepId)}
                     className="flex h-[60px] shrink-0 items-center rounded-full bg-cream-3 px-6 text-[19px] font-bold whitespace-nowrap text-ink hover:bg-line"
                   >
-                    {pick.kind === "undecided" ? "고르기" : "바꾸기"}
+                    {pick.kind === "undecided" || noFitRow ? "고르기" : "바꾸기"}
                   </button>
                 </div>
               );
@@ -289,10 +299,15 @@ export function GuideCheck() {
         onClose={() => setPouchModal(false)}
       />
 
-      {/* 고르지 않은 단계는 none으로 바꾸지 않는다 */}
+      {/* 고를 수 있는데 고르지 않은 단계는 none으로 바꾸지 않는다 */}
       <StartModal
         open={startAsk}
         noun="고르지 않은 단계"
+        note={
+          noFit.length
+            ? `파우치에 맞는 제품이 없는 ${noFit.length}단계는 제품을 생략해요.`
+            : undefined
+        }
         missing={rows
           .filter((r) => r.pick.kind === "undecided")
           .map((r) => ({
@@ -306,6 +321,16 @@ export function GuideCheck() {
         }}
         onStart={() => {
           setStartAsk(false);
+          if (noFit.length)
+            updateRun(
+              (prev) => ({
+                choice: noFit.reduce(
+                  (c, r) => withChoice(c, r.step.stepId, { kind: "none" }),
+                  prev.choice,
+                ),
+              }),
+              run.id,
+            );
           router.push(href("/tutorial/guide"));
         }}
         onClose={() => setStartAsk(false)}

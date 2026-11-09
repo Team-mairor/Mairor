@@ -46,7 +46,7 @@ const run = (extra: Partial<{ photoOk: boolean; captures: string[] }> = {}) => (
 const steps = [step("s1"), step("s2"), step("s3", { product: null })];
 
 describe("buildGuideReport", () => {
-  it("단계마다 선택·건너뜀·미확정을 나눠 남긴다", () => {
+  it("단계마다 선택·생략·미확정을 나눠 남긴다", () => {
     const report = buildGuideReport(guide(steps), run(), pouch);
     expect(report.steps.map((s) => [s.stepId, s.pick, s.used])).toEqual([
       ["s1", "picked", { brand: "클리오", name: "프리즘 블러셔", shade: "03" }],

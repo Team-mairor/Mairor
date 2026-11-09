@@ -98,7 +98,7 @@ export function PrepCard({
     ? pick.kind === "picked"
       ? "이 제품을 준비해 주세요 · 내가 고른 제품"
       : pick.kind === "skipped"
-        ? "제품 없이 진행해요"
+        ? "이 단계는 제품을 생략해요"
         : "고른 제품이 없어요"
     : !match
       ? "제품 매칭 전이에요"

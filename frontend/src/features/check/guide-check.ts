@@ -15,6 +15,8 @@ export interface CheckRow {
   pick: StepPick;
   /** 서버 매칭 제안. 연결 전까지 null */
   suggestion: null;
+  /** 파우치에 맞는 제품이 없어 자동으로 생략하는 단계 */
+  noFit?: true;
 }
 
 /** 고른 제품이 지워졌으면 미확정으로 본다 */
@@ -42,6 +44,15 @@ export function checkRows(
     pick: pickOf(step.stepId, choice, pouch),
     suggestion: null,
   }));
+}
+
+/** 고르지 않았고 파우치에 맞는 제품도 없는 단계는 생략한 것으로 본다 */
+export function markNoFit(rows: CheckRow[], pouch: PouchItem[]): CheckRow[] {
+  return rows.map((r) =>
+    r.pick.kind === "undecided" && candidatesFor(r.step, pouch).length === 0
+      ? { ...r, pick: { kind: "skipped" }, noFit: true }
+      : r,
+  );
 }
 
 export function pickCounts(rows: CheckRow[]): Record<PickKind, number> {
