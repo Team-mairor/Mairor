@@ -1,10 +1,12 @@
 """스크립트가 그린 뒤의 상품 페이지 HTML을 받는다(Playwright).
 
 정적 HTML에 호수가 없을 때만 쓴다. 느리고 무겁기 때문이다.
-사이트에 보내는 규칙은 PoliteClient와 같다. robots.txt, 호스트별 간격과 동시 1건,
-차단 감지를 PoliteClient.run_guarded로 적용하고 사이트마다 한 번만 받는다.
+첫 문서 요청 하나에만 PoliteClient의 규칙(robots.txt, 호스트별 간격과 동시 1건, 차단 감지)을
+PoliteClient.run_guarded로 적용하고 상품 주소마다 한 번만 받는다.
+그 문서가 불러오는 스크립트·스타일시트·XHR 요청은 Chromium이 직접 보내므로 이 규칙을 거치지 않는다.
+robots.txt가 막은 경로를 하위 요청이 받을 수 있다는 뜻이다. 막으면 옵션을 불러오는 XHR까지 끊겨
+렌더링한 이유가 없어지므로 막지 않았고, 대신 이미지·미디어·폰트는 받지 않아 부담을 줄인다.
 차단을 피하려는 동작(사람인 척하는 설정, 확인 페이지 통과)은 하지 않는다.
-이미지·미디어·폰트는 받지 않아 사이트에 주는 부담을 줄인다.
 """
 
 from types import TracebackType

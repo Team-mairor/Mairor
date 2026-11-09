@@ -25,7 +25,7 @@ from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
 
-PRODUCT_TOKEN = "MairorCatalogCollector"
+ROBOTS_AGENT_NAME = "MairorCatalogCollector"
 PRODUCT_VERSION = "1.0"
 MAX_REDIRECTS = 5
 BODY_SNIFF_BYTES = 8192
@@ -85,7 +85,7 @@ class HttpError(HttpFailure):
 
 
 def build_user_agent(contact: str | None) -> str:
-    base = f"{PRODUCT_TOKEN}/{PRODUCT_VERSION}"
+    base = f"{ROBOTS_AGENT_NAME}/{PRODUCT_VERSION}"
     return f"{base} (+{contact})" if contact else base
 
 
@@ -212,7 +212,7 @@ class PoliteClient:
                 raise BlockedError(host, state.blocked)
             if host not in self._config.robots_exempt_hosts:
                 await self._ensure_robots(url, host, state)
-                if state.robots is not None and not state.robots.can_fetch(PRODUCT_TOKEN, url):
+                if state.robots is not None and not state.robots.can_fetch(ROBOTS_AGENT_NAME, url):
                     raise RobotsDisallowedError(host, url)
             await self._pace(state)
             try:
@@ -256,7 +256,7 @@ class PoliteClient:
                 raise BlockedError(host, state.blocked)
             if host not in self._config.robots_exempt_hosts:
                 await self._ensure_robots(url, host, state)
-                if state.robots is not None and not state.robots.can_fetch(PRODUCT_TOKEN, url):
+                if state.robots is not None and not state.robots.can_fetch(ROBOTS_AGENT_NAME, url):
                     raise RobotsDisallowedError(host, url)
             return await self._send(url, host, state, headers)
 
@@ -269,7 +269,7 @@ class PoliteClient:
         parser = RobotFileParser()
         if response.status_code == 200:
             parser.parse(response.text.splitlines())
-            delay = parser.crawl_delay(PRODUCT_TOKEN)
+            delay = parser.crawl_delay(ROBOTS_AGENT_NAME)
             if delay is not None:
                 state.interval = min(
                     max(state.interval, float(delay)), self._config.max_interval_seconds

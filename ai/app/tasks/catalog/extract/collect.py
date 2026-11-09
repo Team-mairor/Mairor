@@ -26,6 +26,18 @@ async def _shopify_json(client: PoliteClient, url: str, handle: str) -> str | No
     return response.text if response.status_code == 200 else None
 
 
+MAX_WARNINGS = 50
+
+
+def with_warning(warnings: list[str], code: str) -> list[str]:
+    """경고를 하나 더한 새 목록. 상한(MAX_WARNINGS)을 넘으면 앞의 경고를 줄여 새 경고를 남긴다."""
+    return (
+        [*warnings[: MAX_WARNINGS - 1], code]
+        if len(warnings) >= MAX_WARNINGS
+        else [*warnings, code]
+    )
+
+
 async def collect_product(
     client: PoliteClient,
     site: BrandSite,
@@ -68,7 +80,9 @@ async def collect_product(
         rendered = await renderer.render(url)
         if rendered.status_code == 200:
             product, raw = build(decode_html(rendered))
-            product.warnings.append("RENDERED")
+            product = product.model_copy(
+                update={"warnings": with_warning(product.warnings, "RENDERED")}
+            )
             raw["rendered"] = True
     if colors and product.shades:
         product, raw = await add_colors(client, product, raw, llm=llm)
