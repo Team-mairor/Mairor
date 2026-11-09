@@ -43,10 +43,10 @@ public class GuideMatchController {
         @SecurityRequirement(name = OpenApiConfig.CSRF_TOKEN)
       })
   @ApiResponse(responseCode = "201", description = "생성된 매칭 스냅샷.")
-  @ApiResponse(responseCode = "400", description = "guideId가 누락됐거나 형식이 잘못됐다.")
-  @ApiResponse(responseCode = "404", description = "가이드가 없거나 승인 상태가 아니다.")
+  @ApiResponse(responseCode = "400", description = "guideId가 누락됐거나 형식이 잘못됐다. (VALIDATION_FAILED)")
   @ApiResponse(responseCode = "403", description = "X-CSRF-TOKEN 이 없거나 유효하지 않다. (CSRF_INVALID)")
   @AuthApiDocs.Unauthorized
+  @AuthApiDocs.NotFound
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public GuideMatchResponse create(
@@ -60,8 +60,9 @@ public class GuideMatchController {
       description = "내 매칭의 저장 스냅샷을 반환하고 현재 가이드·파우치와 다르면 stale을 표시한다.",
       security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE))
   @ApiResponse(responseCode = "200", description = "저장된 매칭 스냅샷과 stale 여부.")
-  @ApiResponse(responseCode = "404", description = "매칭이 없거나 다른 회원 소유다.")
+  @ApiResponse(responseCode = "400", description = "matchId 형식이 잘못됐다. (VALIDATION_FAILED)")
   @AuthApiDocs.Unauthorized
+  @AuthApiDocs.NotFound
   @GetMapping("/{matchId}")
   public GuideMatchDetailResponse get(
       @AuthenticationPrincipal AuthenticatedUser principal, @PathVariable UUID matchId) {

@@ -325,7 +325,7 @@ API-POUCH-004 · POST /api/v1/users/me/pouch-items
 - <b>등록 계약 (구현 전 명세 반영)</b>: CATALOG는 서버에서 기존 제품·호수를 검증하고 표시 정보·색상을 개인 항목에 복사하며 연결 ID도 보관한다. MANUAL은 개인 항목에만 저장한다. 이 요청은 공용 카탈로그를 생성·수정하거나 크롤링을 시작하지 않는다.
 - MANUAL의 colorHex 생략/null은 color=null·colorSource=NONE이고, 입력한 색은 color.source=USER\_INPUT·estimated=true다. CATALOG는 요청 colorHex가 아니라 선택 호수의 색을 사용하며, 색이 있으면 source=CATALOG·estimated는 카탈로그 값을 보존한다. 어느 방식이든 색이 없으면 color=null·colorSource=NONE이다. 대체 후보 제외는 `color`가 없고 `colors[]`에도 사용 가능한 칸이 없을 때다(팔레트는 사용 가능한 칸이 하나라도 있으면 대상). 자동 연결된 CATALOG 항목은 사용자 입력 색을 유지해 colorSource=USER\_INPUT일 수 있다(아래 자동 연결).
 - 본인 항목 저장과 pouchVersion 증가는 원자적으로 처리한다. 초기 pouchVersion=0, 등록 성공마다 +1이며 실패·중복·롤백 시 증가하지 않는다. 시작 전 매칭은 변경된 버전으로 재계산 대상이 되고, 이미 시작한 실행·완료 리포트의 당시 제품 스냅샷은 변경하지 않는다.
-- 카탈로그 복사본·정규화 중복키와 표시값은 등록 시점 기준이다. 이후 카탈로그 이름·색상 변경은 기존 개인 항목이나 pouchVersion에 자동 반영하지 않는다. 개인 목록·상세·매칭 입력도 이 복사본을 사용한다. 카탈로그 연결 ID만으로 조회 때 최신값으로 치환하지 않는다. 예외는 색 칸 목록 `colors[]`뿐이며 shadeId로 카탈로그를 읽는다(재수집 보강 반영, 기준이 바뀌면 referenceVersion으로 stale 처리).
+- 카탈로그 복사본·정규화 중복키와 개인 표시값은 등록 시점 기준이다. 이후 카탈로그 이름·색상 변경은 기존 개인 항목을 수정하지 않는다. 개인 목록·상세와 MANUAL 추천 색은 이 복사본을 사용한다. <b>로컬 수정 -325</b>: 추천 매칭의 CATALOG 색상 후보만 연결된 호수의 현재 사용 가능한 색 칸을 읽는다. 이 색은 추천 스냅샷에만 반영하고 pouch_items의 복사본은 바꾸지 않는다. 해당 호수 색이 바뀌면 CatalogColorChanged 소비자가 영향 회원의 pouchVersion을 증가시켜 이전 매칭을 stale 처리한다. `colors[]`도 shadeId로 카탈로그를 읽으며 재수집 보강 기준 변경은 referenceVersion으로 stale 처리한다.
 - 중복 범위는 같은 회원의 정규화 brand·name·shadeName이다. type·category·registrationMode·productId·shadeId·color는 제외하므로 다른 종류 및 CATALOG/MANUAL 간에도 같은 비교값이면 409 POUCH\_DUPLICATE다. 다른 회원의 동일 제품 등록은 허용한다. 호수 없음(null·생략·공백)은 같은 값으로 취급하며 DB 유니크 제약으로 동시 중복도 차단한다.
 - shadeSelectable=true인데 해당 제품에 선택할 유효 호수가 없으면 CATALOG 등록은 400 POUCH\_INVALID\_PRODUCT다. NAIL\_FILE도 이 규칙을 따르며, 화면은 호수·색상을 생략할 수 있는 MANUAL 등록을 안내한다. 임의 호수 생성이나 분류·기초 데이터 변경은 하지 않는다.
 
@@ -436,7 +436,7 @@ API-RECOMMEND-001 · POST /api/v1/users/me/guide-matches
 
 관련 기능: RECOMMEND-001 · RECOMMEND-002 · GUIDE-001 · GUIDE-004
 
-- 회원·CSRF 필요. Body guideId:string 필수. 201 GuideMatch. 미검수·없는 가이드는 404 NOT\_FOUND.
+- 회원·CSRF 필요. Body guideId:UUID 필수. 201 GuideMatch. guideId 누락·형식 오류는 400 VALIDATION\_FAILED, 미검수·없는 가이드는 404 NOT\_FOUND.
 - GUIDE 단계마다 SAME/SUBSTITUTE/NONE 결과 1개. 5개 메이크업 카테고리만 제품 매칭. SAME은 동일 productId·shadeId가 검증된 경우이며 색상 없어도 가능. 대체는 색상 있는 같은 용도·부위 후보 최대3개.
 - 추천 외 같은 카테고리 제품 수동 선택 가능, 유사도 수치 응답 없음. 기준 색은 DB 호수 색→목표 발색, 없으면 comparisonAvailable=false. 빈 파우치는 NO\_ITEMS.
 - <b>로컬 수정 -325</b>: 기준색은 연결된 사용 가능 SLOT 색을 우선하고, 없으면 수치형 targetColor를 쓴다. 제품 설명 문자열·색 유사도만으로 원본 슬롯을 추정하지 않는다. 생성 시점의 파우치 항목·기준색·선택 색 칸을 매칭 스냅샷으로 저장하며, 이후 stale이어도 조회 결과의 스냅샷은 바꾸지 않는다.
@@ -450,8 +450,8 @@ API-RECOMMEND-002 · GET /api/v1/users/me/guide-matches/\{matchId\}
 
 관련 기능: RECOMMEND-001 · RECOMMEND-002 · GUIDE-001 · GUIDE-004
 
-- 회원 GET. Path matchId:string 필수. 200 GuideMatch & \{stale:boolean\}. 404 NOT\_FOUND.
-- <b>로컬 수정 -325</b>: 저장한 pouchVersion·guideVersion·referenceVersion 중 하나가 현재 값과 다르면 stale=true다. 소분류 호환 정책 버전도 서버 내부에서 함께 저장·비교하되 응답에는 노출하지 않는다. stale 조회는 생성 당시 매칭 스냅샷을 유지하며, 사용자는 새 매칭을 생성한다. 실행 시작 시 서버도 같은 버전 묶음을 확인해 불일치하면 409 GUIDE\_MATCH\_STALE을 반환한다.
+- 회원 GET. Path matchId:UUID 필수. 200 GuideMatch & \{stale:boolean\}. 형식 오류는 400 VALIDATION\_FAILED, 없는 매칭·다른 회원 소유는 404 NOT\_FOUND.
+- <b>로컬 수정 -325</b>: 저장한 pouchVersion·guideVersion·referenceVersion 중 하나가 현재 값과 다르면 stale=true다. 소분류 호환 정책 버전도 서버 내부에서 함께 저장·비교하되 응답에는 노출하지 않는다. stale 조회는 생성 당시 매칭 스냅샷을 200 응답으로 유지하며, 사용자는 새 매칭을 생성한다.
 </toggle>
 
 <toggle>

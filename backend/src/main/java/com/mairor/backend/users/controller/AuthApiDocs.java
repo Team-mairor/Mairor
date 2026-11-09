@@ -60,6 +60,19 @@ public final class AuthApiDocs {
               examples = @ExampleObject(name = "NOT_FOUND", value = AuthApiDocs.NOT_FOUND)))
   @interface DeviceNotFound {}
 
+  /** 없는 리소스와 다른 회원 소유 리소스를 구분하지 않는 공통 404. */
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.METHOD)
+  @ApiResponse(
+      responseCode = "404",
+      description = "요청한 리소스를 찾을 수 없다. (NOT_FOUND)",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ErrorResponse.class),
+              examples = @ExampleObject(name = "NOT_FOUND", value = AuthApiDocs.NOT_FOUND)))
+  public @interface NotFound {}
+
   static final String LOGIN_REQUEST =
       """
       {"email": "user@example.com", "password": "Password1!"}""";
