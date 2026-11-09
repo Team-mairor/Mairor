@@ -31,3 +31,4 @@
 | [찾은 영역과 기본 가이드가 섞인 단계도 둘 다 그리기](2026-11-06-hyeonsoo-seoyun-draw-extracted-and-template.md) | 2026-11-06 | 김현수 → 한서윤 | 요청 |
 | [분석 재시도 API와 로딩 화면 확인용 작업](2026-11-06-juyeon-seoyeon-analysis-retry-and-test-job.md) | 2026-11-06 | 최주연 → 김서연 | 요청 |
 | [회원 분석 요청 API(API-VIDEO-002)와 영상 파일 확보 방식](2026-11-06-juyeon-jungyoon-analysis-request-api.md) | 2026-11-06 | 최주연 → 김정윤 | 요청 |
+| [운영 가이드 작업 실행 번호와 실행 시각 공유](2026-11-08-hyeonsoo-jungyoon-guide-job-run-records.md) | 2026-11-08 | 김현수 → 김정윤 | 요청 |
