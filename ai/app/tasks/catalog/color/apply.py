@@ -15,6 +15,7 @@
 받기·모델 호출 실패는 그 호수(또는 사진)만 영향을 받는다.
 """
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -49,6 +50,7 @@ from app.tasks.catalog.link.shade_link import ShadeImage
 from app.tasks.catalog.text import compact_key, tokens
 
 MAX_IMAGES = 60
+MAX_DECODED_IMAGES = 4
 MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
 CELL_INSET = 0.15
@@ -71,7 +73,9 @@ class _Slot:
 class _Context:
     client: PoliteClient
     llm: Llm | None
-    images: dict[str, LoadedImage | ImageUnusableError] = field(default_factory=dict)
+    images: OrderedDict[str, LoadedImage] = field(default_factory=OrderedDict)
+    failures: dict[str, ImageUnusableError] = field(default_factory=dict)
+    requested: set[str] = field(default_factory=set)
     analyses: dict[str, Analysis | None] = field(default_factory=dict)
     evidence: list[EvidenceRecord] = field(default_factory=list)
     vision: list[dict[str, Any]] = field(default_factory=list)
@@ -222,20 +226,42 @@ def _not_found(ctx: _Context, shade: Shade, reason: str) -> Shade:
     return shade.model_copy(update={"color_status": ColorStatus.NOT_FOUND, "colors": []})
 
 
+async def _load(ctx: _Context, url: str) -> LoadedImage | ImageUnusableError | None:
+    """사진을 받는다. 디코드한 사진은 최근 MAX_DECODED_IMAGES장만 들고 있다.
+
+    큰 사진을 호수마다 다르게 쓰는 상품에서 디코드한 RGBA(수십~160MB)가 쌓이지 않게 하려는 것이다.
+    분석 결과(ctx.analyses)는 작아서 계속 두므로, 밀려난 사진을 다시 쓰면 받기만 다시 한다.
+    사진 수 상한(MAX_IMAGES)을 넘으면 None이다.
+    """
+    if url in ctx.failures:
+        return ctx.failures[url]
+    if url in ctx.images:
+        ctx.images.move_to_end(url)
+        return ctx.images[url]
+    if url not in ctx.requested and len(ctx.requested) >= MAX_IMAGES:
+        ctx.warnings.append("IMAGE_LIMIT")
+        return None
+    ctx.requested.add(url)
+    try:
+        loaded = await load_image(ctx.client, url)
+    except ImageUnusableError as error:
+        ctx.failures[url] = error
+        return error
+    ctx.images[url] = loaded
+    while len(ctx.images) > MAX_DECODED_IMAGES:
+        _, evicted = ctx.images.popitem(last=False)
+        evicted.image.close()
+    return loaded
+
+
 async def _color_shade(
     ctx: _Context, product: CollectedProduct, shade: Shade, link: ShadeImage | None
 ) -> Shade:
     if link is None or link.image_url is None:
         return shade.model_copy(update={"color_status": ColorStatus.NOT_FOUND})
-    if link.image_url not in ctx.images:
-        if len(ctx.images) >= MAX_IMAGES:
-            ctx.warnings.append("IMAGE_LIMIT")
-            return shade.model_copy(update={"color_status": ColorStatus.FAILED})
-        try:
-            ctx.images[link.image_url] = await load_image(ctx.client, link.image_url)
-        except ImageUnusableError as error:
-            ctx.images[link.image_url] = error
-    loaded = ctx.images[link.image_url]
+    loaded = await _load(ctx, link.image_url)
+    if loaded is None:
+        return shade.model_copy(update={"color_status": ColorStatus.FAILED})
     if isinstance(loaded, ImageUnusableError):
         ctx.warnings.append(f"IMAGE_FAILED:{loaded.code}:{shade.source_option_id}")
         return shade.model_copy(update={"color_status": ColorStatus.FAILED})
