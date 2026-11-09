@@ -103,6 +103,8 @@ interface SessionContextValue {
   signIn: (user: Pick<User, "email" | "nickname">, csrfToken?: string) => void;
   /** 로그아웃. 토큰을 지우고 로그인 이력도 지운다(만료 안내 없음) */
   signOut: () => void;
+  /** API가 401을 돌려줘 세션이 끝났다. 로그아웃 상태로 바꾸고 다음 로그인 전까지 만료 안내를 띄운다 */
+  expireSession: () => void;
   updateRun: (patch: Partial<RunState> | ((prev: RunState) => Partial<RunState>)) => void;
   /** 새 실행 시작. 이전 실행의 진행 데이터는 버린다 (GUIDE-011) */
   startRun: (run: Partial<RunState>) => void;
@@ -131,6 +133,7 @@ export function SessionProvider({
   const [storageLoaded, setStorageLoaded] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
 
+  // 같은 계정이 이어질 때만 파우치를 둔다. 아니면 비우고 서버 목록을 기다린다(샘플·다른 계정 목록을 내 제품으로 쓰지 않게)
   const signIn = useCallback<SessionContextValue["signIn"]>((user, csrfToken) => {
     if (csrfToken !== undefined) setCsrfToken(csrfToken);
     setState((prev) => ({
@@ -139,9 +142,11 @@ export function SessionProvider({
       email: user.email,
       nickname: user.nickname ?? "",
       sessionExpired: false,
+      pouch: prev.loggedIn && prev.email === user.email ? prev.pouch : [],
     }));
   }, []);
 
+  // 로그아웃·만료 때는 이전 계정 목록을 지우고 처음 샘플로 돌린다
   const signOut = useCallback(() => {
     setCsrfToken(null);
     setState((prev) => ({
@@ -150,8 +155,21 @@ export function SessionProvider({
       email: "",
       nickname: "",
       sessionExpired: false,
+      pouch: initial.pouch,
     }));
-  }, []);
+  }, [initial]);
+
+  const expireSession = useCallback(() => {
+    setCsrfToken(null);
+    setState((prev) => ({
+      ...prev,
+      loggedIn: false,
+      email: "",
+      nickname: "",
+      sessionExpired: prev.loggedIn || prev.sessionExpired,
+      pouch: initial.pouch,
+    }));
+  }, [initial]);
 
   useEffect(() => {
     try {
@@ -176,15 +194,7 @@ export function SessionProvider({
       .get<LoginResponse>("/v1/users/me", { signal: controller.signal })
       .then(({ user, csrfToken }) => signIn(user, csrfToken))
       .catch((e) => {
-        if (e instanceof ApiError && e.code === "UNAUTHORIZED") {
-          setState((prev) => ({
-            ...prev,
-            loggedIn: false,
-            email: "",
-            nickname: "",
-            sessionExpired: prev.loggedIn || prev.sessionExpired,
-          }));
-        }
+        if (e instanceof ApiError && e.code === "UNAUTHORIZED") expireSession();
       })
       .finally(() => {
         clearTimeout(timer);
@@ -195,7 +205,7 @@ export function SessionProvider({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [initial, signIn]);
+  }, [initial, signIn, expireSession]);
 
   // storageLoaded는 저장값을 state에 넣은 다음 렌더부터 true라, 기본값으로 저장값을 덮어쓰지 않는다
   useEffect(() => {
@@ -232,11 +242,23 @@ export function SessionProvider({
       update,
       signIn,
       signOut,
+      expireSession,
       updateRun,
       startRun,
       reset,
     }),
-    [state, storageLoaded, sessionChecked, update, signIn, signOut, updateRun, startRun, reset],
+    [
+      state,
+      storageLoaded,
+      sessionChecked,
+      update,
+      signIn,
+      signOut,
+      expireSession,
+      updateRun,
+      startRun,
+      reset,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

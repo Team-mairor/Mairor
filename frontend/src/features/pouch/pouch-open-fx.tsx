@@ -5,19 +5,13 @@
 import { Illustration } from "./illustration";
 
 const SPRING = "cubic-bezier(.34,1.56,.64,1)";
-/** [종류, dx, dy, 회전, 폭] */
+/** [종류 코드, dx, dy, 회전, 폭] */
 const ITEMS: [string, number, number, number, number][] = [
-  ["립스틱", -150, -190, -14, 56],
-  ["컴팩트", -20, -240, 6, 100],
-  ["브러시", 120, -200, 12, 74],
-  ["브로우 펜슬", 0, -130, -6, 56],
+  ["LIPSTICK", -150, -190, -14, 56],
+  ["COMPACT", -20, -240, 6, 100],
+  ["BRUSH", 120, -200, 12, 74],
+  ["BROW_PENCIL", 0, -130, -6, 56],
 ];
-const CAT: Record<string, "립" | "치크" | "도구" | "브로우"> = {
-  립스틱: "립",
-  컴팩트: "치크",
-  브러시: "도구",
-  "브로우 펜슬": "브로우",
-};
 
 export function PouchOpenFx() {
   return (
@@ -43,7 +37,7 @@ export function PouchOpenFx() {
               } as React.CSSProperties
             }
           >
-            <Illustration item={{ cat: CAT[type], type }} color="#F4B6CF" width={w} />
+            <Illustration item={{ cat: "도구", type }} color="#F4B6CF" width={w} />
           </div>
         ))}
         {/* 열리는 입구 */}

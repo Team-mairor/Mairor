@@ -125,12 +125,6 @@ const ITEMS: Item[] = [
     href: "/my/pouch?empty=1",
     prep: () => loggedIn,
   },
-  {
-    label: "제품 등록 · 컬러 조회 실패",
-    sub: "다시 시도 · 직접 입력",
-    href: "/my/pouch?demo=shade-fail",
-    prep: () => loggedIn,
-  },
   { label: "리포트 목록", sub: "메이크업 기록", href: "/my/reports", prep: () => loggedIn },
   {
     label: "리포트 목록 · 비어 있음",

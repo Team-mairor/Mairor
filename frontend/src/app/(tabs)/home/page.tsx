@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldError } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { useLogout } from "@/features/auth";
-import { PouchBoard } from "@/features/pouch";
+import { PouchBoard, usePouchSync } from "@/features/pouch";
 import { displayName, useSession } from "@/features/session";
 import { videoThumb } from "@/features/video";
 import { useQuery } from "@/lib/hooks/use-query";
@@ -37,14 +37,19 @@ const MONTHS = [
 /** 02 홈 (REPORT-002 · REPORT-005 · POUCH-004 · VIDEO-003 검수 카드) */
 export default function HomePage() {
   const router = useRouter();
-  const { state, update, startRun } = useSession();
+  const { state, sessionChecked, update, startRun } = useSession();
+  // 로그인했으면 파우치 보드를 서버 목록으로 맞춘다 (API-POUCH-003)
+  const sync = usePouchSync();
   const [account, setAccount] = useState(false);
   const { logout, pending: logoutPending, error: logoutError } = useLogout();
   const query = useQuery();
   // ?empty=1: 리포트·파우치 빈 상태 확인용 (데이터는 지우지 않는다)
   const empty = query?.get("empty") === "1";
   const reports = empty ? [] : state.reports;
-  const pouch = empty ? [] : state.pouch;
+  // 로그인했으면 서버 목록을 받기 전·받지 못했을 때 저장된(지난) 파우치를 보여 주지 않는다 (내 파우치와 같다)
+  const waiting = sync.status === "loading" || (state.loggedIn && !sessionChecked);
+  const hidden = waiting || sync.status === "error";
+  const pouch = empty || hidden ? [] : state.pouch;
   const d = new Date();
   const today = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
   const last = reports[0];
@@ -243,9 +248,20 @@ export default function HomePage() {
           <div className="absolute top-5 right-[22px] left-[22px] z-[2] flex items-start justify-between">
             <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
               <span className="font-serif text-[32px] leading-none text-ink italic">My pouch</span>
-              <span className="text-[16px] text-mute">
-                내 파우치 · {pouch.length}개 · 탭해서 수정
-              </span>
+              {sync.status === "error" ? (
+                <span className="flex items-center gap-2 text-[16px] text-mute">
+                  파우치를 불러오지 못했어요
+                  <button type="button" onClick={sync.retry} className="font-bold text-navy">
+                    다시 시도
+                  </button>
+                </span>
+              ) : waiting ? (
+                <span className="text-[16px] text-mute">파우치를 불러오고 있어요</span>
+              ) : (
+                <span className="text-[16px] text-mute">
+                  내 파우치 · {pouch.length}개 · 탭해서 수정
+                </span>
+              )}
             </span>
             <Link
               href="/my/pouch?add=1"
@@ -255,7 +271,7 @@ export default function HomePage() {
               제품 추가
             </Link>
           </div>
-          {pouch.length === 0 && (
+          {pouch.length === 0 && !hidden && (
             <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3.5 px-10 pt-[90px] pb-6 text-center">
               <span className="font-display text-[24px] leading-[1.35] text-ink">
                 파우치가 비어 있어요

@@ -223,11 +223,11 @@ public/
 - import 기준: 모든 `features/<이름>/`에 `index.ts`를 두고, 폴더 밖에서는 `@/features/<이름>`으로만 가져온다. 폴더 안에서는 `./파일`로 가져오고 자기 barrel은 쓰지 않는다. `lib`는 `features`를 가져오지 않는다. import 순서(패키지 / `@/` / 상대 경로, 묶음 안은 경로 알파벳순)는 eslint `import/order`가 검사하고 `npx eslint src --fix`로 맞춘다
 - 얼굴 등록(로딩 화면 모달)은 실시간으로 조명(얼굴 가운데 밝기)·거리(얼굴 폭 비율과 가운데 위치)·정면(yaw·pitch·roll)·가림(핵심 부위와 얼굴 윤곽이 화면 안에 정면으로 보임)을 판정하고, 4개를 1.5초 유지하면 정면 1장을 찍는다. 찍는 순간 눈을 감았으면 버리고 다시 잰다. 표정은 판정하지 않고 안내 문구로만 요청한다. 기준값은 `features/face/face-register.ts`에 있다. 밝기·좌우·기울기는 갤럭시탭 S6 Lite에서 재서 정했고, 거리·가운데·위아래는 원 표시 방식과 하프미러 보정이 정해지면 확정한다. 손 가림은 아직 판정하지 못하고, 사진은 업로드 API 전까지 메모리에만 둔다
 - 등록에 쓴 카메라는 미리보기에서 그대로 이어 쓴다. 등록 전에 '나중에'를 누르면 카메라를 끈다
-- 회원(로그인·가입·비밀번호 재설정·로그아웃), 튜토리얼 가이드 조회(`GET /v1/guides/{guideId}`), 분석 상태(`GET /v1/users/me/analysis-jobs/{jobId}`와 SSE `…/events`)는 BE API를 쓴다. `/tutorial?guideId=<UUID>`면 조회 응답의 단계·설명·영상 제품·영역을 사용한다. `/loading?jobId=<UUID>`면 그 분석 작업의 진행 상태를 받고, jobId가 없으면 샘플 진행률을 보여 준다. 나머지는 API 연동 전이라 데이터는 `mocks/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. `guideId` 없는 샘플 튜토리얼의 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `mocks/mock-guide.ts`에서 만든다. 가이드 대상이 아닌 단계(스킨케어 등)는 빼고, 단계 수가 영상마다 다르므로 화면은 목록 길이대로 돈다.
+- 회원(로그인·가입·비밀번호 재설정·로그아웃), 파우치(분류·제품 찾기·내 파우치 목록·상세·등록·수정·삭제, API-POUCH-001~008), 튜토리얼 가이드 조회(`GET /v1/guides/{guideId}`), 분석 상태(`GET /v1/users/me/analysis-jobs/{jobId}`와 SSE `…/events`)는 BE API를 쓴다. 로그인했으면 홈·내 파우치가 서버 파우치를 받아 세션 파우치(`state.pouch`)를 바꾸고, 다른 화면도 이 목록을 쓴다. 로그인 전에는 저장된 샘플 파우치를 보여 주고(수정 시트는 저장·삭제 없이 로그인 안내만), 온보딩의 흐린 예시 보드는 `DEFAULT_POUCH` 샘플이다. 파우치 일러스트는 종류 코드로 고르고(`features/pouch/catalog.ts`의 `TYPE_ILL`), 모르는 코드는 카테고리 기본 그림이다. `/tutorial?guideId=<UUID>`면 조회 응답의 단계·설명·영상 제품·영역을 사용한다. `/loading?jobId=<UUID>`면 그 분석 작업의 진행 상태를 받고, jobId가 없으면 샘플 진행률을 보여 준다. 나머지는 API 연동 전이라 데이터는 `mocks/mock-data.ts`의 샘플이고 분석·저장은 타이머로 흉내 낸다. `guideId` 없는 샘플 튜토리얼의 가이드 단계와 영상 제품은 AI 샘플 영상(`ai/samples/local_01`)의 가이드 입력을 옮긴 `mocks/mock-guide.ts`에서 만든다. 가이드 대상이 아닌 단계(스킨케어 등)는 빼고, 단계 수가 영상마다 다르므로 화면은 목록 길이대로 돈다.
 - 샘플은 화면(app/)과 layout에서만 가져와 features에 props·인자로 넘긴다(파우치·리포트 기본값은 `SessionProvider`의 `seed`, 영상 상태는 `VideoPicker`의 `stateOf`, 영상 속 제품은 `matchFor` 등의 인자). 그래서 mocks를 지우면 화면·layout과 개발용 `dev-nav`만 깨지고 features·lib는 그대로다. API가 붙으면 그 자리에 응답을 넣는다.
 - 예외로 모의 응답 계층 `lib/api/mock.ts`는 가이드 조회의 모의 응답을 만들려고 `mocks/mock-guide-api.ts`를 가져온다. 모의 가이드가 샘플 단계(`mocks/mock-guide.ts`)로 만들어져 lib로 옮기면 샘플 데이터까지 lib에 들어가므로, 가이드 조회를 부를 때만 동적으로 불러온다. mocks를 지울 때는 `mock.ts`의 가이드 조회 경로도 함께 지운다.
 - 모의 가이드 ID(`NEXT_PUBLIC_API_MOCK=success`): `a0000000-0000-4000-8000-000000000001`은 샘플 영상 가이드, `…0002`는 9가지 화장 종류(마스카라는 설명 없이 요약만), `…0003`은 로그인 필요(401)다. 그 밖의 ID는 404다.
-- 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`, `/my/pouch?demo=shade-fail`
+- 상태 확인용 주소: `/login?expired=basic|tut`, `/loading?joined=1`, `/loading?fail=timeout|failed`, `/loading?review=pending|rejected`, `/preview?alert=lost|turn|cover|far|light`, `/check?empty=1`, `/tutorial?alert=cover`, `/tutorial?photofail=1`, `/done?fail=1`
 
 ## MediaPipe 파일
 
@@ -268,7 +268,7 @@ try {
 }
 ```
 
-- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. [API 명세](../docs/references/api-spec.md)와 다르면 코드를 따른다. 타입은 `GET /health`와 화면에서 쓰는 회원 API(가입·이메일 인증·로그인·내 계정·로그아웃·비밀번호 재설정)만 있고, 로그인 기기 API는 화면을 만들 때 BE `users.dto`를 보고 추가한다.
+- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. [API 명세](../docs/references/api-spec.md)와 다르면 코드를 따른다. 타입은 `GET /health`, 화면에서 쓰는 회원 API(가입·이메일 인증·로그인·내 계정·로그아웃·비밀번호 재설정), 파우치·제품 API만 있고, 로그인 기기 API는 화면을 만들 때 BE `users.dto`를 보고 추가한다.
 - 경로는 `/api` 뒤부터 적는다 (`/v1/...`, `/health`). 주소 앞부분은 `NEXT_PUBLIC_API_BASE_URL` (기본 `/api`).
 - `NEXT_PUBLIC_API_BASE_URL`은 같은 Origin의 상대 경로(`/api`)만 지원한다. 다른 도메인이면 세션 쿠키가 실리지 않고, BE에도 CORS 설정이 없다.
 - 세션 쿠키(`__Host-sessionId`)는 Secure라서 `http://<PC IP>:3000`으로 접속하면 브라우저가 버린다. 로그인이 필요한 요청을 폰에서 확인할 때는 USB 연결(`localhost`)이나 `npm run dev:https`로 접속한다.
@@ -278,7 +278,7 @@ try {
 - 실패하면 `ApiError`를 던진다. 서버에 닿지 못하면 `code`가 `NETWORK_ERROR`, `AbortSignal.timeout()`으로 끊기면 `TIMEOUT`, 응답이 공통 형식이 아니면(JSON이 아닌 성공 응답 포함) `UNEXPECTED_RESPONSE`다. 직접 취소하면 `abort()`에 넣은 이유와 상관없이 `AbortError`를 던진다.
 - `setCsrfToken()`으로 토큰을 넣어 두면 POST·PUT·PATCH·DELETE에 `X-CSRF-TOKEN`이 붙는다. 로그인·내 계정 조회 응답의 `csrfToken`을 고치지 않고 그대로 넣는다.
 - 토큰이 없거나 맞지 않는 변경 요청은 403 `CSRF_INVALID`이고, `api`가 내 계정 조회로 토큰을 다시 받아 한 번만 다시 보낸다. 조회가 401이면 `UNAUTHORIZED`를 던진다. 회원가입·로그인은 세션이 없어 토큰 대신 허용 Origin으로 검사한다(허용되지 않으면 403 `FORBIDDEN`). 개발 서버 Origin `http://localhost:3000`은 BE 개발 설정에서 허용돼 있다.
-- 앱을 열면 `SessionProvider`가 내 계정 조회로 로그인 상태를 서버 기준으로 맞추고 토큰을 넣는다. 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하거나 5초 안에 답이 없으면 저장된 상태로 시작한다. 저장된 상태가 로그인인데 401이면 세션 만료로 보고 인트로가 `/login?expired=basic`으로 보낸다(로그인하면 풀린다). 첫 조회가 끝나기 전에는 로그인 버튼이 막히고 "로그인 상태 확인 중"을 보여 준다. 세션 상태는 둘로 나뉜다: `storageLoaded`(브라우저 저장값을 읽음 — 파우치·리포트 화면이 기다린다), `sessionChecked`(내 계정 조회가 끝남 — 로그인 분기가 기다린다).
+- 앱을 열면 `SessionProvider`가 내 계정 조회로 로그인 상태를 서버 기준으로 맞추고 토큰을 넣는다. 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하거나 5초 안에 답이 없으면 저장된 상태로 시작한다. 저장된 상태가 로그인인데 401이면 세션 만료로 보고 인트로가 `/login?expired=basic`으로 보낸다(로그인하면 풀린다). 화면에서 받은 API가 401이면 `expireSession()`으로 같은 만료 상태로 바꾼다. 로그아웃·만료 때는 서버에서 받은 파우치를 지우고 처음 샘플로 돌리며, 로그아웃 상태에서 로그인하거나 다른 계정으로 바뀌면 파우치를 비우고 서버 목록을 기다린다(목록 조회가 실패해도 샘플·이전 계정 목록을 내 제품으로 쓰지 않는다). 첫 조회가 끝나기 전에는 로그인 버튼이 막히고 "로그인 상태 확인 중"을 보여 준다. 세션 상태는 둘로 나뉜다: `storageLoaded`(브라우저 저장값을 읽음 — 파우치·리포트 화면이 기다린다), `sessionChecked`(내 계정 조회가 끝남 — 로그인 분기가 기다린다).
 - 오류 문구는 `errorMessage(e)`로 고른다. 아래 표에 있는 코드면 `message`, 아니면 "잠시 후 다시 시도해 주세요."다.
 - 가입 전 이메일 인증은 `NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION`으로 정한다(빌드 시점 값, 기본 켜짐). BE의 `SIGNUP_REQUIRE_EMAIL_VERIFICATION`과 같게 둔다. BE가 메일을 보내지 않는 환경(`MAIL_ENABLED=false`)에서는 인증번호를 받을 수 없으므로 `false`로 빌드해야 가입할 수 있다. 끄면 이메일 중복 확인만 거치고 인증 토큰은 보내지 않는다.
 - **약관 버전**: 가입 때 보내는 버전은 `lib/validation.ts`의 `AGREEMENT_VERSION`에 고정돼 있다. BE의 `AGREEMENT_*_VERSION`만 올리면 모든 가입이 실패하므로, 약관을 바꿀 때는 두 값을 같이 바꿔 FE·BE를 함께 배포한다.
@@ -308,13 +308,15 @@ try {
 | `USERS_*_ATTEMPTS_EXCEEDED`                         | 429  | `message`와 함께 인증번호 다시 받기를 보여 준다. `Retry-After`가 없고 다시 받기 전까지는 맞는 인증번호도 거절된다                                                                                                           |
 | `TOO_MANY_REQUESTS`, `USERS_*_RATE_LIMITED`         | 429  | `message`를 보여 주고, `retryAfterSeconds`가 있으면 그동안 버튼을 막는다                                                                                                                                                    |
 | `USERS_*_SEND_FAILED`, `SERVICE_UNAVAILABLE`        | 503  | `message`를 보여 주고 다시 시도 버튼을 둔다                                                                                                                                                                                 |
+| `POUCH_DUPLICATE`                                   | 409  | 등록 시트에 `message`를 보여 준다 (같은 브랜드·제품명·호수가 이미 있음)                                                                                                                                                     |
+| `POUCH_INVALID_PRODUCT`, `POUCH_INVALID_UPDATE`     | 400  | 서버 문구가 개발자용이라 쓰지 않고 "컬러를 다시 고르거나 직접 입력으로 저장해 주세요"를 보여 준다                                                                                                                           |
 | `METHOD_NOT_ALLOWED`                                | 405  | FE 호출 오류라 `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                                                             |
 | `INTERNAL_ERROR`                                    | 500  | "잠시 후 다시 시도해 주세요" 안내와 다시 시도 버튼                                                                                                                                                                          |
 | `NETWORK_ERROR`, `TIMEOUT`                          | -    | FE에서 만드는 코드. 연결을 확인하라는 안내와 다시 시도 버튼                                                                                                                                                                 |
 | `UNEXPECTED_RESPONSE`                               | -    | FE에서 만드는 코드. `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                                                        |
 | 그 밖의 코드                                        | -    | `message`를 쓰지 않고 `INTERNAL_ERROR`와 같이 처리한다                                                                                                                                                                      |
 
-- 공통 코드는 `backend/src/main/java/com/mairor/backend/common/error/ErrorCode.java`, 회원 코드는 같은 `backend` 패키지 아래 `users/service`와 `users/support/AgreementPolicy.java`에 있다. 코드가 추가되면 이 표에 같이 적는다
+- 공통 코드는 `backend/src/main/java/com/mairor/backend/common/error/ErrorCode.java`, 회원 코드는 같은 `backend` 패키지 아래 `users/service`와 `users/support/AgreementPolicy.java`, 파우치 코드는 `pouch/service`에 있다. 코드가 추가되면 이 표에 같이 적는다
 
 ## 규칙
 

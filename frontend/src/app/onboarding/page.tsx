@@ -9,6 +9,7 @@ import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/featu
 import { useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial";
 import { cn } from "@/lib/utils";
+import { DEFAULT_POUCH } from "@/mocks/mock-data";
 
 /** 온보딩 4장: 기능 소개 3장 + 파우치 담기. 이 기기에서 최초 1회 (POUCH-001) */
 export default function OnboardingPage() {
@@ -20,7 +21,8 @@ export default function OnboardingPage() {
 
   const mine = state.pouch.filter((p) => newIds.includes(p.id));
   const demo = mine.length === 0;
-  const items = demo ? state.pouch.filter((p) => /^p\d{1,2}$/.test(p.id)) : mine;
+  // 아직 담은 제품이 없으면 샘플 제품을 흐리게 보여 준다 (예시일 뿐 파우치에 넣지 않는다)
+  const items = demo ? DEFAULT_POUCH : mine;
 
   const finish = () => {
     update({ onboarded: true });

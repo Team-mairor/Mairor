@@ -1,16 +1,11 @@
-import { ILL_SIZE, POUCH_TYPES, type PouchCat, type PouchItem } from "./catalog";
+import { CAT_ILL, ILL_SIZE, TYPE_ILL, type PouchCat, type PouchItem } from "./catalog";
 
 /** 선화+채움 두 장으로 된 옛 일러스트. 채움을 제품 색으로 물들인다 */
 const TINTED = new Set(["lip", "compact", "jar", "spray", "pencil", "brush"]);
 
-export function typeOf(p: Pick<PouchItem, "cat" | "type">) {
-  const types = POUCH_TYPES[p.cat] ?? POUCH_TYPES["도구"];
-  return types.find((t) => t[0] === p.type) ?? types[0];
-}
-
 /** 종류 일러스트 키와 스티커 크기. 면적을 비슷하게 맞춘다 (최대 230px) */
 export function illOf(p: Pick<PouchItem, "cat" | "type">) {
-  const key = typeOf(p)[1];
+  const key = (p.type && TYPE_ILL[p.type]) || CAT_ILL[p.cat] || "brush";
   const [w, h] = ILL_SIZE[key] ?? [160, 200];
   const sc = Math.min(Math.sqrt(30000 / (w * h)), 230 / Math.max(w, h));
   return { key, width: Math.round(w * sc), height: Math.round(h * sc), tinted: TINTED.has(key) };

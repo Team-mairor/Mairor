@@ -1,4 +1,5 @@
-// 파우치 카테고리·종류·일러스트 크기. 화면과 매칭이 함께 쓰는 고정값
+// 파우치 카테고리·일러스트 크기. 화면과 매칭이 함께 쓰는 고정값.
+// 카테고리·종류 목록은 서버(GET /v1/product-categories)가 기준이고, 여기에는 화면 표시·그림에 필요한 것만 둔다
 
 export const POUCH_CATS = [
   "베이스",
@@ -13,65 +14,83 @@ export const POUCH_CATS = [
 ] as const;
 export type PouchCat = (typeof POUCH_CATS)[number];
 
+/** 카테고리 → 서버 코드. 9개 코드는 API 명세 4절의 고정값이다 */
+export const CAT_CODE: Record<PouchCat, string> = {
+  베이스: "BASE",
+  아이: "EYE",
+  브로우: "BROW",
+  치크: "CHEEK",
+  립: "LIP",
+  스킨케어: "SKINCARE",
+  네일: "NAIL",
+  향수: "FRAGRANCE",
+  도구: "TOOL",
+};
+
+/** 서버 카테고리 코드 → 화면 카테고리. 모르는 코드는 도구로 둔다 */
+export function catOf(code: string): PouchCat {
+  return POUCH_CATS.find((c) => CAT_CODE[c] === code) ?? "도구";
+}
+
 /** 대체 후보 매칭 대상 카테고리. 나머지는 파우치 보관만 */
 export const MATCH_CATS: PouchCat[] = ["베이스", "아이", "브로우", "치크", "립"];
-/** 호수·컬러를 묻지 않는 카테고리 */
-export const NO_SHADE_CATS: PouchCat[] = ["스킨케어", "향수", "도구"];
 
-/** 카테고리별 종류 → 일러스트 키 (public/ill/<key>.png) */
-export const POUCH_TYPES: Record<PouchCat, [label: string, ill: string][]> = {
-  베이스: [
-    ["쿠션", "cushion"],
-    ["파운데이션", "foundation"],
-    ["컨실러", "concealer"],
-    ["선크림", "sunscreen"],
-    ["파우더", "powder"],
-    ["스틱", "stick"],
-  ],
-  아이: [
-    ["섀도우 팔레트", "palette"],
-    ["마스카라", "mascara"],
-    ["아이라이너", "eyeliner"],
-    ["인조 속눈썹", "lashes"],
-  ],
-  브로우: [["브로우 펜슬", "pencil"]],
-  치크: [
-    ["블러셔", "blush"],
-    ["하이라이터", "highlighter"],
-    ["컴팩트", "compact"],
-  ],
-  립: [
-    ["립스틱", "lip"],
-    ["립글로스", "gloss"],
-    ["립틴트", "tint"],
-    ["립밤 · 팟", "balm"],
-    ["리퀴드 립", "liquid-lip"],
-  ],
-  스킨케어: [
-    ["토너", "toner"],
-    ["세럼 · 앰플", "serum"],
-    ["크림", "jar"],
-    ["클렌징 폼", "cleansing-foam"],
-    ["클렌징 오일", "cleansing-oil"],
-    ["핸드 · 아이크림", "cream-tube"],
-    ["마스크팩", "sheet-mask"],
-    ["미스트", "spray"],
-  ],
-  네일: [
-    ["네일 폴리시", "nail"],
-    ["네일 파일", "nail-file"],
-  ],
-  향수: [["향수", "perfume"]],
-  도구: [
-    ["브러시", "brush"],
-    ["퍼프", "puff"],
-    ["스펀지", "sponge"],
-    ["뷰러", "curler"],
-    ["손거울", "mirror"],
-    ["족집게", "tweezers"],
-    ["화장솜", "cotton"],
-    ["면봉", "swab"],
-  ],
+/**
+ * 종류 코드 → 일러스트 키 (public/ill/<key>.png).
+ * 종류 코드는 서버의 임시 제안이라(API-POUCH-008) 여기 없는 코드는 카테고리 기본 그림(CAT_ILL)을 쓴다
+ */
+export const TYPE_ILL: Record<string, string> = {
+  CUSHION: "cushion",
+  FOUNDATION: "foundation",
+  CONCEALER: "concealer",
+  SUNSCREEN: "sunscreen",
+  POWDER: "powder",
+  BASE_STICK: "stick",
+  EYESHADOW_PALETTE: "palette",
+  MASCARA: "mascara",
+  EYELINER: "eyeliner",
+  FALSE_LASHES: "lashes",
+  BROW_PENCIL: "pencil",
+  BLUSHER: "blush",
+  HIGHLIGHTER: "highlighter",
+  COMPACT: "compact",
+  LIPSTICK: "lip",
+  LIP_GLOSS: "gloss",
+  LIP_TINT: "tint",
+  LIP_BALM: "balm",
+  LIQUID_LIP: "liquid-lip",
+  TONER: "toner",
+  SERUM_AMPOULE: "serum",
+  CREAM: "jar",
+  CLEANSING_FOAM: "cleansing-foam",
+  CLEANSING_OIL: "cleansing-oil",
+  HAND_EYE_CREAM: "cream-tube",
+  MASK_PACK: "sheet-mask",
+  MIST: "spray",
+  NAIL_POLISH: "nail",
+  NAIL_FILE: "nail-file",
+  PERFUME: "perfume",
+  BRUSH: "brush",
+  PUFF: "puff",
+  SPONGE: "sponge",
+  EYELASH_CURLER: "curler",
+  HAND_MIRROR: "mirror",
+  TWEEZERS: "tweezers",
+  COTTON_PAD: "cotton",
+  COTTON_SWAB: "swab",
+};
+
+/** 종류를 모를 때 카테고리 기본 그림 */
+export const CAT_ILL: Record<PouchCat, string> = {
+  베이스: "cushion",
+  아이: "palette",
+  브로우: "pencil",
+  치크: "blush",
+  립: "lip",
+  스킨케어: "toner",
+  네일: "nail",
+  향수: "perfume",
+  도구: "brush",
 };
 
 /** 일러스트 원본 크기 (px). 스티커를 같은 면적으로 맞출 때 쓴다 */
@@ -117,6 +136,7 @@ export const ILL_SIZE: Record<string, [number, number]> = {
   brush: [144, 339],
 };
 
+/** 직접 입력할 때 고르는 색 */
 export const SHADE_COLORS = [
   "#E9D2C2",
   "#EF8E8A",
@@ -129,9 +149,10 @@ export const SHADE_COLORS = [
 ];
 
 export interface PouchItem {
+  /** 서버 항목 ID(pouchItemId). 샘플은 p1·p2… */
   id: string;
   cat: PouchCat;
-  /** 종류 (POUCH_TYPES 라벨). 없으면 카테고리 첫 종류 */
+  /** 종류 코드 (API-POUCH-008). 없으면 카테고리 기본 그림 */
   type?: string;
   brand: string;
   name: string;
@@ -139,4 +160,7 @@ export interface PouchItem {
   shade?: string;
   /** 대표 색. 없으면 대체 후보에서 빠진다 */
   color?: string | null;
+  /** 카탈로그 제품·호수 연결 (CATALOG 등록). 직접 입력·샘플은 없음 */
+  productId?: string | null;
+  shadeId?: string | null;
 }

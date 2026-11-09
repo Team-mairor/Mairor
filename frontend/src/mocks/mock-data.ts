@@ -161,14 +161,6 @@ export const DEFAULT_POUCH: PouchItem[] = [
   ...REF_PRODUCTS.flatMap((r) => (r.sub ? [{ cat: r.matchCat, ...r.sub }] : [])),
 ].map((p, i) => ({ id: `p${i + 1}`, ...p }));
 
-/** 샘플 호수 목록 (API-POUCH-001 흉내) */
-export const SHADE_OPTIONS: { name: string; color: string }[] = [
-  { name: "01 쥬시 코랄", color: "#EF8E8A" },
-  { name: "06 피그 피그", color: "#B5706B" },
-  { name: "09 로즈 MLBB", color: "#C8235F" },
-  { name: "12 피치 글로우", color: "#F2899B" },
-];
-
 export const DEFAULT_REPORTS: ReportSummary[] = [
   { id: "rp1", title: "면접용 내추럴 룩", date: "10월 16일", steps: 7, subs: 1 },
   { id: "rp2", title: "글로시 립 포인트", date: "10월 12일", steps: 5, subs: 0 },

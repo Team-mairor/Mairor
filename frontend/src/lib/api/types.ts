@@ -146,3 +146,118 @@ export interface AnalysisJobStatus {
   createdAt: string;
   completedAt: string | null;
 }
+
+/** 색 (ColorInfo). 색이 없으면 객체 자체가 null */
+export interface ColorInfo {
+  colorSpace: "sRGB";
+  /** #RRGGBB */
+  hex: string;
+  /** 보유 제품 CATALOG | USER_INPUT, 목표 발색 VIDEO_ESTIMATE | CATALOG | MANUAL_REVIEW (명세 4절 ColorInfo 공용이라 string) */
+  source: string;
+  estimated: boolean;
+}
+
+/** 호수 안의 색 칸 하나 (ShadeColor). 단색 호수는 칸 1개, 팔레트는 여러 개 */
+export interface ShadeColor {
+  colorId: string;
+  name: string | null;
+  sortOrder: number;
+  /** 쓸 수 있는 색이 없으면 null */
+  color: ColorInfo | null;
+}
+
+/** 호수 (Shade) */
+export interface Shade {
+  shadeId: string;
+  name: string;
+  colors: ShadeColor[];
+}
+
+/** 카탈로그 제품 (ProductResponse). 호수 선택이 없는 분류는 shades=[] */
+export interface Product {
+  productId: string;
+  brand: string;
+  name: string;
+  category: string;
+  type: string;
+  shades: Shade[];
+}
+
+/** GET /v1/products?category&type&brand&name 응답. 정확히 같은 제품 0~1건 (0건이면 직접 입력) */
+export interface ProductList {
+  items: Product[];
+}
+
+export interface ProductType {
+  code: string;
+  label: string;
+}
+
+/** 카테고리 (ProductCategoryResponse). code를 저장하고 label을 보여 준다 */
+export interface ProductCategory {
+  code: string;
+  label: string;
+  matchable: boolean;
+  /** 등록할 때 호수·컬러를 고르는 분류 */
+  shadeSelectable: boolean;
+  types: ProductType[];
+  compatibleParts: string[];
+}
+
+/** GET /v1/product-categories 응답 */
+export interface ProductCategoryList {
+  items: ProductCategory[];
+}
+
+/** 내 파우치 항목 (PouchItemResponse). MANUAL은 productId·shadeId가 null */
+export interface PouchItemResponse {
+  pouchItemId: string;
+  registrationMode: "CATALOG" | "MANUAL";
+  productId: string | null;
+  shadeId: string | null;
+  brand: string;
+  name: string;
+  category: string;
+  type: string;
+  shadeName: string | null;
+  color: ColorInfo | null;
+  colorSource: "CATALOG" | "USER_INPUT" | "NONE";
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /v1/users/me/pouch-items 응답. 최신 등록순, size 최대 100 */
+export interface PouchList extends Page<PouchItemResponse> {
+  pouchVersion: number;
+}
+
+/**
+ * POST /v1/users/me/pouch-items 요청 (PouchRegistrationRequest).
+ * CATALOG: type·productId(+ 호수 선택 분류면 shadeId)만. MANUAL: category·type·brand·name(+ 호수 선택 분류면 shadeName·colorHex)
+ * 실패: 400 VALIDATION_FAILED·POUCH_INVALID_PRODUCT, 409 POUCH_DUPLICATE(같은 브랜드·제품명·호수)
+ */
+export type PouchRegistrationRequest =
+  | { registrationMode: "CATALOG"; type: string; productId: string; shadeId?: string }
+  | {
+      registrationMode: "MANUAL";
+      category: string;
+      type: string;
+      brand: string;
+      name: string;
+      shadeName?: string | null;
+      colorHex?: string | null;
+    };
+
+/**
+ * PATCH /v1/users/me/pouch-items/{id} 요청. 생략한 칸은 그대로다.
+ * 직접 입력 칸을 바꾸면 서버가 MANUAL로 바꾼다. 실패: 400 POUCH_INVALID_UPDATE·POUCH_INVALID_PRODUCT, 404, 409 POUCH_DUPLICATE
+ */
+export type PouchUpdateRequest =
+  | { registrationMode: "CATALOG"; type: string; productId: string; shadeId?: string }
+  | Omit<Extract<PouchRegistrationRequest, { registrationMode: "MANUAL" }>, "registrationMode">;
+
+/** 등록(201)·수정(200) 응답 */
+export interface PouchWriteResponse {
+  item: PouchItemResponse;
+  pouchVersion: number;
+}
