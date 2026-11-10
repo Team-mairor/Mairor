@@ -27,7 +27,7 @@ import { observeCanvasSize } from "@/lib/canvas-size";
 import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer } from "./renderer";
 import { cropTransform } from "./tutorial-crop";
-import type { AreaSubStep, GuideArea, GuideSet, GuideStep } from "./types";
+import type { AreaGuideSet, AreaSubStep, GuideArea, GuideSet, GuideStep } from "./types";
 import { GuideVisibility, GUIDE_STALE_MS, GUIDE_TURN } from "./visibility";
 
 function anchorsOf(guide: GuideShape): MeshAnchor[] {
@@ -88,8 +88,9 @@ export async function loadGuideArea(url: string): Promise<GuideArea> {
 }
 
 /**
- * 단계별 도포 영역을 검사한다. 쓸 수 없는 부위별 묶음은 경고만 남기고 빼고,
- * 그 때문에 영역이 하나도 남지 않은 extracted 하위 단계는 failed로 바꾼다.
+ * 단계별 도포 영역을 검사한다. 잘못된 도형은 그 도형만 빼고, 바를 영역(polygon)이 하나도 남지 않은
+ * 부위별 묶음은 뺀다. 화살표는 선택 항목이라 영역 없이 화살표만 남은 묶음도 뺀다.
+ * 그 때문에 묶음이 하나도 남지 않은 extracted 하위 단계는 failed로 바꾼다.
  * source는 오류 문구에 붙일 출처(파일 경로 등)다.
  */
 export async function checkGuideArea(area: GuideArea, source: string): Promise<GuideArea> {
@@ -102,20 +103,33 @@ export async function checkGuideArea(area: GuideArea, source: string): Promise<G
   const mesh = await loadFaceMesh();
   const checkSub = (sub: AreaSubStep): AreaSubStep => {
     if (sub.status !== "extracted") return sub;
-    const guideSets = (sub.guideSets ?? []).filter((set) => {
+    const shapeError = (g: AreaGuideSet["guides"][number]) =>
+      g?.type !== "polygon" && g?.type !== "arrow"
+        ? "영역 또는 화살표 모양이 아님"
+        : g.type === "polygon" && (g.outline?.length ?? 0) < 3
+          ? "영역 점이 3개보다 적음"
+          : anchorsOf(g)
+              .map((a) => anchorError(a, mesh))
+              .find(Boolean);
+    const guideSets = (sub.guideSets ?? []).flatMap((set) => {
       const error =
         regionNamesError([set.region]) ??
         regionNamesError(set.exclude ?? [], { allowEmpty: true }) ??
-        (!Array.isArray(set.guides) || set.guides.length === 0
-          ? "도형 없음"
-          : set.guides.some((g) => g.type !== "polygon" || (g.outline?.length ?? 0) < 3)
-            ? "테두리 점이 3개보다 적음"
-            : set.guides
-                .flatMap(anchorsOf)
-                .map((a) => anchorError(a, mesh))
-                .find(Boolean));
-      if (error) console.warn(`${sub.subStepId} ${set.region} 영역을 쓸 수 없어 뺍니다: ${error}`);
-      return !error;
+        (Array.isArray(set.guides) ? null : "도형 없음");
+      if (error) {
+        console.warn(`${sub.subStepId} ${set.region} 영역을 쓸 수 없어 뺍니다: ${error}`);
+        return [];
+      }
+      const guides = set.guides.filter((g) => {
+        const problem = shapeError(g);
+        if (problem) console.warn(`${sub.subStepId} ${set.region} 도형을 빼고 씁니다: ${problem}`);
+        return !problem;
+      });
+      if (!guides.some((g) => g.type === "polygon")) {
+        console.warn(`${sub.subStepId} ${set.region} 바를 영역이 없어 뺍니다`);
+        return [];
+      }
+      return [{ ...set, guides }];
     });
     return guideSets.length
       ? { ...sub, guideSets }

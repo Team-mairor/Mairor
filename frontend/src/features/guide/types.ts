@@ -36,8 +36,9 @@ export type Makeup =
   | "highlight"
   | "other";
 
-/** 기본 가이드 키. 화장 종류에 더해 아이섀도는 바른 자리별 템플릿이 있다 (eyeshadow는 위아래 모두) */
-export type TemplateId = Makeup | "eyeshadowUpper" | "eyeshadowUnder";
+/** 기본 가이드 키. 눈 화장은 바른 자리별 템플릿을 더 쓴다 */
+export type TemplateId =
+  Makeup | "eyeshadowUpper" | "eyeshadowUnder" | "eyelinerWaterline" | "eyelinerUnder";
 
 /**
  * AI가 넘기는 영상 하나의 단계별 도포 영역 (shared/guide-area).
@@ -74,6 +75,7 @@ export interface AreaSubStep {
 export interface AreaGuideSet {
   region: RegionName;
   source: "extracted" | "manual";
-  guides: Extract<GuideShape, { type: "polygon" }>[];
+  /** 찾은 도포 영역과, 바르기 시작한 곳에서 진행 방향으로 향하는 화살표 */
+  guides: Extract<GuideShape, { type: "polygon" | "arrow" }>[];
   exclude?: RegionName[];
 }

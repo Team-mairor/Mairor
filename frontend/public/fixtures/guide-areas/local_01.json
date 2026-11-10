@@ -72,7 +72,7 @@
           "order": 1,
           "status": "template",
           "reasons": [
-            "noUsableFrame"
+            "notAnalyzed"
           ],
           "templateId": "foundation",
           "guideSets": []
@@ -838,7 +838,7 @@
           "reasons": [
             "noUsableFrame"
           ],
-          "templateId": "eyeshadow",
+          "templateId": "eyeshadowUnder",
           "guideSets": []
         }
       ]
@@ -870,7 +870,7 @@
           "order": 1,
           "status": "template",
           "reasons": [
-            "noUsableFrame"
+            "notAnalyzed"
           ],
           "templateId": "contour",
           "guideSets": []
@@ -887,7 +887,7 @@
           "order": 1,
           "status": "template",
           "reasons": [
-            "noUsableFrame"
+            "notAnalyzed"
           ],
           "templateId": "highlight",
           "guideSets": []
@@ -1108,7 +1108,7 @@
           "order": 1,
           "status": "failed",
           "reasons": [
-            "FRAME_UNREADABLE"
+            "analysisError"
           ],
           "templateId": null,
           "guideSets": []

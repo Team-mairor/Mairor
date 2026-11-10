@@ -126,6 +126,15 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
   const arrow = (from: MeshAnchor, to: MeshAnchor): GuideShape => ({ type: "arrow", from, to });
   const point = (anchor: MeshAnchor): GuideShape => ({ type: "point", at: anchor });
   const eyeliner = eyelinerPaths(mesh);
+  const eyelinerWaterline = {
+    right: [133, 173, 157, 158, 159, 160, 161, 246, 33].map(at),
+    left: [362, 398, 384, 385, 386, 387, 388, 466, 263].map(at),
+  };
+  // 아랫라인·아랫점막은 아래 속눈썹 바깥쪽 절반을 같은 기본 선으로 안내한다.
+  const eyelinerUnder = {
+    right: [145, 144, 163, 7, 33].map(at),
+    left: [374, 373, 390, 249, 263].map(at),
+  };
   /** 얼굴 외곽 점들과, 그 점들을 코끝 쪽으로 조금 들인 선 사이의 띠 */
   const contourBand = (edge: number[]): GuideShape => ({
     type: "polygon",
@@ -328,6 +337,28 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
         { type: "polyline", path: eyeliner.right, width: 0.03 },
         point(eyeliner.left[0]),
         { type: "polyline", path: eyeliner.left, width: 0.03 },
+      ],
+    },
+    {
+      stepId: "eyelinerWaterline",
+      title: "아이라인: 윗점막은 눈 앞머리부터 눈꼬리까지 속눈썹 사이를 채워요",
+      regions: ["rightEye", "leftEye"],
+      guides: [
+        point(eyelinerWaterline.right[0]),
+        { type: "polyline", path: eyelinerWaterline.right, width: 0.03 },
+        point(eyelinerWaterline.left[0]),
+        { type: "polyline", path: eyelinerWaterline.left, width: 0.03 },
+      ],
+    },
+    {
+      stepId: "eyelinerUnder",
+      title: "아이라인: 아래 속눈썹 바깥쪽을 따라 얇게 채워요",
+      regions: ["rightEye", "leftEye"],
+      guides: [
+        point(eyelinerUnder.right[0]),
+        { type: "polyline", path: eyelinerUnder.right, width: 0.03 },
+        point(eyelinerUnder.left[0]),
+        { type: "polyline", path: eyelinerUnder.left, width: 0.03 },
       ],
     },
     {

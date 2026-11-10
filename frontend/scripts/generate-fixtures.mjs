@@ -555,10 +555,6 @@ const eyeshadowSubSteps = [
 const aiArea = JSON.parse(
   readFileSync(join(frontendDir, "../ai/samples/local_01/guide_area.json"), "utf8"),
 );
-// 마스카라는 기본 가이드로 안내하기로 해, AI 샘플이 바뀌기 전까지 template으로 덮어쓴다
-const mascaraSubSteps = (stepId) => [
-  sub(stepId, 1, "template", { reasons: ["notAnalyzed"], templateId: "mascara" }),
-];
 writeJson("guide-areas/local_01.json", {
   ...aiArea,
   steps: aiArea.steps.map((step) => ({
@@ -566,15 +562,17 @@ writeJson("guide-areas/local_01.json", {
     subSteps:
       step.stepId === "s10"
         ? eyeshadowSubSteps
-        : step.makeup === "mascara"
-          ? mascaraSubSteps(step.stepId)
-          : step.subSteps.map((s) => ({
-              ...s,
-              guideSets: s.guideSets.map((set) => ({
-                ...set,
-                guides: [{ type: "polygon", outline: ring(REGIONS[set.region].indices) }],
-              })),
+        : step.subSteps.map((s) => ({
+            ...s,
+            guideSets: s.guideSets.map((set) => ({
+              ...set,
+              guides: set.guides.map((guide) =>
+                guide.type === "polygon"
+                  ? { type: "polygon", outline: ring(REGIONS[set.region].indices) }
+                  : guide,
+              ),
             })),
+          })),
   })),
 });
 

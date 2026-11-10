@@ -2507,7 +2507,7 @@
         {
           "type": "polyline",
           "brush": true,
-          "width": 0.012087569918576008,
+          "width": 0.01208756991857601,
           "path": [
             {
               "triangle": 249,
@@ -3747,7 +3747,7 @@
         {
           "type": "polyline",
           "brush": true,
-          "width": 0.012087569918576008,
+          "width": 0.01208756991857601,
           "path": [
             {
               "triangle": 248,
@@ -5269,6 +5269,322 @@
       "source": "template"
     },
     {
+      "stepId": "eyelinerWaterline",
+      "title": "아이라인: 윗점막은 눈 앞머리부터 눈꼬리까지 속눈썹 사이를 채워요",
+      "regions": [
+        "rightEye",
+        "leftEye"
+      ],
+      "guides": [
+        {
+          "type": "point",
+          "at": {
+            "triangle": 0,
+            "bary": [
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 0,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 0,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 39,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 165,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 163,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 91,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 93,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            }
+          ],
+          "width": 0.03
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 2,
+            "bary": [
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 2,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 2,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 38,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 164,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 162,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 90,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 92,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 3,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 3,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ],
+          "width": 0.03
+        }
+      ],
+      "order": 10,
+      "source": "template"
+    },
+    {
+      "stepId": "eyelinerUnder",
+      "title": "아이라인: 아래 속눈썹 바깥쪽을 따라 얇게 채워요",
+      "regions": [
+        "rightEye",
+        "leftEye"
+      ],
+      "guides": [
+        {
+          "type": "point",
+          "at": {
+            "triangle": 121,
+            "bary": [
+              1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 121,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 119,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 489,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 1,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            }
+          ],
+          "width": 0.03
+        },
+        {
+          "type": "point",
+          "at": {
+            "triangle": 120,
+            "bary": [
+              1,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "type": "polyline",
+          "path": [
+            {
+              "triangle": 120,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 118,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 488,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 3,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 3,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            }
+          ],
+          "width": 0.03
+        }
+      ],
+      "order": 11,
+      "source": "template"
+    },
+    {
       "stepId": "mascara",
       "title": "마스카라: 속눈썹 뿌리에서 위로 쓸어 올려요",
       "regions": [
@@ -6021,7 +6337,7 @@
           "brush": true
         }
       ],
-      "order": 10,
+      "order": 12,
       "source": "template"
     },
     {
@@ -6249,7 +6565,7 @@
           }
         }
       ],
-      "order": 11,
+      "order": 13,
       "source": "template"
     }
   ]
