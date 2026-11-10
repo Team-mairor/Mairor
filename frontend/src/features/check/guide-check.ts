@@ -1,22 +1,34 @@
 import type { GuideStepModel } from "@/features/guide";
 import type { PouchItem } from "@/features/pouch";
-import type { Choice } from "@/features/session";
+import type { Choice, MatchKind } from "@/features/session";
 
 import { similarity } from "./color";
 import { isCompatible } from "./compat";
+import type { NoneReason, StepMatch } from "./match-api";
 
-/** 사용자가 고른 것만 본다. 보유·대체는 판정하지 않는다 */
+/** 저장된 선택만 본다. 튜토리얼·리포트가 쓴다 */
 export type StepPick =
   { kind: "undecided" } | { kind: "picked"; item: PouchItem } | { kind: "skipped" };
 export type PickKind = StepPick["kind"];
 
+/**
+ * 매칭 결과가 없을 때의 이유. pending 맞추는 중, failed 매칭 실패,
+ * unsupported 서버가 맞춰 보지 않는 단계(기타 화장), skipped 사용자가 생략을 고름
+ */
+export type NoMatchReason = "pending" | "failed" | "unsupported";
+export type NoneKind = NoneReason | NoMatchReason | "skipped";
+
+/** 제품 체크 화면의 단계별 결과. 사용자가 고른 것이 있으면 그것을, 없으면 서버 매칭을 쓴다 */
+export type GuidePick =
+  | { kind: "same"; item: PouchItem }
+  | { kind: "sub"; item: PouchItem }
+  | { kind: "none"; reason: NoneKind };
+
 export interface CheckRow {
   step: GuideStepModel;
-  pick: StepPick;
-  /** 서버 매칭 제안. 연결 전까지 null */
-  suggestion: null;
-  /** 파우치에 맞는 제품이 없어 자동으로 생략하는 단계 */
-  noFit?: true;
+  pick: GuidePick;
+  /** 서버가 고른 대체 후보(가까운 순). 파우치에서 지워진 제품은 뺀다 */
+  candidates: PouchItem[];
 }
 
 /** 고른 제품이 지워졌으면 미확정으로 본다 */
@@ -34,31 +46,73 @@ export function pickOf(
   return { kind: "undecided" };
 }
 
+const byRank = (list: StepMatch["candidates"] = []) => [...list].sort((a, b) => a.rank - b.rank);
+
+/** 사용자가 직접 고른 선택. 시작할 때 자동으로 채운 것은 빼고 본다 */
+export function userChoice(choice: Record<string, Choice>, stepId: string): Choice | undefined {
+  const ch = Object.hasOwn(choice, stepId) ? choice[stepId] : undefined;
+  return ch?.auto ? undefined : ch;
+}
+
+/** missing은 매칭 결과가 없을 때 보여 줄 이유 */
+export function guidePick(
+  stepId: string,
+  choice: Record<string, Choice>,
+  pouch: PouchItem[],
+  match: StepMatch | undefined,
+  missing: NoMatchReason = "unsupported",
+): GuidePick {
+  const find = (id: string | null) => (id ? pouch.find((p) => p.id === id) : undefined);
+  const sameId = match?.result === "SAME" ? match.samePouchItemId : null;
+  const ch = userChoice(choice, stepId);
+  if (ch?.kind === "none") return { kind: "none", reason: "skipped" };
+  const chosen = ch?.kind === "pouch" ? find(ch.id) : undefined;
+  if (chosen) return { kind: chosen.id === sameId ? "same" : "sub", item: chosen };
+  const same = find(sameId);
+  if (same) return { kind: "same", item: same };
+  const sub = byRank(match?.candidates)
+    .map((c) => find(c.pouchItemId))
+    .find(Boolean);
+  if (sub) return { kind: "sub", item: sub };
+  return { kind: "none", reason: match ? (match.noneReason ?? "NO_SUITABLE_ITEM") : missing };
+}
+
 export function checkRows(
   steps: GuideStepModel[],
   choice: Record<string, Choice>,
   pouch: PouchItem[],
+  matches: Map<string, StepMatch>,
+  missing: NoMatchReason = "unsupported",
 ): CheckRow[] {
-  return steps.map((step) => ({
-    step,
-    pick: pickOf(step.stepId, choice, pouch),
-    suggestion: null,
-  }));
+  return steps.map((step) => {
+    const match = matches.get(step.stepId);
+    return {
+      step,
+      pick: guidePick(step.stepId, choice, pouch, match, missing),
+      candidates: byRank(match?.candidates).flatMap(
+        (c) => pouch.find((p) => p.id === c.pouchItemId) ?? [],
+      ),
+    };
+  });
 }
 
-/** 고르지 않았고 파우치에 맞는 제품도 없는 단계는 생략한 것으로 본다 */
-export function markNoFit(rows: CheckRow[], pouch: PouchItem[]): CheckRow[] {
-  return rows.map((r) =>
-    r.pick.kind === "undecided" && candidatesFor(r.step, pouch).length === 0
-      ? { ...r, pick: { kind: "skipped" }, noFit: true }
-      : r,
-  );
-}
-
-export function pickCounts(rows: CheckRow[]): Record<PickKind, number> {
-  const counts = { undecided: 0, picked: 0, skipped: 0 };
+export function pickCounts(rows: CheckRow[]): Record<MatchKind, number> {
+  const counts = { same: 0, sub: 0, none: 0 };
   rows.forEach((r) => counts[r.pick.kind]++);
   return counts;
+}
+
+/** 시작할 때 자동으로 채울 선택. 보유·대체는 그 제품, 없음은 생략 */
+export function choiceOf(pick: GuidePick): Choice {
+  return pick.kind === "none"
+    ? { kind: "none", auto: true }
+    : { kind: "pouch", id: pick.item.id, auto: true };
+}
+
+/** 바꾸기 목록. 서버 대체 후보를 먼저, 나머지 같은 종류 제품을 뒤에 둔다 */
+export function swapList(row: CheckRow, pouch: PouchItem[]): PouchItem[] {
+  const rest = candidatesFor(row.step, pouch).filter((p) => !row.candidates.includes(p));
+  return [...row.candidates, ...rest];
 }
 
 /** 기준색이 있으면 색이 가까운 순, 없으면 파우치 순서 */

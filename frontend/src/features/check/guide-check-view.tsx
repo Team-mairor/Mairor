@@ -9,36 +9,43 @@ import { useHiddenVideo } from "@/features/face";
 import { useGuide, type GuideStepModel } from "@/features/guide";
 import { GlassPanel, LiveNote, LiveTag, RoundBack, useLiveState } from "@/features/live";
 import { emptyDraft, ProductSheet, type PouchItem, type ProductDraft } from "@/features/pouch";
-import { runHref, useSession, type Choice } from "@/features/session";
+import { runHref, useSession, type Choice, type MatchKind } from "@/features/session";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { cn } from "@/lib/utils";
 
 import { COMPAT_TYPES, isCompatible } from "./compat";
 import {
-  candidatesFor,
   checkRows,
-  markNoFit,
+  choiceOf,
   pickCounts,
+  swapList,
+  userChoice,
   withChoice,
-  type PickKind,
+  type NoneKind,
 } from "./guide-check";
+import { useGuideMatch, type StepMatch } from "./match-api";
+import { GROUPS, TAG_BG } from "./match-groups";
 import { PouchModal } from "./pouch-modal";
 import { StartModal } from "./start-modal";
 import { SwapPanel } from "./swap-panel";
 import { Toast } from "./toast";
 
-/** 선택 상태별 탭. 상태가 늘면 여기서 빠진 것을 타입 검사가 잡는다 */
-const PICK_GROUPS: Record<PickKind, { label: string; dot: string; bg: string }> = {
-  undecided: { label: "미확정", dot: "var(--color-blush)", bg: "bg-blush" },
-  picked: { label: "선택", dot: "var(--color-mint)", bg: "bg-mint" },
-  skipped: { label: "생략", dot: "var(--color-ash)", bg: "bg-cream-3" },
+const NONE_TEXT: Record<NoneKind, string> = {
+  skipped: "→ 제품 생략",
+  pending: "→ 내 파우치와 맞춰 보는 중",
+  failed: "→ 맞춰 보지 못함",
+  unsupported: "→ 맞춰 볼 제품 종류가 없음",
+  NO_ITEMS: "→ 파우치가 비어 있음",
+  COMPARISON_UNAVAILABLE: "→ 영상 색 정보가 없음",
+  NO_SUITABLE_ITEM: "→ 파우치에 적절한 제품이 없음",
 };
-const PICK_TABS = Object.keys(PICK_GROUPS) as PickKind[];
+const NO_MATCHES = new Map<string, StepMatch>();
+const groupLabel = (k: MatchKind) => GROUPS.find((g) => g.k === k)?.label;
 
 const productText = (step: GuideStepModel) =>
   [step.product?.name, step.product?.shade].filter(Boolean).join(" ") || null;
 
-/** 실제 가이드의 제품 체크. 보유·대체를 판정하지 않고 사용자가 고른 것만 남긴다. 파우치에 맞는 제품이 없는 단계는 제품을 생략한다 */
+/** 실제 가이드의 제품 체크. 서버 매칭으로 보유·대체·없음을 나누고, 사용자가 바꾼 것은 선택으로 남긴다 */
 export function GuideCheck() {
   const router = useRouter();
   const { state, updateRun } = useSession();
@@ -46,7 +53,7 @@ export function GuideCheck() {
   const run = state.run;
   const pouch = state.pouch;
 
-  const [group, setGroup] = useState<PickKind | null>(null);
+  const [group, setGroup] = useState<MatchKind | null>(null);
   const [swapFor, setSwapFor] = useState<string | null>(null);
   const [pouchModal, setPouchModal] = useState(false);
   const [form, setForm] = useState<ProductDraft | null>(null);
@@ -55,12 +62,22 @@ export function GuideCheck() {
   const toastT = useTimeout();
   const { note, reason } = useLiveState();
   useHiddenVideo();
+  // 제품을 등록·수정·삭제하면 다시 맞춘다. 수정은 ID가 그대로라 항목 값 전체를 기준으로 본다
+  const { load: matching, retry } = useGuideMatch(run.guideId, JSON.stringify(pouch));
 
   if (load.status !== "ready") return null;
-  const rows = markNoFit(checkRows(load.guide.steps, run.choice, pouch), pouch);
-  const noFit = rows.filter((r) => r.noFit);
+  const rows =
+    matching.status === "ready"
+      ? checkRows(load.guide.steps, run.choice, pouch, matching.byStep)
+      : checkRows(
+          load.guide.steps,
+          run.choice,
+          pouch,
+          NO_MATCHES,
+          matching.status === "loading" ? "pending" : "failed",
+        );
   const counts = pickCounts(rows);
-  const active = group ?? (counts.undecided ? "undecided" : "picked");
+  const active = group ?? (counts.none ? "none" : counts.sub ? "sub" : "same");
   const shown = rows.filter((r) => r.pick.kind === active);
   const swapRow = rows.find((r) => r.step.stepId === swapFor) ?? null;
   const href = (path: string) => runHref(path, run.guideId);
@@ -72,12 +89,12 @@ export function GuideCheck() {
     setToast({ ok, text });
     toastT.set(() => setToast(null), 2800);
   };
-  // 등록한 제품은 자동으로 고르지 않는다
+  // 등록·수정하면 파우치가 바뀌어 다시 맞춘다
   const onSaved = (item: PouchItem, isNew: boolean) => {
-    if (!isNew) return;
-    if (swapRow && isCompatible(swapRow.step, item))
-      showToast(true, `'${item.name}' 등록 완료 · 목록에서 고를 수 있어요`);
-    else showToast(true, `'${item.name}' 등록 완료`);
+    const done = isNew ? "등록 완료" : "수정 완료";
+    if (isNew && swapRow && isCompatible(swapRow.step, item))
+      showToast(true, `'${item.name}' ${done} · 목록에서 고를 수 있어요`);
+    else showToast(true, `'${item.name}' ${done} · 다시 맞춰 볼게요`);
   };
 
   return (
@@ -97,9 +114,9 @@ export function GuideCheck() {
               name: productText(swapRow.step) ?? "영상 속 제품 정보 없음",
               color: null,
             }}
-            list={candidatesFor(swapRow.step, pouch)}
-            curId={swapRow.pick.kind === "picked" ? swapRow.pick.item.id : null}
-            skipped={swapRow.pick.kind === "skipped"}
+            list={swapList(swapRow, pouch)}
+            curId={swapRow.pick.kind === "none" ? null : swapRow.pick.item.id}
+            skipped={swapRow.pick.kind === "none" && swapRow.pick.reason === "skipped"}
             ranked={false}
             emptyText={
               COMPAT_TYPES[swapRow.step.makeup].length
@@ -110,8 +127,9 @@ export function GuideCheck() {
               setChoice(swapRow.step.stepId, choice);
               closeSwap();
             }}
+            // 직접 고른 것을 지우면 서버 매칭으로 돌아간다
             onClear={
-              swapRow.pick.kind === "undecided" || swapRow.noFit
+              !userChoice(run.choice, swapRow.step.stepId)
                 ? undefined
                 : () => {
                     setChoice(swapRow.step.stepId, null);
@@ -126,7 +144,7 @@ export function GuideCheck() {
           <div className="flex min-w-0 flex-col gap-1.5">
             <div className="flex items-baseline gap-3.5">
               <span className="shrink-0 font-serif text-[72px] leading-[.85] text-blush italic tabular">
-                {counts.picked}
+                {counts.same + counts.sub}
                 <span className="text-[40px] text-ash">/{rows.length}</span>
               </span>
               <h1 className="font-display text-[34px] leading-[1.15] text-white">
@@ -134,9 +152,22 @@ export function GuideCheck() {
               </h1>
             </div>
             <span className="text-[19px] leading-[1.5] text-line-2">
-              {pouch.length
-                ? "영상 속 제품은 이름만 확인했어요. 내 파우치에서 직접 골라 주세요."
-                : "파우치가 비어 있어요. 제품을 등록하면 고를 수 있어요."}
+              {matching.status === "loading" ? (
+                "내 파우치와 맞춰 보는 중이에요."
+              ) : matching.status === "error" ? (
+                <>
+                  {matching.message}{" "}
+                  <button type="button" onClick={retry} className="font-bold text-white underline">
+                    다시 맞춰 보기
+                  </button>
+                </>
+              ) : !pouch.length ? (
+                "파우치가 비어 있어요. 제품을 등록하면 다시 맞춰 봐요."
+              ) : counts.same + counts.sub ? (
+                "같은 제품은 보유, 색이 가까운 제품은 대체로 골라 두었어요. 눌러서 바꿀 수 있어요."
+              ) : (
+                "추천할 제품을 찾지 못했어요. 쓸 제품이 있으면 직접 선택해 주세요."
+              )}
             </span>
           </div>
           <button
@@ -153,8 +184,7 @@ export function GuideCheck() {
           className="mx-8 grid grid-cols-3 gap-1.5 rounded-[26px] border border-white/12 bg-white/8 p-1.5"
           role="tablist"
         >
-          {PICK_TABS.map((k) => {
-            const g = PICK_GROUPS[k];
+          {GROUPS.map(({ k, label, dot }) => {
             const on = active === k;
             return (
               <button
@@ -165,7 +195,7 @@ export function GuideCheck() {
                 onClick={() => setGroup(k)}
                 className={cn(
                   "flex h-[76px] items-center gap-3 rounded-[20px] px-5 transition-[background,box-shadow]",
-                  on ? cn(g.bg, "shadow-float") : "hover:bg-white/8",
+                  on ? cn(TAG_BG[k], "shadow-float") : "hover:bg-white/8",
                 )}
               >
                 {on ? (
@@ -173,7 +203,7 @@ export function GuideCheck() {
                     <Check className="size-4" strokeWidth={3.2} aria-hidden />
                   </span>
                 ) : (
-                  <span className="size-3.5 shrink-0 rounded-full" style={{ background: g.dot }} />
+                  <span className="size-3.5 shrink-0 rounded-full" style={{ background: dot }} />
                 )}
                 <span
                   className={cn(
@@ -181,7 +211,7 @@ export function GuideCheck() {
                     on ? "text-ink" : "text-white",
                   )}
                 >
-                  {g.label}
+                  {label}
                 </span>
                 <span
                   className={cn(
@@ -199,11 +229,12 @@ export function GuideCheck() {
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain px-8">
           {shown.length === 0 ? (
             <div className="py-10 text-center text-[20px] font-semibold text-ash">
-              {PICK_GROUPS[active].label} 단계가 없어요
+              {groupLabel(active)} 단계가 없어요
             </div>
           ) : (
-            shown.map(({ step, pick, noFit: noFitRow }) => {
+            shown.map(({ step, pick }) => {
               const product = productText(step);
+              const mine = pick.kind === "none" ? null : pick.item;
               return (
                 <div
                   key={step.stepId}
@@ -213,34 +244,23 @@ export function GuideCheck() {
                   <span
                     className={cn(
                       "size-20 shrink-0 rounded-full",
-                      pick.kind === "picked" && pick.item.color
-                        ? "ring-4 ring-mint"
-                        : "border-[2.5px] border-dashed border-ash",
+                      mine?.color ? "ring-4 ring-mint" : "border-[2.5px] border-dashed border-ash",
                     )}
-                    style={
-                      pick.kind === "picked" && pick.item.color
-                        ? { background: pick.item.color }
-                        : undefined
-                    }
+                    style={mine?.color ? { background: mine.color } : undefined}
                   />
                   <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                     <span className="flex min-w-0 items-center gap-2">
                       <span
                         className={cn(
-                          "flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-[14px] font-extrabold text-ink",
-                          PICK_GROUPS[pick.kind].bg,
+                          "flex h-[26px] shrink-0 items-center rounded-full px-2.5 text-[14px] leading-none font-extrabold text-ink",
+                          TAG_BG[pick.kind],
                         )}
                       >
-                        {PICK_GROUPS[pick.kind].label}
+                        {groupLabel(pick.kind)}
                       </span>
                       <span className="truncate text-[18px] font-semibold text-mute">
                         STEP {step.order} · {step.label}
                       </span>
-                      {product && (
-                        <span className="flex h-[26px] shrink-0 items-center rounded-full border-[1.5px] border-dashed border-navy px-2.5 text-[13px] font-bold text-navy">
-                          이름만 확인
-                        </span>
-                      )}
                     </span>
                     <span
                       className={cn(
@@ -250,16 +270,17 @@ export function GuideCheck() {
                     >
                       {product ?? "영상에서 제품 정보를 찾지 못했어요"}
                     </span>
-                    {pick.kind === "picked" && (
+                    {mine ? (
                       <span className="truncate text-[19px] font-bold text-navy">
-                        → {pick.item.brand} {pick.item.name}
-                        {pick.item.shade && ` ${pick.item.shade}`}
+                        → {mine.brand} {mine.name}
+                        {mine.shade && ` ${mine.shade}`}
                       </span>
-                    )}
-                    {pick.kind === "skipped" && (
-                      <span className="text-[19px] font-bold text-mute">
-                        {noFitRow ? "→ 파우치에 맞는 제품이 없어 생략" : "→ 제품 생략"}
-                      </span>
+                    ) : (
+                      pick.kind === "none" && (
+                        <span className="text-[19px] font-bold text-mute">
+                          {NONE_TEXT[pick.reason]}
+                        </span>
+                      )
                     )}
                   </span>
                   <button
@@ -267,7 +288,7 @@ export function GuideCheck() {
                     onClick={() => setSwapFor(step.stepId)}
                     className="flex h-[60px] shrink-0 items-center rounded-full bg-cream-3 px-6 text-[19px] font-bold whitespace-nowrap text-ink hover:bg-line"
                   >
-                    {pick.kind === "undecided" || noFitRow ? "고르기" : "바꾸기"}
+                    {mine ? "바꾸기" : "선택"}
                   </button>
                 </div>
               );
@@ -284,6 +305,8 @@ export function GuideCheck() {
             size="cta"
             trailing
             onClick={() => setStartAsk(true)}
+            // 맞춰 보지 못한 단계를 생략으로 저장하지 않도록, 매칭 결과가 있을 때만 시작한다
+            disabled={matching.status !== "ready"}
             className="min-w-0 flex-1"
           >
             이 조합으로 시작
@@ -299,17 +322,11 @@ export function GuideCheck() {
         onClose={() => setPouchModal(false)}
       />
 
-      {/* 고를 수 있는데 고르지 않은 단계는 none으로 바꾸지 않는다 */}
+      {/* 시작하면 직접 고르지 않은 단계에 화면에 보이는 결과를 자동 선택으로 저장한다. 없음은 생략 */}
       <StartModal
         open={startAsk}
-        noun="고르지 않은 단계"
-        note={
-          noFit.length
-            ? `파우치에 맞는 제품이 없는 ${noFit.length}단계는 제품을 생략해요.`
-            : undefined
-        }
         missing={rows
-          .filter((r) => r.pick.kind === "undecided")
+          .filter((r) => r.pick.kind === "none")
           .map((r) => ({
             key: r.step.stepId,
             label: `${r.step.label} · ${productText(r.step) ?? "제품 정보 없음"}`,
@@ -317,20 +334,20 @@ export function GuideCheck() {
           }))}
         onRecheck={() => {
           setStartAsk(false);
-          setGroup("undecided");
+          setGroup("none");
         }}
         onStart={() => {
           setStartAsk(false);
-          if (noFit.length)
-            updateRun(
-              (prev) => ({
-                choice: noFit.reduce(
-                  (c, r) => withChoice(c, r.step.stepId, { kind: "none" }),
-                  prev.choice,
-                ),
-              }),
-              run.id,
-            );
+          updateRun(
+            (prev) => ({
+              choice: rows.reduce(
+                (c, r) =>
+                  userChoice(c, r.step.stepId) ? c : withChoice(c, r.step.stepId, choiceOf(r.pick)),
+                prev.choice,
+              ),
+            }),
+            run.id,
+          );
           router.push(href("/tutorial/guide"));
         }}
         onClose={() => setStartAsk(false)}

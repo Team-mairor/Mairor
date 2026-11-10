@@ -4,7 +4,18 @@ import type { GuideStepModel } from "@/features/guide";
 import type { PouchItem } from "@/features/pouch";
 import { createRun } from "@/features/session/run-state";
 
-import { candidatesFor, checkRows, pickCounts, pickOf, markNoFit, withChoice } from "./guide-check";
+import {
+  candidatesFor,
+  checkRows,
+  choiceOf,
+  guidePick,
+  pickCounts,
+  pickOf,
+  swapList,
+  userChoice,
+  withChoice,
+} from "./guide-check";
+import type { StepMatch } from "./match-api";
 
 const step = (stepId: string, extra: Partial<GuideStepModel> = {}): GuideStepModel => ({
   stepId,
@@ -61,18 +72,110 @@ describe("pickOf", () => {
   });
 });
 
+const match = (stepId: string, extra: Partial<StepMatch> = {}): StepMatch => ({
+  stepId,
+  result: "NONE",
+  samePouchItemId: null,
+  noneReason: "COMPARISON_UNAVAILABLE",
+  candidates: [],
+  ...extra,
+});
+
+describe("guidePick", () => {
+  const pouch = [item("p1"), item("p2"), item("p3")];
+  const same = match("s1", { result: "SAME", samePouchItemId: "p1", noneReason: null });
+  const sub = match("s1", {
+    result: "SUBSTITUTE",
+    noneReason: null,
+    candidates: [
+      { pouchItemId: "gone", rank: 1 },
+      { pouchItemId: "p2", rank: 2 },
+    ],
+  });
+
+  it("고른 것이 없으면 서버의 보유·대체를 쓰고, 지워진 후보는 건너뛴다", () => {
+    expect(guidePick("s1", {}, pouch, same)).toEqual({ kind: "same", item: pouch[0] });
+    expect(guidePick("s1", {}, pouch, sub)).toEqual({ kind: "sub", item: pouch[1] });
+  });
+
+  it("직접 고른 제품이 보유 제품이면 보유, 아니면 대체다", () => {
+    const chose = (id: string) => ({ s1: { kind: "pouch" as const, id } });
+    expect(guidePick("s1", chose("p1"), pouch, same).kind).toBe("same");
+    expect(guidePick("s1", chose("p3"), pouch, same)).toEqual({ kind: "sub", item: pouch[2] });
+  });
+
+  it("생략을 골랐으면 서버 결과와 상관없이 생략이다", () => {
+    expect(guidePick("s1", { s1: { kind: "none" } }, pouch, same)).toEqual({
+      kind: "none",
+      reason: "skipped",
+    });
+  });
+
+  it("없음은 서버 이유를 쓰고, 매칭 결과가 없으면 넘겨받은 이유(맞추는 중·실패·대상 아님)를 쓴다", () => {
+    const noItems = match("s1", { noneReason: "NO_ITEMS" });
+    expect(guidePick("s1", {}, pouch, noItems)).toEqual({ kind: "none", reason: "NO_ITEMS" });
+    expect(guidePick("s1", {}, pouch, undefined)).toEqual({ kind: "none", reason: "unsupported" });
+    expect(guidePick("s1", {}, pouch, undefined, "pending")).toEqual({
+      kind: "none",
+      reason: "pending",
+    });
+  });
+});
+
 describe("checkRows", () => {
-  it("가이드 단계 순서와 stepId를 그대로 쓰고, 다른 단계의 선택은 무시한다", () => {
-    const rows = checkRows(
-      [step("s2"), step("s5")],
-      { s5: { kind: "none" }, old: { kind: "pouch", id: "p1" } },
-      [item("p1")],
-    );
-    expect(rows.map((r) => [r.step.stepId, r.pick.kind, r.suggestion])).toEqual([
-      ["s2", "undecided", null],
-      ["s5", "skipped", null],
+  it("가이드 단계 순서를 쓰고 상태별로 센다. 대체 후보는 순위순, 바꾸기 목록은 후보 다음 같은 종류", () => {
+    const pouch = [item("p1"), item("p2"), item("p3")];
+    const matches = new Map([
+      ["s2", match("s2", { result: "SAME", samePouchItemId: "p1", noneReason: null })],
+      [
+        "s5",
+        match("s5", {
+          result: "SUBSTITUTE",
+          noneReason: null,
+          candidates: [
+            { pouchItemId: "p3", rank: 2 },
+            { pouchItemId: "p2", rank: 1 },
+          ],
+        }),
+      ],
     ]);
-    expect(pickCounts(rows)).toEqual({ undecided: 1, picked: 0, skipped: 1 });
+    const rows = checkRows([step("s2"), step("s5"), step("s8")], {}, pouch, matches);
+    expect(rows.map((r) => [r.step.stepId, r.pick.kind])).toEqual([
+      ["s2", "same"],
+      ["s5", "sub"],
+      ["s8", "none"],
+    ]);
+    expect(rows[1].candidates.map((p) => p.id)).toEqual(["p2", "p3"]);
+    expect(swapList(rows[1], pouch).map((p) => p.id)).toEqual(["p2", "p3", "p1"]);
+    expect(pickCounts(rows)).toEqual({ same: 1, sub: 1, none: 1 });
+    expect(rows.map((r) => choiceOf(r.pick))).toEqual([
+      { kind: "pouch", id: "p1", auto: true },
+      { kind: "pouch", id: "p2", auto: true },
+      { kind: "none", auto: true },
+    ]);
+  });
+
+  it("시작할 때 자동으로 채운 선택은 체크 화면에서 무시하고 서버 매칭을 쓴다", () => {
+    const pouch = [item("p1"), item("p2")];
+    const match = new Map([
+      [
+        "s1",
+        {
+          stepId: "s1",
+          result: "SUBSTITUTE" as const,
+          samePouchItemId: null,
+          noneReason: null,
+          candidates: [{ pouchItemId: "p2", rank: 1 }],
+        },
+      ],
+    ]);
+    const auto = { s1: { kind: "none" as const, auto: true as const } };
+    expect(guidePick("s1", auto, pouch, match.get("s1"))).toMatchObject({ kind: "sub" });
+    expect(userChoice(auto, "s1")).toBeUndefined();
+    expect(guidePick("s1", { s1: { kind: "none" } }, pouch, match.get("s1"))).toEqual({
+      kind: "none",
+      reason: "skipped",
+    });
   });
 });
 
@@ -130,30 +233,5 @@ describe("새 실행", () => {
   it("새 실행은 이전 선택 없이 시작한다", () => {
     const run = createRun({ kind: "guide", guideId: "a0000000-0000-4000-8000-000000000001" }, "r2");
     expect(run.choice).toEqual({});
-  });
-});
-
-describe("markNoFit", () => {
-  const steps = [
-    { stepId: "a", order: 1, makeup: "blush", matchCategory: "CHEEK", label: "블러셔" },
-    { stepId: "b", order: 2, makeup: "mascara", matchCategory: "EYE", label: "마스카라" },
-    { stepId: "c", order: 3, makeup: "mascara", matchCategory: "EYE", label: "마스카라" },
-  ] as unknown as GuideStepModel[];
-  const blush: PouchItem = {
-    id: "p",
-    cat: "치크",
-    type: "블러셔",
-    brand: "B",
-    name: "치크",
-    color: null,
-  };
-
-  it("맞는 제품이 없고 고르지 않은 단계만 자동으로 생략한다", () => {
-    const rows = markNoFit(checkRows(steps, { c: { kind: "none" } }, [blush]), [blush]);
-    expect(rows.map((r) => [r.step.stepId, r.pick.kind, r.noFit ?? false])).toEqual([
-      ["a", "undecided", false],
-      ["b", "skipped", true],
-      ["c", "skipped", false],
-    ]);
   });
 });

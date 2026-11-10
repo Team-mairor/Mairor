@@ -5,14 +5,5 @@ export { SwapPanel } from "./swap-panel";
 export { PouchModal } from "./pouch-modal";
 export { StartModal } from "./start-modal";
 export { COMPAT_TYPES, isCompatible } from "./compat";
-export {
-  candidatesFor,
-  checkRows,
-  pickCounts,
-  pickOf,
-  withChoice,
-  type CheckRow,
-  type PickKind,
-  type StepPick,
-} from "./guide-check";
+export { candidatesFor, pickOf, type StepPick } from "./guide-check";
 export { GuideCheck } from "./guide-check-view";

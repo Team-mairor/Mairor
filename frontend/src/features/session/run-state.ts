@@ -1,6 +1,7 @@
 import type { VideoItem } from "@/features/video";
 
-export type Choice = { kind: "none" } | { kind: "pouch"; id: string };
+/** auto는 실제 가이드 제품 체크가 시작할 때 매칭 결과로 채운 선택. 다시 체크하면 새 매칭 결과를 쓴다 */
+export type Choice = ({ kind: "none" } | { kind: "pouch"; id: string }) & { auto?: true };
 export type RunPhase = "preparing" | "tutorial" | "completed" | "invalidated";
 
 export interface RunState {

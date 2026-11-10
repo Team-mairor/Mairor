@@ -105,6 +105,13 @@ const ROUTES: MockRoute[] = [
       }),
   },
   {
+    // 요청 본문(guideId)을 보지 않으므로 단계 결과 없이 답한다. 화면은 모든 단계를 비교 기준 없음으로 본다
+    method: "POST",
+    path: /^\/v1\/users\/me\/guide-matches$/,
+    success: () => ({ status: 201, body: { matchId: "mock-match", guideId: "", steps: [] } }),
+    error: () => NOT_FOUND(),
+  },
+  {
     method: "POST",
     path: /^\/v1\/users\/login$/,
     success: () => ({ status: 200, body: LOGGED_IN }),

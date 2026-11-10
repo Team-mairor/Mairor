@@ -9,7 +9,6 @@ export function StartModal({
   open,
   missing,
   noun = "없는 제품",
-  note,
   onRecheck,
   onStart,
   onClose,
@@ -18,8 +17,6 @@ export function StartModal({
   /** 제품을 생략할 단계 */
   missing: { key: string; label: string; color: string | null }[];
   noun?: string;
-  /** 목록 위에 덧붙일 안내 */
-  note?: string;
   /** 없음 목록으로 돌아가 다시 확인 */
   onRecheck: () => void;
   onStart: () => void;
@@ -34,14 +31,11 @@ export function StartModal({
     >
       <div className="flex flex-col gap-3">
         <h2 className="font-display text-[36px] leading-[1.25]">
-          {n ? `${noun} ${n}개는` : "이대로"}
-          <br />
-          {n ? "건너뛰고 시작할까요?" : "시작할까요?"}
+          {n ? `${noun} ${n}개는 생략할까요?` : "이대로 시작할까요?"}
         </h2>
         <p className="text-[20px] leading-[1.5] text-mute">
           {n ? "이 단계들은 설명만 보여 드리고 넘어가요. " : ""}시작하면 제품을 바꿀 수 없어요.
         </p>
-        {note && <p className="text-[18px] leading-[1.5] font-semibold text-mute">{note}</p>}
       </div>
       {n > 0 && (
         <div className="-mx-1 flex max-h-[420px] min-h-0 flex-col gap-2.5 overflow-y-auto px-1">
