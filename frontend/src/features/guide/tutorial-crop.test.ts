@@ -18,6 +18,8 @@ import {
   tutorialVideoRatio,
   centeredTutorialCrop,
   resizeTutorialCrop,
+  layoutHeight,
+  tutorialAreaHeight,
 } from "./tutorial-crop";
 import type { GuideStep } from "./types";
 
@@ -63,6 +65,18 @@ describe("tutorial crop", () => {
     expect(TABLET_WIDTH).toBe(800);
     expect(TABLET_HEIGHT).toBe(1200);
     expect(TABLET_HEIGHT - TUTORIAL_TOP - TUTORIAL_BOTTOM).toBe(688);
+  });
+  it("레이아웃 높이는 줄어든 화면이면 1200, 세로가 남는 전체 화면이면 그 높이다", () => {
+    expect(layoutHeight({ width: 800, height: 1160 })).toBeCloseTo(1200);
+    expect(layoutHeight({ width: 1920, height: 1080 })).toBeCloseTo(1200);
+    expect(layoutHeight({ width: 800, height: 1280 })).toBe(1280);
+    expect(tutorialAreaHeight(1280)).toBe(768);
+  });
+  it("전체 화면에서는 실제 tutorial 높이(800×768) 비율로 영역을 잡는다", () => {
+    const rect = centeredTutorialCrop(3 / 4, 768);
+    expect(((rect.x1 - rect.x0) * 3) / 4 / (rect.y1 - rect.y0)).toBeCloseTo(800 / 768);
+    const resized = resizeTutorialCrop(rect, 0.5, 3 / 4, 768);
+    expect(((resized.x1 - resized.x0) * 3) / 4 / (resized.y1 - resized.y0)).toBeCloseTo(800 / 768);
   });
   it("잘못되거나 너무 작거나 영상 밖인 저장값은 거부한다", () => {
     for (const value of [

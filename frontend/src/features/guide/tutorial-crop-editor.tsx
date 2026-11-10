@@ -6,7 +6,8 @@ import { useCamera, type NormalizedRect } from "@/features/face";
 
 import {
   TABLET_WIDTH,
-  TABLET_HEIGHT,
+  layoutHeight,
+  tutorialAreaHeight,
   TUTORIAL_BOTTOM,
   TUTORIAL_TOP,
   tabletPreviewScale,
@@ -42,7 +43,8 @@ export function TutorialCropEditor({
   const drag = useRef<{ x: number; y: number; rect: NormalizedRect; resize: boolean } | null>(null);
   useEffect(() => {
     const update = () => {
-      setScreen({ width: window.innerWidth, height: window.innerHeight });
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      setScreen(viewport);
       const v = videoRef.current;
       const ratio = tutorialVideoRatio(v);
       setImageRatio(ratio);
@@ -52,7 +54,7 @@ export function TutorialCropEditor({
         setRect(
           (initializedRatio.current === null || savedChanged) && saved
             ? saved
-            : centeredTutorialCrop(ratio),
+            : centeredTutorialCrop(ratio, tutorialAreaHeight(layoutHeight(viewport))),
         );
         initializedRatio.current = ratio;
         drag.current = null;
@@ -72,10 +74,13 @@ export function TutorialCropEditor({
     };
   }, [videoRef, saved, status]);
   const cameraReady = status === "ready" && imageRatio !== null;
-  const previewScale = tabletPreviewScale(screen);
+  // 이 기기에서 실제 tutorial이 쓰는 높이로 영역 비율을 잡는다
+  const appHeight = layoutHeight(screen);
+  const areaHeight = tutorialAreaHeight(appHeight);
+  const previewScale = tabletPreviewScale(screen, appHeight);
   const center = () => {
     if (imageRatio === null) return;
-    setRect(centeredTutorialCrop(imageRatio));
+    setRect(centeredTutorialCrop(imageRatio, areaHeight));
     setMessage("");
   };
   const down = (e: PointerEvent<HTMLDivElement>, resize: boolean) => {
@@ -95,7 +100,7 @@ export function TutorialCropEditor({
     const dx = (e.clientX - start.x) / bounds.width,
       dy = (e.clientY - start.y) / bounds.height;
     if (start.resize) {
-      setRect(resizeTutorialCrop(r, w + dx, imageRatio));
+      setRect(resizeTutorialCrop(r, w + dx, imageRatio, areaHeight));
     } else {
       const x = clamp(r.x0 + dx, 1 - w),
         y = clamp(r.y0 + dy, 1 - h);
@@ -114,7 +119,9 @@ export function TutorialCropEditor({
   return (
     <section className="relative z-20 rounded-lg border bg-background p-3 text-foreground [&_button]:min-h-10 [&_button]:rounded-lg [&_button]:border [&_button]:px-3 [&_button]:py-2 [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50">
       <div className="flex flex-wrap items-center gap-2">
-        <strong>갤탭 S6 tutorial 표시 영역 · 800×688</strong>
+        <strong>
+          tutorial 표시 영역 · {TABLET_WIDTH}×{Math.round(areaHeight)} (레이아웃 기준)
+        </strong>
         <button disabled={!cameraReady} onClick={center}>
           tutorial 비율로 맞추기
         </button>
@@ -210,17 +217,19 @@ export function TutorialCropEditor({
           <button className="absolute top-4 right-4 z-10" onClick={() => setPreview(false)}>
             돌아가기
           </button>
-          <div style={{ width: TABLET_WIDTH * previewScale, height: TABLET_HEIGHT * previewScale }}>
+          <div style={{ width: TABLET_WIDTH * previewScale, height: appHeight * previewScale }}>
             <div
               className="relative bg-black"
               style={{
                 width: TABLET_WIDTH,
-                height: TABLET_HEIGHT,
+                height: appHeight,
                 transform: `scale(${previewScale})`,
                 transformOrigin: "top left",
               }}
             >
-              <p className="absolute top-6 left-6">갤탭 S6 tutorial · 800×1200</p>
+              <p className="absolute top-6 left-6">
+                레이아웃 기준 · {TABLET_WIDTH}×{Math.round(appHeight)}
+              </p>
               <div
                 className="absolute inset-x-0 overflow-hidden outline-2 outline-yellow-300 outline-dashed"
                 style={{ top: TUTORIAL_TOP, bottom: TUTORIAL_BOTTOM }}

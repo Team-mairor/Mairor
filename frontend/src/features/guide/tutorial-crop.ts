@@ -7,6 +7,19 @@ export const TABLET_HEIGHT = 1200;
 export const TUTORIAL_TOP = 140;
 export const TUTORIAL_BOTTOM = 372;
 export const CROP_KEY = "mairor:tutorial-crop:v1";
+const BASE_AREA_HEIGHT = TABLET_HEIGHT - TUTORIAL_TOP - TUTORIAL_BOTTOM;
+
+/**
+ * 앱 화면의 레이아웃 높이. globals.css의 zoom(min(1, 폭/800, 높이/1200))을 되돌린 값이다.
+ * 줄어든 화면(주소창 있는 크롬 등)은 1200, 세로가 남는 전체 화면(800×1280)은 그 높이 그대로다
+ */
+export function layoutHeight(viewport: { width: number; height: number }): number {
+  const zoom = Math.min(1, viewport.width / TABLET_WIDTH, viewport.height / TABLET_HEIGHT);
+  return viewport.height / zoom;
+}
+
+/** 레이아웃 높이에서 tutorial이 위·아래를 비우고 영상에 쓰는 높이 */
+export const tutorialAreaHeight = (height: number) => height - TUTORIAL_TOP - TUTORIAL_BOTTOM;
 
 export function tutorialVideoRatio(
   video: Pick<HTMLVideoElement, "videoWidth" | "videoHeight" | "readyState"> | null,
@@ -16,11 +29,14 @@ export function tutorialVideoRatio(
     : null;
 }
 
-const cropHeightRatio = (imageRatio: number) =>
-  (imageRatio * (TABLET_HEIGHT - TUTORIAL_TOP - TUTORIAL_BOTTOM)) / TABLET_WIDTH;
+const cropHeightRatio = (imageRatio: number, areaHeight: number) =>
+  (imageRatio * areaHeight) / TABLET_WIDTH;
 
-export function centeredTutorialCrop(imageRatio: number): NormalizedRect {
-  const factor = cropHeightRatio(imageRatio);
+export function centeredTutorialCrop(
+  imageRatio: number,
+  areaHeight = BASE_AREA_HEIGHT,
+): NormalizedRect {
+  const factor = cropHeightRatio(imageRatio, areaHeight);
   const width = Math.min(0.9, 0.9 / factor);
   const height = width * factor;
   return { x0: (1 - width) / 2, y0: (1 - height) / 2, x1: (1 + width) / 2, y1: (1 + height) / 2 };
@@ -30,8 +46,9 @@ export function resizeTutorialCrop(
   rect: NormalizedRect,
   width: number,
   imageRatio: number,
+  areaHeight = BASE_AREA_HEIGHT,
 ): NormalizedRect {
-  const factor = cropHeightRatio(imageRatio);
+  const factor = cropHeightRatio(imageRatio, areaHeight);
   const min = Math.max(0.06, 0.06 / factor);
   const max = Math.min(1 - rect.x0, (1 - rect.y0) / factor);
   if (max < min) return rect;
@@ -115,10 +132,13 @@ export function isStepInCrop(
   });
 }
 
-export function tabletPreviewScale(screen: { width: number; height: number }): number {
+export function tabletPreviewScale(
+  screen: { width: number; height: number },
+  height = TABLET_HEIGHT,
+): number {
   return Math.max(
     0,
-    Math.min(1, (screen.width - 32) / TABLET_WIDTH, (screen.height - 32) / TABLET_HEIGHT),
+    Math.min(1, (screen.width - 32) / TABLET_WIDTH, (screen.height - 32) / height),
   );
 }
 
