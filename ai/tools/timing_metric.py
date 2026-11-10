@@ -61,7 +61,9 @@ from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     known_cells,
     match_sizes,
+    step_bounds,
     usable_rows,
+    within_step,
 )
 from tools.face_map_store import STORE_USAGE, split_store, stored_known_map, tool_photos
 from tools.metric_settings import (
@@ -517,6 +519,7 @@ def main() -> None:
         )
 
     out = []
+    bounds = step_bounds(reference.manifest.steps)
     for part in selected_parts(PARTS, part_names):
 
         def load_map(
@@ -529,9 +532,11 @@ def main() -> None:
             if step.makeup != part.makeup:
                 continue
             start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
-            areas = {
-                side: part.find(result, start, end, photos, side, occlusion) for side in part.sides
-            }
+            with within_step(*bounds[step.step_id]):
+                areas = {
+                    side: part.find(result, start, end, photos, side, occlusion)
+                    for side in part.sides
+                }
             drawn_areas, _, drawn = output_area(part.makeup, areas, drawn)
 
             def find(side: RegionName, areas=areas) -> np.ndarray | None:

@@ -38,6 +38,7 @@ LIGHT_MARGIN_RATIO = 0.5
 BLUR_SIGMA = 32
 REDDENING_MIN = 0.5
 MIN_FOUND_RATIO = 0.5
+OUTLINE_SMOOTH_CELLS = 4
 CHEEKS: tuple[RegionName, RegionName] = ("leftCheek", "rightCheek")
 
 BlushAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "blushColorNotFound"]

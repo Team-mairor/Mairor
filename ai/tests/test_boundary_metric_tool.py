@@ -100,8 +100,13 @@ def test_mask_to_map_keeps_empty_masks_empty_and_drops_cells_outside_the_face():
 
 
 def test_measure_part_reports_scores_only_for_found_areas(monkeypatch):
-    real = block(slice(0, 10), slice(0, 10))
-    found = block(slice(0, 10), slice(0, 10))
+    """찾은 단계만 덮음·넘침을 내고, 나가는 영역도 서비스처럼 테두리를 펴서 잰다.
+
+    서비스는 테두리를 펴서 보내므로 몇 칸짜리 칸 표는 모서리가 깎여 덮음이 크게 준다.
+    그래서 칸 표를 실제 부위처럼 60칸 크기로 잡았다.
+    """
+    real = block(slice(100, 160), slice(100, 160))
+    found = block(slice(100, 160), slice(100, 160))
     monkeypatch.setattr(boundary_metric, "usable_rows", lambda *args: ["photo"])
     part = boundary_metric.Part(
         "lip",

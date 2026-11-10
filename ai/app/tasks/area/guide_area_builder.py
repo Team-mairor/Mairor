@@ -20,6 +20,7 @@ from app.schemas.guide_area import (
     AreaSubStep,
     GuideArea,
     GuideSet,
+    MeshAnchor,
     PolygonShape,
     RegionName,
     TemplateId,
@@ -27,13 +28,18 @@ from app.schemas.guide_area import (
 from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
 from app.tasks.area.common.face_map import points_to_anchors
-from app.tasks.area.common.mask_outline import mask_outline, mask_outlines, simplify_outline
+from app.tasks.area.common.mask_outline import smooth_outlines
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
-from app.tasks.area.parts.area_preparation import recording_dropped
+from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
+from app.tasks.area.parts.area_preparation import (
+    StepBounds,
+    recording_dropped,
+    step_bounds,
+    within_step,
+)
 from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import (
-    OUTLINE_GROW_CELLS,
     EyelinerArea,
     find_eyeliner_area,
     symmetric_eyeliner,
@@ -77,6 +83,7 @@ def build_guide_area(
     load_photo: PhotoLoader,
     on_step: Callable[[], None] | None = None,
     occlusion: OcclusionFinder | None = None,
+    bounds: Mapping[str, StepBounds] | None = None,
 ) -> GuideArea:
     """단계마다 하위 단계 하나를 채워 영상 하나의 가이드 영역을 돌려준다.
 
@@ -91,9 +98,15 @@ def build_guide_area(
     None이면 가림을 따로 빼지 않고 사진 여러 장의 중앙값에만 맡긴다.
     단계마다 area_step 기록에 결과 상태·이유와, 판정을 통과했는데 부위 분석에서 빠진 사진 번호를
     이유별로(area_preparation.recording_dropped) 남긴다.
+    부위 분석은 앞 단계 끝과 다음 단계 시작 사이의 사진만 쓴다(area_preparation.within_step).
+    직전·직후 창이 이웃 단계에 걸치면 다른 화장 장면이 섞이기 때문이다.
+    bounds는 단계마다 (앞 단계 끝 ms, 다음 단계 시작 ms)이고(step_bounds), 없으면 steps로 정한다.
+    단계를 여러 줄로 나눠 부르면 steps가 일부라 이웃이 틀리므로, 부르는 쪽이 전체로 정해 넘긴다.
     사진이 왜 안 쓰였는지 운영에서 보려는 것이다.
     """
     ordered = sorted(steps, key=lambda step: step.order)
+    if bounds is None:
+        bounds = step_bounds(ordered)
     drawn: np.ndarray | None = None
     area_steps = []
     for step in ordered:
@@ -102,6 +115,7 @@ def build_guide_area(
                 f"area_step {step.step_id}", {"makeup": step.makeup}, step_id=step.step_id
             ) as span,
             recording_dropped() as dropped,
+            within_step(*bounds[step.step_id]),
         ):
             if step.makeup == "eyeliner":
                 sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
@@ -174,7 +188,7 @@ def _sub_step(
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
         return _failed(sub_step_id)
     if step.makeup == "eyeshadow" and sub_step.status == "template":
-        return _template(sub_step_id, _eyeshadow_template_id(step), sub_step.reasons)
+        return template_sub_step(sub_step_id, _eyeshadow_template_id(step), sub_step.reasons)
     return sub_step
 
 
@@ -240,14 +254,14 @@ def _eyeliner_step(
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
         return _failed(sub_step_id), drawn
-    sub_step = _eyeliner_sub_step(sub_step_id, areas, masks)
+    sub_step = eyeliner_sub_step(sub_step_id, areas, masks)
     if sub_step.status != "extracted" or masks is None:
         return sub_step, drawn
     guided = np.any(list(masks.values()), axis=0)
     return sub_step, guided if drawn is None else drawn | guided
 
 
-def _eyeliner_sub_step(
+def eyeliner_sub_step(
     sub_step_id: str,
     areas: Mapping[RegionName, EyelinerArea],
     masks: Mapping[RegionName, np.ndarray] | None,
@@ -255,27 +269,33 @@ def _eyeliner_sub_step(
     """양쪽 눈의 아이라인 마스크를 눈마다 영역 하나씩 적는다.
 
     앞머리 아래와 눈꼬리 트임처럼 떨어진 선은 덩어리마다 polygon 하나씩이다.
-    얇은 선이 테두리로 바꿀 때 가늘어지지 않게 OUTLINE_GROW_CELLS칸 굵혀 테두리를 뽑는다.
+    얇은 선이 테두리로 바꿀 때 가늘어지지 않게 OUTLINE_GROW_CELLS칸 굵혀 테두리를 뽑고,
+    아이라인 세기(OUTLINE_SMOOTH_CELLS)로 테두리를 편다(smooth_outlines).
     두 눈 모두 못 찾았으면 눈마다의 이유를 모아 기본 아이라인 가이드(template)를 쓴다.
     찾았지만 앞 단계에서 안내한 곳뿐이거나 테두리가 나오지 않으면 eyelinerColorNotFound다.
     아이라인은 눈 테두리 바깥에서만 찾아 눈 구멍을 감싸지 않으므로 exclude는 비운다.
     """
     if masks is None:
         reasons = [area.reason or "eyelinerColorNotFound" for area in areas.values()]
-        return _template(sub_step_id, "eyeliner", list(dict.fromkeys(reasons)))
+        return template_sub_step(sub_step_id, "eyeliner", list(dict.fromkeys(reasons)))
     guides = {
         eye: [
             PolygonShape(type="polygon", outline=outline)
             for outline in (
-                points_to_anchors(simplify_outline(points))
-                for points in mask_outlines(masks[eye], OUTLINE_GROW_CELLS)
+                points_to_anchors(points)
+                for points in smooth_outlines(
+                    masks[eye],
+                    eyeliner_area.OUTLINE_SMOOTH_CELLS,
+                    eyeliner_area.OUTLINE_GROW_CELLS,
+                    every_piece=True,
+                )
             )
             if outline
         ]
         for eye in areas
     }
     if not all(guides.values()):
-        return _template(sub_step_id, "eyeliner", ["eyelinerColorNotFound"])
+        return template_sub_step(sub_step_id, "eyeliner", ["eyelinerColorNotFound"])
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,
@@ -299,7 +319,7 @@ def _fixed_sub_step(makeup: Makeup, sub_step_id: str) -> AreaSubStep | None:
         return _not_applicable(sub_step_id)
     if makeup == "eyeliner" or makeup in AREA_FINDERS:
         return None
-    return _template(sub_step_id, makeup, [NOT_ANALYZED])
+    return template_sub_step(sub_step_id, makeup, [NOT_ANALYZED])
 
 
 def _not_applicable(sub_step_id: str) -> AreaSubStep:
@@ -325,7 +345,7 @@ def _failed(sub_step_id: str) -> AreaSubStep:
     )
 
 
-def _template(sub_step_id: str, template_id: TemplateId, reasons: list[str]) -> AreaSubStep:
+def template_sub_step(sub_step_id: str, template_id: TemplateId, reasons: list[str]) -> AreaSubStep:
     """FE 기본 가이드를 쓰라는 하위 단계.
 
     template_id는 기본 가이드 키(화장 종류, 아이섀도는 바른 자리별 키도),
@@ -339,6 +359,15 @@ def _template(sub_step_id: str, template_id: TemplateId, reasons: list[str]) -> 
         template_id=template_id,
         guide_sets=[],
     )
+
+
+def outline_anchors(mask: np.ndarray, smooth_cells: float) -> list[MeshAnchor]:
+    """가장 큰 덩어리의 테두리를 smooth_cells 세기로 펴서(smooth_outlines) 얼굴 주소로 바꾼다.
+
+    테두리가 나오지 않으면 빈 목록이다.
+    """
+    outlines = smooth_outlines(mask, smooth_cells)
+    return points_to_anchors(outlines[0]) if outlines else []
 
 
 def _lip_sub_step(
@@ -356,10 +385,10 @@ def _lip_sub_step(
     """
     found = find_lip_area(result, step_end_ms, load_photo, occlusion=occlusion)
     if found.mask is None:
-        return _template(sub_step_id, "lip", [found.reason])
-    outline = points_to_anchors(simplify_outline(mask_outline(found.mask)))
+        return template_sub_step(sub_step_id, "lip", [found.reason])
+    outline = outline_anchors(found.mask, lip_area.OUTLINE_SMOOTH_CELLS)
     if not outline:
-        return _template(sub_step_id, "lip", ["lipColorNotFound"])
+        return template_sub_step(sub_step_id, "lip", ["lipColorNotFound"])
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,
@@ -391,8 +420,14 @@ def _blush_sub_step(
         )
         for cheek in CHEEKS
     }
-    return _pair_sub_step(
-        sub_step_id, "blush", areas, symmetric_blush(areas), "blushColorNotFound", False
+    return pair_sub_step(
+        sub_step_id,
+        "blush",
+        areas,
+        symmetric_blush(areas),
+        "blushColorNotFound",
+        False,
+        blush_area.OUTLINE_SMOOTH_CELLS,
     )
 
 
@@ -411,8 +446,14 @@ def _brow_sub_step(
         )
         for brow in BROWS
     }
-    return _pair_sub_step(
-        sub_step_id, "brow", areas, symmetric_brows(areas), "browColorNotFound", False
+    return pair_sub_step(
+        sub_step_id,
+        "brow",
+        areas,
+        symmetric_brows(areas),
+        "browColorNotFound",
+        False,
+        brow_area.OUTLINE_SMOOTH_CELLS,
     )
 
 
@@ -435,23 +476,25 @@ def _eyeshadow_sub_step(
         )
         for eye in EYES
     }
-    return _pair_sub_step(
+    return pair_sub_step(
         sub_step_id,
         "eyeshadow",
         areas,
         symmetric_eyeshadow(areas),
         "eyeshadowColorNotFound",
         True,
+        eyeshadow_area.OUTLINE_SMOOTH_CELLS,
     )
 
 
-def _pair_sub_step(
+def pair_sub_step(
     sub_step_id: str,
     makeup: Makeup,
     areas: Mapping[RegionName, BlushArea | BrowArea | EyeshadowArea],
     masks: Mapping[RegionName, np.ndarray] | None,
     not_found: str,
     exclude_self: bool,
+    smooth_cells: float,
 ) -> AreaSubStep:
     """좌우 짝 부위(볼·눈썹·눈)의 결과를 하위 단계 하나로 적는다.
 
@@ -459,22 +502,21 @@ def _pair_sub_step(
     두 쪽 모두 못 찾으면 쪽마다의 이유를 겹치지 않게 모아
     그 화장 종류의 기본 가이드(template)를 쓴다.
     한쪽만 못 찾으면 형식상 extracted의 reasons는 비워야 하므로, 그쪽과 이유를 로그에 남긴다.
-    테두리가 나오지 않으면 not_found 이유로 기본 가이드를 쓴다.
+    테두리는 부위의 세기(smooth_cells)로 펴서 보내고(outline_anchors),
+    나오지 않으면 not_found 이유로 기본 가이드를 쓴다.
     exclude_self가 참이면 묶음마다 자기 부위를 exclude에 넣는다(섀도의 눈 구멍).
     """
     if masks is None:
         reasons = list(dict.fromkeys(area.reason for area in areas.values()))
-        return _template(sub_step_id, makeup, reasons)
+        return template_sub_step(sub_step_id, makeup, reasons)
     for side, area in areas.items():
         if area.mask is None:
             logger.info(
                 "%s %s %s 못 찾음(%s), 반대쪽을 뒤집어 씀", sub_step_id, makeup, side, area.reason
             )
-    outlines = {
-        side: points_to_anchors(simplify_outline(mask_outline(masks[side]))) for side in areas
-    }
+    outlines = {side: outline_anchors(masks[side], smooth_cells) for side in areas}
     if not all(outlines.values()):
-        return _template(sub_step_id, makeup, [not_found])
+        return template_sub_step(sub_step_id, makeup, [not_found])
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,

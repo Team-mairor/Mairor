@@ -60,12 +60,12 @@ def face_cells() -> np.ndarray:
 
 def map_points(indices: Sequence[int]) -> list[tuple[float, float]]:
     """얼굴 점 번호들이 지도에서 놓이는 칸 좌표. 지도에서는 사진과 상관없이 늘 같은 자리다."""
-    uv = _uv()
+    uv = mesh_uv()
     return [(float(uv[i, 0]), float(uv[i, 1])) for i in indices]
 
 
 def points_to_anchors(points: Sequence[tuple[float, float]]) -> list[MeshAnchor]:
-    """지도 칸 번호 좌표들의 얼굴 주소. mask_outline·simplify_outline이 돌려준 좌표를 넣는다.
+    """지도 칸 번호 좌표들의 얼굴 주소. smooth_outlines가 돌려준 좌표를 넣는다.
 
     칸은 가운데(+0.5)로 보고, 칸이 속한 조각 번호와 그 조각 세 꼭짓점 비율을 주소로 적는다.
     map_points가 돌려주는 이어진 좌표는 칸 번호가 아니라서 넣지 않는다.
@@ -80,7 +80,7 @@ def points_to_anchors(points: Sequence[tuple[float, float]]) -> list[MeshAnchor]
     for col, row in cells.astype(int):
         inside = 0 <= col < MAP_SIZE and 0 <= row < MAP_SIZE and piece_map[row, col] >= 0
         pieces.append(int(piece_map[row, col]) if inside else _nearest_piece(col, row))
-    a, b, c = (_uv()[_triangles()[pieces, k]] for k in range(3))
+    a, b, c = (mesh_uv()[mesh_triangles()[pieces, k]] for k in range(3))
     ratios = _ratios(cells + 0.5, a, b, c)
     anchors = []
     for piece, (first, second, _) in zip(pieces, ratios, strict=True):
@@ -91,13 +91,15 @@ def points_to_anchors(points: Sequence[tuple[float, float]]) -> list[MeshAnchor]
 
 
 @lru_cache
-def _triangles() -> np.ndarray:
+def mesh_triangles() -> np.ndarray:
+    """얼굴 조각(삼각형)마다 세 꼭짓점의 얼굴 점 번호 표. 얼굴 주소의 조각 번호가 이 표의 행이다."""
     data = json.loads((MESH_DIR / "triangles.v1.json").read_text(encoding="utf-8"))
     return np.array(data["triangles"])
 
 
 @lru_cache
-def _uv() -> np.ndarray:
+def mesh_uv() -> np.ndarray:
+    """얼굴 점마다 얼굴 지도에서 놓이는 칸 좌표(x, y) 표. 공유 uv 값에 MAP_SIZE를 곱한 것이다."""
     data = json.loads((MESH_DIR / "uv.v1.json").read_text(encoding="utf-8"))
     return np.array(data["uv"]) * MAP_SIZE
 
@@ -105,7 +107,7 @@ def _uv() -> np.ndarray:
 @lru_cache
 def _piece_map() -> np.ndarray:
     """지도 칸마다 속한 조각 번호(MAP_SIZE × MAP_SIZE). 조각이 없는 칸(얼굴 밖)은 -1이다."""
-    uv, triangles = _uv(), _triangles()
+    uv, triangles = mesh_uv(), mesh_triangles()
     image = Image.new("I", (MAP_SIZE, MAP_SIZE), 0)
     draw = ImageDraw.Draw(image)
     for number, corners in enumerate(triangles):
@@ -119,7 +121,7 @@ def _cells() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     piece_map = _piece_map()
     rows, cols = np.nonzero(piece_map >= 0)
     pieces = piece_map[rows, cols]
-    a, b, c = (_uv()[_triangles()[pieces, k]] for k in range(3))
+    a, b, c = (mesh_uv()[mesh_triangles()[pieces, k]] for k in range(3))
     ratios = _ratios(np.stack([cols + 0.5, rows + 0.5], axis=1), a, b, c)
     return rows, cols, pieces, ratios
 
@@ -128,7 +130,7 @@ def _source(face: Face, width: int, height: int) -> np.ndarray:
     """얼굴 안 지도 칸마다 사진에서 볼 자리(x, y). 칸이 속한 조각의 같은 비율 위치다."""
     points = np.array([[p.x * width, p.y * height] for p in face.landmarks[:VERTEX_COUNT]])
     _, _, pieces, ratios = _cells()
-    corners = points[_triangles()[pieces]]
+    corners = points[mesh_triangles()[pieces]]
     return np.einsum("nk,nkd->nd", ratios, corners)
 
 

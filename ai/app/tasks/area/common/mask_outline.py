@@ -1,4 +1,10 @@
-from collections.abc import Sequence
+"""찾은 칸 표(마스크)의 테두리를 FE로 보낼 점 목록으로 바꾼다.
+
+FE는 받은 점을 모두 지나는 곡선으로 테두리를 그린다. 칸 표의 가장자리를 그대로 따면 테두리가
+계단 모양이고, 그 모서리 점을 그대로 보내면 화면의 곡선이 계단마다 출렁인다. 그래서 테두리를
+매끈하게 편 뒤 고른 간격으로 점을 다시 찍어 보낸다. 펴는 세기는 부위마다 다르며(부위 파일의
+OUTLINE_SMOOTH_CELLS), 얇은 부위일수록 약하다. 세게 펴면 얇은 띠는 모양이 뭉개지기 때문이다.
+"""
 
 import cv2
 import numpy as np
@@ -6,59 +12,69 @@ import numpy as np
 from app.tasks.area.common.region_mask import Pixel
 
 MIN_OUTLINE_POINTS = 3
-OUTLINE_TOLERANCE = 1.0
+OUTLINE_SPACING_CELLS = 4
 
 
-def mask_outline(mask: np.ndarray) -> list[Pixel]:
-    """마스크에서 가장 큰 덩어리의 바깥선을 칸 좌표 목록으로 돌려준다. mask는 칠한 칸이 True인 표다.
+def smooth_outlines(
+    mask: np.ndarray, smooth_cells: float, grow_cells: int = 0, every_piece: bool = False
+) -> list[list[Pixel]]:
+    """칸 표의 바깥선을 매끈하게 펴고 OUTLINE_SPACING_CELLS칸마다 점을 고르게 찍어 돌려준다.
 
-    한 바퀴 도는 순서이고 마지막 점은 첫 점으로 이어 닫는다. 작은 덩어리는 보지 않는다.
-    가로·세로·대각선으로 곧게 이어진 구간은 양 끝 점만 남기므로 다시 칠해도 모양은 그대로다.
-    칠한 칸이 없거나 가장 큰 덩어리도 MIN_OUTLINE_POINTS점이 안 되면 빈 목록이다.
-    """
-    contours, _ = cv2.findContours(
-        mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-    )
-    if not contours:
-        return []
-    largest = max(contours, key=cv2.contourArea)
-    if len(largest) < MIN_OUTLINE_POINTS:
-        return []
-    return [(float(x), float(y)) for x, y in largest[:, 0, :]]
-
-
-def mask_outlines(mask: np.ndarray, grow_cells: int = 0) -> list[list[Pixel]]:
-    """마스크의 덩어리마다 바깥선을 칸 좌표 목록으로 돌려준다. 큰 덩어리부터 담는다.
-
-    바깥선마다 mask_outline과 같은 모양이다. grow_cells가 있으면 그만큼 굵힌 뒤 바깥선을 뽑는다.
-    바깥선은 가장자리 칸의 가운데를 지나서 칠한 칸보다 반 칸씩 안쪽에 놓이는데,
-    아이라인처럼 몇 칸 두께인 선은 이 차이로 눈에 띄게 얇아져서 1칸 굵혀 맞춘다.
-    MIN_OUTLINE_POINTS점이 안 되는 덩어리는 빼고, 칠한 칸이 없으면 빈 목록이다.
+    바깥선은 가장자리 칸의 가운데를 지나는 칸 좌표 선이다. 선 위의 점마다 앞뒤 이웃 점들을
+    가우시안 무게로 평균 낸 자리로 옮겨 편다. smooth_cells는 그 무게의 폭(표준편차, 칸)이라
+    그보다 작은 계단은 펴지고, 입술 산·눈썹 꼬리처럼 그보다 큰 모양은 남는다.
+    every_piece가 거짓이면 가장 큰 덩어리 하나만, 참이면 큰 덩어리부터 모두 낸다.
+    grow_cells가 있으면 그만큼 굵힌 뒤 바깥선을 딴다. 바깥선이 가장자리 칸의 가운데를 지나서
+    아이라인처럼 몇 칸 두께인 선은 칠한 칸보다 눈에 띄게 얇아지므로 굵혀 맞춘다.
+    한 바퀴 도는 순서이고 첫 점으로 돌아가 닫힌다고 본다.
+    점이 MIN_OUTLINE_POINTS개가 안 되는 덩어리는 빼고, 칠한 칸이 없으면 빈 목록이다.
     """
     cells = mask.astype(np.uint8)
     if grow_cells > 0:
         size = 2 * grow_cells + 1
         cells = cv2.dilate(cells, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size)))
-    contours, _ = cv2.findContours(cells, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    ordered = sorted(contours, key=cv2.contourArea, reverse=True)
-    return [
-        [(float(x), float(y)) for x, y in contour[:, 0, :]]
-        for contour in ordered
-        if len(contour) >= MIN_OUTLINE_POINTS
-    ]
+    contours, _ = cv2.findContours(cells, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    pieces = [c for c in sorted(contours, key=cv2.contourArea, reverse=True) if len(c) >= 3]
+    if not every_piece:
+        pieces = pieces[:1]
+    out = []
+    for piece in pieces:
+        points = _resample(_smooth(piece[:, 0, :].astype(float), smooth_cells))
+        if len(points) >= MIN_OUTLINE_POINTS:
+            out.append(points)
+    return out
 
 
-def simplify_outline(outline: Sequence[Pixel], tolerance: float = OUTLINE_TOLERANCE) -> list[Pixel]:
-    """한 바퀴 도는 테두리의 점을 모양을 지키며 줄인다. tolerance는 지도 칸 단위 허용 거리다.
+def _smooth(points: np.ndarray, cells: float) -> np.ndarray:
+    """닫힌 선의 점마다 앞뒤 이웃 점들의 가우시안 가중 평균 자리를 낸다. cells가 0이면 그대로다."""
+    if cells <= 0:
+        return points
+    radius = int(np.ceil(3 * cells))
+    offsets = np.arange(-radius, radius + 1)
+    weights = np.exp(-0.5 * (offsets / cells) ** 2)
+    weights /= weights.sum()
+    count = len(points)
+    smoothed = np.zeros_like(points)
+    for offset, weight in zip(offsets, weights, strict=True):
+        smoothed += weight * points[(np.arange(count) + offset) % count]
+    return smoothed
 
-    남은 점을 이은 선에서 tolerance 안에 드는 점은 버리고 꺾이는 점만 남긴다(Douglas-Peucker).
-    원래 점 중에서 고르기만 하고, 서로 가장 먼 두 점은 늘 남는다.
-    들어온 점이나 줄인 결과가 MIN_OUTLINE_POINTS점이 안 되면 빈 목록이다.
+
+def _resample(points: np.ndarray) -> list[Pixel]:
+    """닫힌 선 위에 OUTLINE_SPACING_CELLS칸마다 점을 고르게 다시 찍는다.
+
+    둘레가 짧아 MIN_OUTLINE_POINTS개가 안 나오면 둘레를 그만큼 나눠 찍는다.
+    길이가 0이면 빈 목록이다.
     """
-    if len(outline) < MIN_OUTLINE_POINTS:
+    edges = np.roll(points, -1, axis=0) - points
+    lengths = np.hypot(edges[:, 0], edges[:, 1])
+    total = float(lengths.sum())
+    if total == 0:
         return []
-    points = np.array(outline, dtype=np.float32).reshape(-1, 1, 2)
-    kept = cv2.approxPolyDP(points, tolerance, True)
-    if len(kept) < MIN_OUTLINE_POINTS:
-        return []
-    return [(float(x), float(y)) for x, y in kept[:, 0, :]]
+    count = max(MIN_OUTLINE_POINTS, round(total / OUTLINE_SPACING_CELLS))
+    targets = np.arange(count) * total / count
+    starts = np.concatenate([[0.0], np.cumsum(lengths)[:-1]])
+    index = np.clip(np.searchsorted(starts, targets, side="right") - 1, 0, len(points) - 1)
+    ratio = (targets - starts[index]) / np.where(lengths[index] > 0, lengths[index], 1)
+    picked = points[index] + edges[index] * ratio[:, None]
+    return [(float(x), float(y)) for x, y in picked]

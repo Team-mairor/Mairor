@@ -39,7 +39,7 @@ from app.schemas.landmarks import LandmarksResult
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
-from app.tasks.area.parts.area_preparation import PhotoLoader
+from app.tasks.area.parts.area_preparation import PhotoLoader, step_bounds, within_step
 from tools.face_map_store import STORE_USAGE, split_store, tool_photos
 from tools.metric_settings import (
     PARTS_USAGE,
@@ -280,6 +280,7 @@ def main() -> None:
 
     photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     out = []
+    bounds = step_bounds(reference.manifest.steps)
     for part in selected_parts(PARTS, part_names):
         drawn = None
         for step in sorted(reference.manifest.steps, key=lambda s: s.order):
@@ -290,7 +291,8 @@ def main() -> None:
             def find(s: int, e: int, side: RegionName, part=part) -> Area:
                 return part.find(result, s, e, photos, side, occlusion)
 
-            rows, drawn = measure_part_step(part, find, start, end, drawn)
+            with within_step(*bounds[step.step_id]):
+                rows, drawn = measure_part_step(part, find, start, end, drawn)
             for side, measured in zip(part.sides, rows, strict=True):
                 row = {"part": part.name, "stepId": step.step_id, "side": side} | measured
                 out.append(row)

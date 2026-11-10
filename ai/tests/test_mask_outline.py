@@ -1,105 +1,149 @@
+import math
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
 from app.tasks.area.common.face_map import MAP_SIZE
-from app.tasks.area.common.mask_outline import mask_outline, mask_outlines, simplify_outline
+from app.tasks.area.common.mask_outline import OUTLINE_SPACING_CELLS, smooth_outlines
 from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.parts import lip_area
 from app.tasks.area.parts.lip_area import check_lip_area, lip_area_on_map
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "lip"
-MAX_CHANGED_RATIO_ON_SAMPLE = 0.01
+MAX_CHANGED_RATIO_ON_SAMPLE = 0.03
 
 
-def blank(size: int = 30) -> np.ndarray:
+def blank(size: int = 100) -> np.ndarray:
     return np.zeros((size, size), dtype=bool)
 
 
+def disk(radius: float, size: int = 100) -> np.ndarray:
+    rows, cols = np.mgrid[0:size, 0:size]
+    return (rows - size / 2) ** 2 + (cols - size / 2) ** 2 <= radius**2
+
+
+def iou(a: np.ndarray, b: np.ndarray) -> float:
+    return float((a & b).sum() / (a | b).sum())
+
+
+def direction_changes(points, min_deg: float = 0.5) -> int:
+    """닫힌 꺾은선에서 꺾이는 방향(왼쪽·오른쪽)이 바뀌는 횟수.
+
+    min_deg보다 작은 꺾임은 보지 않는다.
+    """
+    p = np.asarray(points, dtype=float)
+    edges = np.roll(p, -1, axis=0) - p
+    before = np.roll(edges, 1, axis=0)
+    cross = before[:, 0] * edges[:, 1] - before[:, 1] * edges[:, 0]
+    turns = np.degrees(np.arctan2(cross, (before * edges).sum(axis=1)))
+    signs = np.sign(turns[np.abs(turns) >= min_deg])
+    return int((signs != np.roll(signs, 1)).sum()) if len(signs) > 1 else 0
+
+
 def test_empty_mask_has_no_outline():
-    assert mask_outline(blank()) == []
+    assert smooth_outlines(blank(), 4) == []
 
 
 def test_single_cell_is_too_small_for_an_outline():
     mask = blank()
     mask[5, 5] = True
-    assert mask_outline(mask) == []
+
+    assert smooth_outlines(mask, 4) == []
 
 
-def test_rectangle_outline_keeps_only_its_corners():
+def test_largest_piece_only_unless_every_piece_is_asked():
+    """짝 부위·립은 가장 큰 덩어리 하나, 아이라인은 떨어진 선마다 하나씩 보내서 고른 경우다."""
     mask = blank()
-    mask[2:5, 3:9] = True
-    assert sorted(mask_outline(mask)) == [(3.0, 2.0), (3.0, 4.0), (8.0, 2.0), (8.0, 4.0)]
+    mask[10:40, 10:40] = True
+    mask[60:70, 60:80] = True
+
+    only = smooth_outlines(mask, 2)
+    every = smooth_outlines(mask, 2, every_piece=True)
+
+    assert len(only) == 1
+    assert max(x for x, _ in only[0]) < 45
+    assert len(every) == 2
+    assert polygon_mask(every[0], 100, 100).sum() > polygon_mask(every[1], 100, 100).sum()
 
 
-def test_largest_piece_is_kept_and_holes_are_ignored():
+def test_holes_inside_a_piece_are_ignored():
+    mask = disk(30)
+    mask[45:55, 45:55] = False
+
+    painted = polygon_mask(smooth_outlines(mask, 4)[0], 100, 100)
+
+    assert painted[50, 50]
+
+
+def test_points_are_evenly_spaced():
+    """FE는 모든 점을 지나는 곡선을 그려 점이 몰리면 출렁이므로, 점 사이가 고른지 본다."""
+    points = np.asarray(smooth_outlines(disk(30), 4)[0])
+    gaps = np.hypot(*(np.roll(points, -1, axis=0) - points).T)
+
+    assert np.all(np.abs(gaps - OUTLINE_SPACING_CELLS) < 0.3)
+
+
+def test_stairs_of_a_slanted_edge_are_smoothed_away():
+    """완만하게 비스듬한 변은 칸 테두리로 따면 계단이 되어, 펴지 않으면 꺾이는 방향이 계속 바뀐다.
+
+    펴면 볼록한 모양 그대로 한쪽으로만 꺾여야 한다. 펴는 단계를 빼면 실패해서 고른 경우다.
+    (45°처럼 칸 대각선과 같은 기울기는 계단이 생기지 않아 기울기를 비켜 골랐다.)
+    """
+    slanted = polygon_mask([(10, 20), (90, 10), (80, 80), (20, 90)], 100, 100)
+
+    assert direction_changes(smooth_outlines(slanted, 4)[0]) == 0
+    assert direction_changes(smooth_outlines(slanted, 0)[0]) > 10
+
+
+def test_big_notch_like_a_cupids_bow_stays():
+    """펴는 폭보다 큰 오목(입술 산 같은 모양)은 남아야 한다.
+
+    너무 세게 펴면 메워져서 고른 경우다. 크기는 시험 영상 입술(가로 약 250칸)에 가깝게 잡았다.
+    """
+    mask = disk(120, 300)
+    mask[24:66, 126:174] = False
+
+    painted = polygon_mask(smooth_outlines(mask, 4)[0], 300, 300)
+
+    assert not painted[45, 150]
+    assert iou(painted, mask) >= 0.98
+
+
+def test_outline_redraws_almost_the_same_cells():
+    """모서리만 조금 둥글어지고 칠한 칸은 거의 그대로다.
+
+    모서리가 둥글어지는 양은 크기와 상관없이 일정해서 실제 부위 크기로 잡았다.
+    """
+    mask = polygon_mask([(20, 60), (260, 20), (230, 240), (50, 270)], 300, 300)
+
+    painted = polygon_mask(smooth_outlines(mask, 4)[0], 300, 300)
+
+    assert iou(painted, mask) >= 0.98
+
+
+def test_thin_line_is_grown_and_not_lost():
+    """아이라인처럼 몇 칸 두께인 선은 굵혀서 따고 약하게 펴야 끊기거나 가늘어지지 않는다."""
     mask = blank()
-    mask[2:20, 2:20] = True
-    mask[8:12, 8:12] = False
-    mask[25:27, 25:27] = True
-    assert sorted(mask_outline(mask)) == [(2.0, 2.0), (2.0, 19.0), (19.0, 2.0), (19.0, 19.0)]
+    mask[20:23, 10:60] = True
+
+    outlines = smooth_outlines(mask, 2, grow_cells=1, every_piece=True)
+    painted = polygon_mask(outlines[0], 100, 100)
+
+    assert len(outlines) == 1
+    assert (painted & mask).sum() >= 0.95 * mask.sum()
 
 
-def test_outline_redraws_the_same_cells():
-    mask = polygon_mask([(5, 3), (40, 8), (35, 30), (8, 25)], 50, 50)
-    assert np.array_equal(polygon_mask(mask_outline(mask), 50, 50), mask)
+def test_sample_lip_keeps_its_shape():
+    """시험 영상 립 영역을 립 세기로 펴도 칠한 칸이 거의 그대로다.
 
-
-def test_each_piece_gets_its_own_outline_largest_first():
-    mask = blank()
-    mask[2:5, 3:9] = True
-    mask[10:20, 10:20] = True
-    mask[25, 25] = True
-    outlines = mask_outlines(mask)
-    assert len(outlines) == 2
-    assert sorted(outlines[0]) == [(10.0, 10.0), (10.0, 19.0), (19.0, 10.0), (19.0, 19.0)]
-    assert sorted(outlines[1]) == [(3.0, 2.0), (3.0, 4.0), (8.0, 2.0), (8.0, 4.0)]
-
-
-def test_empty_mask_has_no_outlines():
-    assert mask_outlines(blank()) == []
-
-
-def test_grow_cells_widens_a_thin_line_before_the_outline():
-    mask = blank()
-    mask[10:13, 5:25] = True
-    grown = polygon_mask(mask_outlines(mask, grow_cells=1)[0], 30, 30)
-    assert (grown & mask).sum() == mask.sum()
-    assert grown[9, 15] and grown[13, 15]
-    assert not grown[8, 15]
-
-
-def test_points_on_straight_edges_are_dropped():
-    square = [(0, 0), (0, 5), (0, 10), (5, 10), (10, 10), (10, 5), (10, 0), (5, 0)]
-    corners = [(0.0, 0.0), (0.0, 10.0), (10.0, 0.0), (10.0, 10.0)]
-    assert sorted(simplify_outline([(float(x), float(y)) for x, y in square])) == corners
-
-
-def test_wiggles_within_tolerance_are_dropped_but_kept_with_a_smaller_one():
-    wiggly = [(0.0, 0.0), (2.0, 0.4), (4.0, -0.3), (6.0, 0.5), (8.0, 0.0), (8.0, 6.0), (0.0, 6.0)]
-    corners = [(0.0, 0.0), (0.0, 6.0), (8.0, 0.0), (8.0, 6.0)]
-    assert sorted(simplify_outline(wiggly)) == corners
-    assert len(simplify_outline(wiggly, tolerance=0.2)) > len(corners)
-
-
-def test_kept_points_come_from_the_outline():
-    mask = polygon_mask([(5, 3), (40, 8), (35, 30), (8, 25)], 50, 50)
-    outline = mask_outline(mask)
-    assert set(simplify_outline(outline)) <= set(outline)
-
-
-def test_too_few_points_give_no_outline():
-    assert simplify_outline([]) == []
-    assert simplify_outline([(0.0, 0.0), (5.0, 5.0)]) == []
-
-
-def test_shape_thinner_than_tolerance_gives_no_outline():
-    assert simplify_outline([(0.0, 0.0), (5.0, 0.2), (10.0, 0.0), (5.0, -0.2)]) == []
-
-
-def test_simplified_sample_lip_keeps_its_shape():
+    입술 넓이에서 테두리 한 줄 남짓만 달라진다.
+    """
     after = np.asarray(Image.open(GOLDEN / "after_s10.png").convert("RGB"))
-    outline = mask_outline(check_lip_area(lip_area_on_map(after)).mask)
-    before = polygon_mask(outline, MAP_SIZE, MAP_SIZE)
-    simplified = polygon_mask(simplify_outline(outline), MAP_SIZE, MAP_SIZE)
-    assert (simplified ^ before).sum() <= before.sum() * MAX_CHANGED_RATIO_ON_SAMPLE
+    mask = check_lip_area(lip_area_on_map(after)).mask
+
+    outline = smooth_outlines(mask, lip_area.OUTLINE_SMOOTH_CELLS)[0]
+    painted = polygon_mask(outline, MAP_SIZE, MAP_SIZE)
+
+    assert (painted ^ mask).sum() <= mask.sum() * MAX_CHANGED_RATIO_ON_SAMPLE
+    assert not math.isclose(len(outline), 0)

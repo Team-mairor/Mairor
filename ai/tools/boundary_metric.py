@@ -46,7 +46,12 @@ from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import brow_area, eyeliner_area, eyeshadow_area, lip_area
-from app.tasks.area.parts.area_preparation import PhotoLoader, usable_rows
+from app.tasks.area.parts.area_preparation import (
+    PhotoLoader,
+    step_bounds,
+    usable_rows,
+    within_step,
+)
 from tools.face_map_store import STORE_USAGE, split_store, tool_photos
 from tools.metric_settings import (
     PARTS_USAGE,
@@ -281,17 +286,24 @@ def measure_part(
     """
     out = []
     drawn = None
+    bounds = step_bounds(steps)
     for step in sorted(steps, key=lambda s: s.order):
         if step.makeup != part.makeup:
             continue
         start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
-        areas = {
-            side: part.find(result, start, end, load_photo, side, occlusion) for side in part.sides
-        }
+        with within_step(*bounds[step.step_id]):
+            areas = {
+                side: part.find(result, start, end, load_photo, side, occlusion)
+                for side in part.sides
+            }
+            side_rows = {
+                side: usable_rows(result, end, end + part.after_ms, part.regions(side))
+                for side in part.sides
+            }
         output, _, drawn = output_area(part.makeup, areas, drawn)
         for side in part.sides:
             area, drawn_area = areas[side].mask, found_side(output, side)
-            rows = usable_rows(result, end, end + part.after_ms, part.regions(side))
+            rows = side_rows[side]
             real = None
             if rows and (area is not None or drawn_area is not None):
                 real = majority([label_map(r, part.label) for r in rows]) & side_half(side)

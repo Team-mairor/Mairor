@@ -13,7 +13,7 @@ from app.tasks.area.guide_area_builder import AREA_FINDERS, build_guide_area, fa
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
-from app.tasks.area.parts.area_preparation import RememberedPhotos
+from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 from app.tasks.area.reference_area import (
     FACE_MAP_KEEP,
     PART_WINDOWS,
@@ -325,11 +325,41 @@ def test_one_line_keeps_steps_as_given():
     assert split_steps(steps, landmarks_every_half_second(60_000), 1) == [list(steps)]
 
 
+def test_every_line_gets_neighbor_times_from_all_steps(monkeypatch):
+    """두 줄로 나누면 줄마다 단계가 일부만 들어가, 줄 안에서 이웃을 정하면 다른 줄의 단계를 놓친다.
+
+    예를 들어 s3(블러셔)의 바로 앞은 s2(아이라인)인데 둘이 다른 줄에 가므로,
+    나누기 전 전체 단계로 정한 앞뒤 시각을 두 줄 모두 받아야 해서 고른 경우다.
+    """
+    seen = []
+
+    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
+        seen.append(bounds)
+        return failed_guide_area(video_id, steps)
+
+    monkeypatch.setattr(reference_area, "build_guide_area", build)
+    steps = guide_input(*LINE_STEPS).steps
+
+    build_area_in_lines(
+        "test_01",
+        steps,
+        landmarks_every_half_second(60_000),
+        lambda row: np.zeros((24, 32, 3), dtype=np.uint8),
+        find_occlusion,
+        None,
+        2,
+    )
+
+    assert len(seen) == 2
+    assert all(bounds == step_bounds(steps) for bounds in seen)
+    assert seen[0]["s3"] == (15_000, 30_000)
+
+
 def test_lines_get_their_own_memory_and_merge_in_step_order(monkeypatch):
     """두 줄이 지도 꾸러미·가림 기억을 같이 쓰면 넣고 빼다 꼬일 수 있어 줄마다 따로 쓴다."""
     seen = []
 
-    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None):
+    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
         seen.append((load_photo, occlusion))
         return failed_guide_area(video_id, steps)
 

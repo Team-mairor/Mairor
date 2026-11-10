@@ -30,7 +30,7 @@ from app.tasks.area.landmarks.occlusion import OcclusionFinder, remember_by_fram
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.landmarks.reference_input import ReferenceInput, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
-from app.tasks.area.parts.area_preparation import RememberedPhotos
+from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 
 OCCLUSION_KEEP = 64
 FACE_MAP_KEEP = 64
@@ -242,7 +242,10 @@ def build_area_in_lines(
     줄마다 지도 꾸러미(RememberedPhotos)와 가림 기억(remember_by_frame)을 따로 둔다.
     같은 기억을 두 줄이 같이 넣고 빼면 꼬일 수 있어서다. 줄이 하나면 그 자리에서 바로 만든다.
     줄마다 지금 문맥을 복사해 넘겨, 단계 기록(area_step)이 이 작업의 기록 밑에 붙게 한다.
+    단계마다 앞뒤 단계 시각(step_bounds)은 나누기 전 전체 단계로 정해 넘긴다.
+    줄에 든 단계만으로 정하면 다른 줄에 간 이웃 단계를 못 봐서다.
     """
+    bounds = step_bounds(steps)
 
     def build(group: list[GuideInputStep]) -> GuideArea:
         return build_guide_area(
@@ -252,6 +255,7 @@ def build_area_in_lines(
             RememberedPhotos(load_row, FACE_MAP_KEEP),
             on_step=on_step,
             occlusion=remember_by_frame(occlusion, OCCLUSION_KEEP),
+            bounds=bounds,
         )
 
     groups = split_steps(steps, checked, lines)

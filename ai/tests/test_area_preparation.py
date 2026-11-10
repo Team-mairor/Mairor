@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import cv2
 import numpy as np
 import pytest
@@ -27,7 +29,9 @@ from app.tasks.area.parts.area_preparation import (
     rgb_to_lab,
     rows_to_known_map,
     rows_to_map,
+    step_bounds,
     usable_rows,
+    within_step,
 )
 from tests.test_face_map import UV, face_on_map
 
@@ -72,6 +76,58 @@ def test_every_listed_region_must_be_inside():
 def test_window_leaves_out_its_start_and_keeps_its_end():
     rows = [make_row(1000), make_row(1500), make_row(2000), make_row(2100)]
     assert picked(rows, 1000, 2000, ["lipsOuter"]) == [1500, 2000]
+
+
+def test_step_bounds_are_the_previous_end_and_the_next_start():
+    """앞뒤 단계는 화장 종류와 상관없이 order 순서로 바로 붙은 단계다. 처음·끝은 한쪽이 없다."""
+    steps = [
+        SimpleNamespace(step_id="b", order=2, start_seconds=10.0, end_seconds=20.0),
+        SimpleNamespace(step_id="a", order=1, start_seconds=0.0, end_seconds=8.0),
+        SimpleNamespace(step_id="c", order=3, start_seconds=21.5, end_seconds=30.0),
+    ]
+
+    assert step_bounds(steps) == {
+        "a": (None, 10_000),
+        "b": (8_000, 21_500),
+        "c": (20_000, None),
+    }
+
+
+def test_photos_of_neighbor_steps_are_left_out_inside_a_step():
+    """직전 창이 앞 단계 끝에, 직후 창이 다음 단계 시작에 걸치면 다른 화장 장면이 섞인다.
+
+    경계 시각과 그 바깥 사진은 빼고, 빠진 이유를 neighborStep으로 남겨야
+    운영 기록에서 보여서 고른 경우다.
+    밖에서는 자르지 않는다.
+    """
+    rows = [make_row(t) for t in (7_500, 8_000, 8_500, 9_500, 20_500, 21_000, 21_500, 22_000)]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+
+    with recording_dropped() as dropped, within_step(8_000, 21_500):
+        before = usable_rows(result, 7_000, 10_000, ["lipsOuter"])
+        after = usable_rows(result, 20_000, 23_000, ["lipsOuter"])
+
+    assert [row.timestamp_ms for row in before] == [8_500, 9_500]
+    assert [row.timestamp_ms for row in after] == [20_500, 21_000]
+    assert dropped["neighborStep"] == {7_500, 8_000, 21_500, 22_000}
+    assert picked(rows, 7_000, 10_000, ["lipsOuter"]) == [7_500, 8_000, 8_500, 9_500]
+
+
+def test_window_cut_to_nothing_falls_back_to_the_whole_window():
+    """창 전체가 앞 단계 시간에 들어가 자르면 남는 사진이 없을 때는 자르지 않은 창을 쓴다.
+
+    BE가 한 번에 바른 것을 끝과 시작이 붙은 단계로 나누면 경계에 깨끗한 사진이 원래 없다.
+    그때 기본 가이드로 버리면 창 떼기 전보다 나빠져서 고른 경우다.
+    되돌린 사진은 빠진 것으로 세지 않는다.
+    """
+    rows = [make_row(t) for t in (7_000, 7_500, 8_000)]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+
+    with recording_dropped() as dropped, within_step(8_000, None):
+        kept = usable_rows(result, 6_000, 8_000, ["lipsOuter"])
+
+    assert [row.timestamp_ms for row in kept] == [7_000, 7_500, 8_000]
+    assert "neighborStep" not in dropped
 
 
 def test_photo_without_outside_count_is_not_used():

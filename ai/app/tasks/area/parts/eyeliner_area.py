@@ -53,6 +53,7 @@ MIN_PIECE_CELLS = 40
 FOUND_MIN_CELLS = 150
 DRAWN_GROW_CELLS = 3
 OUTLINE_GROW_CELLS = 1
+OUTLINE_SMOOTH_CELLS = 2
 EYES: tuple[RegionName, RegionName] = ("leftEye", "rightEye")
 EYE_BROWS: dict[RegionName, RegionName] = {"leftEye": "leftBrow", "rightEye": "rightBrow"}
 

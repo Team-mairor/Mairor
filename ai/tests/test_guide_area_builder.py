@@ -20,11 +20,13 @@ from app.tasks.area.guide_area_builder import (
     build_guide_area,
     failed_guide_area,
 )
+from app.tasks.area.parts.area_preparation import usable_rows
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
 from app.tasks.area.parts.brow_area import BrowArea, brow_range
 from app.tasks.area.parts.eyeliner_area import EyelinerArea
 from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, eyeshadow_range
 from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_map
+from tests.test_area_preparation import make_row
 from tests.test_eyeliner_area import lash_line, with_gap
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -174,6 +176,31 @@ def test_blush_step_start_and_end_are_passed_in_milliseconds(monkeypatch):
 
     build_blush(monkeypatch, remember)
     assert seen == [(8000, 10500, "leftCheek"), (8000, 10500, "rightCheek")]
+
+
+def test_each_step_only_picks_photos_between_its_neighbor_steps(monkeypatch):
+    """빌더는 단계마다 앞 단계 끝과 다음 단계 시작 사이 사진만 고르게 감싼다(within_step).
+
+    블러셔 직전 창(7~8초)이 앞 베이스 단계 끝(7.5초)에 걸치므로, 7.5초 사진까지는 빠져야 한다.
+    빌더가 감싸지 않으면 실패해서 고른 경우다.
+    """
+    rows = [make_row(t) for t in (7_000, 7_500, 8_000)]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+    steps = [
+        Step(step_id="s3", order=1, start_seconds=5, end_seconds=7.5, makeup="foundation"),
+        Step(step_id="s4", order=2, start_seconds=8, end_seconds=10.5, makeup="blush"),
+    ]
+    seen = []
+
+    def remember(result, step_start_ms, step_end_ms, load_photo, cheek, occlusion=None):
+        rows = usable_rows(result, step_start_ms - 1000, step_start_ms, [cheek])
+        seen.append([row.timestamp_ms for row in rows])
+        return BlushArea(mask=cheek_range(cheek))
+
+    monkeypatch.setattr(guide_area_builder, "find_blush_area", remember)
+    build_guide_area("test_01", steps, result, never)
+
+    assert seen == [[8_000], [8_000]]
 
 
 def test_blush_not_found_on_both_cheeks_uses_default_blush_guide_with_reasons(monkeypatch):

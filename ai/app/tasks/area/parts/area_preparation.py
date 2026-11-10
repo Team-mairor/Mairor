@@ -8,6 +8,7 @@ check_frames를 거친 결과에서 구간·부위 조건에 맞는 사진을 �
 범위의 모름 칸이 너무 많으면 그 범위는 보지 않는다(mostly_unknown).
 전후 사이 조명이 바뀐 만큼은 화장하지 않은 피부로 재서 뺀다(remove_lighting).
 판정을 통과했는데 여기서 빠진 사진은 recording_dropped 안이면 이유별로 모은다.
+within_step 안에서는 앞 단계 끝과 다음 단계 시작 사이의 사진만 고른다.
 립·블러셔·눈썹 같은 부위 분석이 같이 쓴다. 기준값의 근거는 ai/docs/FRAME_SELECTION.md에 있다.
 """
 
@@ -50,11 +51,56 @@ D65_WHITE = np.array([0.950456, 1.0, 1.088754])
 PhotoLoader = Callable[[FrameLandmarks], np.ndarray]
 FaceMaps = tuple[np.ndarray, np.ndarray | None]
 DropReason = Literal[
-    "regionOutside", "eyesClosed", "faceSizeUnmatched", "heavilyOccluded", "faceBlurry"
+    "regionOutside",
+    "eyesClosed",
+    "faceSizeUnmatched",
+    "heavilyOccluded",
+    "faceBlurry",
+    "neighborStep",
 ]
 DroppedPhotos = dict[DropReason, set[int]]
+StepBounds = tuple[int | None, int | None]
 
 _dropped: ContextVar[DroppedPhotos | None] = ContextVar("dropped_photos", default=None)
+_step_bounds: ContextVar[StepBounds | None] = ContextVar("step_bounds", default=None)
+
+
+@contextmanager
+def within_step(previous_end_ms: int | None, next_start_ms: int | None) -> Iterator[None]:
+    """이 안에서 usable_rows가 앞 단계 끝 뒤·다음 단계 시작 앞 사진만 고르게 한다.
+
+    직전 창이 앞 단계의 마지막 몇 초에, 직후 창이 다음 단계의 첫 몇 초에 걸치면
+    다른 화장 장면이 섞여 바뀐 곳을 잘못 찾는다. previous_end_ms 시각과 그 전,
+    next_start_ms 시각과 그 뒤 사진은 쓰지 않는다. None이면 그쪽은 자르지 않는다.
+    잘라서 쓸 사진이 하나도 없으면 자르지 않은 창의 사진을 쓴다. BE가 한 번에 바른 것을
+    끝과 시작이 붙은 단계 여러 개로 나누면(시험 영상 운영 실행 11-04에서 26개 중 6개)
+    경계에 깨끗한 사진이 원래 없어서, 자르면 영역을 아예 못 찾고 기본 가이드가 되기 때문이다.
+    부위 함수마다 인자를 더하지 않고 단계 하나를 감싸면 되도록
+    recording_dropped와 같은 방식으로 둔다.
+    """
+    token = _step_bounds.set((previous_end_ms, next_start_ms))
+    try:
+        yield
+    finally:
+        _step_bounds.reset(token)
+
+
+def step_bounds(steps: Sequence) -> dict[str, StepBounds]:
+    """단계마다 (앞 단계 끝 ms, 다음 단계 시작 ms). order 순서로 바로 앞뒤 단계를 본다.
+
+    steps는 step_id·order·start_seconds·end_seconds가 있는 단계들이다(화장 종류는 가리지 않는다).
+    첫 단계의 앞, 마지막 단계의 뒤는 None이다.
+    """
+    ordered = sorted(steps, key=lambda step: step.order)
+    out: dict[str, StepBounds] = {}
+    for index, step in enumerate(ordered):
+        previous = ordered[index - 1] if index > 0 else None
+        following = ordered[index + 1] if index + 1 < len(ordered) else None
+        out[step.step_id] = (
+            None if previous is None else round(previous.end_seconds * 1000),
+            None if following is None else round(following.start_seconds * 1000),
+        )
+    return out
 
 
 @contextmanager
@@ -64,7 +110,8 @@ def recording_dropped() -> Iterator[DroppedPhotos]:
     판정(check_frames)을 통과했는데 부위 분석에서 빠진 사진이 왜 빠졌는지 기록에 남기려는 것이다.
     regionOutside는 부위가 화면 밖, eyesClosed는 섀도·아이라인에서 눈 감음,
     faceSizeUnmatched는 직전·직후 크기 맞추기에서 덜어 냄, heavilyOccluded는 범위를
-    OCCLUDED_MAX보다 많이 가림, faceBlurry는 흐림(drop_blurry)이다.
+    OCCLUDED_MAX보다 많이 가림, faceBlurry는 흐림(drop_blurry), neighborStep은 앞뒤 단계 시간
+    (within_step)이다.
     좌우 짝 부위처럼 같은 사진이 두 번 빠져도 한 번만 센다. 밖에서는 아무것도 모으지 않는다.
     """
     found: DroppedPhotos = {}
@@ -152,22 +199,46 @@ def usable_rows(
     regions에 눈(EYE_REGIONS)이 있으면 섀도·아이라인처럼 눈 둘레를 보는 분석이라,
     눈 뜬 정도가 EYE_OPEN_MIN 미만인 사진도 쓰지 않는다. 감은 눈꺼풀은 뜬 눈과 색이 달라서다.
     블러셔처럼 좌우가 있으면 부위마다 따로 불러, 한쪽만 잘린 사진도 다른 쪽에는 쓴다.
-    판정이 ok인데 빠진 사진은 recording_dropped 안이면 regionOutside·eyesClosed로 모은다.
+    within_step 안이면 앞 단계 끝 시각과 그 전, 다음 단계 시작 시각과 그 뒤 사진도 쓰지 않는다.
+    다만 그렇게 자르고 나서 쓸 사진이 하나도 없으면 자르지 않은 창의 사진을 쓴다(within_step).
+    판정이 ok인데 빠진 사진은 recording_dropped 안이면
+    regionOutside·eyesClosed·neighborStep으로 모은다.
     """
     eyes = any(region in EYE_REGIONS for region in regions)
-    picked, outside, closed = [], [], []
+    previous_end, next_start = _step_bounds.get() or (None, None)
+    inside, neighbor = [], []
     for row in result.frames:
         if not (start_ms < row.timestamp_ms <= end_ms and row.status == "ok"):
             continue
+        if (previous_end is not None and row.timestamp_ms <= previous_end) or (
+            next_start is not None and row.timestamp_ms >= next_start
+        ):
+            neighbor.append(row)
+        else:
+            inside.append(row)
+    picked, outside, closed = _sorted_rows(inside, regions, eyes)
+    if not picked and neighbor:
+        picked, more_outside, more_closed = _sorted_rows(neighbor, regions, eyes)
+        outside, closed, neighbor = outside + more_outside, closed + more_closed, []
+    _note(outside, "regionOutside")
+    _note(closed, "eyesClosed")
+    _note(neighbor, "neighborStep")
+    return picked
+
+
+def _sorted_rows(
+    rows: Sequence[FrameLandmarks], regions: Sequence[RegionName], eyes: bool
+) -> tuple[list[FrameLandmarks], list[FrameLandmarks], list[FrameLandmarks]]:
+    """사진을 (쓸 사진, 부위가 화면 밖인 사진, 눈 감은 사진)으로 나눈다. usable_rows가 쓴다."""
+    picked, outside, closed = [], [], []
+    for row in rows:
         if not all(row.measures.get(outside_count_name(region)) == 0 for region in regions):
             outside.append(row)
         elif eyes and eye_openness(row) < EYE_OPEN_MIN:
             closed.append(row)
         else:
             picked.append(row)
-    _note(outside, "regionOutside")
-    _note(closed, "eyesClosed")
-    return picked
+    return picked, outside, closed
 
 
 def eye_openness(row: FrameLandmarks) -> float:

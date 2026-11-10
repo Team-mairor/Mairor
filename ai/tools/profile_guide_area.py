@@ -84,7 +84,7 @@ PART_FINDERS = {
     "eyeshadow": "find_eyeshadow_area",
     "eyeliner": "find_eyeliner_area",
 }
-OUTLINE_FUNCTIONS = ("mask_outline", "mask_outlines", "simplify_outline", "points_to_anchors")
+OUTLINE_FUNCTIONS = ("smooth_outlines", "points_to_anchors")
 
 
 @dataclass

@@ -45,6 +45,7 @@ TIDY_CELLS = 5
 CURVE_DEGREE = 3
 MIN_COLUMN_CELLS = 3
 MIN_CURVE_COLUMNS = 10
+OUTLINE_SMOOTH_CELLS = 4
 BROWS: tuple[RegionName, RegionName] = ("leftBrow", "rightBrow")
 
 BrowAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "browColorNotFound"]

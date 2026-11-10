@@ -24,6 +24,7 @@ MARGIN_RATIO = 0.05
 REDNESS_MIN = 6.0
 MIN_FOUND_RATIO = 0.5
 SKIN_RING_RATIOS = (0.20, 0.35)
+OUTLINE_SMOOTH_CELLS = 4
 
 LipAreaReason = Literal["noUsableFrame", "lipColorNotFound"]
 
