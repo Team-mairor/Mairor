@@ -18,14 +18,24 @@
 아이라인은 그 시각 전에 끝난 아이라인 단계들이 안내한 칸을 빼고 본다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
-실행 (ai/ 폴더에서): uv run python tools/noise_metric.py samples/local_03_seq [--occlusion <이름>]
+사진을 얼굴 지도에 편 결과는 서비스와 같은 사진 꾸러미(RememberedPhotos)로 최근 FACE_MAP_KEEP장을
+기억해, 쌍 계산과 아이라인 안내 칸을 찾는 서비스 찾기가 같이 쓴다. 기억에 없는 사진은 디스크 저장
+(tools/face_map_store.py)에서 꺼내고, --no-store를 주면 디스크 저장을 쓰지 않는다.
+같은 기준 시각의 직전 창은 간격이 달라도 사진 묶음이 같아, 사진 묶음으로 낸 지도를 최근
+MEDIAN_KEEP개 기억해 다시 쓴다(시험 영상에서 같은 묶음을 다시 쓰기까지 사이 최대 400개).
+기준값을 바꿔 다시 재려면 tools/run_metric.py로 --set을 준다.
+--tag <이름>을 주면 결과를 그 이름 폴더에 따로 둔다.
+실행 (ai/ 폴더에서):
+uv run python tools/noise_metric.py samples/local_03_seq [--occlusion <이름>] [--no-store]
+    [--tag <이름>] [--parts <부위,부위>]
+--parts를 주면 그 부위만 계산한다. 일꾼 여러 명이 나눠 돌릴 때(tools/run_metrics.py) 쓴다.
 """
 
 import json
 import sys
-from collections.abc import Callable, Sequence
+from collections import OrderedDict
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from functools import lru_cache
 from pathlib import Path
 
 import cv2
@@ -37,18 +47,31 @@ sys.path.insert(0, str(AI_ROOT))
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Step
-from app.tasks.area.common.face_map import MAP_SIZE, flatten, flatten_mask, map_points
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask, span
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import (
+    PhotoLoader,
+    RememberedPhotos,
     known_cells,
     known_median_map,
     match_sizes,
     remove_lighting,
     rgb_to_lab,
     usable_rows,
+)
+from tools.face_map_store import STORE_USAGE, split_store, stored_known_map, tool_photos
+from tools.metric_settings import (
+    PARTS_USAGE,
+    TAG_USAGE,
+    selected_parts,
+    split_parts,
+    split_tag,
+    tagged_dir,
+    write_result,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 from tools.output_area import (
@@ -65,7 +88,8 @@ CAUTION_FILE = "caution_ranges.json"
 OUTPUT_FILE = "noise.json"
 GAPS_SECONDS = (1, 10, 30, 60, 120)
 STRIDE_MS = 4000
-MAP_CACHE = 300
+FACE_MAP_KEEP = 300
+MEDIAN_KEEP = 512
 HIST_EDGES = np.arange(-40.0, 40.0001, 0.05)
 PERCENTILES = (50, 95, 99, 99.9)
 UNTOUCHED_SECONDS: dict[str, tuple[tuple[float, float], ...]] = {
@@ -512,6 +536,71 @@ def flats_to_map(flats: Sequence[Flat], zone: np.ndarray | None) -> tuple[np.nda
     return known_median_map([face_map for face_map, _ in flats], covered, zone)
 
 
+def remembered_flat(
+    photos: RememberedPhotos,
+    rows_by_index: Mapping[int, FrameLandmarks],
+    occlusion: OcclusionFinder | None,
+) -> Callable[[int], Flat]:
+    """사진 번호로 (얼굴 지도, 가린 칸 표)를 내는 함수. photos 꾸러미가 기억한 지도를 꺼내 쓴다.
+
+    같은 꾸러미를 서비스 부위 찾기에도 넘기면, 찾기가 이미 편 사진은 도구 계산에서 다시 펴지 않는다.
+    꺼낸 지도는 읽기 전용이다.
+    """
+
+    def flat(index: int) -> Flat:
+        return photos.face_maps(rows_by_index[index], occlusion)
+
+    return flat
+
+
+class RememberedMedians:
+    """(부위, 쪽, 사진 묶음)으로 낸 (지도, 모름 칸)을 최근 keep개 기억한다.
+
+    flat은 사진 번호로 (얼굴 지도, 가린 칸 표)를 내는 함수다. 범위(zone)는 부위·쪽마다 하나라
+    열쇠에 넣지 않는다. 꺼낸 지도는 여러 쌍이 같이 쓰므로 읽기 전용이다.
+    기억에 없으면 photos의 대표 지도 저장(stored_known_map)에서 찾고, 그래도 없으면 만든다.
+    """
+
+    def __init__(
+        self,
+        flat: Callable[[int], Flat],
+        keep: int,
+        photos: PhotoLoader | None = None,
+        occlusion: OcclusionFinder | None = None,
+    ) -> None:
+        self.flat = flat
+        self.keep = keep
+        self.photos = photos
+        self.occlusion = occlusion
+        self._kept: OrderedDict[tuple, tuple[np.ndarray, np.ndarray]] = OrderedDict()
+
+    def get(
+        self,
+        part_name: str,
+        side: RegionName,
+        rows: Sequence[FrameLandmarks],
+        zone: np.ndarray | None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        key = (part_name, side, tuple(row.frame_index for row in rows))
+        hit = self._kept.get(key)
+        if hit is not None:
+            self._kept.move_to_end(key)
+            return hit
+        made = stored_known_map(
+            self.photos,
+            rows,
+            self.occlusion,
+            zone,
+            lambda: flats_to_map([self.flat(index) for index in key[2]], zone),
+        )
+        for array in made:
+            array.flags.writeable = False
+        self._kept[key] = made
+        if len(self._kept) > self.keep:
+            self._kept.popitem(last=False)
+        return made
+
+
 def part_zones(part: Part) -> dict[RegionName, np.ndarray | None]:
     """부위의 쪽마다 범위를 한 번씩 만들어 둔다. zone이 없는 부위는 None이다."""
     return {side: None if part.zone is None else part.zone(side) for side in part.sides}
@@ -567,8 +656,14 @@ def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
 
 def main() -> None:
     args, occlusion_name = split_occlusion(sys.argv[1:])
+    args, use_store = split_store(args)
+    args, tag = split_tag(args)
+    args, part_names = split_parts(args)
     if len(args) != 1:
-        print(f"사용법: uv run python tools/noise_metric.py <샘플 폴더> {USAGE}")
+        print(
+            f"사용법: uv run python tools/noise_metric.py <샘플 폴더>"
+            f" {USAGE} {STORE_USAGE} {TAG_USAGE} {PARTS_USAGE}"
+        )
         sys.exit(1)
 
     folder = Path(args[0])
@@ -584,35 +679,35 @@ def main() -> None:
     cautions = caution_spans(json.loads((folder / CAUTION_FILE).read_text(encoding="utf-8")))
     occlusion = table_finder(folder, occlusion_name)
 
-    @lru_cache(maxsize=MAP_CACHE)
-    def flat(index: int) -> Flat:
-        row = rows_by_index[index]
-        photo = read_frame_rgb(reference, frames[index])
-        covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
-        return flatten(photo, row.face), covered
-
     def load_photo(row: FrameLandmarks) -> np.ndarray:
         return read_frame_rgb(reference, frames[row.frame_index])
+
+    photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
+    flat = remembered_flat(photos, rows_by_index, occlusion)
+    medians = RememberedMedians(flat, MEDIAN_KEEP, photos, occlusion)
 
     def find_eyeliner(step: Step, eye: RegionName) -> eyeliner_area.EyelinerArea:
         start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
         return eyeliner_area.find_eyeliner_area(
-            result, start, end, load_photo, eye, occlusion=occlusion
+            result, start, end, photos, eye, occlusion=occlusion
         )
 
-    timeline = eyeliner_drawn(reference.manifest.steps, find_eyeliner)
+    chosen = {part.name for part in selected_parts(PARTS, part_names)}
+    timeline = (
+        eyeliner_drawn(reference.manifest.steps, find_eyeliner) if "eyeliner" in chosen else []
+    )
 
     def eyeliner_drawn_at(start_ms: int) -> np.ndarray | None:
         return drawn_before(timeline, start_ms)
 
     summary, records = [], []
-    for part in PARTS:
+    for part in selected_parts(PARTS, part_names):
         zones = part_zones(part)
 
         def load_map(
-            rows: Sequence[FrameLandmarks], side: RegionName, zones=zones
+            rows: Sequence[FrameLandmarks], side: RegionName, zones=zones, part=part
         ) -> tuple[np.ndarray, np.ndarray]:
-            return flats_to_map([flat(row.frame_index) for row in rows], zones[side])
+            return medians.get(part.name, side, rows, zones[side])
 
         tallies, part_records = measure_part(
             part,
@@ -638,15 +733,9 @@ def main() -> None:
                 f"  나가는 영역 헛것 {row['outputFalsePositives']}/{row['pairs']}{zones}"
             )
 
-    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {"videoId": reference.manifest.video_id, "summary": summary, "pairs": records},
-            ensure_ascii=False,
-            indent=1,
-        ),
-        encoding="utf-8",
+    path = tagged_dir(output_dir(folder, occlusion_name), tag) / OUTPUT_FILE
+    write_result(
+        path, {"videoId": reference.manifest.video_id, "summary": summary, "pairs": records}
     )
     print(f"저장: {path}")
 

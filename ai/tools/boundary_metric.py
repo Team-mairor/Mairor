@@ -12,12 +12,20 @@ FE로 나가는 영역도 같은 점수로 재 output 칸에 둔다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 영역을 찾는다
 (tools/occlusion_tables.py).
+쪽마다 같은 직전·직후 사진을 쓰므로, 서비스 찾기에 사진 꾸러미(RememberedPhotos)를 넘겨
+사진마다 얼굴 지도를 한 번만 편다. 한 단계 직전·직후 사진(시험 영상 최대 40장)을 다 기억하도록
+FACE_MAP_KEEP장(서비스와 같은 수)을 기억한다. 기억에 없는 사진은 디스크 저장
+(tools/face_map_store.py)에서 꺼내고, --no-store를 주면 쓰지 않는다.
+기준값을 바꿔 다시 재려면 tools/run_metric.py로 --set을 준다.
+--tag <이름>을 주면 결과를 그 이름 폴더에 따로 둔다.
 실행 (ai/ 폴더에서):
-uv run python tools/boundary_metric.py samples/local_03_seq <모델 파일> [--occlusion <이름>]
+uv run python tools/boundary_metric.py samples/local_03_seq <모델 파일>
+    [--occlusion <이름>] [--no-store] [--tag <이름>] [--parts <부위,부위>] [--ort-threads <수>]
+--ort-threads는 분할 모델이 쓸 코어 수다. 주지 않으면 라이브러리가 이 컴퓨터 코어 수로 정한다.
+일꾼 여러 명이 동시에 돌 때(tools/run_metrics.py) 서로 코어를 다투지 않게 줄인다.
 """
 
 import hashlib
-import json
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -39,11 +47,24 @@ from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import PhotoLoader, usable_rows
+from tools.face_map_store import STORE_USAGE, split_store, tool_photos
+from tools.metric_settings import (
+    PARTS_USAGE,
+    TAG_USAGE,
+    selected_parts,
+    split_parts,
+    split_tag,
+    tagged_dir,
+    take_option,
+    write_result,
+)
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 from tools.output_area import Area, found_side, output_area
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "boundary.json"
+FACE_MAP_KEEP = 64
+ORT_THREADS_OPTION = "--ort-threads"
 MODEL_URL = "https://github.com/yakhyo/face-parsing/releases/download/weights/resnet18.onnx"
 MODEL_SHA256 = "0d9bd318e46987c3bdbfacae9e2c0f461cae1c6ac6ea6d43bbe541a91727e33f"
 INPUT_SIZE = 512
@@ -147,15 +168,22 @@ def crop_box(face: Face, width: int, height: int) -> tuple[int, int, int, int]:
     return x0, y0, x1, y1
 
 
-def onnx_parser(model_path: Path) -> Parser:
+def onnx_parser(model_path: Path, threads: int | None = None) -> Parser:
     """BiSeNet ONNX로 사진의 픽셀마다 부위 번호(0~18)를 매기는 함수를 만든다.
 
     얼굴만 잘라 INPUT_SIZE로 줄여 넣고, 결과를 잘라 낸 크기로 되돌려 사진 크기 표에 놓는다.
-    잘라 낸 곳 밖은 0(배경)이다.
+    잘라 낸 곳 밖은 0(배경)이다. threads가 있으면 모델 안 일꾼(intra-op) 수를 그만큼으로,
+    노드 사이 일꾼(inter-op)을 1로 정한다. 없으면 onnxruntime 기본값이다.
     """
     import onnxruntime
 
-    session = onnxruntime.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+    options = onnxruntime.SessionOptions()
+    if threads is not None:
+        options.intra_op_num_threads = threads
+        options.inter_op_num_threads = 1
+    session = onnxruntime.InferenceSession(
+        str(model_path), sess_options=options, providers=["CPUExecutionProvider"]
+    )
     name = session.get_inputs()[0].name
 
     def parse(rgb: np.ndarray, face: Face) -> np.ndarray:
@@ -276,8 +304,18 @@ def measure_part(
 
 def main() -> None:
     args, occlusion_name = split_occlusion(sys.argv[1:])
+    args, use_store = split_store(args)
+    args, tag = split_tag(args)
+    args, part_names = split_parts(args)
+    args, threads = take_option(args, ORT_THREADS_OPTION)
+    if len(threads) > 1 or not all(value.isdigit() and int(value) > 0 for value in threads):
+        print(f"{ORT_THREADS_OPTION}는 한 번, 1 이상 정수로 줍니다")
+        sys.exit(1)
     if len(args) != 2:
-        print(f"사용법: uv run python tools/boundary_metric.py <샘플 폴더> <모델 파일> {USAGE}")
+        print(
+            "사용법: uv run python tools/boundary_metric.py <샘플 폴더> <모델 파일>"
+            f" {USAGE} {STORE_USAGE} {TAG_USAGE} {PARTS_USAGE} [{ORT_THREADS_OPTION} <수>]"
+        )
         sys.exit(1)
 
     folder, model_path = Path(args[0]), Path(args[1])
@@ -291,7 +329,7 @@ def main() -> None:
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     rows_by_index = {row.frame_index: row for row in result.frames}
-    parse = onnx_parser(model_path)
+    parse = onnx_parser(model_path, int(threads[0]) if threads else None)
     occlusion = table_finder(folder, occlusion_name)
 
     def load_photo(row: FrameLandmarks) -> np.ndarray:
@@ -305,11 +343,10 @@ def main() -> None:
     def label_map(row: FrameLandmarks, label: str) -> np.ndarray:
         return mask_to_map(np.isin(labels_of(row.frame_index), LABELS[label]), row.face)
 
+    photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     out = []
-    for part in PARTS:
-        rows = measure_part(
-            part, result, reference.manifest.steps, load_photo, label_map, occlusion
-        )
+    for part in selected_parts(PARTS, part_names):
+        rows = measure_part(part, result, reference.manifest.steps, photos, label_map, occlusion)
         out += rows
         for row in rows:
             keys = ("cover", "overflow", "intrude", "pointOutlineIoU")
@@ -320,14 +357,8 @@ def main() -> None:
                 f"  | 나가는 영역 찾음 {row['output']['found']}  {output}"
             )
 
-    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {"videoId": reference.manifest.video_id, "steps": out}, ensure_ascii=False, indent=1
-        ),
-        encoding="utf-8",
-    )
+    path = tagged_dir(output_dir(folder, occlusion_name), tag) / OUTPUT_FILE
+    write_result(path, {"videoId": reference.manifest.video_id, "steps": out})
     print(f"저장: {path}")
 
 

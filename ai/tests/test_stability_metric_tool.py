@@ -124,3 +124,12 @@ def test_measure_part_step_measures_the_drawn_area_on_a_side_that_found_nothing(
     assert left["output"]["found"] == right["output"]["found"] == 9
     assert right["output"]["baseFound"] is True and right["baseFound"] is False
     assert right["output"]["meanIoU"] == 1.0
+
+
+def test_face_map_keep_covers_every_photo_one_step_uses():
+    """한 단계의 9가지 조합이 쓰는 사진을 다 기억해야 조합끼리 같은 사진을 다시 펴지 않는다.
+
+    시험 영상에서 센 한 단계 최대는 80장(s16a, 창을 2초씩 옮긴 직전·직후 창의 합)이다.
+    서비스 값 64장이면 이런 단계에서 조합마다 다시 편다.
+    """
+    assert stability_metric.FACE_MAP_KEEP >= 80

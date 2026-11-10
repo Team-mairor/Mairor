@@ -22,7 +22,17 @@ cautionSkipped로 센다. 서비스가 영역을 만드는 사진 창(직전 창
 판정 도구가 그 선은 빼고 보게 한다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
-실행 (ai/ 폴더에서): uv run python tools/timing_metric.py samples/local_03_seq [--occlusion <이름>]
+사진을 얼굴 지도에 편 결과는 서비스와 같은 사진 꾸러미(RememberedPhotos)로 최근 FACE_MAP_KEEP장을
+기억해, 시각마다 만드는 지도와 서비스 찾기가 같이 쓴다. 서비스 찾기가 단계 처음에 편 직후 창
+사진을 끝 시각에서 다시 쓰려면, 시작 PAD_MS 전부터 끝 시각까지 펴는 사진(시험 영상 한 단계
+최대 222장)보다 많이 기억해야 한다.
+기억에 없는 사진은 디스크 저장(tools/face_map_store.py)에서 꺼내고, --no-store를 주면 쓰지 않는다.
+기준값을 바꿔 다시 재려면 tools/run_metric.py로 --set을 준다.
+--tag <이름>을 주면 결과를 그 이름 폴더에 따로 둔다.
+실행 (ai/ 폴더에서):
+uv run python tools/timing_metric.py samples/local_03_seq [--occlusion <이름>] [--no-store]
+    [--tag <이름>] [--parts <부위,부위>]
+--parts를 주면 그 부위만 계산한다. 일꾼 여러 명이 나눠 돌릴 때(tools/run_metrics.py) 쓴다.
 """
 
 import json
@@ -40,7 +50,7 @@ sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.tasks.area.common.face_map import MAP_SIZE, flatten, flatten_mask, map_points
+from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
@@ -52,15 +62,25 @@ from app.tasks.area.parts.area_preparation import (
     match_sizes,
     usable_rows,
 )
+from tools.face_map_store import STORE_USAGE, split_store, stored_known_map, tool_photos
+from tools.metric_settings import (
+    PARTS_USAGE,
+    TAG_USAGE,
+    selected_parts,
+    split_parts,
+    split_tag,
+    tagged_dir,
+    write_result,
+)
 from tools.noise_metric import (
     CAUTION_FILE,
-    Flat,
     Span,
     blush_reddening,
     caution_spans,
     flats_to_map,
     lip_redness,
     overlaps,
+    remembered_flat,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 from tools.output_area import Area, found_side, output_area
@@ -76,7 +96,7 @@ LEVELS = (0.5, 0.9)
 STRONG_PERCENTILE = 90
 STRONG_LEVEL = 0.5
 LIP_BEFORE_MS = 1000
-MAP_CACHE = 64
+FACE_MAP_KEEP = 256
 
 MapLoader = Callable[[Sequence[FrameLandmarks], RegionName], tuple[np.ndarray, np.ndarray]]
 AreaFinder = Callable[[RegionName], np.ndarray | None]
@@ -430,8 +450,14 @@ def measure_step(
 
 def main() -> None:
     args, occlusion_name = split_occlusion(sys.argv[1:])
+    args, use_store = split_store(args)
+    args, tag = split_tag(args)
+    args, part_names = split_parts(args)
     if len(args) != 1:
-        print(f"사용법: uv run python tools/timing_metric.py <샘플 폴더> {USAGE}")
+        print(
+            f"사용법: uv run python tools/timing_metric.py <샘플 폴더>"
+            f" {USAGE} {STORE_USAGE} {TAG_USAGE} {PARTS_USAGE}"
+        )
         sys.exit(1)
 
     folder = Path(args[0])
@@ -450,12 +476,8 @@ def main() -> None:
     def load_photo(row: FrameLandmarks) -> np.ndarray:
         return read_frame_rgb(reference, frames[row.frame_index])
 
-    @lru_cache(maxsize=MAP_CACHE)
-    def flat(index: int) -> Flat:
-        row = rows_by_index[index]
-        photo = load_photo(row)
-        covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
-        return flatten(photo, row.face), covered
+    photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
+    flat = remembered_flat(photos, rows_by_index, occlusion)
 
     zones = {
         (part.name, side): None if part.zone is None else part.zone(side)
@@ -467,10 +489,17 @@ def main() -> None:
     def median_of(
         indices: tuple[int, ...], part_name: str, side: RegionName
     ) -> tuple[np.ndarray, np.ndarray]:
-        return flats_to_map([flat(index) for index in indices], zones[(part_name, side)])
+        zone = zones[(part_name, side)]
+        return stored_known_map(
+            photos,
+            [rows_by_index[index] for index in indices],
+            occlusion,
+            zone,
+            lambda: flats_to_map([flat(index) for index in indices], zone),
+        )
 
     out = []
-    for part in PARTS:
+    for part in selected_parts(PARTS, part_names):
 
         def load_map(
             rows: Sequence[FrameLandmarks], side: RegionName, part=part
@@ -483,8 +512,7 @@ def main() -> None:
                 continue
             start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
             areas = {
-                side: part.find(result, start, end, load_photo, side, occlusion)
-                for side in part.sides
+                side: part.find(result, start, end, photos, side, occlusion) for side in part.sides
             }
             drawn_areas, _, drawn = output_area(part.makeup, areas, drawn)
 
@@ -512,25 +540,20 @@ def main() -> None:
                     f"  못 잼 {record.get('notMeasured', [])}"
                 )
 
-    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {
-                "videoId": reference.manifest.video_id,
-                "settings": {
-                    "stepMs": STEP_MS,
-                    "padMs": PAD_MS,
-                    "ringGapMinCells": RING_GAP_MIN_CELLS,
-                    "blurGapRatio": BLUR_GAP_RATIO,
-                    "ringWidthCells": RING_WIDTH_CELLS,
-                },
-                "steps": out,
+    path = tagged_dir(output_dir(folder, occlusion_name), tag) / OUTPUT_FILE
+    write_result(
+        path,
+        {
+            "videoId": reference.manifest.video_id,
+            "settings": {
+                "stepMs": STEP_MS,
+                "padMs": PAD_MS,
+                "ringGapMinCells": RING_GAP_MIN_CELLS,
+                "blurGapRatio": BLUR_GAP_RATIO,
+                "ringWidthCells": RING_WIDTH_CELLS,
             },
-            ensure_ascii=False,
-            indent=1,
-        ),
-        encoding="utf-8",
+            "steps": out,
+        },
     )
     print(f"저장: {path}")
 

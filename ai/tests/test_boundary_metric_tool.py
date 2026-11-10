@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -129,3 +130,32 @@ def test_measure_part_reports_scores_only_for_found_areas(monkeypatch):
     assert rows[1]["found"] is False and "cover" not in rows[1]
     assert rows[0]["output"]["found"] is True and rows[0]["output"]["cover"] > 0.9
     assert rows[1]["output"] == {"found": False, "photos": 1}
+
+
+def test_face_map_keep_covers_both_windows_of_one_step():
+    """두 쪽이 같은 직전·직후 사진을 쓰므로, 한 단계 두 창의 사진(시험 영상 최대 40장)을 기억하면
+    두 번째 쪽에서 다시 펴지 않는다."""
+    assert boundary_metric.FACE_MAP_KEEP >= 40
+
+
+def test_ort_threads_set_the_model_worker_count_only_when_given(monkeypatch):
+    """일꾼 여러 명이 동시에 돌 때만 분할 모델 코어 수를 줄이고, 안 주면 지금처럼 기본값을 쓴다."""
+    import onnxruntime
+
+    opened = []
+
+    class FakeSession:
+        def __init__(self, path, sess_options=None, providers=None):
+            opened.append(sess_options)
+
+        def get_inputs(self):
+            return [SimpleNamespace(name="input")]
+
+    monkeypatch.setattr(onnxruntime, "InferenceSession", FakeSession)
+
+    boundary_metric.onnx_parser(Path("model.onnx"), 1)
+    boundary_metric.onnx_parser(Path("model.onnx"))
+
+    given, default = opened
+    assert (given.intra_op_num_threads, given.inter_op_num_threads) == (1, 1)
+    assert default.intra_op_num_threads == 0

@@ -11,11 +11,18 @@ FE로 나가는 영역도 같은 방법으로 재 output 칸에 둔다. 아이�
 결과로 안내한 칸을 빼고 본다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
+9가지 조합은 거의 같은 사진을 쓰므로, 서비스 찾기에 사진 꾸러미(RememberedPhotos)를 넘겨
+사진마다 얼굴 지도를 한 번만 편다. 한 단계의 조합들이 쓰는 사진(시험 영상 최대 80장)을 다 기억하도록
+FACE_MAP_KEEP장을 기억한다. 기억에 없는 사진은 디스크 저장(tools/face_map_store.py)에서 꺼내고,
+--no-store를 주면 쓰지 않는다.
+기준값을 바꿔 다시 재려면 tools/run_metric.py로 --set을 준다.
+--tag <이름>을 주면 결과를 그 이름 폴더에 따로 둔다.
 실행 (ai/ 폴더에서):
-uv run python tools/stability_metric.py samples/local_03_seq [--occlusion <이름>]
+uv run python tools/stability_metric.py samples/local_03_seq [--occlusion <이름>] [--no-store]
+    [--tag <이름>] [--parts <부위,부위>]
+--parts를 주면 그 부위만 계산한다. 일꾼 여러 명이 나눠 돌릴 때(tools/run_metrics.py) 쓴다.
 """
 
-import json
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -33,6 +40,16 @@ from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import PhotoLoader
+from tools.face_map_store import STORE_USAGE, split_store, tool_photos
+from tools.metric_settings import (
+    PARTS_USAGE,
+    TAG_USAGE,
+    selected_parts,
+    split_parts,
+    split_tag,
+    tagged_dir,
+    write_result,
+)
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 from tools.output_area import Area, found_side, not_found_reason, output_area
 
@@ -40,6 +57,7 @@ CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "stability.json"
 SHIFTS_MS = (0, 1000, 2000)
 MAX_SHIFT_CELLS = 60
+FACE_MAP_KEEP = 128
 
 Finder = Callable[[int, int], tuple[np.ndarray | None, str | None]]
 ComboResult = tuple[int, int, np.ndarray | None, str | None]
@@ -236,8 +254,14 @@ def measure_part_step(
 
 def main() -> None:
     args, occlusion_name = split_occlusion(sys.argv[1:])
+    args, use_store = split_store(args)
+    args, tag = split_tag(args)
+    args, part_names = split_parts(args)
     if len(args) != 1:
-        print(f"사용법: uv run python tools/stability_metric.py <샘플 폴더> {USAGE}")
+        print(
+            f"사용법: uv run python tools/stability_metric.py <샘플 폴더>"
+            f" {USAGE} {STORE_USAGE} {TAG_USAGE} {PARTS_USAGE}"
+        )
         sys.exit(1)
 
     folder = Path(args[0])
@@ -254,8 +278,9 @@ def main() -> None:
     def load_photo(row):
         return read_frame_rgb(reference, frames[row.frame_index])
 
+    photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     out = []
-    for part in PARTS:
+    for part in selected_parts(PARTS, part_names):
         drawn = None
         for step in sorted(reference.manifest.steps, key=lambda s: s.order):
             if step.makeup != part.makeup:
@@ -263,7 +288,7 @@ def main() -> None:
             start, end = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
 
             def find(s: int, e: int, side: RegionName, part=part) -> Area:
-                return part.find(result, s, e, load_photo, side, occlusion)
+                return part.find(result, s, e, photos, side, occlusion)
 
             rows, drawn = measure_part_step(part, find, start, end, drawn)
             for side, measured in zip(part.sides, rows, strict=True):
@@ -277,14 +302,8 @@ def main() -> None:
                     f"  평균 겹침 {output['meanIoU']}  흔들림 비율 {output['shiftRatio']}"
                 )
 
-    path = output_dir(folder, occlusion_name) / OUTPUT_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {"videoId": reference.manifest.video_id, "steps": out}, ensure_ascii=False, indent=1
-        ),
-        encoding="utf-8",
-    )
+    path = tagged_dir(output_dir(folder, occlusion_name), tag) / OUTPUT_FILE
+    write_result(path, {"videoId": reference.manifest.video_id, "steps": out})
     print(f"저장: {path}")
 
 

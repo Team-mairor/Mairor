@@ -381,3 +381,12 @@ def test_measure_step_skips_caution_times_but_keeps_the_service_window(monkeypat
     assert max(p["inside"] for p in row["points"] if p["inside"] is not None) == 10.0
     assert row["cautionSkipped"] == 5
     assert row["keepRatio"] is None and row["notMeasured"] == ["keepRatio"]
+
+
+def test_face_map_keep_lasts_from_the_service_windows_to_the_final_time():
+    """서비스 찾기가 단계 처음에 편 직후 창 사진을 끝 시각에서 다시 쓰려면 그 사이를 기억해야 한다.
+
+    시험 영상에서 센 한 단계의 시작 PAD_MS 전부터 끝 시각까지 사진은 최대 222장(s8a)이다.
+    옛 기억 64장이면 대부분 단계에서 끝 시각에 다시 편다.
+    """
+    assert timing_metric.FACE_MAP_KEEP >= 222

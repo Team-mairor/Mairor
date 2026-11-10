@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, Point, Pose
 from app.schemas.manifest import Manifest
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
@@ -375,3 +376,88 @@ def test_parts_build_maps_over_the_service_ranges(parts):
     for part in parts:
         for side in part.sides:
             assert np.array_equal(part.zone(side), service[part.name](side))
+
+
+def make_row(frame_index: int) -> FrameLandmarks:
+    points = [Point(x=(i % 30) / 30, y=(i // 30) / 20, z=0.0) for i in range(478)]
+    return FrameLandmarks(
+        frame_index=frame_index,
+        timestamp_ms=frame_index * 500,
+        step_id=None,
+        image_size=ImageSize(width=10, height=10),
+        status="ok",
+        face_count=1,
+        face=Face(landmarks=points, iod=1.0, pose=Pose(yaw=0.0, pitch=0.0, roll=0.0)),
+    )
+
+
+def test_remembered_flat_reuses_maps_the_service_finder_already_made():
+    """도구 계산이 서비스 찾기와 같은 꾸러미를 쓰면, 찾기가 편 사진은 다시 읽지도 펴지도 않는다.
+
+    시간 도구는 서비스 찾기가 단계 처음에 편 직전·직후 창 사진을 자기 직전 지도와 끝 시각에서
+    다시 쓰므로, 기억을 따로 두면 같은 사진을 두 번 편다. 꺼낸 지도는 새로 편 지도와 값이 같아야
+    빠르게 한 뒤에도 결과가 그대로다.
+    """
+    photo = np.full((10, 10, 3), 120, dtype=np.uint8)
+    covered = np.zeros((10, 10), dtype=bool)
+    covered[:3] = True
+    loads = []
+
+    def load_photo(row):
+        loads.append(row.frame_index)
+        return photo
+
+    def occlusion(_row, _image):
+        return covered
+
+    rows = [make_row(1), make_row(2)]
+    photos = area_preparation.RememberedPhotos(load_photo, 8)
+    area_preparation.rows_to_known_map(rows, photos, occlusion)
+    flat = noise_metric.remembered_flat(photos, {row.frame_index: row for row in rows}, occlusion)
+
+    face_map, hidden = flat(1)
+    flat(2)
+
+    assert loads == [1, 2]
+    expected_map, expected_hidden = area_preparation.make_face_maps(
+        rows[0], lambda _row: photo, occlusion
+    )
+    assert np.array_equal(face_map, expected_map)
+    assert np.array_equal(hidden, expected_hidden)
+
+
+def test_remembered_medians_make_each_photo_bundle_once_per_part_and_side():
+    """같은 기준 시각의 직전 창은 간격이 달라도 사진 묶음이 같아, 대표 지도를 한 번만 만들어야 한다.
+
+    시험 영상에서 3,532번 중 1,374번이 같은 묶음을 다시 만드는 것이었다. 쪽(범위)이 다르면
+    다른 지도라 따로 만든다. 여러 쌍이 같이 쓰므로 꺼낸 지도는 읽기 전용이고, 값은 바로 만든 것과
+    같다.
+    """
+    flats = {
+        1: (np.full((MAP_SIZE, MAP_SIZE, 3), 100, dtype=np.uint8), None),
+        2: (np.full((MAP_SIZE, MAP_SIZE, 3), 140, dtype=np.uint8), None),
+    }
+    asked = []
+
+    def flat(index):
+        asked.append(index)
+        return flats[index]
+
+    medians = noise_metric.RememberedMedians(flat, 8)
+    rows = [make_row(1), make_row(2)]
+
+    first = medians.get("brow", "leftBrow", rows, None)
+    again = medians.get("brow", "leftBrow", rows, None)
+    other_side = medians.get("brow", "rightBrow", rows, None)
+
+    assert again is first
+    assert other_side is not first
+    assert asked == [1, 2, 1, 2]
+    assert not first[0].flags.writeable
+    expected, _ = noise_metric.flats_to_map([flats[1], flats[2]], None)
+    assert np.array_equal(first[0], expected)
+
+
+def test_median_keep_covers_the_longest_wait_before_a_bundle_is_used_again():
+    """시험 영상에서 같은 묶음을 다시 쓰기까지 사이에 낸 대표 지도는 최대 400개다."""
+    assert noise_metric.MEDIAN_KEEP >= 400

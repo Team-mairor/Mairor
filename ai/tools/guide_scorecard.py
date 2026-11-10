@@ -18,8 +18,9 @@ stability_metric.py, boundary_metric.py, timing_metric.py를 실행해 둔다.
 output 칸이 없는 옛 결과 파일은 쪽마다 찾은 영역으로 판정한다.
 시간 결과의 notMeasured에 든 지표(조심할 구간이라 잴 시각이 없던 유지 비)는 못 잼으로 적고
 그 선은 합격·불합격에 넣지 않는다. 다른 까닭으로 값이 없으면 지금처럼 불합격이다.
+--tag <이름>을 주면 그 이름 폴더(tools/run_metric.py로 기준값을 바꿔 돈 결과)를 판정한다.
 실행 (ai/ 폴더에서):
-uv run python tools/guide_scorecard.py samples/local_03_seq [--occlusion <이름>]
+uv run python tools/guide_scorecard.py samples/local_03_seq [--occlusion <이름>] [--tag <이름>]
 """
 
 import json
@@ -31,6 +32,7 @@ from pathlib import Path
 AI_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_ROOT))
 
+from tools.metric_settings import TAG_USAGE, split_tag, tagged_dir
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion
 
 INPUT_FILES = ("noise.json", "stability.json", "boundary.json", "timing.json")
@@ -315,11 +317,12 @@ def describe(checks: Sequence[dict]) -> str:
 
 def main() -> None:
     args, occlusion_name = split_occlusion(sys.argv[1:])
+    args, tag = split_tag(args)
     if len(args) != 1:
-        print(f"사용법: uv run python tools/guide_scorecard.py <샘플 폴더> {USAGE}")
+        print(f"사용법: uv run python tools/guide_scorecard.py <샘플 폴더> {USAGE} {TAG_USAGE}")
         sys.exit(1)
 
-    folder = output_dir(Path(args[0]), occlusion_name)
+    folder = tagged_dir(output_dir(Path(args[0]), occlusion_name), tag)
     missing = [name for name in INPUT_FILES if not (folder / name).is_file()]
     if missing:
         print(f"{folder}에 {', '.join(missing)}가 없습니다. 먼저 지표 도구를 실행하세요.")
