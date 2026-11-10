@@ -69,6 +69,21 @@ export interface User {
   createdAt: string;
 }
 
+/** GET /v1/users/oauth/google/signup 응답. Google로 처음 온 사용자의 가입 대기. 없거나 만료면 410 USERS_GOOGLE_SIGNUP_EXPIRED */
+export interface GoogleSignupPending {
+  /** Google이 확인한 이메일. 가입 이메일 인증을 거치지 않는다 */
+  email: string;
+  /** Google 표시 이름. 없으면 null */
+  name: string | null;
+  expiresAt: string;
+}
+
+/** POST /v1/users/oauth/google/signup 요청. 이메일 가입에서 이메일·비밀번호·인증 토큰을 뺀 입력. 성공하면 201 LoginResponse로 바로 로그인된다 */
+export type GoogleSignUpRequest = Omit<
+  SignUpRequest,
+  "email" | "password" | "passwordConfirm" | "emailVerificationToken"
+>;
+
 /** POST /v1/users/login 요청. 실패 원인(미가입·비밀번호 오류·Google 전용 계정)은 모두 401 USERS_INVALID_CREDENTIALS */
 export interface LoginRequest {
   email: string;

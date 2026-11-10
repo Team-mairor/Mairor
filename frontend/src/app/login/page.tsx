@@ -10,11 +10,12 @@ import { IconButton } from "@/components/ui/icon-button";
 import { FieldError, Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { TextField } from "@/components/ui/text-field";
-import { GoogleSheet, PasswordReset, type GoogleResult } from "@/features/auth";
+import { PasswordReset } from "@/features/auth";
 import { useSession } from "@/features/session";
 import {
   api,
   ApiError,
+  apiUrl,
   errorMessage,
   type LoginRequest,
   type LoginResponse,
@@ -27,7 +28,23 @@ import { normalizeEmail } from "@/lib/validation";
 
 type Mode = "pick" | "email" | "reset";
 
-/** 01 로그인. ?expired=basic|tut, ?signup=done&email= 로 안내를 띄운다 */
+/** Google 로그인 결과 안내. BE의 시작·복귀(callback)와 가입 화면이 /login?error=<코드>로 보낸다 */
+type GoogleNotice = "cancel" | "fail" | "busy" | "unavailable" | "linked" | "expired";
+
+/** 서버 오류 코드를 안내 종류로 바꾼다. 목록에 없는 코드는 일반 실패로 안내한다 */
+function googleNotice(code: string): GoogleNotice {
+  if (code === "USERS_GOOGLE_AUTH_CANCELLED") return "cancel";
+  if (code === "USERS_ACCOUNT_LINK_REQUIRED") return "linked";
+  if (code === "USERS_GOOGLE_SIGNUP_EXPIRED") return "expired";
+  if (code === "USERS_GOOGLE_AUTH_UNAVAILABLE") return "unavailable";
+  if (code === "USERS_LOGIN_RATE_LIMITED") return "busy";
+  return "fail";
+}
+
+/** Google 로그인 시작. fetch가 아니라 화면 전체를 BE로 보내고, BE가 Google 인증 화면으로 넘긴다 */
+const startGoogle = () => window.location.assign(apiUrl("/v1/users/oauth/google"));
+
+/** ?expired=basic|tut, ?signup=done&email=, ?error=<Google 오류 코드>로 안내를 띄운다 */
 export default function LoginPage() {
   const router = useRouter();
   const query = useQuery();
@@ -45,9 +62,7 @@ export default function LoginPage() {
   const [expired, setExpired] = useState<"basic" | "tut" | null>(null);
   const [signupDone, setSignupDone] = useState(false);
   const [resetDone, setResetDone] = useState(false);
-  const [google, setGoogle] = useState(false);
-  const [gNotice, setGNotice] = useState<Exclude<GoogleResult, "ok"> | null>(null);
-  const [linkedEmail, setLinkedEmail] = useState("");
+  const [gNotice, setGNotice] = useState<GoogleNotice | null>(null);
   const { pending, run } = useRequest<"login">();
   const busy = pending !== null;
 
@@ -68,6 +83,8 @@ export default function LoginPage() {
       setEmail(query.get("email") ?? "");
       setMode("email");
     }
+    const googleError = query.get("error");
+    if (googleError) setGNotice(googleNotice(googleError));
   }, [query]);
 
   /** 로그인 성공. 이 기기에서 온보딩을 안 봤으면 온보딩으로 */
@@ -108,14 +125,6 @@ export default function LoginPage() {
         );
       },
     );
-  };
-
-  const onGoogle = (r: GoogleResult, who?: string) => {
-    setGoogle(false);
-    // Google은 BE가 없어 흉내만 낸다. 토큰은 받지 않는다
-    if (r === "ok") return finish({ email: who ?? "", nickname: null });
-    if (r === "linked") setLinkedEmail(who ?? "");
-    setGNotice(r);
   };
 
   const openEmail = () => {
@@ -192,7 +201,7 @@ export default function LoginPage() {
               <Notice
                 tone="error"
                 action={
-                  <button type="button" onClick={() => setGoogle(true)}>
+                  <button type="button" onClick={startGoogle}>
                     다시 시도
                   </button>
                 }
@@ -200,15 +209,31 @@ export default function LoginPage() {
                 Google 로그인에 실패했어요. 잠시 후 다시 시도해 주세요.
               </Notice>
             )}
+            {gNotice === "busy" && (
+              <Notice tone="error">
+                Google 로그인 시도가 너무 많아요. 잠시 후 다시 시도해 주세요.
+              </Notice>
+            )}
+            {gNotice === "unavailable" && (
+              <Notice
+                tone="error"
+                action={
+                  <button type="button" onClick={openEmail}>
+                    이메일로 로그인
+                  </button>
+                }
+              >
+                지금은 Google 로그인을 쓸 수 없어요. 이메일로 로그인해 주세요.
+              </Notice>
+            )}
             {gNotice === "linked" && (
               <Notice
                 tone="error"
-                title="이미 이메일로 가입된 계정이에요"
+                title="이미 가입된 이메일이에요"
                 action={
                   <button
                     type="button"
                     onClick={() => {
-                      setEmail(linkedEmail);
                       setPw("");
                       setCredErr(null);
                       openEmail();
@@ -218,8 +243,20 @@ export default function LoginPage() {
                   </button>
                 }
               >
-                {linkedEmail}은 이메일 로그인으로 가입돼 있어요. Google 계정과 자동으로 연결되지
-                않으니 이메일로 로그인해 주세요.
+                이 Google 계정의 이메일로 가입한 계정이 있어요. 자동으로 연결되지 않으니 이메일로
+                로그인해 주세요.
+              </Notice>
+            )}
+            {gNotice === "expired" && (
+              <Notice
+                tone="info"
+                action={
+                  <button type="button" onClick={startGoogle}>
+                    Google로 다시 시작
+                  </button>
+                }
+              >
+                가입 시간이 지났어요. Google로 다시 시작해 주세요.
               </Notice>
             )}
 
@@ -229,14 +266,7 @@ export default function LoginPage() {
                   <Mail className="size-5" strokeWidth={1.9} aria-hidden />
                   이메일로 로그인
                 </PillButton>
-                <PillButton
-                  variant="outline"
-                  onClick={() => {
-                    setGNotice(null);
-                    setSignupDone(false);
-                    setGoogle(true);
-                  }}
-                >
+                <PillButton variant="outline" onClick={startGoogle}>
                   <span className="font-label text-[22px] font-bold">G</span>
                   Google로 계속하기
                 </PillButton>
@@ -329,8 +359,6 @@ export default function LoginPage() {
           </div>
         )}
       </div>
-
-      {google && <GoogleSheet onResult={onGoogle} />}
     </main>
   );
 }

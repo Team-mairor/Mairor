@@ -35,3 +35,4 @@
 | [AI 서버 가이드 영역 설정(줄 수·일꾼 수) 확인](2026-11-08-hyeonsoo-hyeongjun-area-server-settings.md) | 2026-11-08 | 김현수 → 박형준 | 요청 |
 | [가이드 영역 속도 개선 배포 뒤 운영 가이드 작업 한 번 실행](2026-11-09-hyeonsoo-jungyoon-ops-guide-run-after-speedup.md) | 2026-11-09 | 김현수 → 김정윤 | 요청 |
 | [노트북 처리기의 사진 뽑기 규칙을 BE FramePlan과 맞추기](2026-11-09-hyeonsoo-hyeongjun-processor-frame-rule.md) | 2026-11-09 | 김현수 → 박형준(김정윤 함께) | 요청 |
+| [Google 로그인 시작 오류도 로그인 화면으로 보내기](2026-11-10-seoyun-seoyeon-google-start-error-redirect.md) | 2026-11-10 | 한서윤 → 김서연 | 요청 |

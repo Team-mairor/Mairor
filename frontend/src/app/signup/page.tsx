@@ -2,14 +2,21 @@
 
 import { Check } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { FieldError, Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
-import { CodeField, TermsModal, useVerificationCode, type TermsDoc } from "@/features/auth";
+import {
+  AgreementFields,
+  CodeField,
+  EXTRA_FIELDS,
+  ProfileFields,
+  useProfileForm,
+  useVerificationCode,
+} from "@/features/auth";
 import {
   api,
   ApiError,
@@ -24,75 +31,13 @@ import {
 import { useCountdown } from "@/lib/hooks/use-countdown";
 import { useRequest } from "@/lib/hooks/use-request";
 import { cn } from "@/lib/utils";
-import {
-  AGREEMENT_VERSION,
-  isValidEmail,
-  normalizeEmail,
-  passwordRule,
-  profileProblem,
-  profileValue,
-  type ProfileField,
-} from "@/lib/validation";
-
-const AGREEMENTS = [
-  { type: "TERMS", label: "[필수] 서비스 이용약관", required: true, doc: "TERMS" },
-  { type: "PRIVACY", label: "[필수] 개인정보 수집·이용 동의", required: true, doc: "PRIVACY" },
-  { type: "AGE_OVER_14", label: "[필수] 만 14세 이상입니다", required: true, doc: null },
-  { type: "MARKETING", label: "[선택] 마케팅 정보 수신 동의", required: false, doc: null },
-] as const;
-type AgreeType = (typeof AGREEMENTS)[number]["type"];
-const agreeAll = (on: boolean) =>
-  Object.fromEntries(AGREEMENTS.map((a) => [a.type, on])) as Record<AgreeType, boolean>;
+import { isValidEmail, normalizeEmail, passwordRule } from "@/lib/validation";
 
 /**
  * 가입 전에 이메일 인증을 거칠지. BE의 SIGNUP_REQUIRE_EMAIL_VERIFICATION과 맞춘다.
  * 메일 발송이 꺼진(MAIL_ENABLED=false) 환경에서는 "false"로 빌드해야 가입할 수 있다.
  */
 const EMAIL_VERIFICATION = process.env.NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION !== "false";
-
-/** 선택 항목 중 글자로 받는 칸 */
-const PROFILE_INPUTS = [
-  {
-    field: "nickname",
-    label: "닉네임",
-    placeholder: "2~20자, 한글·영문·숫자·밑줄",
-    autoComplete: "nickname",
-    inputMode: "text",
-    maxLength: 20,
-  },
-  {
-    field: "name",
-    label: "이름",
-    placeholder: "2~50자, 한글·영문",
-    autoComplete: "name",
-    inputMode: "text",
-    maxLength: 50,
-  },
-  {
-    field: "phone",
-    label: "휴대폰 번호",
-    placeholder: "010-1234-5678",
-    autoComplete: "tel",
-    inputMode: "tel",
-    maxLength: 13,
-  },
-] as const;
-const EMPTY_PROFILE: Record<ProfileField | "birthDate", string> = {
-  nickname: "",
-  name: "",
-  phone: "",
-  birthDate: "",
-};
-
-type Gender = NonNullable<SignUpRequest["gender"]>;
-const GENDERS: { value: Gender; label: string }[] = [
-  { value: "FEMALE", label: "여성" },
-  { value: "MALE", label: "남성" },
-];
-
-/** 서버 입력 오류를 칸 아래에 보여 줄 선택 항목 */
-const EXTRA_FIELDS = ["nickname", "name", "phone", "birthDate", "gender"] as const;
-type ExtraField = (typeof EXTRA_FIELDS)[number];
 
 /** dup: 이미 가입된 이메일, msg: 서버가 준 안내 문구 */
 type EmailError = { kind: "dup" } | { kind: "msg"; text: string } | null;
@@ -135,13 +80,6 @@ function SideButton({
   );
 }
 
-/** 오늘(기기 시간대) YYYY-MM-DD. 생년월일 상한 */
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-const noSubscribe = () => () => {};
-
 /** 입력 칸에서 Enter를 가입 제출 대신 그 칸의 동작으로 보낸다. 한글 조합 중 Enter는 무시한다 */
 const onEnter = (action: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
   if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
@@ -155,7 +93,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
-  const [agree, setAgree] = useState(() => agreeAll(false));
+  const form = useProfileForm();
   /** 가입할 수 있다고 확인한 이메일 */
   const [okFor, setOkFor] = useState("");
   /** 인증번호를 보낸 이메일 */
@@ -167,28 +105,16 @@ export default function SignupPage() {
   const [codeErr, setCodeErr] = useState<string | null>(null);
   const [pwErr, setPwErr] = useState<string | null>(null);
   const [pw2Err, setPw2Err] = useState<string | null>(null);
-  const [agreeErr, setAgreeErr] = useState<string | null>(null);
-  const [termsOpen, setTermsOpen] = useState<TermsDoc | null>(null);
   const [formErr, setFormErr] = useState<string | null>(null);
-  /** 선택 항목. 생년월일은 YYYY-MM-DD */
-  const [profile, setProfile] = useState(EMPTY_PROFILE);
-  const [gender, setGender] = useState<Gender | null>(null);
-  /** 선택 항목별 서버 오류 */
-  const [extraErr, setExtraErr] = useState<Partial<Record<ExtraField, string>>>({});
   const { pending, run } = useRequest<Pending>();
   /** 중복 확인 요청 제한(429)이 풀리는 시각 */
   const [checkUntil, setCheckUntil] = useState<number | null>(null);
   const checkLeft = useCountdown(checkUntil);
 
-  // 정적 HTML에 빌드한 날짜가 남지 않게 브라우저에서만 읽는다
-  const maxBirth = useSyncExternalStore(noSubscribe, today, () => undefined);
   const emN = normalizeEmail(email);
   const emailOk = isValidEmail(email);
   const rule = passwordRule(pw);
   const match = pw2.length > 0 && pw === pw2;
-  const allAgreed = AGREEMENTS.every((a) => agree[a.type]);
-  const requiredAgreed = AGREEMENTS.every((a) => !a.required || agree[a.type]);
-  const profileOk = PROFILE_INPUTS.every((p) => !profileProblem(p.field, profile[p.field]));
   // 이메일을 바꾸면 중복 확인·인증을 다시 해야 한다. 빈 칸끼리 같다고 확인·발송된 것으로 보지 않는다
   const checked = emailOk && okFor === emN;
   const sent = checked && sentFor === emN;
@@ -196,8 +122,7 @@ export default function SignupPage() {
   const canCheck = emailOk && !checked && !pending && checkLeft === 0;
   const canVerify = code.ready && !pending;
   const emailReady = EMAIL_VERIFICATION ? done : checked;
-  const canSubmit =
-    emailOk && emailReady && rule.ok && match && requiredAgreed && profileOk && !pending;
+  const canSubmit = emailOk && emailReady && rule.ok && match && form.ready && !pending;
 
   /** 인증을 마친 이메일을 풀어 다시 입력하게 한다 */
   const changeEmail = () => {
@@ -282,24 +207,13 @@ export default function SignupPage() {
       setVerified(null);
       return setEmailErr({ kind: "msg", text: e.message });
     }
-    if (e.code === "USERS_REQUIRED_AGREEMENT_MISSING") {
-      // 필수 약관에 모두 동의해야 보낼 수 있으므로, 그래도 빠졌다고 하면 BE의 약관 버전이 앱보다 새것이다
-      if (requiredAgreed) {
-        return setAgreeErr("약관이 새로 바뀌었어요. 앱을 새로고침한 뒤 다시 가입해 주세요.");
-      }
-      return setAgreeErr(e.details[0]?.reason ?? e.message);
-    }
+    if (form.applyError(e)) return;
     if (e.code !== "VALIDATION_FAILED") return setFormErr(errorMessage(e));
     const reason = (field: string) => e.details.find((d) => d.field === field)?.reason ?? null;
     const emailReason = reason("email");
     if (emailReason) setEmailErr({ kind: "msg", text: emailReason });
     setPwErr(reason("password"));
     setPw2Err(reason("passwordConfirm"));
-    setExtraErr(
-      Object.fromEntries(
-        EXTRA_FIELDS.flatMap((f) => (reason(f) ? [[f, reason(f)]] : [])),
-      ) as Partial<Record<ExtraField, string>>,
-    );
     // 짝이 되는 칸이 없는 오류(본문·약관 항목 등)는 폼 아래에 보여 준다
     const known: string[] = ["email", "password", "passwordConfirm", ...EXTRA_FIELDS];
     if (e.details.some((d) => !known.includes(d.field))) setFormErr(e.message);
@@ -311,9 +225,8 @@ export default function SignupPage() {
     setEmailErr(null);
     setPwErr(null);
     setPw2Err(null);
-    setAgreeErr(null);
     setFormErr(null);
-    setExtraErr({});
+    form.clearErrors();
     return run(
       "submit",
       async (signal) => {
@@ -322,16 +235,7 @@ export default function SignupPage() {
             email: emN,
             password: pw,
             passwordConfirm: pw2,
-            nickname: profileValue("nickname", profile.nickname),
-            name: profileValue("name", profile.name),
-            phone: profileValue("phone", profile.phone),
-            birthDate: profile.birthDate || undefined,
-            gender: gender ?? undefined,
-            agreements: AGREEMENTS.map((a) => ({
-              type: a.type,
-              version: AGREEMENT_VERSION,
-              agreed: agree[a.type],
-            })),
+            ...form.payload(),
             emailVerificationToken: verified?.token,
           } satisfies SignUpRequest,
           signal,
@@ -541,142 +445,8 @@ export default function SignupPage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-6 border-t border-line pt-6">
-          <div className="flex flex-col gap-1">
-            <span className="text-[18px] font-bold text-ink">추가 정보</span>
-            <span className="text-[15px] text-mute">
-              선택 항목이에요. 비워 둬도 가입할 수 있어요.
-            </span>
-          </div>
-
-          {PROFILE_INPUTS.map((p) => {
-            const err = extraErr[p.field] ?? profileProblem(p.field, profile[p.field]);
-            return (
-              <div key={p.field} className="flex flex-col gap-2">
-                <label htmlFor={`su-${p.field}`} className="text-[16px] font-bold text-ink">
-                  {p.label}
-                </label>
-                <TextField
-                  id={`su-${p.field}`}
-                  placeholder={p.placeholder}
-                  value={profile[p.field]}
-                  invalid={!!err}
-                  onChange={(e) => {
-                    setProfile((prev) => ({ ...prev, [p.field]: e.target.value }));
-                    setExtraErr((prev) => ({ ...prev, [p.field]: undefined }));
-                  }}
-                  autoComplete={p.autoComplete}
-                  inputMode={p.inputMode}
-                  maxLength={p.maxLength}
-                />
-                {err && <FieldError>{err}</FieldError>}
-              </div>
-            );
-          })}
-
-          <div className="flex flex-col gap-2">
-            <label htmlFor="su-birthDate" className="text-[16px] font-bold text-ink">
-              생년월일
-            </label>
-            <TextField
-              id="su-birthDate"
-              type="date"
-              min="1900-01-01"
-              max={maxBirth}
-              value={profile.birthDate}
-              invalid={!!extraErr.birthDate}
-              onChange={(e) => {
-                setProfile((prev) => ({ ...prev, birthDate: e.target.value }));
-                setExtraErr((prev) => ({ ...prev, birthDate: undefined }));
-              }}
-              autoComplete="bday"
-            />
-            {extraErr.birthDate && <FieldError>{extraErr.birthDate}</FieldError>}
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <span className="text-[16px] font-bold text-ink">성별</span>
-            <div className="grid grid-cols-2 gap-2.5">
-              {GENDERS.map((g) => (
-                <button
-                  key={g.value}
-                  type="button"
-                  aria-pressed={gender === g.value}
-                  onClick={() => {
-                    // 다시 누르면 선택을 지운다
-                    setGender((prev) => (prev === g.value ? null : g.value));
-                    setExtraErr((prev) => ({ ...prev, gender: undefined }));
-                  }}
-                  className={cn(
-                    "h-[60px] rounded-2xl border text-[17px] font-semibold",
-                    gender === g.value
-                      ? "border-navy bg-ice-tint text-navy"
-                      : "border-line-2 bg-white text-mute",
-                  )}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-            {extraErr.gender && <FieldError>{extraErr.gender}</FieldError>}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3.5 border-t border-line pt-6">
-          <button
-            type="button"
-            onClick={() => {
-              setAgree(agreeAll(!allAgreed));
-              setAgreeErr(null);
-            }}
-            className="flex items-center gap-3 text-[18px] font-bold text-ink"
-            aria-pressed={allAgreed}
-          >
-            <span
-              className={cn(
-                "flex size-[26px] shrink-0 items-center justify-center rounded-lg border-[1.5px]",
-                allAgreed ? "border-ice bg-ice text-ink" : "border-ash-2 bg-white text-white",
-              )}
-            >
-              <Check className="size-4" strokeWidth={3} aria-hidden />
-            </span>
-            전체 동의
-          </button>
-          {AGREEMENTS.map((a) => (
-            <div key={a.type} className="flex items-center gap-3 pl-1 text-[16px] text-ink">
-              <button
-                type="button"
-                onClick={() => {
-                  setAgree((p) => ({ ...p, [a.type]: !p[a.type] }));
-                  setAgreeErr(null);
-                }}
-                aria-pressed={agree[a.type]}
-                className="flex flex-1 items-center gap-3 text-left"
-              >
-                <span
-                  className={cn(
-                    "flex size-5 shrink-0 items-center justify-center",
-                    agree[a.type] ? "text-navy" : "text-line-3",
-                  )}
-                >
-                  <Check className="size-[18px]" strokeWidth={2.6} aria-hidden />
-                </span>
-                <span className="flex-1">{a.label}</span>
-              </button>
-              {a.doc && (
-                <button
-                  type="button"
-                  onClick={() => setTermsOpen(a.doc)}
-                  className="text-[15px] text-mute underline"
-                  aria-label={`${a.label} 보기`}
-                >
-                  보기
-                </button>
-              )}
-            </div>
-          ))}
-          {agreeErr && <FieldError>{agreeErr}</FieldError>}
-        </div>
+        <ProfileFields form={form} idPrefix="su" />
+        <AgreementFields form={form} />
 
         <div className="mt-auto flex shrink-0 flex-col gap-3 pt-2">
           {formErr && <Notice tone="error">{formErr}</Notice>}
@@ -691,19 +461,6 @@ export default function SignupPage() {
           </PillButton>
         </div>
       </form>
-      {termsOpen && (
-        <TermsModal
-          // 약관마다 스크롤 상태를 새로 센다
-          key={termsOpen}
-          doc={termsOpen}
-          onClose={() => setTermsOpen(null)}
-          onAgree={() => {
-            setAgree((p) => ({ ...p, [termsOpen]: true }));
-            setAgreeErr(null);
-            setTermsOpen(null);
-          }}
-        />
-      )}
     </main>
   );
 }

@@ -3,6 +3,7 @@ import type {
   CodeSent,
   EmailAvailability,
   EmailVerified,
+  GoogleSignupPending,
   Health,
   LoginResponse,
   PasswordResetVerified,
@@ -67,6 +68,40 @@ const ROUTES: MockRoute[] = [
         code: "VALIDATION_FAILED",
         message: "입력값이 올바르지 않습니다.",
         details: [{ field: "passwordConfirm", reason: "비밀번호와 일치하지 않습니다." }],
+      }),
+  },
+  {
+    method: "GET",
+    path: /^\/v1\/users\/oauth\/google\/signup$/,
+    success: () => ({
+      status: 200,
+      body: {
+        email: "mock.google@gmail.com",
+        name: "Mock User",
+        expiresAt: TOKEN_EXPIRES_AT,
+      } satisfies GoogleSignupPending,
+    }),
+    error: () =>
+      error(410, {
+        code: "USERS_GOOGLE_SIGNUP_EXPIRED",
+        message: "가입 시간이 지났습니다. Google 로 다시 시작해 주세요.",
+      }),
+  },
+  {
+    // Google 가입도 세션이 없어 CSRF 토큰 대신 허용 Origin으로 검사한다.
+    method: "POST",
+    path: /^\/v1\/users\/oauth\/google\/signup$/,
+    success: () => ({
+      status: 201,
+      body: {
+        user: { ...USER, email: "mock.google@gmail.com", provider: "GOOGLE" },
+        csrfToken: "mock-csrf-token",
+      } satisfies LoginResponse,
+    }),
+    error: () =>
+      error(409, {
+        code: "USERS_ACCOUNT_LINK_REQUIRED",
+        message: "같은 이메일로 가입된 계정이 있습니다. 이메일로 로그인해 주세요.",
       }),
   },
   {
