@@ -10,6 +10,7 @@ from app.tasks.area.common.face_map import (
     MAP_SIZE,
     MESH_DIR,
     _sample,
+    face_cells,
     flatten,
     flatten_mask,
     map_points,
@@ -45,6 +46,15 @@ def test_single_color_photo_fills_face_cells_only():
     assert colors == {color, WHITE}
     assert tuple(out[0, 0]) == WHITE
     assert tuple(out[round(UV[13, 1] * MAP_SIZE), round(UV[13, 0] * MAP_SIZE)]) == color
+
+
+def test_face_cells_are_the_cells_flatten_fills():
+    """얼굴 안 칸 표는 flatten이 사진 색을 채우는 칸과 같고, 꺼내 쓰는 쪽이 고칠 수 없다."""
+    photo = np.zeros((600, 800, 3), dtype=np.uint8)
+    filled = (flatten(photo, face_on_map()) == 0).all(axis=2)
+    assert np.array_equal(face_cells(), filled)
+    with pytest.raises(ValueError):
+        face_cells()[0, 0] = True
 
 
 def test_face_already_on_map_comes_back_unchanged():

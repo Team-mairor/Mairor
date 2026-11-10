@@ -48,6 +48,16 @@ def median_map(maps: Sequence[np.ndarray]) -> np.ndarray:
     return np.median(np.stack(maps), axis=0).astype(np.uint8)
 
 
+@lru_cache
+def face_cells() -> np.ndarray:
+    """얼굴 안 지도 칸 표(MAP_SIZE × MAP_SIZE, 얼굴 안이 True). 한 번만 만들고 읽기 전용이다."""
+    rows, cols = _cells()[:2]
+    cells = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    cells[rows, cols] = True
+    cells.flags.writeable = False
+    return cells
+
+
 def map_points(indices: Sequence[int]) -> list[tuple[float, float]]:
     """얼굴 점 번호들이 지도에서 놓이는 칸 좌표. 지도에서는 사진과 상관없이 늘 같은 자리다."""
     uv = _uv()

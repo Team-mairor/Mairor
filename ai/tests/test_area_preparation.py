@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import pytest
 
@@ -5,14 +6,23 @@ from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult, Po
 from app.tasks.area.common.face_map import MAP_SIZE, flatten, median_map
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.frame_checker import outside_count_name
-from app.tasks.area.parts import area_preparation
+from app.tasks.area.parts import (
+    area_preparation,
+    blush_area,
+    brow_area,
+    eyeliner_area,
+    eyeshadow_area,
+    lip_area,
+)
 from app.tasks.area.parts.area_preparation import (
     EYE_OPEN_POINTS,
     RememberedPhotos,
+    drop_blurry,
     eye_openness,
     known_median_map,
     match_sizes,
     mostly_unknown,
+    recording_dropped,
     remove_lighting,
     rgb_to_lab,
     rows_to_known_map,
@@ -364,6 +374,191 @@ def test_every_photo_hiding_too_much_makes_every_cell_unknown():
     _, unknown = known_median_map([skin, skin], [most, most], zone)
 
     assert unknown.all()
+
+
+def textured_photo(blur_sigma: float = 0.0) -> np.ndarray:
+    """얼굴 지도에 펴면 칸마다 밝기가 달라 경계가 많은 무늬 사진(800 × 600).
+
+    blur_sigma를 주면 그만큼 흐리게 해서 초점이 나간 사진을 흉내 낸다.
+    """
+    photo = np.random.default_rng(0).integers(60, 200, size=(600, 800, 3), dtype=np.uint8)
+    return photo if blur_sigma == 0 else cv2.GaussianBlur(photo, (0, 0), blur_sigma)
+
+
+def photos_by_time(photos: dict[int, np.ndarray]):
+    """사진 시각마다 사진을 받아 (사진 정보들, 사진 읽기 함수)를 만든다."""
+    rows = [make_row(time) for time in photos]
+    return rows, lambda row: photos[row.timestamp_ms]
+
+
+def times(rows: list[FrameLandmarks]) -> list[int]:
+    return [row.timestamp_ms for row in rows]
+
+
+def test_photo_much_blurrier_than_the_step_photos_is_dropped_and_recorded():
+    """직전·직후를 합친 사진들 가운데 선명도의 BLUR_SHARE배 미만인 사진만 빼고 이유를 모은다."""
+    rows, load = photos_by_time(
+        {1000: textured_photo(8), 2000: textured_photo(), 5000: textured_photo()}
+    )
+    with recording_dropped() as dropped:
+        before, after = drop_blurry(rows[:2], rows[2:], load)
+    assert (times(before), times(after)) == ([2000], [5000])
+    assert dropped == {"faceBlurry": {1000}}
+
+
+def test_sharp_hand_over_a_blurry_face_does_not_hide_the_blur():
+    """초점이 손에 가고 얼굴이 흐린 사진은 가린 칸을 빼고 재야 흐린 사진으로 잡힌다.
+
+    가린 칸을 빼지 않으면 또렷한 손 무늬가 선명도를 끌어올려 흐린 사진을 놓친다.
+    """
+    hand = hand_over(13, half=150)
+    focused_on_hand = textured_photo(8)
+    focused_on_hand[hand] = textured_photo()[hand]
+    rows, load = photos_by_time(
+        {1000: focused_on_hand, 2000: textured_photo(), 5000: textured_photo()}
+    )
+
+    def finds_the_hand(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
+        return hand if row.timestamp_ms == 1000 else np.zeros(photo.shape[:2], dtype=bool)
+
+    assert times(drop_blurry(rows[:2], rows[2:], load)[0]) == [1000, 2000]
+    assert times(drop_blurry(rows[:2], rows[2:], load, finds_the_hand)[0]) == [2000]
+
+
+def test_photo_with_its_whole_face_hidden_is_kept_without_judging():
+    """얼굴이 모두 가려 볼 칸이 없으면 흐린지 알 수 없어 그대로 둔다.
+
+    가린 칸은 지도 만들기(rows_to_known_map)가 따로 뺀다.
+    """
+    rows, load = photos_by_time(
+        {1000: textured_photo(8), 2000: textured_photo(), 5000: textured_photo()}
+    )
+
+    def hides_first(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
+        return np.full(photo.shape[:2], row.timestamp_ms == 1000)
+
+    before, _ = drop_blurry(rows[:2], rows[2:], load, hides_first)
+    assert times(before) == [1000, 2000]
+
+
+def test_blur_is_measured_on_maps_the_photo_bundle_already_made():
+    """사진 꾸러미로 넘기면 흐림을 잴 때 편 지도를 지도 만들기에서 다시 쓴다.
+
+    그래서 사진마다 한 번만 읽는다. 서비스가 흐림을 재는 데 시간을 거의 더 쓰지 않는 까닭이다.
+    """
+    rows, load_photo = photos_by_time({1000: textured_photo(), 5000: textured_photo()})
+    load, reads = counted(load_photo)
+    photos = RememberedPhotos(load, keep=64)
+
+    before, after = drop_blurry(rows[:1], rows[1:], photos)
+    rows_to_known_map(before + after, photos)
+
+    assert reads == [1000, 5000]
+
+
+def test_photo_bundle_measures_each_photo_sharpness_once(monkeypatch):
+    """좌우 짝 부위와 지표 도구는 같은 사진 묶음을 여러 번 넘기므로 선명도는 사진마다 한 번만 잰다.
+
+    지도는 keep장만 기억해 keep=1이면 잊히지만, 선명도는 값 하나라 계속 기억해야 한다.
+    기억한 값은 꾸러미 없이 잰 값과 같아야 빼는 사진도 같다.
+    """
+    rows, load_photo = photos_by_time(
+        {1000: textured_photo(8), 2000: textured_photo(), 5000: textured_photo()}
+    )
+    plain = [area_preparation.face_sharpness(row, load_photo) for row in rows]
+    measured = []
+    measure = area_preparation.sharpness_on_maps
+    monkeypatch.setattr(
+        area_preparation,
+        "sharpness_on_maps",
+        lambda face_map, covered: measured.append(1) or measure(face_map, covered),
+    )
+    photos = RememberedPhotos(load_photo, keep=1)
+
+    drop_blurry(rows[:2], rows[2:], photos)
+    before, after = drop_blurry(rows[:2], rows[2:], photos)
+
+    assert len(measured) == len(rows)
+    assert [photos.sharpness(row, None) for row in rows] == plain
+    assert (times(before), times(after)) == ([2000], [5000])
+
+
+STEP_START_MS, STEP_END_MS = 10_000, 20_000
+PART_FINDERS = {
+    "lip": lambda result, load: lip_area.find_lip_area(result, STEP_END_MS, load),
+    "blush": lambda result, load: blush_area.find_blush_area(
+        result, STEP_START_MS, STEP_END_MS, load, "leftCheek"
+    ),
+    "brow": lambda result, load: brow_area.find_brow_area(
+        result, STEP_START_MS, STEP_END_MS, load, "leftBrow"
+    ),
+    "eyeshadow": lambda result, load: eyeshadow_area.find_eyeshadow_area(
+        result, STEP_START_MS, STEP_END_MS, load, "leftEye"
+    ),
+    "eyeliner": lambda result, load: eyeliner_area.find_eyeliner_area(
+        result, STEP_START_MS, STEP_END_MS, load, "leftEye"
+    ),
+}
+
+
+@pytest.mark.parametrize("part", PART_FINDERS)
+def test_every_part_leaves_out_a_blurry_photo(part):
+    """부위 함수마다 흐린 사진 빼기(drop_blurry)를 부르는지 본다.
+
+    흐림 빼기 자체는 위 시험들이 보지만, 한 부위 함수에서 부르는 줄이 지워지면 그 부위만 조용히
+    흐린 사진을 다시 쓴다. 직후 창에 흐린 사진을 하나 섞어, 빠진 사진 기록에 흐림으로 남는지 본다.
+    """
+    sharp, blurry = textured_photo(), textured_photo(8)
+    photos = {
+        STEP_START_MS - 500: sharp,
+        STEP_END_MS + 300: blurry,
+        STEP_END_MS + 500: sharp,
+        STEP_END_MS + 700: sharp,
+    }
+    rows = [with_eyes(make_row(time), 0.35) for time in photos]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+    with recording_dropped() as dropped:
+        PART_FINDERS[part](result, lambda row: photos[row.timestamp_ms])
+    assert dropped.get("faceBlurry") == {STEP_END_MS + 300}
+
+
+def test_photos_left_out_after_the_check_are_recorded_with_their_reasons():
+    """판정은 통과했는데 부위 분석에서 빠진 사진을 이유별 사진 번호로 한 번씩 모은다."""
+    rows = [
+        make_row(1000, {"leftCheek": 1}),
+        with_eyes(make_row(2000), 0.1),
+        with_eyes(make_row(3000), 0.35),
+    ]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+    with recording_dropped() as dropped:
+        usable_rows(result, 0, 4000, ["leftCheek"])
+        usable_rows(result, 0, 4000, ["leftCheek"])
+        usable_rows(result, 1500, 4000, ["leftEye"])
+        match_sizes([sized(5000, 400), sized(6000, 400), sized(7000, 300)], [sized(8000, 300)])
+    assert dropped == {
+        "regionOutside": {1000},
+        "eyesClosed": {2000},
+        "faceSizeUnmatched": {5000, 6000},
+    }
+
+
+def test_photo_hiding_most_of_the_zone_is_recorded():
+    rows, load_photo = photos_with_hands({1000: hand_over(13, half=200), 2000: None})
+    row, col = cell(13)
+    zone = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    zone[row - 20 : row + 20, col - 20 : col + 20] = True
+    with recording_dropped() as dropped:
+        rows_to_known_map(rows, load_photo, finds_hand_color, zone)
+    assert dropped == {"heavilyOccluded": {1000}}
+
+
+def test_nothing_is_recorded_outside_recording():
+    rows = [make_row(1000, {"leftCheek": 1})]
+    result = LandmarksResult(video_id="test_01", frames=rows)
+    usable_rows(result, 0, 4000, ["leftCheek"])
+    with recording_dropped() as dropped:
+        pass
+    assert dropped == {}
 
 
 def test_range_is_mostly_unknown_past_half():

@@ -1,11 +1,13 @@
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, Point, Pose
 from app.tasks.area.parts import area_preparation, eyeshadow_area
+from tests.test_area_preparation import photos_by_time, textured_photo, times
 from tools import face_map_store
 from tools.face_map_store import (
     PART_MODULES,
@@ -295,3 +297,120 @@ def test_stored_slot_with_a_plain_loader_behaves_like_the_service():
 
     assert np.array_equal(expected[0], got[0])
     assert np.array_equal(expected[1], got[1])
+
+
+def test_blur_check_on_the_next_run_reads_stored_photo_maps(tmp_path):
+    """흐린 사진 빼기(drop_blurry)도 저장 꾸러미로 재면 사진 지도를 저장에서 꺼낸다.
+
+    다음 실행(새 꾸러미)은 사진을 다시 펴지 않고, 저장 없이 잰 것과 같은 사진을 빼야 한다.
+    도구가 저장을 써도 서비스와 같은 사진으로 재는지 보는 것이다.
+    """
+    rows, load_photo = photos_by_time(
+        {1000: textured_photo(8), 2000: textured_photo(), 5000: textured_photo()}
+    )
+    loads = []
+
+    def counted(row: FrameLandmarks) -> np.ndarray:
+        loads.append(row.timestamp_ms)
+        return load_photo(row)
+
+    plain = area_preparation.drop_blurry(rows[:2], rows[2:], load_photo)
+    store, _ = make_store(tmp_path)
+    first = area_preparation.drop_blurry(rows[:2], rows[2:], StoredPhotos(counted, 8, store))
+    first_loads = list(loads)
+    store_again, _ = make_store(tmp_path)
+    again = area_preparation.drop_blurry(rows[:2], rows[2:], StoredPhotos(counted, 8, store_again))
+
+    assert times(plain[0]) == [2000]
+    assert first == again == plain
+    assert first_loads == [1000, 2000, 5000]
+    assert loads == first_loads
+
+
+def code_folder(folder: Path, name: str) -> Path:
+    """판 폴더 하나와 그 안의 대표 지도 파일 하나를 만든다."""
+    (folder / name).mkdir(parents=True)
+    (folder / name / "map.npz").write_bytes(b"map")
+    return folder / name
+
+
+def test_new_code_forgets_only_the_old_representative_maps(tmp_path):
+    """코드가 바뀌면 옛 판의 대표 지도는 다시 쓰이지 않고 디스크만 차지한다(시험 영상 한 판 11GB).
+
+    옛 판과 판을 나누기 전 방식의 파일만 지우고, 지금 판, 판 이름 모양이 아닌 폴더(손으로 둔 사본
+    등), 다른 가림 표의 판, 사진 지도는 남기는지 본다.
+    """
+    medians = tmp_path / "median_maps"
+    table = medians / "after334"
+    code = face_map_store.median_folder_code("code-1")
+    current = code_folder(table, code)
+    old = code_folder(table, "0123456789abcdef")
+    copy = code_folder(table, "backup")
+    other_table = code_folder(medians / "none", "0123456789abcdef")
+    (table / "before-folders.npz").write_bytes(b"map")
+    photo_map = tmp_path / "face_maps" / "after334" / "000001.npz"
+    photo_map.parent.mkdir(parents=True)
+    photo_map.write_bytes(b"map")
+
+    face_map_store.forget_old_medians(table, code)
+
+    assert not old.exists()
+    assert not (table / "before-folders.npz").exists()
+    assert (current / "map.npz").exists()
+    assert (copy / "map.npz").exists()
+    assert (other_table / "map.npz").exists()
+    assert photo_map.exists()
+
+
+def test_code_folder_changes_with_map_code_but_not_with_thresholds(monkeypatch):
+    """판은 지도를 만드는 코드(사진 지도·대표 지도)가 바뀔 때만 바뀐다.
+
+    기준값만 바꿔 다시 재는 튜닝에서 판이 바뀌면 저장한 대표 지도를 지워 버리므로, 대표 지도
+    상수(OCCLUDED_MAX)나 판정 기준값을 바꿔도 판이 그대로인지 본다. 대표 지도 상수는 파일 이름
+    지문에 들어가 같은 판 안에 따로 저장된다.
+    """
+    code = face_map_store.median_folder_code("code-1")
+    monkeypatch.setattr(area_preparation, "OCCLUDED_MAX", area_preparation.OCCLUDED_MAX + 0.1)
+    monkeypatch.setattr(eyeshadow_area, "REDDENING_MIN", eyeshadow_area.REDDENING_MIN + 0.5)
+
+    assert face_map_store.median_folder_code("code-1") == code
+    assert face_map_store.is_folder_code(code)
+    assert face_map_store.median_folder_code("code-2") != code
+    monkeypatch.setattr(face_map_store, "median_code_fingerprint", lambda: "other median code")
+    assert face_map_store.median_folder_code("code-1") != code
+
+
+def test_forgetting_skips_what_cannot_be_removed(tmp_path, monkeypatch):
+    """다른 일꾼이 읽는 중이라 못 지우거나 폴더가 없으면 건너뛰고, 도구를 멈추지 않는다.
+
+    일꾼 8명이 함께 시작하면 같은 옛 판을 동시에 지우고, 윈도우는 읽는 중인 파일 지우기를 거절한다.
+    """
+    table = tmp_path / "after334"
+    table.mkdir()
+    (table / "before-folders.npz").write_bytes(b"map")
+
+    def refuse(self, missing_ok=False):
+        raise PermissionError("읽는 중")
+
+    monkeypatch.setattr(Path, "unlink", refuse)
+
+    face_map_store.forget_old_medians(table, "fedcba9876543210")
+    face_map_store.forget_old_medians(tmp_path / "missing", "fedcba9876543210")
+
+    assert (table / "before-folders.npz").exists()
+
+
+def test_stored_photos_keep_representative_maps_in_the_current_code_folder(tmp_path):
+    """도구가 저장을 쓰면 대표 지도를 지금 판 폴더에 두고, 시작할 때 옛 판을 지운다."""
+    table = tmp_path / face_map_store.MEDIAN_DIR / "none"
+    old = code_folder(table, "0123456789abcdef")
+    reference = SimpleNamespace(manifest=SimpleNamespace(frames=[]), frame_path=lambda frame: None)
+
+    try:
+        photos = tool_photos(reference, tmp_path, None, Counter(), 8, True)
+    finally:
+        uninstall_stored_medians()
+
+    code = face_map_store.median_folder_code(face_map_store.code_fingerprint())
+    assert photos.medians.folder == table / code
+    assert not old.exists()

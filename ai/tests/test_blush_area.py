@@ -1,12 +1,14 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts import area_preparation
 from app.tasks.area.parts.blush_area import (
     CHEEKS,
     MIN_FOUND_RATIO,
@@ -113,6 +115,16 @@ def test_symmetric_blush_is_none_when_no_cheek_is_found():
     assert symmetric_blush({"leftCheek": missing, "rightCheek": missing}) is None
 
 
+@pytest.fixture
+def without_blur_check(monkeypatch):
+    """가짜 사진은 무늬 없는 한 가지 색이라 얼굴 선명도가 0이다.
+
+    분홍 볼 경계가 있는 직후 사진과 견주면 무늬 없는 직전 사진이 흐린 사진으로 빠지므로,
+    블러셔를 찾는 일만 보는 시험에서는 흐림 거르기(BLUR_SHARE)를 끈다.
+    """
+    monkeypatch.setattr(area_preparation, "BLUR_SHARE", 0.0)
+
+
 def photo_of(color: tuple[int, int, int], pink_cheek: str | None = None) -> np.ndarray:
     """가짜 얼굴(사진과 지도가 같은 모양) 사진. pink_cheek을 주면 그 볼 범위만 분홍이다."""
     width, height = PHOTO_SIZE
@@ -123,7 +135,7 @@ def photo_of(color: tuple[int, int, int], pink_cheek: str | None = None) -> np.n
     return photo
 
 
-def test_photos_right_before_and_after_the_step_are_compared():
+def test_photos_right_before_and_after_the_step_are_compared(without_blur_check):
     photos = {
         START_MS - 500: photo_of(SKIN),
         15000: photo_of(HAND),
@@ -145,7 +157,7 @@ def finds_puff(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:
     return np.all(photo == PUFF, axis=2)
 
 
-def test_puff_over_the_cheek_in_most_photos_is_left_out_with_occlusion():
+def test_puff_over_the_cheek_in_most_photos_is_left_out_with_occlusion(without_blur_check):
     """직후 사진 3장 중 2장에서 퍼프가 볼 아래를 가려도, 가린 칸을 빼면 남은 1장의 블러셔가 보인다.
 
     가린 칸을 빼지 않으면 중앙값이 퍼프 색이 되어 볼 아래가 덜 붉어진 것으로 보인다.

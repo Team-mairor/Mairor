@@ -14,11 +14,10 @@ sys.path.insert(0, str(AI_ROOT))
 from app.schemas.landmarks import LandmarksResult
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.frame_checker import check_frames, outside_count_name
-from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 
 LANDMARKS_FILE = Path("output") / "landmarks.json"
 OUTPUT_FILE = Path("output") / "frames_checked.json"
-SUMMARY_MEASURES = ("faceWidthPx", "yawDeg", "pitchDeg", "lipsSharpness", "faceWidthRatio")
+SUMMARY_MEASURES = ("faceWidthPx", "yawDeg", "pitchDeg", "faceWidthRatio")
 
 
 def main() -> None:
@@ -32,10 +31,8 @@ def main() -> None:
         print(f"{landmarks_path}가 없습니다. 먼저 tools/build_landmarks.py를 실행하세요.")
         sys.exit(1)
 
-    reference = load_reference_input(folder)
-    frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     landmarks = LandmarksResult.model_validate_json(landmarks_path.read_text(encoding="utf-8"))
-    result = check_frames(landmarks, lambda row: read_frame_rgb(reference, frames[row.frame_index]))
+    result = check_frames(landmarks)
     path = save(result, folder)
 
     counts = Counter(row.status for row in result.frames)

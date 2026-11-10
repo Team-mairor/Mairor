@@ -2,6 +2,7 @@
 
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 서비스와 같게 가림 찾기 모델로 사진마다 가린 칸을 빼고 만든다.
+서비스와 같게 편 지도를 기억해(RememberedPhotos), 흐린 사진을 잴 때 편 지도를 다시 쓴다.
 샘플 폴더에 BE 형식 가이드 입력(guide_input.json)이 있으면 그 단계로 만든다(guide_steps).
 실행 (ai/ 폴더에서): uv run python tools/build_guide_area.py samples/local_01_lip_seq
 """
@@ -21,7 +22,8 @@ from app.tasks.area.guide_area_builder import build_guide_area
 from app.tasks.area.landmarks.occlusion import remember_by_frame
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
-from app.tasks.area.reference_area import OCCLUSION_KEEP
+from app.tasks.area.parts.area_preparation import RememberedPhotos
+from app.tasks.area.reference_area import FACE_MAP_KEEP, OCCLUSION_KEEP
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = Path("output") / "guide_area.json"
@@ -59,7 +61,9 @@ def main() -> None:
         reference.manifest.video_id,
         guide_steps(folder, reference.manifest.steps),
         result,
-        lambda row: read_frame_rgb(reference, frames[row.frame_index]),
+        RememberedPhotos(
+            lambda row: read_frame_rgb(reference, frames[row.frame_index]), FACE_MAP_KEEP
+        ),
         occlusion=remember_by_frame(find_occlusion, OCCLUSION_KEEP),
     )
     path = save(area, folder)

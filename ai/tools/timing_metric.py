@@ -14,8 +14,9 @@
 FE로 나가는 영역도 같은 지도로 재 output 칸에 둔다.
 지도에 쓸 사진은 서비스 부위 찾기와 같이 고른다. 시각마다 직전·직후 묶음의 얼굴 크기를 맞추고
 (match_sizes, 립은 서비스에 직전 창이 없어 맞추지 않는다), 맞출 사진이 없는 시각은 재지 않고
-크기로 뺀 시각(sizeSkipped)으로 센다. 지도를 만들 때 부위 범위를 넘겨 범위를 많이 가린 사진은
-통째로 뺀다.
+크기로 뺀 시각(sizeSkipped)으로 센다. 그다음 서비스처럼 흐린 사진을 빼고(drop_blurry, 립은 그 시각
+사진만), 한쪽이 비는 시각은 재지 않고 흐림으로 뺀 시각(blurSkipped)으로 센다.
+지도를 만들 때 부위 범위를 넘겨 범위를 많이 가린 사진은 통째로 뺀다.
 조심할 구간(caution_ranges.json의 확대·얼굴 없음·광고·마무리)에 걸린 시각은 재지 않고
 cautionSkipped로 센다. 서비스가 영역을 만드는 사진 창(직전 창, 끝 시각)은 걸려도 잰다.
 끝 뒤 시각이 모두 조심할 구간이라 유지 비를 못 내면 notMeasured에 keepRatio를 적어,
@@ -74,6 +75,7 @@ from tools.metric_settings import (
 )
 from tools.noise_metric import (
     CAUTION_FILE,
+    SharpFilter,
     Span,
     blush_reddening,
     caution_spans,
@@ -81,6 +83,7 @@ from tools.noise_metric import (
     lip_redness,
     overlaps,
     remembered_flat,
+    sharp_filter,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 from tools.output_area import Area, found_side, output_area
@@ -338,6 +341,8 @@ def measure_step(
     find: AreaFinder,
     output: AreaFinder | None = None,
     cautions: Sequence[Span] = (),
+    *,
+    keep_sharp: SharpFilter,
 ) -> list[dict]:
     """한 단계를 쪽마다 잰다. find는 쪽을 받아 부위 코드가 찾은 영역(못 찾으면 None)을 낸다.
 
@@ -345,8 +350,10 @@ def measure_step(
     쪽마다 직전 지도와 바깥 띠를 먼저 만들고, 시각 순서로 지도를 만들어 두 쪽을 같이 잰다.
     load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
     pair_sizes인 부위는 시각마다 직전 사진과 그 시각 사진의 얼굴 크기를 서비스처럼 맞추고,
-    맞춘 직전 사진이 처음과 같으면 직전 지도를 다시 쓴다. 맞출 사진이 없는 시각은 값을 비우고
-    sizeSkipped로 센다.
+    맞출 사진이 없는 시각은 값을 비우고 sizeSkipped로 센다. 그다음 keep_sharp로 두 묶음에서
+    흐린 사진을 빼고, 한쪽이 비는 시각은 값을 비우고 blurSkipped로 센다. 남은 직전 사진이 처음과
+    같으면 직전 지도를 다시 쓴다. 립은 서비스에 직전 창이 없어 그 시각 사진만 keep_sharp에 넘긴다.
+    keep_sharp는 noise_metric.sharp_filter로 만든다.
     직전이나 그 시각 사진 모두에서 가려진 칸(모름 칸)은 영역 안·바깥 띠 평균에서 뺀다.
     cautions는 조심할 구간(ms)이다. 끝 시각이 아닌 시각의 사진 창이 걸리면 값을 비우고
     cautionSkipped로 센다. 끝 뒤 시각이 모두 빠져 유지 비를 못 내면 notMeasured에 적는다.
@@ -386,6 +393,7 @@ def measure_step(
 
     points: dict[tuple[str, RegionName], list[dict]] = {key: [] for key in targets}
     size_skipped = dict.fromkeys(targets, 0)
+    blur_skipped = dict.fromkeys(targets, 0)
     for t in times:
         for side, (before, before_unknown) in ready.items():
             keys = [(kind, side) for kind in finders if (kind, side) in targets]
@@ -401,8 +409,16 @@ def measure_step(
                         size_skipped[key] += 1
                         points[key].append({"ms": t, "inside": None, "outside": None})
                     continue
+                kept, photos = keep_sharp(kept, photos)
+                if not kept or not photos:
+                    for key in keys:
+                        blur_skipped[key] += 1
+                        points[key].append({"ms": t, "inside": None, "outside": None})
+                    continue
                 if kept != before_photos[side]:
                     before, before_unknown = load_map(kept, side)
+            elif photos:
+                _, photos = keep_sharp([], photos)
             if not photos:
                 for key in keys:
                     points[key].append({"ms": t, "inside": None, "outside": None})
@@ -427,6 +443,7 @@ def measure_step(
     for key, key_points in points.items():
         rows[key] |= summarize(key_points, start_ms, end_ms, final_ms)
         rows[key]["sizeSkipped"] = size_skipped[key]
+        rows[key]["blurSkipped"] = blur_skipped[key]
         rows[key]["cautionSkipped"] = len(caution_times)
         final_inside = rows[key]["insideFinal"]
         if keep_cut and final_inside is not None and final_inside > 0:
@@ -478,6 +495,7 @@ def main() -> None:
 
     photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     flat = remembered_flat(photos, rows_by_index, occlusion)
+    keep_sharp = sharp_filter(photos, occlusion)
 
     zones = {
         (part.name, side): None if part.zone is None else part.zone(side)
@@ -522,7 +540,9 @@ def main() -> None:
             def output(side: RegionName, drawn_areas=drawn_areas) -> np.ndarray | None:
                 return found_side(drawn_areas, side)
 
-            for row in measure_step(part, result, start, end, load_map, find, output, cautions):
+            for row in measure_step(
+                part, result, start, end, load_map, find, output, cautions, keep_sharp=keep_sharp
+            ):
                 record = {"stepId": step.step_id, **row}
                 out.append(record)
                 drawn_row = record["output"]
@@ -536,6 +556,7 @@ def main() -> None:
                     f"  유지 비 {drawn_row.get('keepRatio')}"
                     f"  진한 칸 {drawn_row.get('strongShare')}  {drawn_row.get('reason') or ''}"
                     f"  크기로 뺀 시각 {record.get('sizeSkipped')}"
+                    f"  흐림으로 뺀 시각 {record.get('blurSkipped')}"
                     f"  조심할 구간으로 뺀 시각 {record.get('cautionSkipped')}"
                     f"  못 잼 {record.get('notMeasured', [])}"
                 )

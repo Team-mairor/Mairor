@@ -10,6 +10,7 @@
 from collections import Counter
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from pathlib import Path
 
 import numpy as np
@@ -202,8 +203,16 @@ def build_reference_area(
         landmarks = build_landmarks(manifest, load_frame, finder)
         set_output(span, dict(Counter(row.status for row in landmarks.frames)))
     with traced("check_frames", {"frames": len(landmarks.frames)}) as span:
-        checked = check_frames(landmarks, load_row)
-        set_output(span, dict(Counter(row.status for row in checked.frames)))
+        checked = check_frames(landmarks)
+        set_output(
+            span,
+            {
+                "status": dict(Counter(row.status for row in checked.frames)),
+                "reasons": dict(
+                    Counter(reason for row in checked.frames for reason in row.reasons)
+                ),
+            },
+        )
     with traced("build_guide_area", {"steps": len(guide_input.steps), "lines": lines}) as span:
         area = build_area_in_lines(
             guide_input.video_id,
@@ -232,6 +241,7 @@ def build_area_in_lines(
 
     줄마다 지도 꾸러미(RememberedPhotos)와 가림 기억(remember_by_frame)을 따로 둔다.
     같은 기억을 두 줄이 같이 넣고 빼면 꼬일 수 있어서다. 줄이 하나면 그 자리에서 바로 만든다.
+    줄마다 지금 문맥을 복사해 넘겨, 단계 기록(area_step)이 이 작업의 기록 밑에 붙게 한다.
     """
 
     def build(group: list[GuideInputStep]) -> GuideArea:
@@ -248,6 +258,7 @@ def build_area_in_lines(
     if len(groups) == 1:
         return build(groups[0])
     with ThreadPoolExecutor(max_workers=len(groups)) as pool:
-        areas = list(pool.map(build, groups))
+        futures = [pool.submit(copy_context().run, build, group) for group in groups]
+        areas = [future.result() for future in futures]
     merged = sorted((step for area in areas for step in area.steps), key=lambda step: step.order)
     return GuideArea(video_id=video_id, mesh_version=areas[0].mesh_version, steps=merged)

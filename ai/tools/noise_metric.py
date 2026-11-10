@@ -9,8 +9,9 @@
 맨입술 순간의 사진만 쓴다. 조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
 사진은 서비스 부위 찾기와 같이 고른다. 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
 맞출 사진이 없는 쌍은 서비스에서 기본 가이드(faceSizeMismatch)로 가므로
-재지 않은 쌍(크기로 뺀 쌍)으로 센다. 지도를 만들 때 부위 범위(zone)를 넘겨
-범위를 많이 가린 사진은 통째로 뺀다.
+재지 않은 쌍(크기로 뺀 쌍)으로 센다. 그다음 흐린 사진을 빼고(drop_blurry), 한쪽이 비는 쌍은
+서비스에서 기본 가이드(noUsableFrame)로 가므로 재지 않은 쌍(흐림으로 뺀 쌍)으로 센다.
+지도를 만들 때 부위 범위(zone)를 넘겨 범위를 많이 가린 사진은 통째로 뺀다.
 쌍마다 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py), FE로 나가는 영역이
 생기는지도 센다(나가는 영역 헛것).
 섀도·아이라인은 나가는 영역 헛것이 눈꼬리 점과 앞머리 점을 잇는 직선 위(upper)와 아래(under) 중
@@ -56,6 +57,7 @@ from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     RememberedPhotos,
+    drop_blurry,
     known_cells,
     known_median_map,
     match_sizes,
@@ -109,6 +111,10 @@ Span = tuple[int, int]
 MapLoader = Callable[[Sequence[FrameLandmarks], RegionName], tuple[np.ndarray, np.ndarray]]
 Flat = tuple[np.ndarray, np.ndarray | None]
 DrawnAt = Callable[[int], np.ndarray | None]
+SharpFilter = Callable[
+    [Sequence[FrameLandmarks], Sequence[FrameLandmarks]],
+    tuple[list[FrameLandmarks], list[FrameLandmarks]],
+]
 
 
 @dataclass(frozen=True)
@@ -152,12 +158,14 @@ class Part:
 class Tally:
     """부위·쪽·간격 하나에 모은 결과. size_skipped는 skipped 중 얼굴 크기를 못 맞춰 뺀 쌍이다.
 
+    blur_skipped는 skipped 중 흐린 사진을 빼고 한쪽이 비어 뺀 쌍이다.
     zone_found는 섀도·아이라인의 자리(ZONES)마다 나가는 영역 헛것이 난 쌍의 수다.
     """
 
     pairs: int = 0
     skipped: int = 0
     size_skipped: int = 0
+    blur_skipped: int = 0
     found: int = 0
     output_found: int = 0
     zone_found: dict[str, int] = field(default_factory=dict)
@@ -431,6 +439,8 @@ def measure_part(
     cautions: Sequence[Span],
     load_map: MapLoader,
     drawn_at: DrawnAt | None = None,
+    *,
+    keep_sharp: SharpFilter,
 ) -> tuple[dict[tuple[str, int], Tally], list[dict]]:
     """부위 하나를 안 건드린 시간(spans, ms) 안에서 간격마다 잰다.
 
@@ -439,6 +449,8 @@ def measure_part(
     립은 간격 대신 순간 하나씩(간격 0)이다.
     직전 창이 있는 부위는 서비스처럼 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
     한쪽이라도 남는 사진이 없으면 그 쪽은 재지 않은 것(skipped, size_skipped)으로 센다.
+    그다음 keep_sharp로 흐린 사진을 빼고(립은 서비스처럼 직후 사진만 넘김), 한쪽이 비면
+    재지 않은 것(skipped, blur_skipped)으로 센다. keep_sharp는 sharp_filter로 만든다.
     load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
     쌍마다 쪽을 다 잰 뒤 서비스처럼 하위 단계로 바꿔 쪽마다 나가는 영역이 생기는지 센다.
     재지 못한 쪽은 서비스처럼 못 찾음(noUsableFrame)으로 넘기고, 나가는 영역 헛것은 그 쪽을 잰
@@ -473,6 +485,11 @@ def measure_part(
                             tally.skipped += 1
                             tally.size_skipped += 1
                             continue
+                    before_rows, after_rows = keep_sharp(before_rows, after_rows)
+                    if not after_rows or (part.before_ms and not before_rows):
+                        tally.skipped += 1
+                        tally.blur_skipped += 1
+                        continue
                     after, unknown = load_map(after_rows, side)
                     before = None
                     if part.before_ms:
@@ -551,6 +568,21 @@ def remembered_flat(
         return photos.face_maps(rows_by_index[index], occlusion)
 
     return flat
+
+
+def sharp_filter(photos: RememberedPhotos, occlusion: OcclusionFinder | None) -> SharpFilter:
+    """(직전, 직후) 사진 목록에서 서비스처럼 흐린 사진을 뺀(drop_blurry) 목록을 내는 함수.
+
+    photos 꾸러미가 사진마다 선명도를 한 번만 재서 기억하므로, 겹치는 쌍이 같은 사진을 다시
+    넘겨도 다시 재지 않는다. 시간 도구(timing_metric)도 같이 쓴다.
+    """
+
+    def keep_sharp(
+        before_rows: Sequence[FrameLandmarks], after_rows: Sequence[FrameLandmarks]
+    ) -> tuple[list[FrameLandmarks], list[FrameLandmarks]]:
+        return drop_blurry(before_rows, after_rows, photos, occlusion)
+
+    return keep_sharp
 
 
 class RememberedMedians:
@@ -636,6 +668,7 @@ def summarize(part: Part, tallies: dict[tuple[str, int], Tally]) -> list[dict]:
                 "pairs": t.pairs,
                 "skipped": t.skipped,
                 "sizeSkipped": t.size_skipped,
+                "blurSkipped": t.blur_skipped,
                 "threshold": part.threshold,
                 **pct,
                 "thresholdOverP99": None if not p99 or p99 <= 0 else round(part.threshold / p99, 2),
@@ -700,6 +733,7 @@ def main() -> None:
     def eyeliner_drawn_at(start_ms: int) -> np.ndarray | None:
         return drawn_before(timeline, start_ms)
 
+    keep_sharp = sharp_filter(photos, occlusion)
     summary, records = [], []
     for part in selected_parts(PARTS, part_names):
         zones = part_zones(part)
@@ -716,6 +750,7 @@ def main() -> None:
             cautions,
             load_map,
             eyeliner_drawn_at if part.name == "eyeliner" else None,
+            keep_sharp=keep_sharp,
         )
         summary += summarize(part, tallies)
         records += part_records
@@ -729,7 +764,7 @@ def main() -> None:
                 f"{row['part']:9} {row['side']:9} 간격 {row['gapSeconds']:>3}초"
                 f"  쌍 {row['pairs']:>3}  잡음 99%선 {row['p99']}  기준 {row['threshold']}"
                 f"  헛것 {row['falsePositives']}/{row['pairs']}"
-                f"  크기로 뺀 쌍 {row['sizeSkipped']}"
+                f"  크기로 뺀 쌍 {row['sizeSkipped']}  흐림으로 뺀 쌍 {row['blurSkipped']}"
                 f"  나가는 영역 헛것 {row['outputFalsePositives']}/{row['pairs']}{zones}"
             )
 

@@ -24,6 +24,7 @@ from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
+    drop_blurry,
     known_cells,
     match_sizes,
     mostly_unknown,
@@ -77,8 +78,9 @@ def find_brow_area(
     """눈썹 단계 직전과 직후 사진으로 눈썹 하나(leftBrow 또는 rightBrow)의 그린 곳을 찾는다.
 
     직전 BEFORE_WINDOW_MS와 직후 AFTER_WINDOW_MS 안에서 그 눈썹이 다 보이는 사진을 고르고,
-    두 묶음의 얼굴 크기를 맞춘다(match_sizes).
+    두 묶음의 얼굴 크기를 맞춘 뒤(match_sizes) 흐린 사진을 뺀다(drop_blurry).
     어느 한쪽이라도 쓸 사진이 없으면 사진을 읽지 않고 noUsableFrame을 돌려준다.
+    흐린 사진을 빼고 한쪽이 비어도 noUsableFrame이다.
     load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
     occlusion이 있으면 사진마다 가린 칸을 빼고, 범위를 많이 가린 사진은 통째로 빼며,
     직전이나 직후 어느 한쪽에서라도 모든 사진에 가려진 칸(모름 칸)은 보지 않는다.
@@ -90,6 +92,9 @@ def find_brow_area(
     before_rows, after_rows = match_sizes(before_rows, after_rows)
     if not before_rows or not after_rows:
         return BrowArea(mask=None, reason="faceSizeMismatch")
+    before_rows, after_rows = drop_blurry(before_rows, after_rows, load_photo, occlusion)
+    if not before_rows or not after_rows:
+        return BrowArea(mask=None, reason="noUsableFrame")
     zone = brow_range(brow)
     before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
     after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)

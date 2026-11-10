@@ -12,18 +12,25 @@
 그래도 안 되면 저장만 건너뛴다(replace_or_skip).
 도구는 --no-store를 받으면 저장하지 않고 서비스 꾸러미(RememberedPhotos)만 쓴다.
 
-사진 여러 장을 겹쳐 만든 대표 지도(지도, 모름 칸)도 output/cache/median_maps/<가림 표 이름>/에
-저장한다. 파일 이름이 곧 지문이다. 묶음 속 사진마다의 지문, 볼 범위 값, 대표 지도를 만드는 코드
-(known_median_map·median_map·_grow)와 상수(OCCLUSION_MARGIN_CELLS·OCCLUDED_MAX)의 지금 값을
-합친 것이라, 기준값만 바꿔 다시 재면 같은 파일을 꺼내 쓰고 범위나 이 상수가 바뀌면 새로 만든다.
+사진 여러 장을 겹쳐 만든 대표 지도(지도, 모름 칸)도
+output/cache/median_maps/<가림 표 이름>/<코드 판>/에 저장한다. 파일 이름이 곧 지문이다.
+묶음 속 사진마다의 지문, 볼 범위 값, 대표 지도를 만드는 코드(known_median_map·median_map·_grow)와
+상수(OCCLUSION_MARGIN_CELLS·OCCLUDED_MAX)의 지금 값을 합친 것이라, 기준값만 바꿔 다시 재면
+같은 파일을 꺼내 쓰고 범위나 이 상수가 바뀌면 새로 만든다.
+코드 판은 지도를 만드는 코드의 지문(median_folder_code)이다. 코드가 바뀌면 옛 판의 대표 지도는
+다시 쓰이지 않으므로, 도구를 시작할 때 지금 판이 아닌 판을 지운다(forget_old_medians).
+사진 지도는 사진 번호 이름에 덮어쓰므로 쌓이지 않는다.
 서비스 부위 찾기 안의 대표 지도도 저장하도록, tool_photos는 부위 파일들의 rows_to_known_map 자리를
 저장 판으로 바꿔 끼운다(install_stored_medians). 저장 판은 꾸러미가 StoredPhotos일 때만 저장을 쓰고,
 아니면 원래 함수를 그대로 부른다.
 """
 
+import contextlib
 import hashlib
 import inspect
 import os
+import shutil
+import string
 import time
 import zipfile
 from collections.abc import Callable, Sequence
@@ -63,6 +70,7 @@ STORE_USAGE = f"[{OPTION}]"
 MESH_FILES = ("triangles.v1.json", "uv.v1.json")
 REPLACE_TRIES = 5
 REPLACE_WAIT_SECONDS = 0.05
+FOLDER_CODE_BYTES = 8
 
 PathOf = Callable[[FrameLandmarks], Path | None]
 KnownMap = tuple[np.ndarray, np.ndarray]
@@ -247,6 +255,44 @@ def median_code_fingerprint() -> str:
     return digest.hexdigest()
 
 
+def median_folder_code(face_code: str) -> str:
+    """대표 지도를 나눠 두는 코드 판 이름(16글자 16진수).
+
+    face_code(code_fingerprint 값)와 median_code_fingerprint를 합친다. 둘 중 하나가 바뀌면
+    대표 지도 지문이 모두 달라지므로 판을 나눈다. 기준값 상수는 넣지 않아, 기준값만 바꿔 다시 잴
+    때는 같은 판을 쓴다.
+    """
+    digest = hashlib.blake2b(digest_size=FOLDER_CODE_BYTES)
+    digest.update(face_code.encode())
+    digest.update(median_code_fingerprint().encode())
+    return digest.hexdigest()
+
+
+def is_folder_code(name: str) -> bool:
+    """폴더 이름이 median_folder_code가 만든 판 이름 모양인지."""
+    return len(name) == FOLDER_CODE_BYTES * 2 and all(c in string.hexdigits for c in name)
+
+
+def forget_old_medians(folder: Path, code: str) -> None:
+    """가림 표 하나의 대표 지도 폴더(folder)에서 지금 판(code)이 아닌 판을 지운다.
+
+    코드가 바뀌면 옛 판의 대표 지도는 다시 쓰이지 않고 디스크만 차지한다(시험 영상 한 판 약 11GB).
+    folder 바로 아래에서 판 이름 모양인데 code가 아닌 폴더와, 판을 나누기 전 방식으로 둔 npz
+    파일을 지운다. folder 밖(사진 지도·다른 가림 표·결과 파일)과 판 이름 모양이 아닌 폴더는
+    건드리지 않는다. 일꾼 여럿이 함께 지우거나 다른 일꾼이 읽는 중이라 못 지운 것은 건너뛰고
+    다음 실행에서 다시 지운다.
+    """
+    if not folder.is_dir():
+        return
+    for path in folder.iterdir():
+        if path.is_dir():
+            if is_folder_code(path.name) and path.name != code:
+                shutil.rmtree(path, ignore_errors=True)
+        elif path.suffix == ".npz":
+            with contextlib.suppress(OSError):
+                path.unlink()
+
+
 def median_key(
     photos: StoredPhotos,
     rows: Sequence[FrameLandmarks],
@@ -351,6 +397,7 @@ def tool_photos(
 ) -> RememberedPhotos:
     """지표 도구가 쓸 사진 꾸러미. use_store면 사진 지도·대표 지도 저장을 쓰는 StoredPhotos를 내고
     부위 파일들의 대표 지도 자리를 바꿔 끼운다(install_stored_medians).
+    대표 지도는 지금 코드 판 폴더에 두고, 옛 판은 지운다(forget_old_medians).
     아니면 RememberedPhotos다.
     """
     if not use_store:
@@ -366,5 +413,9 @@ def tool_photos(
     def mask_path(row: FrameLandmarks) -> Path | None:
         return None if masks is None else masks / f"{row.frame_index:06d}.png"
 
-    store = FaceMapStore(folder / STORE_DIR / table, photo_path, mask_path, code_fingerprint())
-    return StoredPhotos(load_photo, keep, store, MedianStore(folder / MEDIAN_DIR / table))
+    face_code = code_fingerprint()
+    store = FaceMapStore(folder / STORE_DIR / table, photo_path, mask_path, face_code)
+    medians = folder / MEDIAN_DIR / table
+    code = median_folder_code(face_code)
+    forget_old_medians(medians, code)
+    return StoredPhotos(load_photo, keep, store, MedianStore(medians / code))

@@ -55,11 +55,15 @@ def load_golden() -> tuple[np.ndarray, np.ndarray]:
 
 
 def test_after_rows_keeps_usable_photos_right_after_the_step():
+    """판정에서 빠진 사진과 입술이 화면 밖인 사진은 뺀다.
+
+    크기가 튄 사진(비율 1.5)도 판정이 rejected로 바꾸므로 여기서는 판정만 본다.
+    """
     rows = [
         make_row(503400),
         make_row(503600),
         make_row(504000, status="rejected"),
-        make_row(504200, ratio=1.5),
+        make_row(504200, status="rejected", ratio=1.5),
         make_row(504300, lips_outside=2),
         make_row(504500),
         make_row(504600),

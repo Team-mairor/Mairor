@@ -5,11 +5,11 @@ import pytest
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
 from app.tasks.area.common.region_points import REGION_POINTS
-from app.tasks.area.landmarks.frame_checker import LIPS_OUTER, check_frames, outside_count_name
+from app.tasks.area.landmarks.frame_checker import check_frames, outside_count_name
 
 WIDTH, HEIGHT = 1000, 800
-PHOTO = np.zeros((HEIGHT, WIDTH, 3), dtype=np.uint8)
 FACE_LEFT_POINT, FACE_RIGHT_POINT = 234, 454
+LIPS_OUTER = REGION_POINTS["lipsOuter"]
 
 
 def make_face(left: float = 0.3, right: float = 0.7, yaw: float = 0.0, lips_x: float = 0.5) -> Face:
@@ -24,28 +24,35 @@ def make_face(left: float = 0.3, right: float = 0.7, yaw: float = 0.0, lips_x: f
     return Face(landmarks=points, iod=1.0, pose=Pose(yaw=radians(yaw), pitch=0.0, roll=0.0))
 
 
-def make_row(index: int, face: Face | None, timestamp_ms: int | None = None) -> FrameLandmarks:
+def make_row(
+    index: int, face: Face | None, timestamp_ms: int | None = None, face_count: int = 1
+) -> FrameLandmarks:
     return FrameLandmarks(
         frame_index=index,
         timestamp_ms=index * 100 if timestamp_ms is None else timestamp_ms,
         step_id="s1",
         image_size=ImageSize(width=WIDTH, height=HEIGHT),
         status="ok" if face else "noFace",
-        face_count=1 if face else 0,
+        face_count=face_count if face else 0,
         face=face,
     )
 
 
-def check(*faces: Face | None, load_photo=lambda row: PHOTO) -> list[FrameLandmarks]:
+def check(*faces: Face | None) -> list[FrameLandmarks]:
     rows = [make_row(index, face) for index, face in enumerate(faces)]
-    return check_frames(LandmarksResult(video_id="test_01", frames=rows), load_photo).frames
+    return check_frames(LandmarksResult(video_id="test_01", frames=rows)).frames
+
+
+def checked_at(*timed: tuple[int, Face]) -> dict[int, FrameLandmarks]:
+    """(시각 ms, 얼굴) 사진들을 판정해 시각마다 판정한 사진을 돌려준다."""
+    rows = [make_row(index, face, time) for index, (time, face) in enumerate(timed)]
+    checked = check_frames(LandmarksResult(video_id="test_01", frames=rows))
+    return {row.timestamp_ms: row for row in checked.frames}
 
 
 def ratios_at(*timed: tuple[int, Face]) -> dict[int, float]:
     """(시각 ms, 얼굴) 사진들을 판정해 시각마다 얼굴 크기 비율을 돌려준다."""
-    rows = [make_row(index, face, time) for index, (time, face) in enumerate(timed)]
-    checked = check_frames(LandmarksResult(video_id="test_01", frames=rows), lambda row: PHOTO)
-    return {row.timestamp_ms: row.measures["faceWidthRatio"] for row in checked.frames}
+    return {time: row.measures["faceWidthRatio"] for time, row in checked_at(*timed).items()}
 
 
 WIDE = make_face(0.3, 0.7)
@@ -60,7 +67,6 @@ def test_normal_face_is_ok_with_measures():
     assert row.measures["yawDeg"] == 0
     assert all(row.measures[outside_count_name(region)] == 0 for region in REGION_POINTS)
     assert row.measures["faceWidthRatio"] == 1
-    assert "lipsSharpness" in row.measures
 
 
 def test_small_face_is_rejected():
@@ -73,6 +79,14 @@ def test_turned_face_is_rejected():
     row = check(make_face(yaw=25))[0]
     assert row.reasons == ["faceTurned"]
     assert row.measures["yawDeg"] == pytest.approx(25)
+
+
+def test_photo_with_several_faces_is_rejected():
+    """두 사람이 나오면 가장 큰 얼굴이 사진마다 다른 사람일 수 있어 어느 부위에도 쓰지 않는다."""
+    rows = [make_row(0, make_face(), face_count=2)]
+    row = check_frames(LandmarksResult(video_id="test_01", frames=rows)).frames[0]
+    assert row.status == "rejected"
+    assert row.reasons == ["multipleFaces"]
 
 
 def test_part_out_of_frame_is_counted_but_not_rejected():
@@ -88,15 +102,6 @@ def test_several_reasons_are_all_listed():
     assert row.reasons == ["faceTooSmall", "faceTurned"]
 
 
-def test_unreadable_photo_becomes_error():
-    def broken(row: FrameLandmarks) -> np.ndarray:
-        raise OSError("깨진 파일")
-
-    row = check(make_face(), load_photo=broken)[0]
-    assert row.status == "error"
-    assert row.reasons == ["FRAME_UNREADABLE"]
-
-
 def test_no_face_row_is_left_as_is():
     row = check(None)[0]
     assert row.status == "noFace"
@@ -104,17 +109,37 @@ def test_no_face_row_is_left_as_is():
 
 
 def test_close_up_section_is_compared_within_itself():
+    """편집으로 확대한 구간은 그 안끼리 견주어 크기가 튀지 않으므로 그대로 쓴다."""
     wide_before = [(t, WIDE) for t in range(7000, 10000, 500)]
     close_up = [(t, CLOSE_UP) for t in range(10000, 13500, 500)]
     wide_after = [(t, WIDE) for t in range(13500, 16500, 500)]
-    ratios = ratios_at(*wide_before, *close_up, *wide_after)
-    assert ratios[11500] == 1.0
-    assert ratios[7000] == 1.0
+    rows = checked_at(*wide_before, *close_up, *wide_after)
+    assert rows[11500].measures["faceWidthRatio"] == 1.0
+    assert rows[7000].measures["faceWidthRatio"] == 1.0
+    assert (rows[11500].status, rows[7000].status) == ("ok", "ok")
 
 
-def test_one_face_jumping_out_of_its_neighbours_is_caught():
+def test_one_face_jumping_out_of_its_neighbours_is_rejected_with_its_reason():
+    """앞뒤 사진보다 혼자 두 배 큰 얼굴은 손 등을 얼굴로 잘못 잡은 것으로 보고 이유를 남겨 뺀다."""
     timed = [(t, CLOSE_UP if t == 1500 else WIDE) for t in range(0, 3500, 500)]
-    assert ratios_at(*timed)[1500] == 2.0
+    rows = checked_at(*timed)
+    assert rows[1500].measures["faceWidthRatio"] == 2.0
+    assert (rows[1500].status, rows[1500].reasons) == ("rejected", ["faceSizeJump"])
+    assert rows[1000].status == "ok"
+
+
+def test_ratio_on_the_edge_of_the_range_is_still_used():
+    """비율 1.2는 범위(0.8~1.2) 끝이라 쓴다. 범위 끝을 넣는지 빼는지가 바뀌면 이 시험이 잡는다."""
+    edge = make_face(0.26, 0.74)
+    rows = checked_at((0, WIDE), (500, WIDE), (1000, edge), (1500, WIDE), (2000, WIDE))
+    assert rows[1000].measures["faceWidthRatio"] == 1.2
+    assert rows[1000].status == "ok"
+
+
+def test_jumping_face_keeps_its_other_reasons_first():
+    timed = [(t, make_face(0.43, 0.57) if t == 1500 else WIDE) for t in range(0, 3500, 500)]
+    row = checked_at(*timed)[1500]
+    assert row.reasons == ["faceTooSmall", "faceSizeJump"]
 
 
 def test_ratio_falls_back_to_whole_video_when_no_photo_is_near():

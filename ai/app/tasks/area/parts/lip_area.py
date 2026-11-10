@@ -10,6 +10,7 @@ from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
+    drop_blurry,
     known_cells,
     mostly_unknown,
     rgb_to_lab,
@@ -48,13 +49,17 @@ def find_lip_area(
 ) -> LipArea:
     """립 단계가 끝난 직후 사진으로 립을 바른 곳을 찾는다.
 
-    after_rows의 사진을 rows_to_known_map으로 바른 뒤 지도로 만들고,
-    lip_area_on_map으로 바른 곳을 찾아 check_lip_area로 본다.
+    after_rows의 사진에서 흐린 사진을 빼고(drop_blurry) rows_to_known_map으로 바른 뒤 지도로
+    만들고, lip_area_on_map으로 바른 곳을 찾아 check_lip_area로 본다.
     occlusion이 있으면 사진마다 가린 칸을 빼고, 입술을 많이 가린 사진은 통째로 빼며,
     모든 사진에서 가려진 칸(모름 칸)은 보지 않는다.
     쓸 수 있는 사진이 없으면 사진을 읽지 않고 noUsableFrame을 돌려준다.
+    흐린 사진을 빼고 남는 사진이 없어도 noUsableFrame이다.
     """
     rows = after_rows(result, step_end_ms)
+    if not rows:
+        return LipArea(mask=None, reason="noUsableFrame")
+    _, rows = drop_blurry([], rows, load_photo, occlusion)
     if not rows:
         return LipArea(mask=None, reason="noUsableFrame")
     after, unknown = rows_to_known_map(rows, load_photo, occlusion, _lips())

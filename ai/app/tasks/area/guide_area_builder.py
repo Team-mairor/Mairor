@@ -3,6 +3,7 @@
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
 아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 해서, 단계 순서대로 따로 부른다.
 가림 찾기 함수를 받으면 모든 부위 분석에 그대로 넘겨 사진마다 가린 칸을 빼고 보게 한다.
+단계마다 area_step 기록(이름 뒤에 단계 ID)을 남기고, 부위 분석에서 빠진 사진 번호를 이유별로 적는다.
 """
 
 import logging
@@ -11,6 +12,7 @@ from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 
+from app.core.tracing import set_output, traced
 from app.schemas.guide import EyeZone, GuideInputStep
 from app.schemas.guide_area import (
     NO_AREA_MAKEUPS,
@@ -27,6 +29,7 @@ from app.schemas.manifest import Makeup, Step
 from app.tasks.area.common.face_map import points_to_anchors
 from app.tasks.area.common.mask_outline import mask_outline, mask_outlines, simplify_outline
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
+from app.tasks.area.parts.area_preparation import recording_dropped
 from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import (
@@ -86,15 +89,32 @@ def build_guide_area(
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
     occlusion은 사진에서 얼굴을 가린 픽셀을 찾는 함수이고, 있으면 부위 분석마다 넘긴다.
     None이면 가림을 따로 빼지 않고 사진 여러 장의 중앙값에만 맡긴다.
+    단계마다 area_step 기록에 결과 상태·이유와, 판정을 통과했는데 부위 분석에서 빠진 사진 번호를
+    이유별로(area_preparation.recording_dropped) 남긴다.
+    사진이 왜 안 쓰였는지 운영에서 보려는 것이다.
     """
     ordered = sorted(steps, key=lambda step: step.order)
     drawn: np.ndarray | None = None
     area_steps = []
     for step in ordered:
-        if step.makeup == "eyeliner":
-            sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
-        else:
-            sub_step = _sub_step(step, result, load_photo, occlusion)
+        with (
+            traced(
+                f"area_step {step.step_id}", {"makeup": step.makeup}, step_id=step.step_id
+            ) as span,
+            recording_dropped() as dropped,
+        ):
+            if step.makeup == "eyeliner":
+                sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
+            else:
+                sub_step = _sub_step(step, result, load_photo, occlusion)
+            set_output(
+                span,
+                {
+                    "status": sub_step.status,
+                    "reasons": sub_step.reasons,
+                    "droppedPhotos": {reason: sorted(ids) for reason, ids in dropped.items()},
+                },
+            )
         area_steps.append(
             AreaStep(
                 step_id=step.step_id,

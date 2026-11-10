@@ -9,7 +9,7 @@ from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import largest_piece, polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.parts import brow_area
-from app.tasks.area.parts.area_preparation import rgb_to_lab
+from app.tasks.area.parts.area_preparation import RememberedPhotos, rgb_to_lab
 from app.tasks.area.parts.brow_area import (
     BROWS,
     FOUND_MEDIAN_MIN,
@@ -103,6 +103,10 @@ def test_no_photo_of_matching_face_size_gives_its_own_reason():
 
 
 def test_photos_around_the_step_are_compared_after_removing_lighting():
+    """단계 직전·직후 사진만, 사진마다 한 번씩 읽는다.
+
+    서비스처럼 사진 꾸러미(RememberedPhotos)로 넘겨, 흐림을 잴 때 편 지도를 영역에서 다시 쓴다.
+    """
     colors = {START_MS - 500: SKIN, 15000: (90, 60, 50), END_MS + 500: DARK_SKIN}
     rows = [make_row(time) for time in colors]
     seen = []
@@ -112,7 +116,8 @@ def test_photos_around_the_step_are_compared_after_removing_lighting():
         return np.full((600, 800, 3), colors[row.timestamp_ms], dtype=np.uint8)
 
     result = LandmarksResult(video_id="test_01", frames=rows)
-    found = find_brow_area(result, START_MS, END_MS, load_photo, "leftBrow")
+    photos = RememberedPhotos(load_photo, keep=64)
+    found = find_brow_area(result, START_MS, END_MS, photos, "leftBrow")
     assert sorted(seen) == [START_MS - 500, END_MS + 500]
     assert found.reason == "browColorNotFound"
 

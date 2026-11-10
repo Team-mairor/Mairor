@@ -15,6 +15,11 @@ def block(rows: slice, cols: slice, size: int = 100) -> np.ndarray:
     return mask
 
 
+def keep_all(before_rows, after_rows):
+    """흐린 사진을 하나도 빼지 않는 keep_sharp. 흐림과 상관없는 시험에서 넘긴다."""
+    return list(before_rows), list(after_rows)
+
+
 def test_time_points_cover_the_padding_and_hit_the_after_window_end():
     times = timing_metric.time_points(20000, 40000, 1000)
 
@@ -136,7 +141,13 @@ def test_measure_step_finds_when_the_inside_changed_and_keeps_the_outside_flat(m
     )
 
     rows = timing_metric.measure_step(
-        part, None, 20000, 40000, load_map, lambda side: area if side == "leftBrow" else None
+        part,
+        None,
+        20000,
+        40000,
+        load_map,
+        lambda side: area if side == "leftBrow" else None,
+        keep_sharp=keep_all,
     )
 
     left, right = rows
@@ -174,7 +185,9 @@ def test_measure_step_leaves_cells_hidden_in_every_photo_out_of_the_means(monkey
         lambda before, after, unknown: after - before,
     )
 
-    (row,) = timing_metric.measure_step(part, None, 20000, 40000, load_map, lambda side: area)
+    (row,) = timing_metric.measure_step(
+        part, None, 20000, 40000, load_map, lambda side: area, keep_sharp=keep_all
+    )
 
     assert row["insideFinal"] == 10.0
     assert row["outsideFinal"] == 0.0
@@ -192,7 +205,13 @@ def test_measure_step_reports_a_missing_before_photo(monkeypatch):
     )
 
     rows = timing_metric.measure_step(
-        part, None, 20000, 40000, None, lambda side: block(slice(0, 5), slice(0, 5))
+        part,
+        None,
+        20000,
+        40000,
+        None,
+        lambda side: block(slice(0, 5), slice(0, 5)),
+        keep_sharp=keep_all,
     )
 
     assert rows == [{"part": "lip", "side": "lipsOuter", "found": True, "reason": "noBeforePhoto"}]
@@ -281,6 +300,7 @@ def test_measure_step_measures_the_drawn_area_with_the_same_maps(monkeypatch):
         load_map,
         lambda side: area if side == "leftBrow" else None,
         lambda side: area,
+        keep_sharp=keep_all,
     )
 
     assert right["found"] is False and right["output"]["found"] is True
@@ -324,12 +344,123 @@ def test_measure_step_skips_a_time_whose_face_size_cannot_be_matched(monkeypatch
         lambda before, after, unknown: after - before,
     )
 
-    (row,) = timing_metric.measure_step(part, None, 20000, 40000, load_map, lambda side: area)
+    (row,) = timing_metric.measure_step(
+        part, None, 20000, 40000, load_map, lambda side: area, keep_sharp=keep_all
+    )
 
     zoomed = [p for p in row["points"] if p["ms"] == zoom_ms]
     assert zoomed == [{"ms": zoom_ms, "inside": None, "outside": None}]
     assert row["sizeSkipped"] == 1
     assert max(p["inside"] for p in row["points"] if p["inside"] is not None) == 10.0
+
+
+def brow_part() -> timing_metric.Part:
+    """짙어진 만큼을 그대로 변화로 내는 왼쪽 눈썹. 사진 고르기만 보는 시험에서 쓴다."""
+    return timing_metric.Part(
+        "brow",
+        "brow",
+        ("leftBrow",),
+        1000,
+        1000,
+        lambda side: [side],
+        lambda *args: None,
+        lambda before, after, unknown: after - before,
+    )
+
+
+def test_measure_step_rebuilds_the_before_map_without_a_blurry_before_photo(monkeypatch):
+    """시험 영상 s11a처럼 직전 창에 흐린 사진이 있으면 서비스는 그 사진을 빼고 직전 지도를 만든다.
+
+    흐린 직전 사진(blurry)이 지도를 5만큼 짙게 만든다고 두고, 그 사진을 뺀 직전 지도로 재서
+    끝 값이 10이 되는지 본다. 빼지 않으면 직전 지도가 5라 끝 값이 5로 줄어든다.
+    """
+    area = block(slice(40, 60), slice(40, 60))
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+
+    def rows(result, start, end, regions):
+        return ["blurry", "sharp"] if end == 20000 else [end]
+
+    def keep_sharp(before_rows, after_rows):
+        return (
+            [row for row in before_rows if row != "blurry"],
+            [row for row in after_rows if row != "blurry"],
+        )
+
+    def load_map(photos, side):
+        photo = np.zeros((100, 100), dtype=np.float32)
+        if "blurry" in photos:
+            photo[area] = 5.0
+        elif photos != ["sharp"]:
+            photo[area] = 10.0 if photos[0] > 20000 else 0.0
+        return photo, np.zeros((100, 100), dtype=bool)
+
+    monkeypatch.setattr(timing_metric, "usable_rows", rows)
+    monkeypatch.setattr(timing_metric, "match_sizes", lambda before, after: (before, after))
+
+    (row,) = timing_metric.measure_step(
+        brow_part(), None, 20000, 40000, load_map, lambda side: area, keep_sharp=keep_sharp
+    )
+
+    assert row["insideFinal"] == 10.0
+    assert (row["sizeSkipped"], row["blurSkipped"]) == (0, 0)
+
+
+def test_measure_step_skips_a_time_left_without_a_sharp_photo(monkeypatch):
+    """흐린 사진을 빼고 그 시각 사진이 비면 서비스라면 noUsableFrame으로 기본 가이드를 쓰므로,
+    그 시각은 값을 비우고 흐림으로 뺀 시각(blurSkipped)으로 센다.
+    """
+    area = block(slice(40, 60), slice(40, 60))
+    blurry_ms = 31000
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+    monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+    monkeypatch.setattr(timing_metric, "match_sizes", lambda before, after: (before, after))
+
+    def keep_sharp(before_rows, after_rows):
+        return list(before_rows), [row for row in after_rows if row != blurry_ms]
+
+    def load_map(photos, side):
+        photo = np.zeros((100, 100), dtype=np.float32)
+        photo[area] = 10.0 if photos[0] > 20000 else 0.0
+        return photo, np.zeros((100, 100), dtype=bool)
+
+    (row,) = timing_metric.measure_step(
+        brow_part(), None, 20000, 40000, load_map, lambda side: area, keep_sharp=keep_sharp
+    )
+
+    skipped = [p for p in row["points"] if p["ms"] == blurry_ms]
+    assert skipped == [{"ms": blurry_ms, "inside": None, "outside": None}]
+    assert (row["sizeSkipped"], row["blurSkipped"]) == (0, 1)
+    assert row["insideFinal"] == 10.0
+
+
+def test_measure_step_hands_only_the_lip_photos_to_the_sharp_filter(monkeypatch):
+    """서비스 립은 직전 창이 없어 그 시각 사진에서만 흐린 사진을 뺀다(drop_blurry([], rows)).
+
+    도구의 립 직전 지도(LIP_BEFORE_MS)는 서비스에 없는 것이라 거르지 않고, 시각마다 그 시각
+    사진만 넘기는지 본다.
+    """
+    area = block(slice(40, 60), slice(40, 60))
+    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
+    monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
+    handed = []
+
+    def keep_sharp(before_rows, after_rows):
+        handed.append(list(before_rows))
+        return list(before_rows), list(after_rows)
+
+    part = replace(brow_part(), name="lip", makeup="lip", sides=("lipsOuter",), pair_sizes=False)
+
+    timing_metric.measure_step(
+        part,
+        None,
+        20000,
+        40000,
+        lambda photos, side: (np.zeros((100, 100), dtype=np.float32), np.zeros((100, 100), bool)),
+        lambda side: area,
+        keep_sharp=keep_sharp,
+    )
+
+    assert handed and all(before == [] for before in handed)
 
 
 def test_only_the_lip_skips_size_matching_like_the_service():
@@ -371,7 +502,7 @@ def test_measure_step_skips_caution_times_but_keeps_the_service_window(monkeypat
     )
 
     (row,) = timing_metric.measure_step(
-        part, None, 20000, 40000, load_map, lambda side: area, None, cautions
+        part, None, 20000, 40000, load_map, lambda side: area, None, cautions, keep_sharp=keep_all
     )
 
     assert [p for p in row["points"] if p["ms"] == 31000] == [

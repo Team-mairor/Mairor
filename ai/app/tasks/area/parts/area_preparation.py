@@ -1,28 +1,31 @@
 """부위 바른 곳을 찾기 전에, 쓸 사진을 골라 Lab 색 얼굴 지도로 만드는 준비 단계.
 
 check_frames를 거친 결과에서 구간·부위 조건에 맞는 사진을 고르고(usable_rows),
-직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
+직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes), 흐린 사진을 빼고(drop_blurry),
 얼굴 지도에 펴서 칸마다 중앙값을 내고(rows_to_map), 색을 Lab으로 바꾼다(rgb_to_lab).
 가림 찾기 함수가 있으면 사진마다 가린 칸을 빼고 중앙값을 낸다(rows_to_known_map).
 사진 꾸러미(RememberedPhotos)를 넘기면 같은 사진을 얼굴 지도에 한 번만 편다.
 범위의 모름 칸이 너무 많으면 그 범위는 보지 않는다(mostly_unknown).
 전후 사이 조명이 바뀐 만큼은 화장하지 않은 피부로 재서 뺀다(remove_lighting).
+판정을 통과했는데 여기서 빠진 사진은 recording_dropped 안이면 이유별로 모은다.
 립·블러셔·눈썹 같은 부위 분석이 같이 쓴다. 기준값의 근거는 ai/docs/FRAME_SELECTION.md에 있다.
 """
 
 from collections import OrderedDict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Literal
 
 import cv2
 import numpy as np
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.tasks.area.common.face_map import flatten, flatten_mask, median_map
+from app.tasks.area.common.face_map import face_cells, flatten, flatten_mask, median_map
 from app.tasks.area.landmarks.frame_checker import outside_count_name
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 
-FACE_RATIO_RANGE = (0.8, 1.2)
 LIGHT_BLUR_SIGMA = 40
 LIGHT_MIN_WEIGHT = 1e-3
 OCCLUSION_MARGIN_CELLS = 0
@@ -32,6 +35,8 @@ EYE_OPEN_MIN = 0.2
 SIZE_MATCH_RANGE = (0.8, 1.25)
 OCCLUDED_MAX = 0.2
 UNKNOWN_MAX = 0.5
+BLUR_SHARE = 0.2
+SHARP_MARGIN_CELLS = 8
 
 SRGB_TO_XYZ = np.array(
     [
@@ -44,6 +49,36 @@ D65_WHITE = np.array([0.950456, 1.0, 1.088754])
 
 PhotoLoader = Callable[[FrameLandmarks], np.ndarray]
 FaceMaps = tuple[np.ndarray, np.ndarray | None]
+DropReason = Literal[
+    "regionOutside", "eyesClosed", "faceSizeUnmatched", "heavilyOccluded", "faceBlurry"
+]
+DroppedPhotos = dict[DropReason, set[int]]
+
+_dropped: ContextVar[DroppedPhotos | None] = ContextVar("dropped_photos", default=None)
+
+
+@contextmanager
+def recording_dropped() -> Iterator[DroppedPhotos]:
+    """이 안에서 부위 분석이 뺀 사진 번호를 이유(DropReason)별로 모은 표를 준다.
+
+    판정(check_frames)을 통과했는데 부위 분석에서 빠진 사진이 왜 빠졌는지 기록에 남기려는 것이다.
+    regionOutside는 부위가 화면 밖, eyesClosed는 섀도·아이라인에서 눈 감음,
+    faceSizeUnmatched는 직전·직후 크기 맞추기에서 덜어 냄, heavilyOccluded는 범위를
+    OCCLUDED_MAX보다 많이 가림, faceBlurry는 흐림(drop_blurry)이다.
+    좌우 짝 부위처럼 같은 사진이 두 번 빠져도 한 번만 센다. 밖에서는 아무것도 모으지 않는다.
+    """
+    found: DroppedPhotos = {}
+    token = _dropped.set(found)
+    try:
+        yield found
+    finally:
+        _dropped.reset(token)
+
+
+def _note(rows: Sequence[FrameLandmarks], reason: DropReason) -> None:
+    found = _dropped.get()
+    if found is not None and rows:
+        found.setdefault(reason, set()).update(row.frame_index for row in rows)
 
 
 class RememberedPhotos:
@@ -55,12 +90,14 @@ class RememberedPhotos:
     단계 하나 분량만 기억해도 같은 사진을 다시 읽고 펴지 않는다.
     기억한 지도는 읽기 전용이라, 꺼내 쓰는 쪽이 고치면 오류가 난다.
     지도는 사진 1장에 약 4MB(얼굴 지도 3MB + 가린 칸 지도 1MB)다.
+    얼굴 선명도(sharpness)는 값 하나라 keep장에 묶지 않고 잰 사진을 모두 기억한다.
     """
 
     def __init__(self, load_photo: PhotoLoader, keep: int) -> None:
         self.load_photo = load_photo
         self.keep = keep
         self._kept: OrderedDict[tuple[int, bool], FaceMaps] = OrderedDict()
+        self._sharpness: dict[tuple[int, bool], float | None] = {}
 
     def __call__(self, row: FrameLandmarks) -> np.ndarray:
         return self.load_photo(row)
@@ -84,6 +121,17 @@ class RememberedPhotos:
             self._kept.popitem(last=False)
         return maps
 
+    def sharpness(self, row: FrameLandmarks, occlusion: OcclusionFinder | None) -> float | None:
+        """row 사진의 얼굴 선명도(face_sharpness). 사진마다 한 번만 재고 그다음은 기억한 값을 준다.
+
+        좌우 짝 부위와 지표 도구는 같은 사진을 여러 번 견주므로 다시 재지 않는다.
+        face_maps와 같이 사진 번호와 가림 찾기 여부로 기억한다.
+        """
+        key = (row.frame_index, occlusion is not None)
+        if key not in self._sharpness:
+            self._sharpness[key] = sharpness_on_maps(*self.face_maps(row, occlusion))
+        return self._sharpness[key]
+
 
 def make_face_maps(
     row: FrameLandmarks, load_photo: PhotoLoader, occlusion: OcclusionFinder | None
@@ -99,23 +147,27 @@ def usable_rows(
 ) -> list[FrameLandmarks]:
     """start_ms 뒤부터 end_ms까지(start_ms는 빼고 end_ms는 넣음) 사진 중 부위 분석에 쓸 사진.
 
-    result는 check_frames를 거친 결과다. 판정이 ok이고, 얼굴 크기 비율이 FACE_RATIO_RANGE 안이며,
+    result는 check_frames를 거친 결과다. 판정이 ok이고(얼굴 크기가 튄 사진은 판정에서 이미 빠짐),
     regions의 부위가 모두 화면 밖 점 0개인 사진이다. 화면 밖 점 수가 적혀 있지 않으면 쓰지 않는다.
     regions에 눈(EYE_REGIONS)이 있으면 섀도·아이라인처럼 눈 둘레를 보는 분석이라,
     눈 뜬 정도가 EYE_OPEN_MIN 미만인 사진도 쓰지 않는다. 감은 눈꺼풀은 뜬 눈과 색이 달라서다.
     블러셔처럼 좌우가 있으면 부위마다 따로 불러, 한쪽만 잘린 사진도 다른 쪽에는 쓴다.
+    판정이 ok인데 빠진 사진은 recording_dropped 안이면 regionOutside·eyesClosed로 모은다.
     """
-    low, high = FACE_RATIO_RANGE
     eyes = any(region in EYE_REGIONS for region in regions)
-    return [
-        row
-        for row in result.frames
-        if start_ms < row.timestamp_ms <= end_ms
-        and row.status == "ok"
-        and low <= row.measures.get("faceWidthRatio", 0.0) <= high
-        and all(row.measures.get(outside_count_name(region)) == 0 for region in regions)
-        and (not eyes or eye_openness(row) >= EYE_OPEN_MIN)
-    ]
+    picked, outside, closed = [], [], []
+    for row in result.frames:
+        if not (start_ms < row.timestamp_ms <= end_ms and row.status == "ok"):
+            continue
+        if not all(row.measures.get(outside_count_name(region)) == 0 for region in regions):
+            outside.append(row)
+        elif eyes and eye_openness(row) < EYE_OPEN_MIN:
+            closed.append(row)
+        else:
+            picked.append(row)
+    _note(outside, "regionOutside")
+    _note(closed, "eyesClosed")
+    return picked
 
 
 def eye_openness(row: FrameLandmarks) -> float:
@@ -144,6 +196,7 @@ def match_sizes(
     직후 ÷ 직전이 SIZE_MATCH_RANGE 안이면 그대로다. 밖이면 사진이 더 많은 묶음(같으면 직전)에서
     다른 묶음 가운데 값과의 비율이 범위 안인 사진만 남긴다. 남는 사진이 없으면 그 묶음은
     빈 목록이다. 얼굴 가로가 없는 사진이 있으면 그대로 둔다.
+    덜어 낸 사진은 recording_dropped 안이면 faceSizeUnmatched로 모은다.
     """
     before_rows, after_rows = list(before_rows), list(after_rows)
     if any("faceWidthPx" not in row.measures for row in [*before_rows, *after_rows]):
@@ -154,8 +207,70 @@ def match_sizes(
     if low <= after_mid / before_mid <= high:
         return before_rows, after_rows
     if len(before_rows) >= len(after_rows):
-        return [row for row in before_rows if low <= after_mid / _width(row) <= high], after_rows
-    return before_rows, [row for row in after_rows if low <= _width(row) / before_mid <= high]
+        kept = [row for row in before_rows if low <= after_mid / _width(row) <= high]
+        _note(_left_out(before_rows, kept), "faceSizeUnmatched")
+        return kept, after_rows
+    kept = [row for row in after_rows if low <= _width(row) / before_mid <= high]
+    _note(_left_out(after_rows, kept), "faceSizeUnmatched")
+    return before_rows, kept
+
+
+def drop_blurry(
+    before_rows: Sequence[FrameLandmarks],
+    after_rows: Sequence[FrameLandmarks],
+    load_photo: PhotoLoader,
+    occlusion: OcclusionFinder | None = None,
+) -> tuple[list[FrameLandmarks], list[FrameLandmarks]]:
+    """직전·직후 묶음에서 흐린 사진을 뺀 (직전, 직후) 사진 목록을 돌려준다.
+
+    두 묶음을 합친 사진들의 얼굴 선명도(face_sharpness) 가운데 값의 BLUR_SHARE배 미만인 사진을
+    뺀다. 영상마다 선명도 수준이 달라 고정 값 대신 그 단계 사진들과 견준다.
+    판정 전에 받은 사진을 모두 재면 가림 찾기와 지도 펴기를 한 번 더 해야 해서,
+    부위 분석이 어차피 펴는 사진으로 잰다. 직후만 쓰는 립은 before_rows를 비워 넘긴다.
+    볼 얼굴 칸이 없어 선명도를 못 잰 사진은 견주지 않고 그대로 둔다.
+    뺀 사진은 recording_dropped 안이면 faceBlurry로 모은다.
+    load_photo가 RememberedPhotos이면 펴 둔 지도를 지도 만들기에서 그대로 다시 쓴다.
+    """
+    rows = [*before_rows, *after_rows]
+    sharpness = {id(row): face_sharpness(row, load_photo, occlusion) for row in rows}
+    measured = [value for value in sharpness.values() if value is not None]
+    if not measured:
+        return list(before_rows), list(after_rows)
+    limit = BLUR_SHARE * float(np.median(measured))
+    blurry = {key for key, value in sharpness.items() if value is not None and value < limit}
+    _note([row for row in rows if id(row) in blurry], "faceBlurry")
+    return (
+        [row for row in before_rows if id(row) not in blurry],
+        [row for row in after_rows if id(row) not in blurry],
+    )
+
+
+def face_sharpness(
+    row: FrameLandmarks, load_photo: PhotoLoader, occlusion: OcclusionFinder | None = None
+) -> float | None:
+    """얼굴 선명도. 클수록 또렷하고, 볼 얼굴 칸이 하나도 없으면 None이다.
+
+    사진을 얼굴 지도에 펴서 회색으로 바꾸고, 칸마다 가로·세로 밝기 기울기(소벨)를 제곱해 더한 값의
+    평균을 낸다(경계 세기). 가린 칸과 그 둘레 SHARP_MARGIN_CELLS칸은 뺀다. 손·붓에 초점이 가고
+    얼굴이 흐린 사진에서 또렷한 손을 얼굴로 세지 않기 위해서다. 입술 한 곳만 보면 물건이 입을
+    가리거나 자막이 걸릴 때 틀려서 얼굴 전체를 본다. 근거는 ai/docs/FRAME_SELECTION.md에 있다.
+    load_photo가 RememberedPhotos이면 사진마다 한 번만 잰다.
+    """
+    if isinstance(load_photo, RememberedPhotos):
+        return load_photo.sharpness(row, occlusion)
+    return sharpness_on_maps(*make_face_maps(row, load_photo, occlusion))
+
+
+def sharpness_on_maps(face_map: np.ndarray, covered: np.ndarray | None) -> float | None:
+    """편 (얼굴 지도, 가린 칸 지도)로 얼굴 선명도(face_sharpness)를 낸다. 볼 칸이 없으면 None."""
+    seen = face_cells() if covered is None else face_cells() & ~_grow(covered, SHARP_MARGIN_CELLS)
+    seen = cv2.erode(seen.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    if not seen.any():
+        return None
+    gray = cv2.cvtColor(face_map, cv2.COLOR_RGB2GRAY).astype(np.float32)
+    across = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    down = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    return float((across[seen] ** 2 + down[seen] ** 2).mean())
 
 
 def rows_to_map(rows: Sequence[FrameLandmarks], load_photo: PhotoLoader) -> np.ndarray:
@@ -181,6 +296,7 @@ def rows_to_known_map(
     known_median_map으로 넘긴다. occlusion이 None이면 지도는 rows_to_map과 같고 모름 칸은 없다.
     zone은 부위 분석이 볼 범위(지도 크기 표)이고 known_median_map에 그대로 넘긴다.
     load_photo가 RememberedPhotos이면 기억해 둔 지도를 쓰고, 아니면 사진마다 새로 편다.
+    범위를 많이 가려 통째로 빠진 사진은 recording_dropped 안이면 heavilyOccluded로 모은다.
     """
     maps, covered = [], []
     for row in rows:
@@ -191,6 +307,14 @@ def rows_to_known_map(
         maps.append(face_map)
         if hidden is not None:
             covered.append(hidden)
+    if _dropped.get() is not None and occlusion is not None and zone is not None:
+        crowded = _crowded(
+            np.stack([_grow(mask, OCCLUSION_MARGIN_CELLS) for mask in covered]), zone
+        )
+        _note(
+            [row for row, too_much in zip(rows, crowded, strict=True) if too_much],
+            "heavilyOccluded",
+        )
     return known_median_map(maps, None if occlusion is None else covered, zone)
 
 
@@ -216,8 +340,7 @@ def known_median_map(
         return out, np.zeros(out.shape[:2], dtype=bool)
     hidden = np.stack([_grow(mask, OCCLUSION_MARGIN_CELLS) for mask in covered])
     if zone is not None:
-        crowded = (hidden & zone).sum(axis=(1, 2)) > OCCLUDED_MAX * zone.sum()
-        hidden[crowded] = True
+        hidden[_crowded(hidden, zone)] = True
     unknown = hidden.all(axis=0)
     partly = hidden.any(axis=0) & ~unknown
     if partly.any():
@@ -277,6 +400,18 @@ def remove_lighting(
 
 def _width(row: FrameLandmarks) -> float:
     return row.measures["faceWidthPx"]
+
+
+def _left_out(
+    rows: Sequence[FrameLandmarks], kept: Sequence[FrameLandmarks]
+) -> list[FrameLandmarks]:
+    kept_ids = {id(row) for row in kept}
+    return [row for row in rows if id(row) not in kept_ids]
+
+
+def _crowded(hidden: np.ndarray, zone: np.ndarray) -> np.ndarray:
+    """사진마다(hidden의 첫 축) 범위(zone)의 OCCLUDED_MAX보다 많이 가렸는지 나타내는 표."""
+    return (hidden & zone).sum(axis=(1, 2)) > OCCLUDED_MAX * zone.sum()
 
 
 def _grow(mask: np.ndarray, cells: int) -> np.ndarray:

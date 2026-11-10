@@ -132,6 +132,26 @@ def test_area_stages_are_recorded_in_job_trace(backend, provider):
         assert spans[name].context.trace_id == job.context.trace_id
     assert output(spans["download_frames"]) == {"missing": 0}
     assert output(spans["face_landmarks"]) == {"noFace": 3}
+    assert output(spans["check_frames"]) == {"status": {"noFace": 3}, "reasons": {}}
+
+
+def test_each_area_step_is_recorded_under_the_area_build(backend, provider):
+    """영역을 여러 줄(스레드)로 나눠 만들어도 단계 기록이 이 작업의 영역 만들기 기록 밑에 붙는다.
+
+    단계 기록에는 결과와, 판정을 통과했는데 부위 분석에서 빠진 사진이 이유별로 남는다.
+    """
+    make_client(passing_llm()).post(JOBS, json=frames_request(backend))
+
+    spans = finished(provider)
+    build = spans["build_guide_area"]
+    steps = {name: span for name, span in spans.items() if name.startswith("area_step ")}
+    assert set(steps) == {"area_step s1", "area_step s2"}
+    for span in steps.values():
+        assert span.parent.span_id == build.context.span_id
+        assert span.context.trace_id == build.context.trace_id
+        assert set(output(span)) == {"status", "reasons", "droppedPhotos"}
+    assert metadata(steps["area_step s2"])["step_id"] == "s2"
+    assert output(steps["area_step s2"])["droppedPhotos"] == {}
 
 
 BE_TRACE = "0af7651916cd43dd8448eb211c80319c"

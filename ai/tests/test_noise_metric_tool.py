@@ -32,6 +32,11 @@ def with_red(base: np.ndarray, cells: np.ndarray, amount: int) -> np.ndarray:
     return out
 
 
+def keep_all(before_rows, after_rows):
+    """흐린 사진을 하나도 빼지 않는 keep_sharp. 흐림과 상관없는 시험에서 넘긴다."""
+    return list(before_rows), list(after_rows)
+
+
 def test_untouched_spans_joins_touching_ranges_in_time_order():
     spans = noise_metric.untouched_spans([(30, 40), (0, 10), (10, 20)])
 
@@ -224,7 +229,7 @@ def test_a_false_find_on_one_cheek_counts_on_both_cheeks_as_output(monkeypatch):
     empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
 
     tallies, records = noise_metric.measure_part(
-        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty)
+        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty), keep_sharp=keep_all
     )
 
     left, right = tallies[("leftCheek", 1)], tallies[("rightCheek", 1)]
@@ -281,7 +286,7 @@ def test_a_false_find_above_the_eye_line_counts_as_upper_only(monkeypatch):
     empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
 
     tallies, records = noise_metric.measure_part(
-        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty)
+        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty), keep_sharp=keep_all
     )
 
     for eye in eyeshadow_area.EYES:
@@ -327,11 +332,141 @@ def test_pair_whose_face_sizes_cannot_be_matched_is_skipped_like_the_service(mon
         [(0, 12000)],
         [],
         lambda rows, side: loads.append(side) or (skin_map(), empty),
+        keep_sharp=keep_all,
     )
 
     left = tallies[("leftCheek", 1)]
     assert (left.pairs, left.skipped, left.size_skipped) == (0, 3, 3)
     assert not loads and not records
+
+
+def blush_part_without_finds() -> noise_metric.Part:
+    """쌍마다 아무것도 찾지 않는 블러셔. 사진 고르기만 보는 시험에서 쓴다."""
+
+    def measure(before, after, cheek, unknown=None):
+        area = blush_area.BlushArea(mask=None, reason="blushColorNotFound")
+        return noise_metric.Measure(None, 0.0, None, False, area)
+
+    return noise_metric.Part(
+        "blush", blush_area.CHEEKS, 1000, 1000, 0.5, None, lambda side: [side], measure
+    )
+
+
+def test_pair_leaves_out_the_photos_the_sharp_filter_drops(monkeypatch):
+    """서비스는 크기를 맞춘 뒤 흐린 사진을 빼고(drop_blurry) 남은 사진으로 지도를 만든다.
+
+    직전·직후 창마다 흐린 사진(번호가 음수)을 한 장씩 넣고, 그 사진이 지도 만들기에 한 장도
+    넘어가지 않는지 본다. 흐린 사진을 빼도 남는 사진이 있으면 재지 않은 쌍으로 세지 않는다.
+    """
+
+    def rows(result, start, end, regions):
+        return [SimpleNamespace(frame_index=end), SimpleNamespace(frame_index=-end)]
+
+    def keep_sharp(before_rows, after_rows):
+        return (
+            [row for row in before_rows if row.frame_index > 0],
+            [row for row in after_rows if row.frame_index > 0],
+        )
+
+    monkeypatch.setattr(noise_metric, "usable_rows", rows)
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
+    loaded = []
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    tallies, _ = noise_metric.measure_part(
+        blush_part_without_finds(),
+        None,
+        [(0, 12000)],
+        [],
+        lambda rows, side: loaded.extend(row.frame_index for row in rows) or (skin_map(), empty),
+        keep_sharp=keep_sharp,
+    )
+
+    left = tallies[("leftCheek", 1)]
+    assert left.pairs == 3 and (left.skipped, left.blur_skipped) == (0, 0)
+    assert loaded and all(index > 0 for index in loaded)
+
+
+def test_pair_left_without_a_sharp_photo_on_one_side_is_skipped_like_the_service(monkeypatch):
+    """흐린 사진을 빼고 한쪽이 비면 서비스는 noUsableFrame으로 기본 가이드를 쓴다.
+
+    못 찾음으로 세면 헛것 비율이 인위적으로 낮아지므로, 재지 않은 쌍(skipped)과 흐림으로 뺀 쌍
+    (blur_skipped)으로 세고 줄에도 blurSkipped로 남기는지 본다.
+    """
+    monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
+    loads = []
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    part = blush_part_without_finds()
+
+    tallies, records = noise_metric.measure_part(
+        part,
+        None,
+        [(0, 12000)],
+        [],
+        lambda rows, side: loads.append(side) or (skin_map(), empty),
+        keep_sharp=lambda before_rows, after_rows: (list(before_rows), []),
+    )
+
+    left = tallies[("leftCheek", 1)]
+    assert (left.pairs, left.skipped, left.size_skipped, left.blur_skipped) == (0, 3, 0, 3)
+    assert not loads and not records
+    row = next(
+        r
+        for r in noise_metric.summarize(part, tallies)
+        if (r["side"], r["gapSeconds"]) == ("leftCheek", 1)
+    )
+    assert (row["skipped"], row["sizeSkipped"], row["blurSkipped"]) == (3, 0, 3)
+
+
+def test_lip_hands_only_its_photos_to_the_sharp_filter(monkeypatch):
+    """서비스 립은 직전 창이 없어 직후 사진에서만 흐린 사진을 뺀다(drop_blurry([], rows)).
+
+    도구도 립은 직전 목록을 비워 넘기는지 본다.
+    """
+    monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
+    handed = []
+
+    def keep_sharp(before_rows, after_rows):
+        handed.append((list(before_rows), list(after_rows)))
+        return list(before_rows), list(after_rows)
+
+    part = noise_metric.Part(
+        "lip", ("lipsOuter",), 0, 1000, 0.5, None, lambda side: [side], lambda *args: None
+    )
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    noise_metric.measure_part(
+        part,
+        None,
+        [(0, 12000)],
+        [],
+        lambda rows, side: (skin_map(), empty),
+        keep_sharp=keep_sharp,
+    )
+
+    assert handed and all(pair == ([], ["photo"]) for pair in handed)
+
+
+def test_sharp_filter_hands_the_photo_bundle_to_the_service_drop_blurry(monkeypatch):
+    """도구가 서비스와 똑같이 흐린 사진을 빼도록 sharp_filter는 서비스 drop_blurry를 그대로 부른다.
+
+    사진마다 선명도를 한 번만 재는 일은 사진 꾸러미(RememberedPhotos)가 하므로 꾸러미를 그대로
+    넘기는지 본다.
+    """
+    calls = []
+
+    def drop_blurry(before_rows, after_rows, load_photo, occlusion):
+        calls.append((before_rows, after_rows, load_photo, occlusion))
+        return ["kept before"], ["kept after"]
+
+    monkeypatch.setattr(noise_metric, "drop_blurry", drop_blurry)
+    photos, occlusion = object(), object()
+
+    kept = noise_metric.sharp_filter(photos, occlusion)(["before"], ["after"])
+
+    assert kept == (["kept before"], ["kept after"])
+    assert calls == [(["before"], ["after"], photos, occlusion)]
 
 
 def test_flats_to_map_matches_the_service_map_and_drops_a_crowded_photo(monkeypatch):
