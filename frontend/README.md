@@ -320,6 +320,18 @@ try {
 
 - 공통 코드는 `backend/src/main/java/com/mairor/backend/common/error/ErrorCode.java`, 회원 코드는 같은 `backend` 패키지 아래 `users/service`와 `users/support/AgreementPolicy.java`, 파우치 코드는 `pouch/service`에 있다. 코드가 추가되면 이 표에 같이 적는다
 
+## 얼굴 등록 BE 연동 (S15P31A306-396)
+
+- 현재 브랜치에 얼굴 등록 3개 API가 구현되어 있으며 배포 확인과 실제 FE 연결 완료 여부는 별개다. 사진 바이너리 GET을 포함한 실행·사진 관련 7개 API는 후속 작업이다. 범위와 상태는 [BE 구현 현황](../backend/docs/implementation-status.md)을 참고한다.
+- 카메라 제어·촬영 버튼/자동 촬영 트리거·실시간 촬영 조건 판정은 FE가 담당한다. BE는 보내온 판정·동의와 사진 파일을 검증·저장하며 조명·배경·화이트밸런스를 직접 분석/보정하지 않는다.
+- POST /api/v1/users/me/face-registrations는 multipart image(실제 JPEG/PNG, 최대 5 MiB)와 application/json metadata를 받는다. metadata는 videoId, 선택 guideId, noticeVersion(현재 v1), agreed=true, checks(lighting·distance·frontal·unobstructed 모두 true, makeupDetected boolean)다.
+- 성공 응답의 faceRegistrationId를 후속 실행 생성에 사용한다. GET/DELETE /api/v1/users/me/face-registrations/{faceRegistrationId}는 본인 리소스만 허용하며, 미연결·진행 중 등록은 원래 세션에서만 접근한다. 요청은 세션 쿠키를 포함하고 변경 요청에는 CSRF 토큰을 보낸다.
+- 400 FACE_CONSENT_REQUIRED/FACE_NOTICE_VERSION_INVALID/FACE_CONDITIONS_NOT_MET는 동의·안내 버전·촬영 조건을 다시 확인한다. 413 PAYLOAD_TOO_LARGE/415 UNSUPPORTED_MEDIA_TYPE는 사진을 다시 준비한다. 409 FACE_REGISTRATION_IN_USE는 실행 중도 종료 또는 리포트 삭제 경로를 사용한다.
+- DELETE의 파일 정리가 끝나지 않으면 503 SERVICE_UNAVAILABLE이며 같은 ID로 재시도한다. 정리 대기 중 GET과 삭제 완료 뒤 재요청은 404다. 재촬영 등록 자체가 실패하면 이전 유효 등록은 유지된다.
+- 사진 메타데이터의 url은 인증이 필요한 /api/v1/users/me/photos/{photoId}다. 이 이미지 바이트 API와 실행 연결은 후속 395에서 제공하므로 얼굴 등록·가이드 실행 전체 연동은 395 반영 후 확인한다.
+- 미연결 얼굴 등록은 고정 30분·1시간 만료 없이 원래 세션 종료까지 유지한다. 세션 종료 후에는 새로 얼굴을 등록한다. 이미 시작한 실행과 완료 리포트의 사진 수명은 각각 실행 종료/리포트 삭제 정책을 따른다.
+- metadata는 `new Blob([JSON.stringify(metadata)], { type: 'application/json' })`으로 FormData에 넣고 image를 함께 첨부한다. FormData 전송 시 Content-Type 헤더는 브라우저가 boundary와 함께 만들도록 직접 지정하지 않는다. videoId는 내부 UUID이며 YouTube 영상 ID가 아니다.
+
 ## 규칙
 
 - **정적 내보내기(`output: 'export'`)** 로 배포한다. API 라우트, 서버 액션, 쿠키 등 서버 기능은 쓰지 않는다. API는 BE 서버를 호출한다.

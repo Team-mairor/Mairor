@@ -48,6 +48,17 @@ public class LocalObjectStorage implements ObjectStorage {
     }
   }
 
+  /** 이미 없는 파일의 삭제도 성공이다. */
+  @Override
+  public void delete(String key) {
+    Path target = resolve(key);
+    try {
+      Files.deleteIfExists(target);
+    } catch (IOException e) {
+      throw new StorageException("로컬 객체를 삭제하지 못했습니다", e);
+    }
+  }
+
   /** 로컬은 만료가 없다. */
   @Override
   public URI presignGet(String key, Duration ttl) {

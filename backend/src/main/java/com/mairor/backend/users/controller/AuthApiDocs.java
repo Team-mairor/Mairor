@@ -45,7 +45,7 @@ public final class AuthApiDocs {
               mediaType = MediaType.APPLICATION_JSON_VALUE,
               schema = @Schema(implementation = ErrorResponse.class),
               examples = @ExampleObject(name = "CSRF_INVALID", value = AuthApiDocs.CSRF_INVALID)))
-  @interface CsrfRejected {}
+  public @interface CsrfRejected {}
 
   /** 없는 값·이미 끝난 기기·다른 회원의 기기를 구분하지 않는 404. */
   @Retention(RetentionPolicy.RUNTIME)

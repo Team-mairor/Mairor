@@ -103,6 +103,21 @@ public class GlobalExceptionHandler {
         List.of(new ErrorResponse.FieldError(e.getParameterName(), "필수 값입니다.")));
   }
 
+  @ExceptionHandler(
+      org.springframework.web.multipart.support.MissingServletRequestPartException.class)
+  public ResponseEntity<ErrorResponse> handleMissingPart(
+      org.springframework.web.multipart.support.MissingServletRequestPartException e) {
+    return validationFailed(
+        List.of(new ErrorResponse.FieldError(e.getRequestPartName(), "필수 파일 또는 메타데이터입니다.")));
+  }
+
+  @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+  public ResponseEntity<ErrorResponse> handleUploadTooLarge(
+      org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+    return ResponseEntity.status(413)
+        .body(ErrorResponse.of("PAYLOAD_TOO_LARGE", "사진 업로드 크기가 허용 범위를 초과했습니다.", List.of()));
+  }
+
   /** 요청 본문을 읽을 수 없음 (JSON 문법 오류, 빈 본문 등). */
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException e) {

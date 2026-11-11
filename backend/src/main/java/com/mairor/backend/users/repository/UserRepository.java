@@ -1,10 +1,12 @@
 package com.mairor.backend.users.repository;
 
 import com.mairor.backend.users.entity.User;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
   /** 정규화한 이메일로 회원을 조회한다. */
   Optional<User> findByEmail(String email);
+
+  /** 회원 소유 리소스의 생성/교체를 짧은 쓰기 트랜잭션에서 직렬화한다. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select u from User u where u.id = :id")
+  Optional<User> findByIdForUpdate(@Param("id") UUID id);
 
   /**
    * 회원의 현재 비밀번호 버전. 로그인이 세션을 발급한 뒤, 비밀번호를 확인할 때 읽어 둔 값과 같은지 다시 확인하는 데 쓴다. 엔티티를 거치지 않고 값 하나만 읽는다.

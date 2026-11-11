@@ -40,7 +40,7 @@ import tools.jackson.databind.ObjectMapper;
     properties = {
       "spring.jpa.hibernate.ddl-auto=validate",
       "spring.sql.init.mode=always",
-      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql,classpath:db/schema/pouch.sql",
+      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql,classpath:db/schema/pouch.sql,classpath:db/schema/camera.sql",
       "app.security.allowed-origins=http://localhost:3000"
     })
 @Transactional

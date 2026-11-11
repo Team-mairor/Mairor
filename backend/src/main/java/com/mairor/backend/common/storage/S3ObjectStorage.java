@@ -9,6 +9,7 @@ import java.time.Duration;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
@@ -67,6 +68,17 @@ public class S3ObjectStorage implements ObjectStorage, AutoCloseable {
           RequestBody.fromFile(source));
     } catch (SdkException e) {
       throw new StorageException("S3 에 올리지 못했습니다: " + key, e);
+    }
+  }
+
+  @Override
+  public void delete(String key) {
+    try {
+      client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+    } catch (NoSuchKeyException e) {
+      // 같은 정리 요청이 반복돼도 이미 없는 객체는 삭제 완료다.
+    } catch (SdkException e) {
+      throw new StorageException("S3 객체를 삭제하지 못했습니다", e);
     }
   }
 

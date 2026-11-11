@@ -10,6 +10,8 @@
 | AI 서버 API (BE ↔ AI) | [ai-api.md](ai-api.md) |
 | 영상 전처리 노트북 API (노트북 ↔ BE) | [processor-api.md](processor-api.md) |
 
+파우치·추천 매칭·얼굴 등록·가이드 실행의 코드 구현/후속 작업 및 머지·운영 확인 상태는 [BE 구현 현황](../../backend/docs/implementation-status.md)을 참고한다. 명세에 있는 API가 모두 구현·배포된 것은 아니다.
+
 - 이 폴더의 파일이 원본이다. 노션에는 회의록·ADR·Git Convention처럼 명세가 아닌 자료만 두고, 명세를 바꿀 때는 이 파일을 바로 고친다. 노션에 옮기거나 '로컬 수정' 같은 표시를 붙이지 않는다.
 - 바뀐 이력은 git log와 MR, Jira 일감으로 본다.
 - 처음에 노션에서 옮겨 와서 `<mention>`, `<callout>`, `<code>` 같은 노션 태그가 남아 있다. GitLab 화면에서 일부 서식이 다르게 보일 수 있다.

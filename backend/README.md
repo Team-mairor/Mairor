@@ -41,6 +41,8 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 
 MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린다. 구성과 실패 시 대응은 [ci/README.md](../ci/README.md).
 
+Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8개로 둔다. JPA 컨텍스트와 PostgreSQL 컨테이너의 누적 메모리를 줄이기 위한 테스트 실행 설정이다.
+
 ## 환경변수
 
 `.env.example` 을 `.env` 로 복사해서 쓴다. `application.yml` 이 `backend/.env` 를 읽는다.
@@ -89,6 +91,14 @@ MR·master 에서는 CI 가 같은 명령(`spotlessCheck test build`)을 돌린�
 | `APP_STORAGE_TYPE` | dev `local` / prod `s3` | 객체 저장소. `local` 은 아래 폴더, `s3` 는 버킷(자격 증명은 AWS 기본 공급자 체인, 운영은 EC2 역할) |
 | `APP_STORAGE_LOCAL_ROOT` | `<임시 폴더>/mairor-storage` | `local` 저장소의 뿌리 폴더. 저장소 키가 이 아래 상대 경로다 |
 | `APP_STORAGE_S3_BUCKET` | prod `mairor-prod-media` | `s3` 저장소 버킷. `s3` 인데 비어 있으면 기동 실패 |
+| `PHOTO_STAGING_TIMEOUT` | `10m` | 도메인에 연결되지 않은 업로드 원장/파일의 정리 대기 시간. 연결된 얼굴 사진 보관 기간과 별개이며 진행 중 업로드를 강제 중단하지 않는다 |
+| `PHOTO_CLEANUP_ENABLED` | `true` | 만료 업로드·삭제 대기 사진 정리 작업. 테스트·점검 외에는 켠다 |
+| `PHOTO_CLEANUP_INTERVAL` / `PHOTO_CLEANUP_RETRY_DELAY` | 각각 `1m` | 정리 실행 간격 / 파일 삭제 실패 후 재시도 간격 |
+| `PHOTO_CLEANUP_BATCH_SIZE` | `50` | 한 주기에 처리할 사진 수 상한 |
+| `PHOTO_MAX_DECODED_PIXELS` | `25000000` | JPEG/PNG 디코딩 메모리 보호 상한(width×height). 파일 5 MiB 제한과 별도로 검사하고 초과하면 413 |
+| `FACE_REGISTRATION_NOTICE_VERSION` | `v1` | 얼굴 등록 안내의 현재 동의 버전. FE metadata.noticeVersion과 일치해야 한다 |
+| `FACE_REGISTRATION_ORPHAN_CLEANUP_ENABLED` | `true` | 세션이 이미 사라진 미연결 등록의 누락 정리. 테스트 외에는 켠다 |
+| `FACE_REGISTRATION_CLEANUP_INTERVAL` / `FACE_REGISTRATION_CLEANUP_BATCH_SIZE` | `1m` / `50` | 누락 세션 확인 주기와 한 번에 처리할 등록 수. 사진 보관 기한을 뜻하지 않는다 |
 | `ANALYSIS_POLL_INTERVAL` | `5s` | worker 가 대기 작업을 확인하는 간격 |
 | `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지운다 |
 | `FFPROBE_PATH` | `ffprobe` | ffprobe 실행 파일. 운영 이미지에는 들어 있다. 로컬에서 worker 를 돌리려면 ffmpeg 를 설치한다 |
@@ -299,6 +309,24 @@ Google 계정으로 로그인·가입한다(S15P31A306-208). 로그인 시작과
 - **GCP 설정**: OAuth 클라이언트(웹 애플리케이션)를 만들고 승인된 리디렉션 URI 에 `GOOGLE_REDIRECT_URI` 값을 환경마다 등록한다(dev `http://localhost:3000/api/v1/users/oauth/google/callback`). 범위는 `openid email profile`. 동의 화면이 테스트 상태면 등록한 테스트 사용자만 로그인된다. 로컬에서는 FE 개발 서버가 `/api` 를 BE 로 넘겨야 한다(FE `API_PROXY_TARGET=http://localhost:8080`).
 - **테스트**: 실제 Google 대신 `FakeGoogle`(JDK HTTP 서버 + 테스트 RSA 키)이 토큰·공개키 주소를 대신한다. 서명·nonce·aud 검증까지 실제 경로로 돈다.
 
+## 비공개 사진 저장 기반 (S15P31A306-396)
+
+파우치·매칭·얼굴 등록의 구현 범위와 가이드 실행·리포트 후속 작업은 [BE 구현 현황](docs/implementation-status.md)에서 확인한다. 구현·MR·배포·실제 S3 검증은 각각 별도로 기록한다.
+
+Swagger 확인·실패 응답·운영 DB 사전 적용 절차는 [얼굴 등록 API 확인·배포 인계](docs/face-registration-operations.md)를 따른다.
+
+배포 시 `deploy/check-camera-schema.sh`가 기존 BE 슬롯 교체 전 얼굴 등록 테이블·핵심 제약을 읽기 전용 검사한다. 마이그레이션 자동 적용은 하지 않는다. 사진 삭제 실패·장기 대기 지표와 임시 업로드 파일 복구 정책도 위 문서에 정리했다.
+
+- 파일명·요청 MIME을 저장소 key로 사용하지 않는다. 실제 JPEG/PNG 디코딩·파일 크기(5 MiB)·설정된 픽셀 수를 검사하고 서버 임시 파일은 업로드 후 닫는다. 실제 디코더가 확인한 MIME·가로·세로·파일 크기를 DB에 남긴다.
+- PhotoUploadService.store는 도메인 저장 트랜잭션 밖에서 호출한다. PENDING_UPLOAD 원장을 먼저 별도 커밋하고 업로드 중 사진 행 하나를 잠가 정리 작업과 충돌하지 않게 한다. 파일 전송 성공 시 AVAILABLE이 되며, 연결 전까지 staging 만료 시각을 유지한다.
+- 얼굴 등록/실행 저장 트랜잭션에서 PhotoRecordService.attach로 사진 소유자·원래 세션·상태를 확인하고 연결한다. 도메인 저장 실패는 트랜잭션이 끝난 뒤 PhotoUploadService.discard로 보상한다. 프로세스가 중단되면 만료된 PENDING_UPLOAD/미연결 AVAILABLE 원장을 정리 작업이 복구한다.
+- 파일 정리 요청은 접근을 막는 CLEANUP_PENDING 상태로 먼저 커밋한다. 삭제 성공 후 DELETED로 바꾸며, 저장소 장애는 시도 횟수·다음 시각을 DB에 남겨 재시도한다. 작업 중인 사진 행은 SKIP LOCKED로 건너뛰고 다음 주기에 처리한다. 이미 없는 객체 삭제는 성공이다.
+- 운영 EC2의 저장소 역할에는 photos/*의 s3:PutObject·s3:GetObject뿐 아니라 **s3:DeleteObject** 권한이 필요하다. 코드 변경만으로 AWS 권한이 적용되는 것은 아니므로 배포 담당자가 확인한다. 이 단계에서는 운영 버킷·IAM을 수정하지 않았다.
+- 얼굴 등록 POST는 multipart image와 application/json metadata를 받는다. GET/DELETE는 경로 ID를 사용한다. 새 등록 성공 후에만 이전 미연결 사진을 정리한다. 파일 삭제 실패 시 GET을 막고 DELETE는 503으로 응답하며 같은 ID로 재시도한다. 사진 바이트를 내려주는 API-GUIDE-008은 395에서 구현한다.
+- 미연결 REGISTERED 사진은 고정 시간 만료 없이 원래 로그인 세션 종료까지 보관한다. FaceRegistrationSessionEndHook이 해당 userId+sessionId의 미연결 등록만 폐기하고 사진 삭제를 DB에 예약한다. 파일 삭제는 PhotoCleanupScheduler가 재시도하며, LINKED/RETAINED는 이 훅으로 삭제하지 않는다. 실행에 연결된 미완료 사진은 395의 실행 종료 처리에서 정리한다.
+- FaceRegistrationOrphanScheduler는 세션 행이 사라진 REGISTERED만 주기적으로 정리해 종료 훅 누락을 복구한다. 세션 행이 살아 있는 등록은 생성 시각이 오래돼도 정리하지 않는다. 유휴 만료는 기존 ExpiredSessionSweeper가 종료 훅을 호출한 뒤 세션을 지우는 순서를 유지한다.
+- 395는 FaceRegistrationExecutionService의 link/retain/abandon을 실행 DB 트랜잭션 안에서 호출해야 한다(MANDATORY). 회원 → 실행/얼굴 등록 → 사진 잠금 순서를 지키며, 같은 얼굴 등록의 실행 재사용은 FACE_REGISTRATION_ALREADY_USED로 거절한다. 완료 보관 전환과 중도 종료 삭제 예약은 실행 저장과 함께 롤백되고 반복 호출은 안전하다. 이 브랜치에는 executions 테이블이나 실행 API가 추가되지 않으며 실행 FK는 395에서 적용한다.
+
 ## DB 스키마
 
 S15P31A306-326: 기존 DB에는 배포 전에 `psql -f db/upgrade/326-product-name-compact.sql`을 적용한다. `products.name_compact`는 `name_normalized`에서 공백을 제거해 DB가 자동 계산하는 파생 검색 키다. 생성 컬럼이므로 구버전 앱과 기존 샘플 SQL의 제품명 입력·수정에도 값이 자동 반영된다. 이 변경은 기존 제품 행의 파생 키 보강만 하며 제품 레코드 추가, 시드, 수집은 포함하지 않는다.
@@ -313,12 +341,14 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값), `catalog_import_runs` (카탈로그 적재 실행), `catalog_import_items` (적재 실행의 건) |
 | `db/schema/analysis.sql` | `videos` (유튜브 영상), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
 | `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
+| `db/schema/camera.sql` | `photos` (비공개 사진 메타데이터·파일 정리 상태), `face_registrations` (실행별 기준 얼굴 등록·동의·촬영 조건) |
 
-- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`, `psql -d <DB> -f analysis.sql`, `psql -d <DB> -f pouch.sql` (이 순서. `analysis.sql`이 `users`를, `pouch.sql`이 `users`·카탈로그 분류/제품/호수 테이블을 참조한다)
+- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`, `psql -d <DB> -f analysis.sql`, `psql -d <DB> -f pouch.sql`, `psql -d <DB> -f camera.sql` (이 순서. `analysis.sql`이 `users`를, `pouch.sql`이 `users`·카탈로그 분류/제품/호수 테이블을 참조한다)
 - **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼·테이블이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column`·`missing table` 로 앱 기동을 막는다.
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
+| 사진 메타데이터·얼굴 등록 테이블 | S15P31A306-396 | **MR 머지·배포 전** `users`·`videos`·`guides`가 있는 DB에서 `SELECT to_regclass('public.photos'), to_regclass('public.face_registrations');`가 모두 NULL인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/396-face-registrations.sql`. 파일은 한 트랜잭션에서 photos → face_registrations → 인덱스 순서로 생성한다. 새 테이블뿐이므로 기존 데이터 위반 행이나 변환은 없고, 이미 존재하면 재적용하지 않는다. 실행 테이블 FK는 395에서 추가한다. |
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
 | 개인 파우치·회원별 버전 기반 | S15P31A306-211 | 먼저 `ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;` 다음 `pouch.sql` 전체. 기존 회원도 버전 0으로 시작한다. 기존 카탈로그 테이블은 변경·재적재하지 않는다 |
 | 호수별 색 칸: `products.image_url`·`sale_status`, `product_shades.source_option_id`, 테이블 `product_shade_colors`·`product_shade_option_aliases`, 수집 출처 유니크 인덱스 2개 | S15P31A306-294 | `psql -f db/upgrade/294-product-shade-colors.sql` (컬럼·테이블·인덱스 추가뿐이라 옛 버전 앱과 함께 돌아도 깨지지 않는다. 옛 `product_shades.color_*` 는 지우지 않는다). 적용 전에 ① `SELECT source, source_product_id, count(*) FROM products WHERE source IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;` 가 0건인지(있으면 새 유니크 인덱스가 만들어지지 않아 파일 전체가 롤백된다) ② `SELECT count(*) FROM product_shades WHERE color_hex IS NOT NULL;` 로 옮길 대표 색이 있는지 센다. ②가 0 이 아니면 **같은 시점에** `psql -f db/upgrade/294-product-shade-colors-data.sql` 로 호수마다 색 칸 1개로 옮긴다(다시 적용해도 된다). 옮기지 않으면 그 호수의 `colors` 는 빈 목록으로 나온다 |
@@ -351,6 +381,7 @@ SELECT EXISTS (
 - 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).
 - 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest`·`ProductsSchemaSqlTest`·`AnalysisSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인). `validate` 는 엔티티 전체를 검사하므로 스키마 SQL 을 추가하면 `schema-locations` 를 쓰는 모든 테스트에 같이 넣는다(`grep -rn schema-locations src/test`).
 - `analysis.sql` 의 부분 유일 인덱스 두 개(`uk_analysis_jobs_video_active`, `uk_guides_video_approved`)와 `increment_guide_reference_version_for_color_change` 트리거는 JPA로 표현할 수 없어 SQL에만 있다. `ddl-auto=update`로 만든 dev DB에는 트리거가 없으므로 색 변경 버전 갱신까지 확인하려면 SQL 초기화 DB를 쓰거나 `analysis.sql`의 트리거 정의를 적용한다.
+- `camera.sql`의 미연결 얼굴 등록 부분 유일 인덱스(`uk_face_registrations_registered`), 사진 소유자·세션 복합 FK 및 CHECK도 SQL 전용이다. dev의 `ddl-auto=update`만으로 이 규칙이 만들어지지 않으므로 SQL 초기화 DB에서 검증한다. 이미지 바이트는 DB에 저장하지 않으며 `session_id`는 내부 인가용으로만 사용한다.
 - Flyway 를 도입하면 `db/migration/V<번호>__*.sql` 로 옮긴다. 번호는 Flyway 담당과 맞춘다.
 
 ### 개인 파우치 저장 기반 (S15P31A306-211 · 2단계)

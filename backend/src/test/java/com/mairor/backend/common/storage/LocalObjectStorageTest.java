@@ -50,6 +50,19 @@ class LocalObjectStorageTest {
   }
 
   @Test
+  void deleteIsIdempotentAndRejectsKeysOutsideTheRoot() throws IOException {
+    Path source = Files.writeString(work.resolve("photo.png"), "image");
+    LocalObjectStorage storage = new LocalObjectStorage(root);
+    storage.upload(source, "photos/test.png", "image/png");
+    storage.delete("photos/test.png");
+    storage.delete("photos/test.png");
+    assertThat(storage.exists("photos/test.png")).isFalse();
+    assertThatThrownBy(() -> storage.delete("../photo.png"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(source).hasContent("image");
+  }
+
+  @Test
   void keyOutsideTheRootIsRejected() {
     LocalObjectStorage storage = new LocalObjectStorage(root);
 

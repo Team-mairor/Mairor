@@ -32,6 +32,9 @@ public interface ObjectStorage {
    */
   void upload(Path source, String key, String contentType);
 
+  /** 객체를 삭제한다. 이미 없으면 성공이며, 저장소 장애는 StorageException으로 알린다. */
+  void delete(String key);
+
   /**
    * 로그인 없이 내려받을 수 있는 주소. S3 는 사전 서명 URL, 로컬은 {@code file:} URI 다.
    *

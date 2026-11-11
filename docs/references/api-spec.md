@@ -6,6 +6,8 @@
 
 ## 0. 구현 규칙 (AI·팀원 공통)
 
+구현·머지·배포 상태는 [BE 구현 현황](../../backend/docs/implementation-status.md)에서 구분한다. 현재 코드에 얼굴 등록 3개 API는 구현되어 있고, 인증된 사진 바이너리 GET을 포함한 실행·사진 관련 7개 API는 후속 작업이다. 아래 실행·리포트 계약은 구현 완료 표기가 아니다.
+
 - 정책 충돌 시 기능명세서 > 이 문서. 충돌을 발견하면 임의 해석하지 말고 문서 수정 요청
 - 5절 미결 항목은 임의 결정 금지. 수치는 설정값으로 분리, 분기는 기본 동작만 구현하고 <code>TODO(확인 필요 N)</code> 표기 (N = 기능명세서 번호)
 - 응답·요청 필드는 4절 모델 기준. 모델에 없는 필드를 추측해 추가하지 않는다
@@ -493,9 +495,9 @@ API-GUIDE-005 · PUT /api/v1/users/me/executions/\{executionId\}/steps/\{stepId\
 관련 기능: GUIDE-008 단계 촬영
 
 - 회원·CSRF 필요. Path executionId:string·stepId:string 필수. multipart image:file 필수(API-CAMERA-001과 동일 필드명), JPEG/PNG 최대5MiB. 200 Photo(새 사진·교체 동일).
-- 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE, 409 GUIDE\_PHOTO\_CONSENT\_REQUIRED(동의 아님), 413 PAYLOAD\_TOO\_LARGE, 415 UNSUPPORTED\_MEDIA\_TYPE.
-- 제품 없이 건너뛴(skipped) 단계도 사진을 받는다. 모든 단계를 촬영한다.
-- 오버레이·UI 없는 캡처만 업로드. 이미지 디코딩·형식·크기 검증. 단계당 현재 사진1개, 새 파일 저장·연결 성공 후 이전 파일 정리. 실패 시 기존 참조 유지. UI는 성공이면 바로 다음, 실패면 다시 찍기만 둔다(사진 없이 진행 없음).
+- 파일 크기와 별도로 서버의 디코딩 픽셀 수 상한을 초과하면 413 PAYLOAD_TOO_LARGE다. 실제 이미지 형식을 디코딩해 검사하며 파일명이나 요청 MIME만으로 판정하지 않는다.
+- 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE, 409 GUIDE\_PHOTO\_CONSENT\_REQUIRED(동의 아님), 409 GUIDE\_STEP\_PHOTO\_NOT\_ALLOWED(skipped), 413 PAYLOAD\_TOO\_LARGE, 415 UNSUPPORTED\_MEDIA\_TYPE.
+- 오버레이·UI 없는 캡처만 업로드. 이미지 디코딩·형식·크기 검증. 단계당 현재 사진1개, 새 파일 저장·연결 성공 후 이전 파일 정리. 실패 시 기존 참조 유지. UI는 성공 확인/다시 찍기/다음, 실패 재시도/사진 없이 진행을 구분.
 </toggle>
 
 <toggle>
@@ -729,16 +731,18 @@ POST /api/v1/users/me/face-registrations
 - 관련 기능: CAMERA-005 · GUIDE-002 · VIDEO-004 · 회원
 - 요청: <code>multipart/form-data</code>
   - <code>image</code> file Y — 정면 1장, JPEG·PNG, 최대 5 MiB, UI·오버레이 제외
-  - <code>metadata</code> JSON Y — <code>videoId</code> string Y(분석 대기에도 확보되는 내부 영상 ID) · <code>guideId</code> string N/null(이미 승인 가이드가 있을 때만) · <code>noticeVersion</code> string Y(등록 전 용도·완료 리포트 보관·삭제 안내 버전) · <code>agreed</code> boolean Y(true 필수, 동의 시각은 서버 기록) · <code>checks</code> object Y: <code>lighting</code>·<code>distance</code>·<code>frontal</code>·<code>unobstructed</code> boolean(필수 4개 모두 true), <code>makeupDetected</code> boolean
+  - <code>metadata</code> JSON Y — part Content-Type은 `application/json`. <code>videoId</code> UUID string Y(분석 대기에도 확보되는 내부 영상 ID, YouTube ID 아님) · <code>guideId</code> UUID string N/null(같은 영상의 승인 가이드만 허용) · <code>noticeVersion</code> string Y(등록 전 용도·완료 리포트 보관·삭제 안내 버전, 최대 50자, 현재 기본 v1) · <code>agreed</code> boolean Y(true 필수, 동의 시각은 서버 기록) · <code>checks</code> object Y: <code>lighting</code>·<code>distance</code>·<code>frontal</code>·<code>unobstructed</code> boolean Y(필수 4개 모두 true), <code>makeupDetected</code> boolean Y
 - 성공 201: FaceRegistration(status=REGISTERED, executionId=null)
-- 오류: 400 <code>FACE_CONDITIONS_NOT_MET</code>(필수 조건 false) · 400 <code>FACE_NOTICE_VERSION_INVALID</code> · 404 <code>NOT_FOUND</code>(videoId 또는 지정한 guideId) · 400 <code>FACE_CONSENT_REQUIRED</code>(agreed가 true 아님) · 413 · 415
+- 오류: 400 <code>VALIDATION_FAILED</code>(필수값/part 누락, UUID 형식·입력 제약 오류) · 400 <code>FACE_CONDITIONS_NOT_MET</code>(필수 조건 false) · 400 <code>FACE_NOTICE_VERSION_INVALID</code> · 404 <code>NOT_FOUND</code>(없는 videoId, 없는/미승인/다른 영상의 guideId) · 400 <code>FACE_CONSENT_REQUIRED</code>(agreed=false) · 413 <code>PAYLOAD_TOO_LARGE</code> · 415 <code>UNSUPPORTED_MEDIA_TYPE</code> · 503 <code>SERVICE_UNAVAILABLE</code>(사진 저장소 처리 실패). 필수 boolean의 누락/null은 입력 검증 오류다. 공통 401/403 정책을 적용한다.
+- 파일 크기와 별도로 서버의 디코딩 픽셀 수 상한을 초과하면 413 PAYLOAD_TOO_LARGE다. 실제 JPEG/PNG가 아니거나 디코딩에 실패하면 415 UNSUPPORTED_MEDIA_TYPE이다. 저장 MIME·해상도는 실제 파일에서 확인한다.
 - 정책
   - 실행마다 새로 등록하고 API-GUIDE-001의 faceRegistrationId로 1회 연결. 다른 실행 재사용 금지
   - makeupDetected=true여도 등록(권장 조건). 화면은 '맨얼굴일수록 색 비교가 정확해요' 안내만
-  - 같은 세션·videoId로 새로 등록하면 이전 미연결 등록은 폐기(다시 촬영). 실행에 연결되지 않은 등록은 내부 정리(시점 비기능)
-  - 촬영 조건 판정은 클라이언트 결과를 기록. 서버 재검증 여부는 미정
+  - 같은 세션·videoId로 새로 등록하면 이전 미연결 등록은 새 등록 성공 후 폐기(다시 촬영).
+  - 실행에 연결되지 않은 등록은 별도의 고정 시간 만료 없이 원래 로그인 세션 종료까지 유지한다. 로그아웃·기기/전체 로그아웃·로그인으로 세션 대체·절대/유휴 만료 시 접근을 차단하고 파일 정리를 예약한다. 세션이 사라졌는데 종료 처리가 누락된 등록은 주기적으로 복구한다. 삭제 실패는 내부 재시도 대상이며 실제 파일 삭제까지 시간이 걸릴 수 있다.
+  - 카메라 제어·촬영 트리거·실시간 조건 판정은 클라이언트가 처리한다. 현 BE는 클라이언트 판정과 동의를 검증·기록하고 이미지 형식·용량·해상도를 검사한다. 사진 자체의 얼굴/조명/배경색/화이트밸런스 분석·보정은 구현되어 있지 않다.
   - 용도는 해당 실행의 조명·색온도·밝기 기준(CAMERA-004 환경 알림, GUIDE-013 보정 후보). 얼굴 특징점·프로필은 저장하지 않음
-  - 저장 위치·암호화·보관 기간은 비기능명세에서 확정
+  - 미연결 등록은 원래 세션 종료까지, 완료 리포트 연결 등록은 리포트 삭제까지 보관한다. 저장소 암호화 등 운영 기준은 비기능명세에서 확정한다.
 
 ### API-CAMERA-002 · 얼굴 등록 조회
 
@@ -747,6 +751,8 @@ GET /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 - 관련 기능: CAMERA-005 · CAMERA-004 · 회원(본인 소유·미연결/진행 등록은 원래 세션)
 - 요청: Path <code>faceRegistrationId</code>
 - 성공 200: FaceRegistration. 이미지 바이너리는 photo.url(API-GUIDE-008)로 조회
+- 오류: 400 <code>VALIDATION_FAILED</code>(UUID 형식 오류) · 404 <code>NOT_FOUND</code>(미존재·타인·원래 세션 불일치·폐기·정리 중). REGISTERED/LINKED는 본인 원래 세션, RETAINED는 본인 계정에서 접근한다. 공통 401 정책을 적용한다.
+- 얼굴 등록 응답에는 저장소 key와 sessionId를 노출하지 않는다. 현재 코드의 photo.url은 후속 API 경로이며 바이너리 GET 구현은 395에 남아 있다.
 - 용도: 준비 화면 '얼굴 인식 준비' 상태 확인, 등록 이미지 재조회(환경 비교용 로컬 사본이 없을 때)
 
 ### API-CAMERA-003 · 얼굴 등록 삭제
@@ -756,7 +762,8 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 - 관련 기능: CAMERA-005 · 회원(본인 소유)
 - 요청: Path <code>faceRegistrationId</code>
 - 성공 204
-- 오류: 404 <code>NOT_FOUND</code> · 409 <code>FACE_REGISTRATION_IN_USE</code>(LINKED: 진행 중 실행 → 중도 종료 API로 정리, RETAINED: 리포트 보관 → 리포트 삭제로만 삭제)
+- 오류: 404 <code>NOT_FOUND</code> · 409 <code>FACE_REGISTRATION_IN_USE</code>(LINKED: 진행 중 실행 → 중도 종료 API로 정리, RETAINED: 리포트 보관 → 리포트 삭제로만 삭제) · 503 <code>SERVICE_UNAVAILABLE</code>(파일 정리 미완료)
+- 삭제 요청은 먼저 등록·사진 조회를 차단하고 파일 삭제 완료 후 204로 응답한다. 파일 정리 실패 시 같은 DELETE를 재시도할 수 있다. 정리 대기 중 GET은 404이며, 삭제 성공 뒤 다시 DELETE하면 404다.
 - 용도: '다시 촬영' 전 기존 미연결 등록 폐기, 준비 이탈 시 정리. '나중에'는 등록을 미루는 동작이며 등록 미완료 상태로 미리보기 진입 불가.
 </toggle>
 
@@ -981,7 +988,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
 | 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
-| 얼굴 등록 | 촬영 조건 서버 재검증 여부, 미연결 등록 정리 시점, 저장 위치·암호화·보관 기간, 정면·좌·우 3장 확장(P1)(확인 필요 7) |
+| 얼굴 등록 | 미연결 등록은 원래 세션 종료까지 유지하는 것으로 확정. 서버 촬영 조건 재검증 여부·저장소 암호화 등 운영 기준·정면/좌/우 3장 확장(P1)은 별도 결정(확인 필요 7) |
 | 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |
 | 실행·준비 | 분석/얼굴 추적 준비 시점 차이에 따른 별도 준비 화면·대기 상한(확인 필요 7), 온보딩·튜토리얼 안내를 계정 단위로 바꿀지(확인 필요 9) |
 | 게이지(P0) | 기준 색·진하기, 피부색/조명 영향(등록 이미지 보정), 부위별 방식·표시 단위·임계값, 데이터 표현·기기/서버 분담(확인 필요 8) |

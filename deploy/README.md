@@ -24,9 +24,9 @@
 | 파일 | 어디서 돈다 | 하는 일 |
 |---|---|---|
 | `../docker-compose.prod.yml` | EC2 | 운영 컨테이너 정의(슬롯 2개, 자원 상한, 헬스, 로그) |
-| `deploy.sh` | BE 서버(root) | `app.env` 만들기(필수값에 `AI_BASE_URL` · `AI_CALLBACK_BASE_URL`) → 이미지 받기 → 슬롯 a → b → worker 롤링 → 실패하면 이전 태그로 되돌리기 → `releases.log` 기록 → `alloy` · `callback-gw` 교체(실패해도 배포는 성공) → 옛 `mairor-ai-1` 정리 |
+| `deploy.sh` | BE 서버(root) | `app.env` 만들기(필수값에 `AI_BASE_URL` · `AI_CALLBACK_BASE_URL`) → 얼굴 등록 DB 읽기 전용 사전 검사 → 이미지 받기 → 슬롯 a → b → worker 롤링 → 실패하면 이전 태그로 되돌리기 → `releases.log` 기록 → `alloy` · `callback-gw` 교체(실패해도 배포는 성공) → 옛 `mairor-ai-1` 정리 |
 | `rollback.sh` | BE 서버(root) | `releases.log`에 성공으로 남은 태그만 받아 `deploy.sh`와 같은 롤링 |
-| `Dockerfile` | CI | 배포 파일 이미지 `mairor-deploy`. BE 서버 파일(`docker-compose.prod.yml` · `deploy.sh` · `rollback.sh` · `callback-gw.conf`), AI 서버 파일(`docker-compose.ai.yml` · `deploy-ai.sh`), alloy 설정(`infra/alloy/config.alloy` → `alloy.alloy`)만 담는다. 넣을 파일은 `Dockerfile.dockerignore` 허용 목록에도 적어야 한다. EC2는 레포 없이 이 이미지에서 파일을 꺼낸다 |
+| `Dockerfile` | CI | 배포 파일 이미지 `mairor-deploy`. BE 서버 파일(`docker-compose.prod.yml` · `deploy.sh` · `rollback.sh` · `callback-gw.conf` · `check-camera-schema.sh` · `check-camera-schema.sql`), AI 서버 파일(`docker-compose.ai.yml` · `deploy-ai.sh`), alloy 설정(`infra/alloy/config.alloy` → `alloy.alloy`)만 담는다. 넣을 파일은 `Dockerfile.dockerignore` 허용 목록에도 적어야 한다. EC2는 레포 없이 이 이미지에서 파일을 꺼낸다 |
 | `run-on-ec2.sh` | CI | 서버 하나(`be` · `ai`)에 "배포 파일 꺼내기 → 배포 또는 되돌리기 스크립트"를 SSM으로 보내고 끝날 때까지 기다린다 |
 | `callback-gw.conf` | BE 서버 | 콜백 입구(`callback-gw`, 8090). AI 서버가 보내는 `/api/v1/internal/ai/` 콜백 · 진행 알림만 살아 있는 api로 넘긴다 |
 | `../docker-compose.ai.yml` · `deploy-ai.sh` · `rollback-ai.sh` | AI 서버(root) | `ai.env` 만들기 → ai 받기 · 교체 · 헬스 → 실패하면 이전 태그로 → `releases-ai.log` → `alloy`. 되돌리기는 `releases-ai.log`에 성공으로 남은 태그만 |
@@ -61,6 +61,8 @@ id=$(docker create "$REG/mairor-deploy:$TAG") && docker cp "$id:/deploy/." /opt/
 배포가 끝날 때까지(`deploy 완료`) Session Manager 탭을 닫지 않는다. 닫으면 배포도 멈춘다.
 
 ## DB 스키마
+
+얼굴 등록 코드 배포는 `app.env` 생성 후, 이미지 교체 전에 `check-camera-schema.sh`로 DB를 읽기 전용 검사한다. `photos`·`face_registrations`, 유효한 부분 유일 인덱스 및 핵심 제약이 없으면 기존 BE 슬롯을 유지하고 실패한다. 검사 SQL은 `check-camera-schema.sql`이며 자동 DDL 적용은 하지 않는다. 두 파일은 배포 이미지에 포함된다. 전체 컬럼과 JPA 정합성은 이후 앱의 스키마 검증이 확인한다. 자세한 수동 적용·운영 확인 기록은 [얼굴 등록 운영 인계](../backend/docs/face-registration-operations.md)를 따른다.
 
 운영은 `ddl-auto: validate`라 테이블을 만들지 않는다. Flyway 전까지는 스키마를 바꾸는 MR이 머지되기 **전에** BE(정윤)가 Session Manager에서 `postgres:17` 컨테이너의 `psql`로 적용한다. 적용할 문장은 `backend/README.md` "DB 스키마".
 

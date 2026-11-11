@@ -89,6 +89,10 @@ tasks.named('check') {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 여러 Spring/JPA 컨텍스트와 PostgreSQL 컨테이너를 동시에 캐시하면 기본 512m 힙이 고갈된다.
+    // 활성 컨텍스트 수를 제한하고 테스트 JVM만 여유를 둔다(운영 앱 JVM 설정은 바꾸지 않는다).
+    maxHeapSize = '1g'
+    systemProperty 'spring.test.context.cache.maxSize', '8'
     // 개발자 .env 의 값(메일 발송·가입 이메일 인증 요구)이 테스트 결과를 바꾸지 않도록 고정한다. 필요한 테스트는 properties 로 직접 켠다
     environment 'MAIL_ENABLED', 'false'
     environment 'SIGNUP_REQUIRE_EMAIL_VERIFICATION', 'false'

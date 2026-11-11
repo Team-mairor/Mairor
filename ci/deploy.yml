@@ -46,6 +46,7 @@ deploy:
   script:
     # 새 AI 가 먼저 떠야 새 BE 가 새 계약으로 부를 수 있다. AI 가 실패하면 여기서 멈추고 BE 는 그대로다
     - bash deploy/run-on-ec2.sh deploy "$CI_COMMIT_SHORT_SHA" ai
+    # BE deploy.sh는 슬롯 교체 전 얼굴 등록 DB 사전 검사를 수행한다. SQL 적용은 수동이다.
     - bash deploy/run-on-ec2.sh deploy "$CI_COMMIT_SHORT_SHA" be
 
 rollback:

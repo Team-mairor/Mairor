@@ -7,3 +7,5 @@ COPY docker-compose.prod.yml docker-compose.ai.yml /deploy/
 COPY deploy/callback-gw.conf /deploy/
 COPY infra/alloy/config.alloy /deploy/alloy.alloy
 COPY --chmod=755 deploy/deploy.sh deploy/rollback.sh deploy/deploy-ai.sh deploy/rollback-ai.sh /deploy/
+COPY --chmod=755 deploy/check-camera-schema.sh /deploy/
+COPY deploy/check-camera-schema.sql /deploy/

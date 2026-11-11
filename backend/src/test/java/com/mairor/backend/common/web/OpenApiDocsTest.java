@@ -29,12 +29,42 @@ class OpenApiDocsTest {
 
   /**
    * 문서에 나오는 API 수(메서드 단위). 파우치 등록 POST·목록 GET·상세 GET·수정 PATCH·삭제 DELETE, 수집 상품 판정 시험 POST, 영상 검색
-   * GET·선택 POST, 분석 요청 POST, 노트북 작업 POST 4개, 공식 홈페이지 수집·카탈로그 적재·품질 API, 가이드 매칭 POST·GET 포함. API 를
-   * 추가하면 함께 올린다.
+   * GET·선택 POST, 분석 요청 POST, 노트북 작업 POST 4개, 공식 홈페이지 수집·카탈로그 적재·품질 API, 가이드 매칭 POST·GET, 얼굴 등록 3개
+   * 포함. API 를 추가하면 함께 올린다.
    */
-  private static final int ALL_OPERATIONS = 54;
+  private static final int ALL_OPERATIONS = 57;
 
   @Autowired private MockMvc mockMvc;
+
+  @Test
+  void apiDocs_faceRegistrationEncodesMetadataAsJsonAndDocumentsFailureResponses()
+      throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/face-registrations'].post.requestBody.content['multipart/form-data'].encoding.metadata.contentType")
+                .value("application/json"))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/face-registrations'].post.responses['201']").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/face-registrations'].post.responses['413']").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/face-registrations'].post.responses['415']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/face-registrations/{faceRegistrationId}'].get.responses['404']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/face-registrations/{faceRegistrationId}'].delete.responses['409']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/face-registrations/{faceRegistrationId}'].delete.responses['503']")
+                .exists());
+  }
 
   @Test
   void apiDocs_isPublicAndDescribesTheApi() throws Exception {

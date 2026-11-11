@@ -172,6 +172,12 @@ main() {
   INSTANCE_ID=$(imds instance-id)
   TG_ARN=$(aws elbv2 describe-target-groups --names "$TG_NAME" --query 'TargetGroups[0].TargetGroupArn' --output text)
   write_app_env
+  # 새 API의 DB가 준비되지 않으면 기존 슬롯을 유지한 채 중단한다. SQL을 자동 적용하지 않는다.
+  if ! bash "$BASE/check-camera-schema.sh"; then
+    record failed
+    log "얼굴 등록 DB 사전 검사 실패. 396 SQL 적용·인덱스를 확인한 뒤 재배포한다"
+    exit 1
+  fi
   ecr_login
 
   log "이미지 받기"

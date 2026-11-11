@@ -8,3 +8,5 @@
 !deploy/callback-gw.conf
 !deploy/deploy-ai.sh
 !deploy/rollback-ai.sh
+!deploy/check-camera-schema.sh
+!deploy/check-camera-schema.sql

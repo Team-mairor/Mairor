@@ -20,6 +20,10 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   session:
     # 서버 세션 유휴 만료. 인증 요청이 올 때마다 연장된다
     timeout: ${SESSION_TIMEOUT:3d}
@@ -85,6 +89,21 @@ management:
       enabled: false
 
 app:
+  face-registration:
+    notice-version: ${FACE_REGISTRATION_NOTICE_VERSION:v1}
+    # 미연결 등록은 세션 종료까지 유지한다. 고정 시간 만료가 아니라 사라진 세션의 누락 정리다.
+    orphan-cleanup-enabled: ${FACE_REGISTRATION_ORPHAN_CLEANUP_ENABLED:true}
+    cleanup-interval: ${FACE_REGISTRATION_CLEANUP_INTERVAL:1m}
+    cleanup-batch-size: ${FACE_REGISTRATION_CLEANUP_BATCH_SIZE:50}
+  photos:
+    # 업로드 원장 복구 시간이며 얼굴 등록 이미지의 보관 기간과 별개다.
+    staging-timeout: ${PHOTO_STAGING_TIMEOUT:10m}
+    cleanup-enabled: ${PHOTO_CLEANUP_ENABLED:true}
+    cleanup-interval: ${PHOTO_CLEANUP_INTERVAL:1m}
+    cleanup-retry-delay: ${PHOTO_CLEANUP_RETRY_DELAY:1m}
+    cleanup-batch-size: ${PHOTO_CLEANUP_BATCH_SIZE:50}
+    # 압축 파일 크기가 작아도 디코딩 메모리가 지나치게 커지는 이미지를 제한한다.
+    max-decoded-pixels: ${PHOTO_MAX_DECODED_PIXELS:25000000}
   security:
     # 세션 없는 요청(회원가입 등)을 보낼 수 있는 프론트 Origin (쉼표 구분). 운영에서 비어 있으면 기동하지 않는다
     allowed-origins: ${ALLOWED_ORIGINS:}
