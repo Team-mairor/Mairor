@@ -260,8 +260,8 @@ API-VIDEO-005 · GET /api/v1/videos/popular
 관련 기능: VIDEO-005 · VIDEO-001
 
 - 회원 GET. Query·Body 없음(Top 4 고정). 200 PopularVideoResponse. 서비스 안에서 많이 선택된 영상 순(YouTube 인기 순위 아님). 분석 불가·중복 제외, guideAvailable=false도 정상.
-- 503 VIDEO\_POPULAR\_UNAVAILABLE(집계·신선도·상위4개 미확보), 외부 오류 502 VIDEO\_PROVIDER\_ERROR / 504 VIDEO\_PROVIDER\_TIMEOUT.
-- 집계 대상·기간·갱신 주기·4개 미확보의 503 정책은 현재 초안이며 결정 전 실제 실시간 집계로 표시하지 않는다. 고정 검수 가이드 목록으로 대체하지 않는다.
+- 503 VIDEO\_POPULAR\_UNAVAILABLE(최근 30일 선택 기록이 하나도 없음). 외부 호출이 없어 502·504는 나오지 않는다.
+- 집계(확인 필요 11, 11.11 확정 · S15P31A306-403): 영상 선택(API-VIDEO-001)이 성공할 때마다 기록하고, 최근 30일 동안 그 영상을 고른 서로 다른 회원 수 순으로 센다(같은 회원이 여러 번 골라도 1, 같으면 마지막 선택이 늦은 순). 서버가 10분마다 다시 센다(하나도 없는 결과는 담아 두지 않음). 4개가 안 되면 있는 만큼(1\~4개) 200이다. 분석 불가 제외는 선택할 때 확인한 것이다: 그 뒤 비공개·삭제된 영상은 기간 동안 남을 수 있고, 카드를 눌러 분석을 요청하면(API-VIDEO-002) 다시 확인해 409. 고정 검수 가이드 목록으로 대체하지 않는다.
 </toggle>
 
 <toggle>
@@ -965,8 +965,8 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | AnalysisJobSummary <b>v2</b> | jobId:string, videoId:string, youtubeVideoId:string, title:string, thumbnailUrl:string\|null, status:COMPLETED, reviewStatus:PENDING\|APPROVED\|REJECTED, guideId:string\|null, requestedAt:datetime, reviewedAt:datetime\|null. API-VIDEO-007 항목. |
 | VideoSearchItem <b>v2</b> | youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, guideId:string\|null, guideAvailable:boolean. embeddable 칸 없음. |
 | VideoSearchPage | items:VideoSearchItem\[\], nextPageToken:string\|null, size:integer. YouTube 검색은 page 대신 pageToken을 사용하는 예외. |
-| PopularVideoItem | VideoSearchItem의 모든 필드 + rank:integer(1\~4). 분석 불가 영상은 응답에서 제외. guideAvailable=false 가능. |
-| PopularVideoResponse | items:PopularVideoItem\[\], rankingBasis:string, aggregationScope:string, updatedAt:datetime, nextRefreshAt:datetime\|null. 정상은 서로 다른 4개·서비스 내 선택순. 집계 대상·기간·주기는 확인 필요 11. 4개 미확보 시 임시 계약 503. |
+| PopularVideoItem | VideoSearchItem의 모든 필드 + rank:integer(1\~4) + videoId:string(내부 영상 ID). 분석 불가 영상은 응답에서 제외. guideAvailable=false 가능. viewCount는 저장하지 않아 null. 가이드가 없는 카드는 영상 선택(API-VIDEO-001) 없이 videoId로 바로 분석 요청(API-VIDEO-002)한다(선택 기록이 늘지 않음). |
+| PopularVideoResponse | items:PopularVideoItem\[\] — 서로 다른 영상 1\~4개 · 서비스 내 선택순, rankingBasis:string(지금 DISTINCT\_MEMBER\_SELECTIONS = 고른 서로 다른 회원 수), aggregationScope:string(지금 LAST\_30\_DAYS), updatedAt:datetime(센 시각), nextRefreshAt:datetime\|null(다음에 다시 셀 시각). 하나도 없으면 503. |
 | Page | items:T\[\], page:integer(0부터), size:integer, hasNext:boolean. 개별 목록 API가 정의한 메타 필드(예: pouchVersion) 확장 가능. |
 | Error | code:string, message:string, details:array of \{field:string, reason:string\}(입력 필드 오류일 때만). 서버 내부 예외는 미노출. |
 </toggle>
@@ -987,7 +987,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | --- | --- |
 | 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), Google 최초 로그인 시 약관·추가 정보 수집(구현은 FE 요청안대로 이메일 가입과 같은 약관 4개·선택 항목 5개, API-USERS-017·018 번호 임시), Google 가입 시 닉네임 기본값(구현은 채우지 않음), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
 | 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
-| 인기 Top 4 | 인기 정의·출처·집계 지역/기간·갱신 주기·4개 미확보 처리(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
+| 인기 Top 4 | 확정(11.11, S15P31A306-403): 영상 선택 기록으로 최근 30일 동안 고른 서로 다른 회원 수 순, 10분마다 다시 셈, 1\~4개 200 · 0개 503(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
 | 얼굴 등록 | 미연결 등록은 원래 세션 종료까지 유지하는 것으로 확정. 서버 촬영 조건 재검증 여부·저장소 암호화 등 운영 기준·정면/좌/우 3장 확장(P1)은 별도 결정(확인 필요 7) |
 | 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |

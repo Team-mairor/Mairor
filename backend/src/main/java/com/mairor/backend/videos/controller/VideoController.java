@@ -3,9 +3,11 @@ package com.mairor.backend.videos.controller;
 import com.mairor.backend.common.web.OpenApiConfig;
 import com.mairor.backend.users.controller.AuthApiDocs;
 import com.mairor.backend.users.support.AuthenticatedUser;
+import com.mairor.backend.videos.dto.PopularVideoResponse;
 import com.mairor.backend.videos.dto.VideoSearchPage;
 import com.mairor.backend.videos.dto.VideoSelection;
 import com.mairor.backend.videos.dto.VideoSelectionRequest;
+import com.mairor.backend.videos.service.PopularVideoService;
 import com.mairor.backend.videos.service.VideoSearchService;
 import com.mairor.backend.videos.service.VideoSelectionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,18 +24,23 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 영상 입력: YouTube 메이크업 영상 검색(API-VIDEO-004)과 선택(API-VIDEO-001). */
-@Tag(name = "영상", description = "YouTube 메이크업 영상 검색과 영상 선택(챕터 · 가이드 유무 · 진행 중 분석).")
+/** 영상 입력: YouTube 메이크업 영상 검색(API-VIDEO-004), 선택(API-VIDEO-001), 서비스 안 인기 영상(API-VIDEO-005). */
+@Tag(name = "영상", description = "YouTube 메이크업 영상 검색, 영상 선택(챕터 · 가이드 유무 · 진행 중 분석), 서비스 안 인기 영상.")
 @RestController
 @RequestMapping("/v1/videos")
 public class VideoController {
 
   private final VideoSearchService searchService;
   private final VideoSelectionService selectionService;
+  private final PopularVideoService popularService;
 
-  public VideoController(VideoSearchService searchService, VideoSelectionService selectionService) {
+  public VideoController(
+      VideoSearchService searchService,
+      VideoSelectionService selectionService,
+      PopularVideoService popularService) {
     this.searchService = searchService;
     this.selectionService = selectionService;
+    this.popularService = popularService;
   }
 
   @Operation(
@@ -68,6 +75,24 @@ public class VideoController {
           @RequestParam(required = false)
           Integer size) {
     return searchService.search(q, pageToken, size);
+  }
+
+  @Operation(
+      summary = "인기 영상 Top 4",
+      description =
+          """
+          서비스 안에서 최근 많이 선택된 영상을 순위대로 최대 4개 준다(YouTube 인기 순위가 아니다).
+          - 영상을 고른 서로 다른 회원 수로 센다. 같으면 마지막 선택이 늦은 영상이 앞이다.
+          - 선택할 때 분석할 수 있던 영상만 센다(그 뒤 바뀐 영상은 분석 요청이 다시 확인한다). guideAvailable=false 영상도 들어온다.
+          - 서버가 센 결과를 잠시 담아 두고 nextRefreshAt 이 지나면 다시 센다. 하나도 없을 때(503)는 담지 않는다.
+          """,
+      security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE))
+  @ApiResponse(responseCode = "200", description = "인기 영상 1~4개")
+  @AuthApiDocs.Unauthorized
+  @ApiResponse(responseCode = "503", description = "셀 선택 기록이 아직 없다. (VIDEO_POPULAR_UNAVAILABLE)")
+  @GetMapping(path = "/popular", produces = MediaType.APPLICATION_JSON_VALUE)
+  public PopularVideoResponse popular() {
+    return popularService.popular();
   }
 
   @Operation(

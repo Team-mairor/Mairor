@@ -17,7 +17,9 @@ import com.mairor.backend.videos.dto.VideoChapter;
 import com.mairor.backend.videos.dto.VideoSelection;
 import com.mairor.backend.videos.dto.VideoSelectionRequest;
 import com.mairor.backend.videos.entity.Video;
+import com.mairor.backend.videos.entity.VideoSelectionRecord;
 import com.mairor.backend.videos.repository.VideoRepository;
+import com.mairor.backend.videos.repository.VideoSelectionRecordRepository;
 import com.mairor.backend.videos.support.ChapterParser;
 import com.mairor.backend.videos.support.VideoErrors;
 import java.sql.Timestamp;
@@ -38,6 +40,8 @@ import tools.jackson.databind.ObjectMapper;
  * 갱신한 뒤 챕터 · 가이드 상태 · 내 진행 중 작업을 돌려준다. 분석은 만들지 않는다.
  *
  * <p>CC BY 가 아닌 영상도 분석할 수 없는 영상으로 본다(11.04 결정). 라이선스는 저장하지 않고 선택 · 분석 요청 때마다 다시 확인한다.
+ *
+ * <p>선택이 성공하면 인기 Top 4(API-VIDEO-005)를 세도록 선택 기록을 한 줄 남긴다(S15P31A306-403).
  */
 @Service
 public class VideoSelectionService {
@@ -65,6 +69,7 @@ public class VideoSelectionService {
 
   private final YouTubeClient youTube;
   private final VideoRepository videos;
+  private final VideoSelectionRecordRepository selections;
   private final GuideRepository guides;
   private final AnalysisJobRepository jobs;
   private final AnalysisJobAccess access;
@@ -76,17 +81,19 @@ public class VideoSelectionService {
   public VideoSelectionService(
       YouTubeClient youTube,
       VideoRepository videos,
+      VideoSelectionRecordRepository selections,
       GuideRepository guides,
       AnalysisJobRepository jobs,
       AnalysisJobAccess access,
       JdbcTemplate jdbc,
       ObjectMapper objectMapper) {
-    this(youTube, videos, guides, jobs, access, jdbc, objectMapper, Clock.systemUTC());
+    this(youTube, videos, selections, guides, jobs, access, jdbc, objectMapper, Clock.systemUTC());
   }
 
   VideoSelectionService(
       YouTubeClient youTube,
       VideoRepository videos,
+      VideoSelectionRecordRepository selections,
       GuideRepository guides,
       AnalysisJobRepository jobs,
       AnalysisJobAccess access,
@@ -95,6 +102,7 @@ public class VideoSelectionService {
       Clock clock) {
     this.youTube = youTube;
     this.videos = videos;
+    this.selections = selections;
     this.guides = guides;
     this.jobs = jobs;
     this.access = access;
@@ -121,6 +129,7 @@ public class VideoSelectionService {
     List<VideoChapter> chapters = ChapterParser.parse(found.description());
 
     Video video = upsert(found, chapters);
+    selections.save(new VideoSelectionRecord(video.getId(), userId, Instant.now(clock)));
     Optional<Guide> approved =
         guides.findByVideoIdAndReviewStatus(video.getId(), ReviewStatus.APPROVED);
     Optional<AnalysisJob> active = jobs.findFirstByVideoIdAndStatusIn(video.getId(), ACTIVE);

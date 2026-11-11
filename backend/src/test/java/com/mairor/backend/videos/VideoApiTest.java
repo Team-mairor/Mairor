@@ -22,6 +22,9 @@ import com.mairor.backend.common.external.youtube.YouTubeException;
 import com.mairor.backend.common.external.youtube.YouTubeSearchResult;
 import com.mairor.backend.common.external.youtube.YouTubeVideo;
 import com.mairor.backend.users.support.AuthenticatedUser;
+import com.mairor.backend.videos.service.PopularVideoService;
+import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -39,7 +42,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
-/** 영상 검색 · 선택 API: 명세 칸, CC BY · 분석 가능 거르기, 가이드 · 내 작업 상태, 오류 코드를 PostgreSQL 로 확인한다. */
+/**
+ * 영상 검색 · 선택 · 인기 Top 4 API: 명세 칸, CC BY · 분석 가능 거르기, 가이드 · 내 작업 상태, 선택 기록 · 인기 순위, 오류 코드를
+ * PostgreSQL 로 확인한다.
+ */
 @Import(TestcontainersConfiguration.class)
 @SpringBootTest(
     properties = {
@@ -53,6 +59,7 @@ class VideoApiTest {
 
   @Autowired private MockMvc mockMvc;
   @Autowired private JdbcTemplate jdbc;
+  @Autowired private PopularVideoService popular;
   @MockitoBean private YouTubeClient youTube;
 
   private UUID userId;
@@ -257,6 +264,8 @@ class VideoApiTest {
     assertThat(rows).isEqualTo(1);
     assertThat(title).isEqualTo("바뀐 제목");
     assertThat(first).contains("\"videoId\"");
+    // 성공한 선택마다 선택 기록이 한 줄씩 남는다(인기 Top 4 를 센다)
+    assertThat(selectionsOf(userId)).isEqualTo(2);
   }
 
   @Test
@@ -319,6 +328,7 @@ class VideoApiTest {
             privateId,
             ageId);
     assertThat(rows).isZero();
+    assertThat(selectionsOf(userId)).isZero();
   }
 
   @Test
@@ -384,6 +394,139 @@ class VideoApiTest {
         .andExpect(jsonPath("$.guideAvailable").value(false));
   }
 
+  // ---------- 인기 Top 4 ----------
+
+  @Test
+  void popularRanksByDistinctMembersWithinThirtyDays() throws Exception {
+    resetPopular();
+    List<UUID> members = List.of(userId, otherUserId, insertUser(), insertUser(), insertUser());
+    Instant now = Instant.now();
+    UUID most = insertVideo(yt("p_a"));
+    UUID repeated = insertVideo(yt("p_b"));
+    UUID tiedEarlier = insertVideo(yt("p_c"));
+    UUID tiedLater = insertVideo(yt("p_d"));
+    UUID single = insertVideo(yt("p_e"));
+    UUID mostlyOld = insertVideo(yt("p_f"));
+    UUID guideId = insertApprovedGuide(most);
+    insertGuide(tiedEarlier, "REJECTED");
+
+    for (int i = 0; i < 3; i++) {
+      insertSelection(most, members.get(i), now.minus(Duration.ofDays(1)));
+    }
+    // 같은 회원이 여러 번 골라도 1 이다
+    for (int i = 0; i < 5; i++) {
+      insertSelection(repeated, userId, now.minus(Duration.ofHours(3 + i)));
+    }
+    // 회원 수가 같으면 마지막 선택이 늦은 영상이 앞이다
+    insertSelection(tiedEarlier, members.get(0), now.minus(Duration.ofHours(5)));
+    insertSelection(tiedEarlier, members.get(1), now.minus(Duration.ofHours(2)));
+    insertSelection(tiedLater, members.get(2), now.minus(Duration.ofHours(4)));
+    insertSelection(tiedLater, members.get(3), now.minus(Duration.ofHours(1)));
+    insertSelection(single, members.get(4), now.minus(Duration.ofMinutes(10)));
+    // 30일이 지난 선택은 세지 않는다
+    for (int i = 0; i < 4; i++) {
+      insertSelection(mostlyOld, members.get(i), now.minus(Duration.ofDays(31)));
+    }
+    insertSelection(mostlyOld, members.get(4), now.minus(Duration.ofHours(6)));
+
+    String body =
+        mockMvc
+            .perform(get("/v1/videos/popular").with(asMember(userId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(4))
+            .andExpect(jsonPath("$.items[0].rank").value(1))
+            .andExpect(jsonPath("$.items[0].youtubeVideoId").value(yt("p_a")))
+            .andExpect(jsonPath("$.items[0].videoId").value(most.toString()))
+            .andExpect(jsonPath("$.items[0].guideId").value(guideId.toString()))
+            .andExpect(jsonPath("$.items[0].guideAvailable").value(true))
+            .andExpect(jsonPath("$.items[0].title").value("저장된 제목"))
+            .andExpect(jsonPath("$.items[0].channelTitle").value("채널"))
+            .andExpect(jsonPath("$.items[0].durationSeconds").value(600))
+            .andExpect(jsonPath("$.items[0].viewCount").doesNotExist())
+            .andExpect(jsonPath("$.items[1].rank").value(2))
+            .andExpect(jsonPath("$.items[1].youtubeVideoId").value(yt("p_d")))
+            .andExpect(jsonPath("$.items[1].videoId").value(tiedLater.toString()))
+            .andExpect(jsonPath("$.items[2].rank").value(3))
+            .andExpect(jsonPath("$.items[2].youtubeVideoId").value(yt("p_c")))
+            // 반려된 가이드는 붙이지 않는다
+            .andExpect(jsonPath("$.items[2].guideId").doesNotExist())
+            .andExpect(jsonPath("$.items[2].guideAvailable").value(false))
+            .andExpect(jsonPath("$.items[3].rank").value(4))
+            .andExpect(jsonPath("$.items[3].youtubeVideoId").value(yt("p_e")))
+            .andExpect(jsonPath("$.rankingBasis").value("DISTINCT_MEMBER_SELECTIONS"))
+            .andExpect(jsonPath("$.aggregationScope").value("LAST_30_DAYS"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    // 한 회원이 다섯 번 고른 영상 · 30일 지난 선택이 대부분인 영상은 회원 1명이라 4위 밖이다
+    assertThat(body).doesNotContain(yt("p_b"), yt("p_f"));
+  }
+
+  @Test
+  void popularReturnsFewerThanFourAndKeepsTheCountUntilTheNextRefresh() throws Exception {
+    resetPopular();
+    String selected = yt("p_s");
+    when(youTube.videos(List.of(selected))).thenReturn(List.of(cc(selected)));
+    mockMvc.perform(select(selected).with(asMember(userId))).andExpect(status().isOk());
+    insertSelection(insertVideo(yt("p_t")), otherUserId, Instant.now().minus(Duration.ofDays(2)));
+
+    String body =
+        mockMvc
+            .perform(get("/v1/videos/popular").with(asMember(userId)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.items[0].youtubeVideoId").value(selected))
+            .andExpect(jsonPath("$.items[0].thumbnailUrl").value(cc(selected).thumbnailUrl()))
+            .andExpect(jsonPath("$.items[0].publishedAt").value("2026-10-01T09:00:00Z"))
+            .andExpect(jsonPath("$.items[1].youtubeVideoId").value(yt("p_t")))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String updatedAt = jsonField(body, "updatedAt");
+    Instant nextRefreshAt = Instant.parse(jsonField(body, "nextRefreshAt"));
+    assertThat(Duration.between(Instant.parse(updatedAt), nextRefreshAt))
+        .isEqualTo(Duration.ofMinutes(10));
+
+    // 다시 셀 때까지는 담아 둔 결과를 준다
+    insertSelection(insertVideo(yt("p_u")), userId, Instant.now());
+    mockMvc
+        .perform(get("/v1/videos/popular").with(asMember(userId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(2))
+        .andExpect(jsonPath("$.updatedAt").value(updatedAt));
+
+    popular.expire();
+    mockMvc
+        .perform(get("/v1/videos/popular").with(asMember(userId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(3))
+        .andExpect(jsonPath("$.items[0].youtubeVideoId").value(yt("p_u")));
+  }
+
+  @Test
+  void popularWithoutRecentSelectionsIsServiceUnavailable() throws Exception {
+    resetPopular();
+    insertSelection(insertVideo(yt("p_o")), userId, Instant.now().minus(Duration.ofDays(31)));
+
+    mockMvc
+        .perform(get("/v1/videos/popular").with(asMember(userId)))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.code").value("VIDEO_POPULAR_UNAVAILABLE"));
+
+    // 빈 결과는 담아 두지 않아, 첫 선택이 생기면 다시 셀 시각을 기다리지 않고 바로 보인다
+    insertSelection(insertVideo(yt("p_n")), otherUserId, Instant.now());
+    mockMvc
+        .perform(get("/v1/videos/popular").with(asMember(userId)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(1))
+        .andExpect(jsonPath("$.items[0].youtubeVideoId").value(yt("p_n")));
+  }
+
+  @Test
+  void popularNeedsLogin() throws Exception {
+    mockMvc.perform(get("/v1/videos/popular")).andExpect(status().isUnauthorized());
+  }
+
   // ---------- 도움 ----------
 
   private static org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder select(
@@ -392,6 +535,41 @@ class VideoApiTest {
         .with(csrf())
         .contentType(MediaType.APPLICATION_JSON)
         .content("{\"youtubeVideoId\": \"" + youtubeVideoId + "\"}");
+  }
+
+  /** 다른 테스트의 선택 기록을 지우고 담아 둔 인기 결과를 버린다. 인기 순위는 모든 회원의 선택을 센다. */
+  private void resetPopular() {
+    jdbc.update("delete from video_selections");
+    popular.expire();
+  }
+
+  private UUID insertUser() {
+    UUID id = UUID.randomUUID();
+    jdbc.update(
+        "insert into users (id, email, provider, created_at, updated_at) values (?, ?, 'LOCAL', now(), now())",
+        id,
+        id + "@example.com");
+    return id;
+  }
+
+  private void insertSelection(UUID videoId, UUID memberId, Instant selectedAt) {
+    jdbc.update(
+        "insert into video_selections (id, video_id, user_id, selected_at) values (?, ?, ?, ?)",
+        UUID.randomUUID(),
+        videoId,
+        memberId,
+        Timestamp.from(selectedAt));
+  }
+
+  private int selectionsOf(UUID memberId) {
+    return jdbc.queryForObject(
+        "select count(*) from video_selections where user_id = ?", Integer.class, memberId);
+  }
+
+  private static String jsonField(String body, String field) {
+    String key = "\"" + field + "\":\"";
+    int start = body.indexOf(key) + key.length();
+    return body.substring(start, body.indexOf('"', start));
   }
 
   private UUID insertVideo(String youtubeVideoId) {
@@ -418,14 +596,19 @@ class VideoApiTest {
   }
 
   private UUID insertApprovedGuide(UUID videoId) {
+    return insertGuide(videoId, "APPROVED");
+  }
+
+  private UUID insertGuide(UUID videoId, String reviewStatus) {
     UUID jobId = insertJob(videoId, null, "COMPLETED");
     UUID id = UUID.randomUUID();
     jdbc.update(
         "insert into guides (id, video_id, analysis_job_id, version, review_status, guide_input,"
-            + " created_at, updated_at) values (?, ?, ?, 1, 'APPROVED', '{}'::jsonb, now(), now())",
+            + " created_at, updated_at) values (?, ?, ?, 1, ?, '{}'::jsonb, now(), now())",
         id,
         videoId,
-        jobId);
+        jobId,
+        reviewStatus);
     return id;
   }
 

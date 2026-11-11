@@ -5,7 +5,7 @@ import com.mairor.backend.common.external.youtube.YouTubeException;
 import com.mairor.backend.common.external.youtube.YouTubeVideo;
 import org.springframework.http.HttpStatus;
 
-/** 영상 API 의 오류 응답(API 명세 v2 API-VIDEO-001 · 002 · 004). */
+/** 영상 API 의 오류 응답(API 명세 v2 API-VIDEO-001 · 002 · 004 · 005). */
 public final class VideoErrors {
 
   public static final String VIDEO_PROVIDER_ERROR = "VIDEO_PROVIDER_ERROR";
@@ -13,6 +13,7 @@ public final class VideoErrors {
   public static final String VIDEO_SEARCH_UNAVAILABLE = "VIDEO_SEARCH_UNAVAILABLE";
   public static final String VIDEO_UNSUPPORTED_FOR_ANALYSIS = "VIDEO_UNSUPPORTED_FOR_ANALYSIS";
   public static final String VIDEO_ANALYSIS_UNAVAILABLE = "VIDEO_ANALYSIS_UNAVAILABLE";
+  public static final String VIDEO_POPULAR_UNAVAILABLE = "VIDEO_POPULAR_UNAVAILABLE";
 
   private VideoErrors() {}
 
@@ -66,6 +67,12 @@ public final class VideoErrors {
     if (!video.creativeCommon()) {
       throw unsupported("크리에이티브 커먼즈(CC BY) 영상만 분석할 수 있습니다.");
     }
+  }
+
+  /** 인기 영상(API-VIDEO-005)을 셀 선택 기록이 기간 안에 하나도 없음. 승인 가이드 목록 같은 다른 목록으로 대신하지 않는다(명세). */
+  public static BusinessException popularUnavailable() {
+    return new BusinessException(
+        HttpStatus.SERVICE_UNAVAILABLE, VIDEO_POPULAR_UNAVAILABLE, "아직 인기 영상을 보여 드릴 수 없습니다.");
   }
 
   public static BusinessException unsupported(String reason) {

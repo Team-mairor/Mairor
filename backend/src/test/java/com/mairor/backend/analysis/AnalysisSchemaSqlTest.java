@@ -56,7 +56,13 @@ class AnalysisSchemaSqlTest {
   void entitiesValidateAgainstTheSqlSchema() {
     // 앱이 ddl-auto=validate 로 기동했다는 것 자체가 엔티티와 SQL 이 맞다는 뜻이다
     for (String table :
-        List.of("videos", "analysis_jobs", "analysis_job_requests", "guides", "llm_calls")) {
+        List.of(
+            "videos",
+            "video_selections",
+            "analysis_jobs",
+            "analysis_job_requests",
+            "guides",
+            "llm_calls")) {
       assertThat(jdbc.queryForObject("select count(*) from " + table, Integer.class))
           .as(table)
           .isZero();

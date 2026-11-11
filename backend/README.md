@@ -350,7 +350,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 |---|---|
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
 | `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값), `catalog_import_runs` (카탈로그 적재 실행), `catalog_import_items` (적재 실행의 건) |
-| `db/schema/analysis.sql` | `videos` (유튜브 영상), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
+| `db/schema/analysis.sql` | `videos` (유튜브 영상), `video_selections` (회원 영상 선택 기록, 인기 Top 4), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
 | `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
 | `db/schema/camera.sql` | `photos` (비공개 사진 메타데이터·파일 정리 상태), `face_registrations` (실행별 기준 얼굴 등록·동의·촬영 조건) |
 | `db/schema/executions.sql` | `guide_executions`·`execution_steps` 실행 스냅샷, `history_records` 완료 기록/리포트 스냅샷, 얼굴/사진/매칭 소유권 FK |
@@ -370,6 +370,7 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |
 | `analysis_job_requests` 테이블 (회원 분석 요청 기록: 합류한 회원의 조회 권한, 회원별 일일 한도) | S15P31A306-362 | `psql -f db/upgrade/362-analysis-job-requests.sql` (새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다) |
+| `video_selections` 테이블 (회원 영상 선택 기록: 인기 Top 4) | S15P31A306-403 | **MR 머지·배포 전** `SELECT to_regclass('public.video_selections');`가 NULL인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/403-video-selections.sql` (새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다. 적용하지 않으면 `validate` 가 `missing table` 로 앱 기동을 막는다) |
 | `guides.reference_version` + `guide_step_product_links` + 제품 색 변경 시 버전 갱신 트리거 | S15P31A306-324 | `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/324-guide-step-product-links.sql` (**MR 병합 및 배포 전에 적용**. 파일은 `guides.reference_version` 추가 → `guide_step_product_links` 테이블·인덱스·제약 생성 → 색 변경 트리거 순서로 실행한다. 기존 가이드 버전은 0으로 시작한다.) |
 | `guide_matches` 추천 결과·색상·파우치 스냅샷 및 생성 버전 | S15P31A306-325 | `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/325-guide-matches.sql` (**MR 병합 및 배포 전에 적용**. 신규 테이블이며 기존 데이터 변환은 없다. `users`·`guides`가 먼저 있어야 하며, 같은 배포에서 324를 적용할 때는 324 후 이 파일을 실행한다.) |
 | `analysis_jobs.processor_lease_until` · `processor_claims` · `processor_request_key` (영상 전처리 노트북 임대) | S15P31A306-357 | `psql -f db/upgrade/357-analysis-jobs-processor.sql` (칸 추가뿐이라 옛 버전 앱과 함께 돌아도 된다) |

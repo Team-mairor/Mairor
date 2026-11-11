@@ -29,10 +29,10 @@ class OpenApiDocsTest {
 
   /**
    * 문서에 나오는 API 수(메서드 단위). 파우치 등록 POST·목록 GET·상세 GET·수정 PATCH·삭제 DELETE, 수집 상품 판정 시험 POST, 영상 검색
-   * GET·선택 POST, 분석 요청 POST·내 분석 목록 GET, 노트북 작업 POST 4개, 공식 홈페이지 수집·카탈로그 적재·품질 API, 가이드 매칭
+   * GET·선택 POST·인기 GET, 분석 요청 POST·내 분석 목록 GET, 노트북 작업 POST 4개, 공식 홈페이지 수집·카탈로그 적재·품질 API, 가이드 매칭
    * POST·GET, 얼굴 등록 3개, 실행 생성·조회·사진 동의·업로드·바이너리 조회·완료·중도 종료 포함. API 를 추가하면 함께 올린다.
    */
-  private static final int ALL_OPERATIONS = 65;
+  private static final int ALL_OPERATIONS = 66;
 
   @Autowired private MockMvc mockMvc;
 

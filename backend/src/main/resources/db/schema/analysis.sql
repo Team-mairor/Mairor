@@ -43,6 +43,22 @@ CREATE TABLE videos (
     CONSTRAINT ck_videos_duration CHECK (duration_seconds > 0)
 );
 
+-- 회원의 영상 선택 기록 (S15P31A306-403, API-VIDEO-001 · API-VIDEO-005). 선택 API 가 성공할 때마다 한 줄 남는다.
+-- 선택은 분석할 수 있는 영상(공개 · CC BY 등)만 성공하므로 분석 불가 영상은 남지 않는다.
+-- 인기 Top 4 는 최근 30일 동안 영상을 고른 서로 다른 회원 수로 센다(같은 회원이 여러 번 골라도 1).
+-- 영상 · 회원이 지워지면 함께 지운다.
+CREATE TABLE video_selections (
+    id          uuid                        NOT NULL,
+    video_id    uuid                        NOT NULL,
+    user_id     uuid                        NOT NULL,
+    selected_at timestamp(6) with time zone NOT NULL,
+    CONSTRAINT video_selections_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_video_selections_video FOREIGN KEY (video_id) REFERENCES videos (id) ON DELETE CASCADE,
+    CONSTRAINT fk_video_selections_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+CREATE INDEX idx_video_selections_selected ON video_selections (selected_at);
+CREATE INDEX idx_video_selections_user ON video_selections (user_id);
+
 -- 분석 작업. 상태·진행 단계 값은 API 명세 v2 AnalysisJobStatus 와 같다.
 -- requested_by: 분석을 요청한 회원. 운영 명령으로 만든 작업은 NULL.
 -- ai_job_id: AI 서버 POST /api/v1/guide-jobs 가 돌려준 jobId (콜백을 이 값으로 찾는다).
