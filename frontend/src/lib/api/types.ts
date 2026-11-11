@@ -276,3 +276,70 @@ export interface PouchWriteResponse {
   item: PouchItemResponse;
   pouchVersion: number;
 }
+
+/** 설명란 챕터 (VideoChapter) */
+export interface VideoChapter {
+  startSeconds: number;
+  label: string;
+}
+
+/** 영상 검색 결과 한 줄 (VideoSearchItem). CC BY 영상만 오고 분석할 수 없는 영상은 빠진다 */
+export interface VideoSearchItem {
+  youtubeVideoId: string;
+  title: string;
+  channelTitle: string;
+  durationSeconds: number;
+  thumbnailUrl: string | null;
+  /** 숨긴 영상은 null */
+  viewCount: number | null;
+  publishedAt: string | null;
+  /** 검수 승인된 가이드. 승인 전·없음은 null */
+  guideId: string | null;
+  guideAvailable: boolean;
+}
+
+/**
+ * GET /v1/videos/search?q=&pageToken=&size= 응답 (VideoSearchPage). 마지막 페이지면 nextPageToken이 null.
+ * 실패: 400 VALIDATION_FAILED, 502 VIDEO_PROVIDER_ERROR, 503 VIDEO_SEARCH_UNAVAILABLE, 504 VIDEO_PROVIDER_TIMEOUT
+ */
+export interface VideoSearchPage {
+  items: VideoSearchItem[];
+  nextPageToken: string | null;
+  size: number;
+}
+
+/**
+ * POST /v1/users/me/analysis-jobs 응답 (AnalysisJobReceipt, API-VIDEO-002).
+ * 200 REUSED_GUIDE(승인 가이드 재사용, jobId=null) · 202 JOINED_JOB(진행 중 작업에 합류) · 202 NEW_JOB(새 작업).
+ * 실패: 409 VIDEO_UNSUPPORTED_FOR_ANALYSIS, 429 ANALYSIS_DAILY_LIMIT_EXCEEDED, 503 VIDEO_ANALYSIS_UNAVAILABLE
+ */
+export interface AnalysisJobReceipt {
+  jobId: string | null;
+  videoId: string;
+  receiptType: "REUSED_GUIDE" | "JOINED_JOB" | "NEW_JOB";
+  status: AnalysisJobStatus["status"];
+  progressStage: AnalysisJobStatus["progressStage"];
+  /** 재사용이면 승인된 가이드 ID, 그 밖에는 null */
+  guideId: string | null;
+  reviewStatus: AnalysisJobStatus["reviewStatus"];
+  pollAfterSeconds: number | null;
+}
+
+/** POST /v1/videos 요청 (VideoSelectionRequest) */
+export interface VideoSelectionRequest {
+  youtubeVideoId: string;
+}
+
+/**
+ * POST /v1/videos 응답 (VideoSelection). 분석은 만들지 않는다.
+ * 실패: 409 VIDEO_UNSUPPORTED_FOR_ANALYSIS(CC BY 아님·비공개·삭제·연령 제한·라이브), 502 VIDEO_PROVIDER_ERROR, 504 VIDEO_PROVIDER_TIMEOUT
+ */
+export interface VideoSelection extends VideoSearchItem {
+  /** 서비스 내부 영상 ID. 분석 요청(API-VIDEO-002)에 쓴다 */
+  videoId: string;
+  chapters: VideoChapter[];
+  /** 내가 요청해 진행 중인 분석 작업 */
+  analysisJobId: string | null;
+  /** 진행 중이면 NOT_READY, 아니면 가장 최근 가이드의 검수 상태, 분석한 적 없으면 null */
+  reviewStatus: "NOT_READY" | "PENDING" | "APPROVED" | "REJECTED" | null;
+}

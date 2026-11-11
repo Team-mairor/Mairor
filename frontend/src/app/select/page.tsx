@@ -2,23 +2,34 @@
 
 import { ArrowRight, Play, Search, Trophy } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
 import { Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
-import { GuideBadge, KW_BG, VideoPicker } from "@/features/select";
-import { useSession } from "@/features/session";
+import {
+  GuideBadge,
+  KW_BG,
+  requestAnalysis,
+  targetOfReceipt,
+  targetOfSelection,
+  VideoPicker,
+} from "@/features/select";
+import { runHref, useSession } from "@/features/session";
 import { videoThumb, type VideoItem } from "@/features/video";
+import type { VideoSelection } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
-import { CHAPTERS, VIDEOS, videoState } from "@/mocks/mock-data";
+import { VIDEOS, videoState } from "@/mocks/mock-data";
 
 const KEYWORDS = ["데일리", "코랄 블러셔", "봄 웜톤", "10분 메이크업", "무쌍 섀도", "글로시 립"];
 const TOP_VIEWS = ["312만회", "248만회", "196만회", "153만회"];
 
-/** 03 영상 입력 */
+/**
+ * 03 영상 입력 (VIDEO-004 · VIDEO-001 · VIDEO-002). 검색 · 선택 · 분석 요청은 실제 API를 쓴다.
+ * Top 4(VIDEO-005)는 아직 샘플이다
+ */
 export default function SelectPage() {
   const router = useRouter();
   const { startRun } = useSession();
@@ -34,6 +45,34 @@ export default function SelectPage() {
     setApiFail(params?.get("fail") === "1");
   }, [params]);
 
+  // 실제 영상을 한 번 시작하면 화면을 떠날 때까지 다시 시작하지 않는다(연타로 분석이 두 번 요청되지 않게)
+  const started = useRef(false);
+
+  /**
+   * 검색에서 고른 영상으로 시작한다. 승인 가이드가 있으면 바로 따라 하기, 내가 요청한 분석이 진행 중이면 그 작업으로,
+   * 아니면 분석을 요청해(API-VIDEO-002) 받은 작업의 로딩 화면으로 간다. 요청이 실패하면 오류를 검색 화면에 넘긴다
+   */
+  const startPicked = async (v: VideoItem, s: VideoSelection) => {
+    if (started.current) return;
+    started.current = true;
+    try {
+      const target = targetOfSelection(s) ?? targetOfReceipt(await requestAnalysis(s.videoId));
+      // 계약상 비지 않지만, 비면 어디로도 가지 않고 다시 누를 수 있게 둔다
+      if (!target) throw new Error("분석 요청 응답에 시작할 ID가 없다");
+      if (target.kind === "guide") {
+        startRun({ kind: "guide", guideId: target.guideId });
+        router.push(runHref("/loading", target.guideId));
+      } else {
+        startRun({ kind: "sample", picked: v, jobId: target.jobId });
+        router.push(`/loading?jobId=${encodeURIComponent(target.jobId)}`);
+      }
+    } catch (e) {
+      started.current = false;
+      throw e;
+    }
+  };
+
+  /** Top 4 샘플 영상 */
   const start = (v: VideoItem) => {
     const st = videoState(v);
     if (st === "blocked") return;
@@ -220,17 +259,9 @@ export default function SelectPage() {
       {picker !== null && (
         <VideoPicker
           initialQuery={picker}
-          stateOf={videoState}
-          videos={VIDEOS}
-          chapters={CHAPTERS}
-          apiFail={apiFail}
-          onRetry={() => setApiFail(false)}
           onClose={() => setPicker(null)}
-          onPick={(v) => {
-            setPicked(v);
-            setPicker(null);
-            setQuota(false);
-          }}
+          // 검색 화면의 버튼이 곧 시작이다. 이 화면으로 돌아와 한 번 더 누르지 않는다
+          onPick={startPicked}
         />
       )}
     </main>
