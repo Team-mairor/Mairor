@@ -25,7 +25,9 @@ import org.springframework.test.context.DynamicPropertySource;
       "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql,classpath:db/schema/pouch.sql,classpath:db/schema/camera.sql",
       "app.security.allowed-origins=http://localhost:3000",
       "app.internal.token=" + AnalysisIntegrationTest.TOKEN,
-      "app.storage.type=local"
+      "app.storage.type=local",
+      // 테스트 저장소는 로컬(file: 주소)이지만 프레임을 싣는 흐름을 검사하려고 켠다. 가짜 AI 는 주소를 내려받지 않는다
+      "app.ai.send-frames=true"
     })
 abstract class AnalysisIntegrationTest {
 

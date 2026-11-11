@@ -105,6 +105,7 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `FFMPEG_PATH` | `ffmpeg` | 프레임 추출(SEGMENTING)의 ffmpeg. 운영 이미지에는 들어 있다. 추출 시간 제한(30분)·동시 업로드 수(8)는 `app.analysis.worker` 기본값 |
 | `AI_BASE_URL` · `AI_CALLBACK_BASE_URL` | 로컬 `http://localhost:8000` · `http://localhost:8080/api` / 운영 `http://ai:8000` · `http://api:8080/api` | AI 서버 주소와 AI 가 콜백을 보낼 BE 주소(context-path 포함). 운영은 `core` 네트워크로 nginx 를 거치지 않는다 |
 | `AI_CALLBACK_TIMEOUT` | `60m` | AI 콜백을 기다리는 시간. 지나면 worker 가 AI 에 상태를 묻고, 작업이 없거나 두 배가 지나면 `ANALYSIS_TIMEOUT` |
+| `AI_SEND_FRAMES` | 비움(자동) | AI 요청에 레퍼런스 프레임을 실을지. 비우면 저장소가 http 주소를 줄 때(`s3`)만 싣는다. `local` 저장소는 `file:` 주소라 AI 가 거절하므로 프레임 없이 설명만 맡기고 가이드 `area` 는 null 이다(S15P31A306-410) |
 | `GEMINI_API_KEY` | (없음) | 단계 추출(worker)의 Gemini 키. **비우면 단계 추출이 `LLM_UNAVAILABLE` 로 실패한다**(앱은 뜬다). 코드·문서에 적지 않는다 |
 | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | Google 직접. GMS 는 `https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com`. 요청 형식이 같아 주소·키만 바꾼다 |
 | `GEMINI_API_KEY_HEADER` · `GEMINI_MODEL` | `x-goog-api-key` · `gemini-2.5-flash` | 키를 싣는 헤더, 모델 |
@@ -480,7 +481,7 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 
 **AI 가이드 생성 · 검수** (S15P31A306-311, 형식은 `docs/references/ai-api.md`)
 
-- worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, progressUrl, guideInput, frames}` 를 보내고 AI 작업 ID 와 맡긴 시각을 `analysis_jobs.ai_job_id`·`ai_requested_at` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다.
+- worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, progressUrl, guideInput, frames}` 를 보내고(로컬 저장소면 `frames` 를 빼고 보낸다, `AI_SEND_FRAMES`) AI 작업 ID 와 맡긴 시각을 `analysis_jobs.ai_job_id`·`ai_requested_at` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다.
 - 프레임 URL 은 저장소 키로 그때 사전 서명한다(24시간, 운영은 역할 자격 증명이라 더 일찍 끝날 수 있음).
 - **콜백 `POST /api/v1/internal/ai/guide-jobs/callback` 은 공유 토큰을 받지 않는다**(AI 가 헤더를 못 붙임). 대신 `frontend/nginx/api.conf` 가 바깥에서 `/api/v1/internal/ai/` 를 404 로 막고, AI 는 `core` 망으로 `api:8080` 에 바로 붙는다. 이 줄이 빠지면 `NginxInternalRouteTest` 가 실패한다.
 - 같은 작업의 콜백이 다시 오면(AI 재전송) 바꾸지 않고 204. 필수 칸이 없으면 400(AI 는 다시 보내지 않는다).

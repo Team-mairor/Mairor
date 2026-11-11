@@ -44,4 +44,9 @@ public interface ObjectStorage {
    * @throws StorageException 주소를 만들지 못하면
    */
   URI presignGet(String key, Duration ttl);
+
+  /** {@link #presignGet}이 다른 서버(AI 서버)가 내려받을 수 있는 http(s) 주소인가. 로컬 저장소는 {@code file:} 주소라 아니다. */
+  default boolean servesHttpUrls() {
+    return true;
+  }
 }

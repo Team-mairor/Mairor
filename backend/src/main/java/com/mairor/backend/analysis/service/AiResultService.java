@@ -89,6 +89,7 @@ public class AiResultService {
           AiResultCheck.problems(
               job.getVideo().getYoutubeVideoId(),
               objectMapper.readTree(guide.getGuideInput()),
+              // 프레임을 싣지 않고 맡긴 작업은 요청할 때 키를 비워 둔다(BuildGuideStep)
               guide.getFramesManifestKey() != null,
               result);
       if (!problems.isEmpty()) {

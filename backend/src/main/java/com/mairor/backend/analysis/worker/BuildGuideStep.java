@@ -4,6 +4,7 @@ import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.ProgressStage;
 import com.mairor.backend.analysis.extraction.GuideInput;
 import com.mairor.backend.analysis.frames.FrameManifest;
+import com.mairor.backend.analysis.service.AiFrameDelivery;
 import com.mairor.backend.common.external.ai.AiGuideJobClient;
 import com.mairor.backend.common.external.ai.AiProperties;
 import com.mairor.backend.common.external.ai.AiServerException;
@@ -39,18 +40,21 @@ class BuildGuideStep implements AnalysisStepHandler {
   private final ObjectStorage storage;
   private final AnalysisJobStore store;
   private final ObjectMapper objectMapper;
+  private final AiFrameDelivery frameDelivery;
 
   BuildGuideStep(
       AiGuideJobClient client,
       AiProperties properties,
       ObjectStorage storage,
       AnalysisJobStore store,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      AiFrameDelivery frameDelivery) {
     this.client = client;
     this.properties = properties;
     this.storage = storage;
     this.store = store;
     this.objectMapper = objectMapper;
+    this.frameDelivery = frameDelivery;
   }
 
   @Override
@@ -76,6 +80,11 @@ class BuildGuideStep implements AnalysisStepHandler {
       throw new AnalysisStepException(
           AnalysisFailureCode.STORAGE_UNAVAILABLE, "프레임 주소를 만들지 못했습니다: " + e.getMessage(), e);
     }
+    if (!frameDelivery.enabled() && context.frames() != null) {
+      // 콜백 검사는 가이드의 프레임 목록 키로 "프레임을 보냈는가"를 본다. 맡기기 전에 이 요청의 판단을 남겨, 콜백을 받는
+      // 프로세스(api)의 설정이 달라도 같은 답을 쓰게 한다
+      store.forgetFramesManifest(context.jobId());
+    }
     String aiJobId;
     try {
       aiJobId = client.submit(body);
@@ -88,7 +97,7 @@ class BuildGuideStep implements AnalysisStepHandler {
         context.jobId(),
         aiJobId,
         guideInput.steps().size(),
-        context.frames() == null ? 0 : context.frames().items().size(),
+        frameDelivery.enabled() && context.frames() != null ? context.frames().items().size() : 0,
         body.length());
   }
 
@@ -105,14 +114,14 @@ class BuildGuideStep implements AnalysisStepHandler {
 
   /**
    * {@code guide_job_request.v2}: {callbackUrl, progressUrl, guideInput, frames?}. 프레임이 없으면 AI 는 영역
-   * 없이 설명만 만든다.
+   * 없이 설명만 만든다. 로컬 저장소처럼 AI 가 받을 수 없는 주소만 주면 프레임을 빼고 맡긴다({@link AiFrameDelivery}).
    */
   Map<String, Object> request(GuideInput guideInput, FrameManifest frames) {
     Map<String, Object> request = new LinkedHashMap<>();
     request.put("callbackUrl", properties.callbackBaseUrl() + CALLBACK_PATH);
     request.put("progressUrl", properties.callbackBaseUrl() + PROGRESS_PATH);
     request.put("guideInput", guideInput);
-    if (frames != null && !frames.items().isEmpty()) {
+    if (frameDelivery.enabled() && frames != null && !frames.items().isEmpty()) {
       List<Map<String, Object>> items = new ArrayList<>(frames.items().size());
       for (FrameManifest.Item item : frames.items()) {
         Map<String, Object> frame = new LinkedHashMap<>();

@@ -65,6 +65,12 @@ public class LocalObjectStorage implements ObjectStorage {
     return resolve(key).toUri();
   }
 
+  /** {@code file:} 주소라 다른 서버는 받지 못한다. */
+  @Override
+  public boolean servesHttpUrls() {
+    return false;
+  }
+
   private Path resolve(String key) {
     Path path = root.resolve(key).normalize();
     if (!path.startsWith(root)) {

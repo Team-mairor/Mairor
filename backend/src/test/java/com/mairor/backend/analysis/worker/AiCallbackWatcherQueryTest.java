@@ -71,7 +71,8 @@ class AiCallbackWatcherQueryTest {
                 Duration.ofSeconds(1),
                 Duration.ofHours(24),
                 TIMEOUT,
-                Duration.ofSeconds(60)),
+                Duration.ofSeconds(60),
+                null),
             objectMapper,
             Clock.fixed(NOW, ZoneOffset.UTC));
     when(client.find(anyString())).thenReturn(Optional.of("{\"status\": \"RUNNING\"}"));

@@ -37,7 +37,8 @@ class AiCallbackWatcherTest {
               Duration.ofSeconds(1),
               Duration.ofHours(24),
               Duration.ofMinutes(60),
-              Duration.ofSeconds(60)),
+              Duration.ofSeconds(60),
+              null),
           JsonMapper.builder().build(),
           Clock.systemUTC());
 

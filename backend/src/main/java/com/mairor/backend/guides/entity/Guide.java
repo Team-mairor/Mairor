@@ -220,6 +220,11 @@ public class Guide {
     this.framesManifestKey = Objects.requireNonNull(key, "key");
   }
 
+  /** 프레임을 싣지 않고 AI 에 맡긴다. 이 키는 "AI 에 보낸 프레임 목록"이고, 콜백 검사는 키가 있으면 영역을 요구하므로 보내지 않았으면 비운다. */
+  public void forgetFramesManifest() {
+    this.framesManifestKey = null;
+  }
+
   public void replaceGuideInput(String guideInput) {
     this.guideInput = Objects.requireNonNull(guideInput, "guideInput");
   }

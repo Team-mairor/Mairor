@@ -252,6 +252,8 @@ app:
     frame-url-ttl: 24h
     callback-timeout: ${AI_CALLBACK_TIMEOUT:60m}
     watch-interval: 60s
+    # 요청에 레퍼런스 프레임을 실을지. 비우면 저장소가 http 주소를 줄 때(S3)만 싣고, 로컬 저장소(file: 주소)면 영역 없이 설명만 맡긴다
+    send-frames: ${AI_SEND_FRAMES:}
   llm:
     gemini:
       # 단계 추출(worker). GMS 와 Google 직접은 요청 형식이 같아 주소·키만 바꾼다

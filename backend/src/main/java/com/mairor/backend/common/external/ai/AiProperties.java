@@ -15,6 +15,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param frameUrlTtl 프레임 사전 서명 URL 의 만료. AI 는 작업을 시작할 때 내려받는다
  * @param callbackTimeout 콜백을 기다리는 시간. 지나면 AI 에 상태를 묻는다
  * @param watchInterval 콜백 시간 초과를 확인하는 간격(worker)
+ * @param sendFrames 요청에 레퍼런스 프레임을 실을지. 비우면({@code null}) 저장소가 http 주소를 줄 때만 싣는다(로컬 저장소는 싣지 않음)
  */
 @ConfigurationProperties(prefix = "app.ai")
 public record AiProperties(
@@ -24,4 +25,5 @@ public record AiProperties(
     @DefaultValue("2m") Duration readTimeout,
     @DefaultValue("24h") Duration frameUrlTtl,
     @DefaultValue("60m") Duration callbackTimeout,
-    @DefaultValue("60s") Duration watchInterval) {}
+    @DefaultValue("60s") Duration watchInterval,
+    Boolean sendFrames) {}

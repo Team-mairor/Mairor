@@ -97,6 +97,12 @@ public class AnalysisJobStore {
     guides.findByAnalysisJobId(jobId).orElseThrow().useFramesManifest(key);
   }
 
+  /** 프레임 없이 AI 에 맡길 때 가이드의 프레임 목록 키를 비운다({@link Guide#forgetFramesManifest()}). */
+  @Transactional
+  public void forgetFramesManifest(UUID jobId) {
+    guides.findByAnalysisJobId(jobId).orElseThrow().forgetFramesManifest();
+  }
+
   /** AI 서버에 맡긴 작업 ID 와 맡긴 시각을 적는다. 작업은 콜백이 끝낼 때까지 RUNNING 이다. */
   @Transactional
   public void awaitAi(UUID jobId, String aiJobId) {
