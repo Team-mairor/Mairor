@@ -1,9 +1,11 @@
 """샘플 폴더의 립 단계마다 바른 곳을 찾아 얼굴 지도 그림으로 저장한다 (개발용).
 
+단계 직전·직후 사진을 서비스처럼 골라(before_rows·after_rows) 지도로 펴고, lip_area_on_maps로
+바른 곳을 찾는다. 가림 표는 쓰지 않는다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 저장: output/lip_area_<stepId>.png (흑백 마스크, 바른 곳이 흰색)
       output/lip_area_<stepId>_check.jpg (바른 뒤 지도 입술 부분, 왼쪽 그대로 · 오른쪽 바른 곳 겹침)
-실행 (ai/ 폴더에서): uv run python tools/draw_lip_area.py samples/local_01_lip_seq
+실행 (ai/ 폴더에서): uv run python tools/draw_lip_area.py samples/local_03_seq
 """
 
 import sys
@@ -19,13 +21,14 @@ from app.schemas.landmarks import LandmarksResult
 from app.tasks.area.common.face_map import map_points
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.parts.area_preparation import rows_to_map
 from app.tasks.area.parts.lip_area import (
     MIN_FOUND_RATIO,
-    after_map,
     after_rows,
+    before_rows,
     check_lip_area,
     found_ratio,
-    lip_area_on_map,
+    lip_area_on_maps,
 )
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
@@ -54,22 +57,22 @@ def main() -> None:
         print("립 단계가 없습니다.")
         return
 
+    def load_photo(row) -> np.ndarray:
+        return read_frame_rgb(reference, frames[row.frame_index])
+
     for step in lip_steps:
-        end_ms = round(step.end_seconds * 1000)
-        rows = after_rows(result, end_ms)
-        after = after_map(
-            result, end_ms, lambda row: read_frame_rgb(reference, frames[row.frame_index])
-        )
-        if after is None:
-            print(f"{step.step_id}: 단계 끝 직후에 쓸 사진이 없어 찾지 못했습니다.")
+        start_ms, end_ms = round(step.start_seconds * 1000), round(step.end_seconds * 1000)
+        befores, afters = before_rows(result, start_ms), after_rows(result, end_ms)
+        if not befores or not afters:
+            print(f"{step.step_id}: 단계 직전이나 직후에 쓸 사진이 없어 찾지 못했습니다.")
             continue
-        area = lip_area_on_map(after)
+        after = rows_to_map(afters, load_photo)
+        area = lip_area_on_maps(rows_to_map(befores, load_photo), after)
         found = check_lip_area(area)
         mask_path, check_path = save(area, after, folder, step.step_id)
-        times = f"{rows[0].timestamp_ms / 1000:.1f}~{rows[-1].timestamp_ms / 1000:.1f}초"
         print(
-            f"{step.step_id}: 사진 {len(rows)}장({times}), 바른 칸 {int(area.sum()):,}개, "
-            f"입술의 {found_ratio(area):.0%}"
+            f"{step.step_id}: 사진 직전 {len(befores)}장·직후 {len(afters)}장, "
+            f"바른 칸 {int(area.sum()):,}개, 입술의 {found_ratio(area):.0%}"
         )
         if found.reason is not None:
             print(f"→ 입술의 {MIN_FOUND_RATIO:.0%}도 못 찾아 기본 가이드로 갑니다 ({found.reason})")

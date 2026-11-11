@@ -148,7 +148,7 @@ PARTS = (
         "lips",
         "cover",
         lambda side: [side],
-        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ),
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, s, e, load, occ),
     ),
 )
 

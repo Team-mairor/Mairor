@@ -5,6 +5,7 @@ import numpy as np
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts import lip_area
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
 from app.tasks.area.parts.lip_area import LipArea
 from tools import outline_metric, output_area
@@ -171,7 +172,7 @@ def test_lip_outline_is_measured_from_what_the_service_sends():
     입술 점 테두리를 그대로 찾았다면 테두리로 바꿔도 넓이가 거의 같고 얇지 않다.
     """
     rows, sub_step, _ = outline_metric.measure_step(
-        "lip", ("lipsOuter",), {"lipsOuter": LipArea(mask=lips())}, None
+        "lip", ("lipsOuter",), {"lipsOuter": LipArea(mask=lip_area._lips())}, None
     )
 
     assert sub_step.status == "extracted"

@@ -35,14 +35,17 @@ def test_anchor_points_undo_points_to_anchors():
 
 
 def test_lip_mask_comes_back_almost_the_same_through_the_service_outline():
-    """서비스는 테두리 점을 1칸 허용으로 줄이므로 둘레 한 줄 안팎만 달라진다.
+    """서비스는 바깥선을 펴서 보내므로 둘레 한 줄 안팎만 달라지고, 입 안은 exclude 구멍으로 빠진다.
 
-    입술 넓이(약 16,000칸)에서 둘레 한 줄은 3% 남짓이라, 겹침 0.95 이상이면 같은 모양으로 본다.
+    입술 넓이(약 16,000칸)에서 둘레 한 줄은 3% 남짓이라, 입 안을 뺀 입술과 겹침 0.95 이상이면
+    같은 모양으로 본다.
     """
     masks, sub_step, _ = output_area.output_area("lip", {"lipsOuter": LipArea(mask=lips())})
+    without_inside = lips() & ~output_area.region_outline("lipsInner")
 
     assert sub_step.status == "extracted"
-    assert iou(masks["lipsOuter"], lips()) >= 0.95
+    assert sub_step.guide_sets[0].exclude == ["lipsInner"]
+    assert iou(masks["lipsOuter"], without_inside) >= 0.95
 
 
 def test_one_cheek_found_is_drawn_on_both_cheeks():

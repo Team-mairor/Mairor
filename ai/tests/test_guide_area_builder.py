@@ -2,6 +2,7 @@ import json
 import logging
 from pathlib import Path
 
+import cv2
 import jsonschema
 import numpy as np
 import pytest
@@ -25,7 +26,7 @@ from app.tasks.area.parts.blush_area import BlushArea, cheek_range
 from app.tasks.area.parts.brow_area import BrowArea, brow_range
 from app.tasks.area.parts.eyeliner_area import EyelinerArea
 from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, eyeshadow_range
-from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_map
+from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_maps
 from tests.test_area_preparation import make_row
 from tests.test_eyeliner_area import lash_line, with_gap
 
@@ -59,7 +60,9 @@ def never(row: FrameLandmarks) -> np.ndarray:
     raise AssertionError("립 분석을 바꿔 끼웠으니 사진을 읽지 않아야 합니다")
 
 
-def lips_found(result: LandmarksResult, step_end_ms: int, load_photo, occlusion=None) -> LipArea:
+def lips_found(
+    result: LandmarksResult, step_start_ms: int, step_end_ms: int, load_photo, occlusion=None
+) -> LipArea:
     return LipArea(mask=polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE))
 
 
@@ -83,19 +86,23 @@ def test_each_kind_of_step_gets_its_status(monkeypatch):
     assert foundation.reasons == [NOT_ANALYZED]
     assert lip.status == "extracted"
     guide_set = lip.guide_sets[0]
-    assert (guide_set.region, guide_set.source, guide_set.exclude) == ("lipsOuter", "extracted", [])
+    assert (guide_set.region, guide_set.source, guide_set.exclude) == (
+        "lipsOuter",
+        "extracted",
+        ["lipsInner"],
+    )
     assert len(guide_set.guides[0].outline) >= 3
 
 
-def test_lip_step_end_is_passed_in_milliseconds(monkeypatch):
+def test_lip_step_start_and_end_are_passed_in_milliseconds(monkeypatch):
     seen = []
 
-    def remember(result, step_end_ms, load_photo, occlusion=None):
-        seen.append(step_end_ms)
-        return lips_found(result, step_end_ms, load_photo)
+    def remember(result, step_start_ms, step_end_ms, load_photo, occlusion=None):
+        seen.append((step_start_ms, step_end_ms))
+        return lips_found(result, step_start_ms, step_end_ms, load_photo)
 
     build(monkeypatch, remember)
-    assert seen == [10500]
+    assert seen == [(8000, 10500)]
 
 
 def test_lip_not_found_uses_default_lip_guide_with_its_reason(monkeypatch):
@@ -136,11 +143,30 @@ def test_failed_area_fails_only_analyzed_steps():
 
 
 def test_sample_lip_becomes_a_valid_guide_area(monkeypatch):
-    after = np.asarray(Image.open(GOLDEN / "after_s10.png").convert("RGB"))
-    area = build(monkeypatch, lambda *_, **__: check_lip_area(lip_area_on_map(after)))
+    before, after = (
+        np.asarray(Image.open(GOLDEN / f"{name}_s27a.png").convert("RGB"))
+        for name in ("before", "after")
+    )
+    area = build(monkeypatch, lambda *_, **__: check_lip_area(lip_area_on_maps(before, after)))
     outline = area.steps[2].sub_steps[0].guide_sets[0].guides[0].outline
-    assert 3 <= len(outline) <= 200
+    assert len(outline) >= 3
     assert all(abs(sum(anchor.bary) - 1) <= 0.001 for anchor in outline)
+    jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
+
+
+def test_lip_found_in_pieces_sends_a_polygon_for_every_piece(monkeypatch):
+    """찾은 비율은 조각 전부로 재므로, 떨어진 조각도 모두 polygon으로 보낸다(글로스 단계 s27b)."""
+    before, after = (
+        np.asarray(Image.open(GOLDEN / f"{name}_s27b.png").convert("RGB"))
+        for name in ("before", "after")
+    )
+    found = check_lip_area(lip_area_on_maps(before, after))
+    pieces = cv2.connectedComponents(found.mask.astype(np.uint8), connectivity=8)[0] - 1
+    area = build(monkeypatch, lambda *_, **__: found)
+    guide_set = area.steps[2].sub_steps[0].guide_sets[0]
+    assert pieces > 1
+    assert len(guide_set.guides) == pieces
+    assert guide_set.exclude == ["lipsInner"]
     jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
 
 

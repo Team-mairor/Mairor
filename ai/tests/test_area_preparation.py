@@ -541,7 +541,7 @@ def test_photo_bundle_measures_each_photo_sharpness_once(monkeypatch):
 
 STEP_START_MS, STEP_END_MS = 10_000, 20_000
 PART_FINDERS = {
-    "lip": lambda result, load: lip_area.find_lip_area(result, STEP_END_MS, load),
+    "lip": lambda result, load: lip_area.find_lip_area(result, STEP_START_MS, STEP_END_MS, load),
     "blush": lambda result, load: blush_area.find_blush_area(
         result, STEP_START_MS, STEP_END_MS, load, "leftCheek"
     ),

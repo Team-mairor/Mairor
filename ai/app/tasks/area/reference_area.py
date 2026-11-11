@@ -35,7 +35,7 @@ from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 OCCLUSION_KEEP = 64
 FACE_MAP_KEEP = 64
 PART_WINDOWS: dict[Makeup, tuple[int | None, int]] = {
-    "lip": (None, lip_area.AFTER_WINDOW_MS),
+    "lip": (lip_area.BEFORE_WINDOW_MS, lip_area.AFTER_WINDOW_MS),
     "blush": (blush_area.BEFORE_WINDOW_MS, blush_area.AFTER_WINDOW_MS),
     "brow": (brow_area.BEFORE_WINDOW_MS, brow_area.AFTER_WINDOW_MS),
     "eyeshadow": (eyeshadow_area.BEFORE_WINDOW_MS, eyeshadow_area.AFTER_WINDOW_MS),
@@ -48,7 +48,7 @@ def photo_ranges(steps: Sequence[GuideInputStep]) -> list[tuple[int, int]]:
 
     부위 분석은 분석하는 단계(PART_WINDOWS에 있는 부위)의 직전 창과 직후 창 사진만 쓴다.
     PART_WINDOWS는 (직전 창, 직후 창) 길이(ms)이고 각 부위 분석의 창 값을 그대로 가져온다.
-    립은 바른 뒤 사진만 써서 직전 창이 None이다.
+    직전 창이 None인 부위는 바른 뒤 사진만 쓴다.
     사진 판정은 얼굴 크기를 앞뒤 RATIO_WINDOW_MS 안 사진과 견주므로 창 양쪽에 그만큼 더한다.
     그래서 창 안 사진의 판정은 모든 사진으로 판정할 때와 같다.
     단계 시각은 build_guide_area처럼 초 × 1000을 반올림한 ms다.

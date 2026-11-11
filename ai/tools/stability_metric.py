@@ -2,7 +2,7 @@
 
 부위 찾기 함수에 넘기는 단계 시작을 SHIFTS_MS만큼 앞당기고 끝을 SHIFTS_MS만큼 늦춰,
 직전·직후 사진 창만 옮긴 조합(3 × 3 = 9가지)마다 영역을 찾는다. 창 길이와 계산은 서비스 그대로다.
-립은 바른 뒤 사진만 보므로 직후 창만 옮긴다(3가지). 조합끼리 찾은 영역이 얼마나 겹치는지(IoU)와
+직전 창이 없는 부위는 직후 창만 옮긴다(3가지). 조합끼리 찾은 영역이 얼마나 겹치는지(IoU)와
 찾음/못 찾음이 뒤집히는지를 센다. 겹침은 영역 모양에 따라 같은 흔들림에도 다르게 나오므로,
 서비스 그대로의 영역을 몇 칸 옮겨야 같은 겹침이 되는지(흔들린 칸)와
 그 칸 ÷ 영역 세로(흔들림 비율)도 낸다.
@@ -68,7 +68,7 @@ class Part:
     """잴 부위 하나. find는 (결과, 시작 ms, 끝 ms, 사진 읽기, 쪽, 가림 찾기)로
     서비스 부위 코드의 찾기 결과(BrowArea 등)를 낸다.
 
-    before_shift가 False면 직전 창을 쓰지 않는 부위(립)라 직후 창만 옮긴다.
+    before_shift가 False면 직전 창을 쓰지 않는 부위라 직후 창만 옮긴다.
     """
 
     name: str
@@ -115,8 +115,8 @@ PARTS = (
         "lip",
         "lip",
         ("lipsOuter",),
-        False,
-        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ),
+        True,
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, s, e, load, occ),
     ),
 )
 

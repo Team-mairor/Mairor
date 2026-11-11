@@ -119,19 +119,20 @@ def frames_every_half_second(until_ms: int) -> ReferenceFrames:
 
 
 def test_needed_frames_keep_window_photos_and_one_second_either_side():
-    """블러셔는 직전·직후 1초, 립은 직후 1초 창에 판정 여유 1초씩. 파운데이션은 고르지 않는다."""
+    """블러셔는 직전·직후 1초 창, 립은 4초 창에 판정 여유 1초씩. 파운데이션은 고르지 않는다."""
     steps = guide_input(
         ("s1", "foundation", 0, 5), ("s2", "blush", 10, 20), ("s3", "lip", 30, 40)
     ).steps
 
     kept = [
-        item.timestamp_ms for item in needed_frames(steps, frames_every_half_second(45_000).items)
+        item.timestamp_ms for item in needed_frames(steps, frames_every_half_second(46_000).items)
     ]
 
     assert kept == [
         *range(8_000, 11_001, 500),
         *range(19_000, 22_001, 500),
-        *range(39_000, 42_001, 500),
+        *range(25_000, 31_001, 500),
+        *range(39_000, 45_001, 500),
     ]
 
 
@@ -175,7 +176,7 @@ def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
 def test_no_needed_photo_still_makes_area_like_before(tmp_path):
     """고를 사진이 0장이면 얼굴 점 없이, 분석하는 단계는 쓸 사진 없음 기본 가이드가 된다."""
     guide = guide_input(("s1", "foundation", 0, 5), ("s2", "lip", 10, 20))
-    frames = frames_every_half_second(5_000)
+    frames = frames_every_half_second(4_500)
     items = needed_frames(guide.steps, frames.items)
 
     area = build_reference_area(

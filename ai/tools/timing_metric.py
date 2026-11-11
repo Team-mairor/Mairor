@@ -3,7 +3,7 @@
 단계마다 부위 코드로 영역을 찾고(직전·직후 창은 서비스 그대로), 단계 시작 직전 지도를 기준으로
 단계 앞뒤 PAD_MS를 더한 구간을 STEP_MS마다 찍는다. 시각마다 그 직전 직후 창 길이만큼의 사진으로
 지도를 만들어, 부위 코드와 같은 색 값(눈썹 어두워진 양, 섀도·블러셔 붉어진 양, 아이라인 바뀐 칸,
-립 붉은 기 변화)을 영역 안과 바깥 띠에서 평균 낸다. 마지막 시각(단계 끝 + 직후 창)은 서비스의
+립 색이 바뀐 양)을 영역 안과 바깥 띠에서 평균 낸다. 마지막 시각(단계 끝 + 직후 창)은 서비스의
 직후 지도와 같다. 안쪽 값이 끝 값의 절반·90%를 넘고 다시 안 떨어진 시각을 단계 안 위치(시작 0,
 끝 1)로 내고, 끝날 때 바깥 ÷ 안을 바깥 비로, 끝 뒤 시각들의 안쪽 값 ÷ 끝 값을 유지 비로 낸다.
 유지 비가 낮으면 영역이 직후 창 순간에만 바뀐 칸을 잡은 것이다.
@@ -13,9 +13,9 @@
 쪽마다 찾은 영역과 함께, 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py)
 FE로 나가는 영역도 같은 지도로 재 output 칸에 둔다.
 지도에 쓸 사진은 서비스 부위 찾기와 같이 고른다. 시각마다 직전·직후 묶음의 얼굴 크기를 맞추고
-(match_sizes, 립은 서비스에 직전 창이 없어 맞추지 않는다), 맞출 사진이 없는 시각은 재지 않고
-크기로 뺀 시각(sizeSkipped)으로 센다. 그다음 서비스처럼 흐린 사진을 빼고(drop_blurry, 립은 그 시각
-사진만), 한쪽이 비는 시각은 재지 않고 흐림으로 뺀 시각(blurSkipped)으로 센다.
+(match_sizes), 맞출 사진이 없는 시각은 재지 않고 크기로 뺀 시각(sizeSkipped)으로 센다.
+그다음 서비스처럼 흐린 사진을 빼고(drop_blurry), 한쪽이 비는 시각은 재지 않고
+흐림으로 뺀 시각(blurSkipped)으로 센다.
 지도를 만들 때 부위 범위를 넘겨 범위를 많이 가린 사진은 통째로 뺀다.
 조심할 구간(caution_ranges.json의 확대·얼굴 없음·광고·마무리)에 걸린 시각은 재지 않고
 cautionSkipped로 센다. 서비스가 영역을 만드는 사진 창(직전 창, 끝 시각)은 걸려도 잰다.
@@ -82,7 +82,6 @@ from tools.noise_metric import (
     blush_reddening,
     caution_spans,
     flats_to_map,
-    lip_redness,
     overlaps,
     remembered_flat,
     sharp_filter,
@@ -100,7 +99,6 @@ RING_WIDTH_CELLS = 15
 LEVELS = (0.5, 0.9)
 STRONG_PERCENTILE = 90
 STRONG_LEVEL = 0.5
-LIP_BEFORE_MS = 1000
 FACE_MAP_KEEP = 256
 
 MapLoader = Callable[[Sequence[FrameLandmarks], RegionName], tuple[np.ndarray, np.ndarray]]
@@ -114,9 +112,7 @@ class Part:
     change는 (직전 지도, 그 시각 지도, 모름 칸)으로 칸마다 색 값 지도를 낸다.
     blur_sigma는 부위 코드가 색 값 지도를 흐리는 폭(칸)이고, 흐리지 않으면 0이다.
 
-    립은 서비스에 직전 창이 없어 before_ms로 LIP_BEFORE_MS를 쓴다.
     zone은 쪽을 받아 서비스 부위 찾기가 rows_to_known_map에 넘기는 범위(지도 크기 표)를 낸다.
-    pair_sizes가 참이면 서비스처럼 직전·직후 묶음의 얼굴 크기를 맞춘다(립은 거짓).
     """
 
     name: str
@@ -131,7 +127,6 @@ class Part:
     change: Callable[[np.ndarray, np.ndarray, np.ndarray | None], np.ndarray]
     blur_sigma: float = 0.0
     zone: Callable[[RegionName], np.ndarray] | None = None
-    pair_sizes: bool = True
 
 
 def eyeliner_change(
@@ -139,13 +134,6 @@ def eyeliner_change(
 ) -> np.ndarray:
     """아이라인 색으로 바뀐 칸을 1, 아닌 칸을 0으로 낸다. 평균이 바뀐 칸 비율이 된다."""
     return eyeliner_area.eyeliner_color_change(before, after, unknown).astype(np.float32)
-
-
-def lip_change(
-    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
-) -> np.ndarray:
-    """입 주변 피부보다 붉은 양(립 코드와 같은 계산)이 직전보다 늘어난 만큼."""
-    return lip_redness(after, unknown)[0] - lip_redness(before, unknown)[0]
 
 
 PARTS = (
@@ -203,13 +191,13 @@ PARTS = (
         "lip",
         "lip",
         ("lipsOuter",),
-        LIP_BEFORE_MS,
+        lip_area.BEFORE_WINDOW_MS,
         lip_area.AFTER_WINDOW_MS,
         lambda side: [side],
-        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, e, load, occ),
-        lip_change,
-        zone=lambda side: lip_area._lips(),
-        pair_sizes=False,
+        lambda r, s, e, load, side, occ: lip_area.find_lip_area(r, s, e, load, occ),
+        lip_area.lip_change,
+        lip_area.BLUR_SIGMA,
+        lambda side: lip_area._lips(),
     ),
 )
 
@@ -351,10 +339,10 @@ def measure_step(
     output이 있으면 쪽을 받아 나가는 영역(없으면 None)을 내고, 같은 지도로 재 output 칸에 둔다.
     쪽마다 직전 지도와 바깥 띠를 먼저 만들고, 시각 순서로 지도를 만들어 두 쪽을 같이 잰다.
     load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
-    pair_sizes인 부위는 시각마다 직전 사진과 그 시각 사진의 얼굴 크기를 서비스처럼 맞추고,
+    시각마다 직전 사진과 그 시각 사진의 얼굴 크기를 서비스처럼 맞추고,
     맞출 사진이 없는 시각은 값을 비우고 sizeSkipped로 센다. 그다음 keep_sharp로 두 묶음에서
     흐린 사진을 빼고, 한쪽이 비는 시각은 값을 비우고 blurSkipped로 센다. 남은 직전 사진이 처음과
-    같으면 직전 지도를 다시 쓴다. 립은 서비스에 직전 창이 없어 그 시각 사진만 keep_sharp에 넘긴다.
+    같으면 직전 지도를 다시 쓴다.
     keep_sharp는 noise_metric.sharp_filter로 만든다.
     직전이나 그 시각 사진 모두에서 가려진 칸(모름 칸)은 영역 안·바깥 띠 평균에서 뺀다.
     cautions는 조심할 구간(ms)이다. 끝 시각이 아닌 시각의 사진 창이 걸리면 값을 비우고
@@ -404,7 +392,7 @@ def measure_step(
                     points[key].append({"ms": t, "inside": None, "outside": None})
                 continue
             photos = usable_rows(result, t - part.after_ms, t, part.regions(side))
-            if photos and part.pair_sizes:
+            if photos:
                 kept, photos = match_sizes(before_photos[side], photos)
                 if not kept or not photos:
                     for key in keys:
@@ -419,8 +407,6 @@ def measure_step(
                     continue
                 if kept != before_photos[side]:
                     before, before_unknown = load_map(kept, side)
-            elif photos:
-                _, photos = keep_sharp([], photos)
             if not photos:
                 for key in keys:
                     points[key].append({"ms": t, "inside": None, "outside": None})

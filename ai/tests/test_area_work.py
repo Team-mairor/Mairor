@@ -14,7 +14,8 @@ from tests.test_reference_area import frames_every_half_second, guide_input
 
 
 def test_only_needed_photos_are_downloaded_and_used(monkeypatch, tmp_path):
-    """립 20~40초 단계면 직후 창과 판정 여유인 39~42초 사진만 받고, 영역에도 그 사진만 넘긴다.
+    """립 20~40초 단계면 직전·직후 창과 판정 여유인 15~21초·39~45초 사진만 받고, 영역에도
+    그 사진만 넘긴다.
 
     영역 만들기 줄 수는 설정(area_lines)을 그대로 넘긴다.
     """
@@ -35,11 +36,11 @@ def test_only_needed_photos_are_downloaded_and_used(monkeypatch, tmp_path):
 
     asyncio.run(
         build_area_from_frames(
-            guide_input(("s1", "lip", 20, 40)), frames_every_half_second(45_000), settings
+            guide_input(("s1", "lip", 20, 40)), frames_every_half_second(46_000), settings
         )
     )
 
-    assert downloaded == list(range(39_000, 42_001, 500))
+    assert downloaded == [*range(15_000, 21_001, 500), *range(39_000, 45_001, 500)]
     assert built == downloaded
     assert lines == [3]
 

@@ -102,7 +102,9 @@ def test_ring_gap_starts_where_the_part_blur_fades_and_follows_the_part_code():
 
     assert timing_metric.ring_gap(parts["blush"]) == 2 * blush_area.BLUR_SIGMA
     assert timing_metric.ring_gap(parts["eyeshadow"]) == 2 * eyeshadow_area.BLUR_SIGMA
-    assert timing_metric.ring_gap(parts["lip"]) == timing_metric.RING_GAP_MIN_CELLS
+    assert timing_metric.ring_gap(parts["lip"]) == max(
+        timing_metric.RING_GAP_MIN_CELLS, round(2 * lip_area.BLUR_SIGMA)
+    )
     assert timing_metric.ring_gap(replace(parts["blush"], blur_sigma=48)) == 96
 
 
@@ -228,14 +230,19 @@ def test_parts_use_the_service_windows_and_color_values():
         blush_area.AFTER_WINDOW_MS,
     )
     assert parts["eyeliner"].after_ms == eyeliner_area.AFTER_WINDOW_MS
-    assert parts["lip"].after_ms == lip_area.AFTER_WINDOW_MS
+    assert (parts["lip"].before_ms, parts["lip"].after_ms) == (
+        lip_area.BEFORE_WINDOW_MS,
+        lip_area.AFTER_WINDOW_MS,
+    )
+    assert parts["lip"].change is lip_area.lip_change
+    assert parts["lip"].blur_sigma == lip_area.BLUR_SIGMA
 
 
 def test_change_is_zero_when_nothing_changed():
     photo = np.full((MAP_SIZE, MAP_SIZE, 3), (200, 150, 130), dtype=np.uint8)
 
     assert not timing_metric.eyeliner_change(photo, photo).any()
-    assert np.allclose(timing_metric.lip_change(photo, photo), 0)
+    assert np.allclose(lip_area.lip_change(photo, photo), 0)
 
 
 def test_parts_pass_the_occlusion_finder_to_the_part_code(monkeypatch):
@@ -431,43 +438,6 @@ def test_measure_step_skips_a_time_left_without_a_sharp_photo(monkeypatch):
     assert skipped == [{"ms": blurry_ms, "inside": None, "outside": None}]
     assert (row["sizeSkipped"], row["blurSkipped"]) == (0, 1)
     assert row["insideFinal"] == 10.0
-
-
-def test_measure_step_hands_only_the_lip_photos_to_the_sharp_filter(monkeypatch):
-    """서비스 립은 직전 창이 없어 그 시각 사진에서만 흐린 사진을 뺀다(drop_blurry([], rows)).
-
-    도구의 립 직전 지도(LIP_BEFORE_MS)는 서비스에 없는 것이라 거르지 않고, 시각마다 그 시각
-    사진만 넘기는지 본다.
-    """
-    area = block(slice(40, 60), slice(40, 60))
-    monkeypatch.setattr(timing_metric, "not_skin", lambda: np.zeros((100, 100), dtype=bool))
-    monkeypatch.setattr(timing_metric, "usable_rows", lambda result, s, e, regions: [e])
-    handed = []
-
-    def keep_sharp(before_rows, after_rows):
-        handed.append(list(before_rows))
-        return list(before_rows), list(after_rows)
-
-    part = replace(brow_part(), name="lip", makeup="lip", sides=("lipsOuter",), pair_sizes=False)
-
-    timing_metric.measure_step(
-        part,
-        None,
-        20000,
-        40000,
-        lambda photos, side: (np.zeros((100, 100), dtype=np.float32), np.zeros((100, 100), bool)),
-        lambda side: area,
-        keep_sharp=keep_sharp,
-    )
-
-    assert handed and all(before == [] for before in handed)
-
-
-def test_only_the_lip_skips_size_matching_like_the_service():
-    """서비스 립은 직후 사진만 보고 직전 묶음이 없어 크기를 맞추지 않는다. 다른 부위는 맞춘다."""
-    pair = {p.name: p.pair_sizes for p in timing_metric.PARTS}
-
-    assert pair == {"brow": True, "eyeshadow": True, "eyeliner": True, "blush": True, "lip": False}
 
 
 def test_measure_step_skips_caution_times_but_keeps_the_service_window(monkeypatch):

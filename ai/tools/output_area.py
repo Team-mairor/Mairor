@@ -22,9 +22,7 @@ sys.path.insert(0, str(AI_ROOT))
 
 from app.schemas.guide_area import (
     AreaSubStep,
-    GuideSet,
     MeshAnchor,
-    PolygonShape,
     RegionName,
 )
 from app.tasks.area.common.face_map import (
@@ -37,11 +35,10 @@ from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.guide_area_builder import (
     eyeliner_sub_step,
-    outline_anchors,
+    lip_sub_step,
     pair_sub_step,
-    template_sub_step,
 )
-from app.tasks.area.parts import blush_area, brow_area, eyeshadow_area, lip_area
+from app.tasks.area.parts import blush_area, brow_area, eyeshadow_area
 from app.tasks.area.parts.area_preparation import step_bounds, within_step
 from app.tasks.area.parts.blush_area import BlushArea, symmetric_blush
 from app.tasks.area.parts.brow_area import BrowArea, symmetric_brows
@@ -89,7 +86,7 @@ def output_sub_step(
 
     areas는 서비스 빌더처럼 부위의 쪽 순서(BROWS·EYES·CHEEKS)대로 담는다.
     짝 부위는 pair_sub_step, 아이라인은 symmetric_eyeliner와 eyeliner_sub_step,
-    립은 _lip_sub_step과 같은 계산이다.
+    립은 lip_sub_step을 그대로 부른다.
     아이섀도 기본 가이드의 바른 자리별 키(단계 글로 고름)는 고르지 않는다.
     기본 가이드는 나가는 영역이 없어 재는 값은 같다.
     drawn은 앞 아이라인 단계들에서 안내한 칸이고 아이라인에만 쓴다.
@@ -103,35 +100,12 @@ def output_sub_step(
         guided = np.any(list(masks.values()), axis=0)
         return sub_step, guided if drawn is None else drawn | guided
     if makeup == "lip":
-        return _lip_output(areas["lipsOuter"]), drawn
+        return lip_sub_step(SUB_STEP_ID, areas["lipsOuter"]), drawn
     symmetric, not_found, exclude_self, smooth_cells = PAIR_RULES[makeup]
     sub_step = pair_sub_step(
         SUB_STEP_ID, makeup, areas, symmetric(dict(areas)), not_found, exclude_self, smooth_cells
     )
     return sub_step, drawn
-
-
-def _lip_output(area: LipArea) -> AreaSubStep:
-    """서비스 _lip_sub_step이 찾은 결과를 하위 단계로 적는 부분과 같다."""
-    if area.mask is None:
-        return template_sub_step(SUB_STEP_ID, "lip", [area.reason])
-    outline = outline_anchors(area.mask, lip_area.OUTLINE_SMOOTH_CELLS)
-    if not outline:
-        return template_sub_step(SUB_STEP_ID, "lip", ["lipColorNotFound"])
-    return AreaSubStep(
-        sub_step_id=SUB_STEP_ID,
-        order=1,
-        status="extracted",
-        reasons=[],
-        template_id=None,
-        guide_sets=[
-            GuideSet(
-                region="lipsOuter",
-                source="extracted",
-                guides=[PolygonShape(type="polygon", outline=outline)],
-            )
-        ],
-    )
 
 
 def anchor_points(anchors: Sequence[MeshAnchor]) -> list[tuple[float, float]]:

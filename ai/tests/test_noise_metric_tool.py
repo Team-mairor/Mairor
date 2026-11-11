@@ -120,13 +120,16 @@ def test_blush_reddening_matches_the_service_before_the_threshold():
     assert np.array_equal(tool_area, blush_area.blush_area_on_maps(before, after, "leftCheek"))
 
 
-def test_lip_redness_matches_the_service_before_the_threshold():
+def test_lip_measure_finds_what_the_service_finds():
     lips = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
-    after = with_red(skin_map(), lips, 30)
+    before = skin_map()
+    after = with_red(before, lips, 30)
 
-    redness, cells = noise_metric.lip_redness(after)
+    m = noise_metric.measure_lip(before, after, "lipsOuter")
 
-    assert np.array_equal(cells & (redness > lip_area.REDNESS_MIN), lip_area.lip_area_on_map(after))
+    assert m.found
+    assert np.array_equal(m.area.mask, lip_area.lip_area_on_maps(before, after))
+    assert m.gate == lip_area.found_ratio(m.area.mask)
 
 
 @pytest.mark.parametrize(
@@ -162,18 +165,17 @@ def test_blush_reddening_with_hidden_cells_matches_the_service():
     )
 
 
-def test_lip_redness_with_hidden_cells_matches_the_service():
+def test_lip_measure_with_hidden_cells_matches_the_service():
     lips = polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE)
-    after = with_red(skin_map(), lips, 30)
+    before = skin_map()
+    after = with_red(before, lips, 30)
     hidden = np.zeros_like(lips)
-    hidden[:, : MAP_SIZE // 2] = True
+    hidden[:, : int(MAP_SIZE * 0.45)] = True
 
-    redness, cells = noise_metric.lip_redness(after, hidden)
+    m = noise_metric.measure_lip(before, after, "lipsOuter", hidden)
 
-    assert not (cells & hidden).any()
-    assert np.array_equal(
-        cells & (redness > lip_area.REDNESS_MIN), lip_area.lip_area_on_map(after, hidden)
-    )
+    assert not (m.area.mask & hidden).any()
+    assert np.array_equal(m.area.mask, lip_area.lip_area_on_maps(before, after, hidden))
 
 
 def test_parts_use_each_service_threshold():
@@ -183,7 +185,7 @@ def test_parts_use_each_service_threshold():
     assert by_name["eyeshadow"].threshold == eyeshadow_area.REDDENING_MIN
     assert by_name["eyeliner"].threshold == eyeliner_area.REDDENING_MIN
     assert by_name["blush"].threshold == blush_area.REDDENING_MIN
-    assert by_name["lip"].threshold == lip_area.REDNESS_MIN
+    assert by_name["lip"].threshold == lip_area.CHANGE_MIN
 
 
 def test_eye_parts_leave_out_brow_steps():
@@ -419,33 +421,33 @@ def test_pair_left_without_a_sharp_photo_on_one_side_is_skipped_like_the_service
     assert (row["skipped"], row["sizeSkipped"], row["blurSkipped"]) == (3, 0, 3)
 
 
-def test_lip_hands_only_its_photos_to_the_sharp_filter(monkeypatch):
-    """서비스 립은 직전 창이 없어 직후 사진에서만 흐린 사진을 뺀다(drop_blurry([], rows)).
-
-    도구도 립은 직전 목록을 비워 넘기는지 본다.
+def test_lip_measures_before_and_after_photos_like_the_service(monkeypatch):
+    """서비스 립은 직전·직후 두 묶음으로 찾으므로 도구도 두 묶음을 흐림 거르기에 넘기고,
+    쌍 간격도 다른 부위처럼 GAPS_SECONDS마다 잰다.
     """
     monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
     handed = []
 
     def keep_sharp(before_rows, after_rows):
         handed.append((list(before_rows), list(after_rows)))
         return list(before_rows), list(after_rows)
 
-    part = noise_metric.Part(
-        "lip", ("lipsOuter",), 0, 1000, 0.5, None, lambda side: [side], lambda *args: None
-    )
+    part = next(p for p in noise_metric.PARTS if p.name == "lip")
     empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
 
-    noise_metric.measure_part(
+    tallies, _ = noise_metric.measure_part(
         part,
         None,
-        [(0, 12000)],
+        [(0, 200000)],
         [],
         lambda rows, side: (skin_map(), empty),
         keep_sharp=keep_sharp,
     )
 
-    assert handed and all(pair == ([], ["photo"]) for pair in handed)
+    assert (part.before_ms, part.after_ms) == (lip_area.BEFORE_WINDOW_MS, lip_area.AFTER_WINDOW_MS)
+    assert handed and all(pair == (["photo"], ["photo"]) for pair in handed)
+    assert {gap for _, gap in tallies} == set(noise_metric.GAPS_SECONDS)
 
 
 def test_sharp_filter_hands_the_photo_bundle_to_the_service_drop_blurry(monkeypatch):

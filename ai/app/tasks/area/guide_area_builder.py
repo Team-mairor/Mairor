@@ -50,7 +50,7 @@ from app.tasks.area.parts.eyeshadow_area import (
     find_eyeshadow_area,
     symmetric_eyeshadow,
 )
-from app.tasks.area.parts.lip_area import PhotoLoader, find_lip_area
+from app.tasks.area.parts.lip_area import LipArea, PhotoLoader, find_lip_area
 
 logger = logging.getLogger(__name__)
 
@@ -378,16 +378,32 @@ def _lip_sub_step(
     sub_step_id: str,
     occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
-    """립을 바른 곳의 바깥선을 얼굴 주소로 바꿔 lipsOuter 영역 하나로 적는다.
+    """립 단계 직전·직후 사진으로 바른 곳을 찾아 lip_sub_step으로 적는다."""
+    found = find_lip_area(result, step_start_ms, step_end_ms, load_photo, occlusion=occlusion)
+    return lip_sub_step(sub_step_id, found)
 
-    립은 단계 끝 직후 사진만 쓰므로 step_start_ms는 쓰지 않는다.
+
+def lip_sub_step(sub_step_id: str, found: LipArea) -> AreaSubStep:
+    """찾은 립의 바깥선을 얼굴 주소로 바꿔 lipsOuter 영역 하나로 적는다.
+
+    윗입술과 아랫입술처럼 떨어진 조각은 조각마다 polygon 하나씩이다. 찾은 비율(check_lip_area)을
+    조각 전부로 재므로 그리는 것도 조각 전부여야, 판정을 넘긴 칸이 그림에서 빠지지 않는다.
+    입 안(lipsInner)은 exclude로 넣어 FE가 구멍으로 그리게 한다.
     립 색을 못 찾으면 그 이유로 기본 립 가이드(template)를 쓴다.
     """
-    found = find_lip_area(result, step_end_ms, load_photo, occlusion=occlusion)
     if found.mask is None:
         return template_sub_step(sub_step_id, "lip", [found.reason])
-    outline = outline_anchors(found.mask, lip_area.OUTLINE_SMOOTH_CELLS)
-    if not outline:
+    guides = [
+        PolygonShape(type="polygon", outline=outline)
+        for outline in (
+            points_to_anchors(points)
+            for points in smooth_outlines(
+                found.mask, lip_area.OUTLINE_SMOOTH_CELLS, every_piece=True
+            )
+        )
+        if outline
+    ]
+    if not guides:
         return template_sub_step(sub_step_id, "lip", ["lipColorNotFound"])
     return AreaSubStep(
         sub_step_id=sub_step_id,
@@ -399,7 +415,8 @@ def _lip_sub_step(
             GuideSet(
                 region="lipsOuter",
                 source="extracted",
-                guides=[PolygonShape(type="polygon", outline=outline)],
+                guides=guides,
+                exclude=["lipsInner"],
             )
         ],
     )

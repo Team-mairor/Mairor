@@ -5,8 +5,8 @@
 안 건드린 시간은 단계표를 바른 시간으로 나누기 전의 유튜브 챕터 단위 구간이다. 말하거나 제품을
 보여 주는 시간도 그 부위를 건드리지 않은 시간이라 넣고, 단계를 나눈 뒤에도 같은 구간으로 재서
 앞선 잡음 결과와 견줄 수 있게 한다. 쌍마다 부위 코드와 같은 계산을 해서
-나온 값은 모두 잡음이다. 립은 전후 비교가 아니라 바른 뒤 사진 한 장을 보므로,
-맨입술 순간의 사진만 쓴다. 조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
+나온 값은 모두 잡음이다. 립도 다른 부위처럼 맨입술 시간의 직전·직후 쌍으로 잰다.
+조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
 사진은 서비스 부위 찾기와 같이 고른다. 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
 맞출 사진이 없는 쌍은 서비스에서 기본 가이드(faceSizeMismatch)로 가므로
 재지 않은 쌍(크기로 뺀 쌍)으로 센다. 그다음 흐린 사진을 빼고(drop_blurry), 한쪽이 비는 쌍은
@@ -48,9 +48,6 @@ sys.path.insert(0, str(AI_ROOT))
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Step
-from app.tasks.area.common.face_map import MAP_SIZE, map_points
-from app.tasks.area.common.region_mask import polygon_mask, span
-from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
@@ -330,43 +327,22 @@ def measure_blush(
     )
 
 
-def lip_redness(
-    after: np.ndarray, unknown: np.ndarray | None = None
-) -> tuple[np.ndarray, np.ndarray]:
-    """lip_area_on_map과 같은 계산으로 (입 주변 피부보다 붉은 양 지도, 살펴볼 범위)를 낸다.
-
-    unknown(모름 칸)은 범위와 입 주변 피부에서 뺀다.
-    입 주변 피부가 모두 모름 칸이면 붉은 양은 0이다.
-    """
-    lab = rgb_to_lab(after)
-    outline = map_points(REGION_POINTS["lipsOuter"])
-    width = span(outline)
-    cells = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=round(width * lip_area.MARGIN_RATIO))
-    near, far = (round(width * ratio) for ratio in lip_area.SKIN_RING_RATIOS)
-    ring = polygon_mask(outline, MAP_SIZE, MAP_SIZE, band=far) & ~polygon_mask(
-        outline, MAP_SIZE, MAP_SIZE, band=near
-    )
-    ring, cells = known_cells(ring, unknown), known_cells(cells, unknown)
-    if not ring.any():
-        return np.zeros((MAP_SIZE, MAP_SIZE)), cells
-    return lab[..., 1] - np.median(lab[..., 1][ring]), cells
-
-
 def measure_lip(
     before: np.ndarray | None,
     after: np.ndarray,
     side: RegionName,
     unknown: np.ndarray | None = None,
 ) -> Measure | None:
-    redness, cells = lip_redness(after, unknown)
+    cells = known_cells(lip_area.lip_range(), unknown)
     if not cells.any():
         return None
-    values = redness[cells]
-    area = cells & (redness > lip_area.REDNESS_MIN)
+    change = lip_area.lip_change(before, after, unknown)
+    values = change[cells]
+    area = lip_area.lip_area_on_maps(before, after, unknown)
     found = lip_area.check_lip_area(area, unknown)
     return Measure(
         values,
-        float((values > lip_area.REDNESS_MIN).mean()),
+        float((values > lip_area.CHANGE_MIN).mean()),
         lip_area.found_ratio(area, unknown),
         found.mask is not None,
         found,
@@ -421,9 +397,9 @@ PARTS = (
     Part(
         "lip",
         ("lipsOuter",),
-        0,
+        lip_area.BEFORE_WINDOW_MS,
         lip_area.AFTER_WINDOW_MS,
-        lip_area.REDNESS_MIN,
+        lip_area.CHANGE_MIN,
         lip_area.MIN_FOUND_RATIO,
         lambda side: [side],
         measure_lip,
@@ -446,10 +422,9 @@ def measure_part(
 
     (모은 결과, 쌍마다 기록)을 돌려준다.
 
-    립은 간격 대신 순간 하나씩(간격 0)이다.
     직전 창이 있는 부위는 서비스처럼 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
     한쪽이라도 남는 사진이 없으면 그 쪽은 재지 않은 것(skipped, size_skipped)으로 센다.
-    그다음 keep_sharp로 흐린 사진을 빼고(립은 서비스처럼 직후 사진만 넘김), 한쪽이 비면
+    그다음 keep_sharp로 흐린 사진을 빼고, 한쪽이 비면
     재지 않은 것(skipped, blur_skipped)으로 센다. keep_sharp는 sharp_filter로 만든다.
     load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
     쌍마다 쪽을 다 잰 뒤 서비스처럼 하위 단계로 바꿔 쪽마다 나가는 영역이 생기는지 센다.
@@ -459,9 +434,8 @@ def measure_part(
     """
     tallies: dict[tuple[str, int], Tally] = {}
     records: list[dict] = []
-    gaps = (0,) if part.name == "lip" else GAPS_SECONDS
     for span_ in spans:
-        for gap in gaps:
+        for gap in GAPS_SECONDS:
             for t in pair_starts(
                 span_, gap * 1000, part.before_ms, part.after_ms, STRIDE_MS, cautions
             ):

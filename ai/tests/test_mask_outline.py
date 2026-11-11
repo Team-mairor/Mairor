@@ -1,6 +1,7 @@
 import math
 from pathlib import Path
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -8,10 +9,10 @@ from app.tasks.area.common.face_map import MAP_SIZE
 from app.tasks.area.common.mask_outline import OUTLINE_SPACING_CELLS, smooth_outlines
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.parts import lip_area
-from app.tasks.area.parts.lip_area import check_lip_area, lip_area_on_map
+from app.tasks.area.parts.lip_area import check_lip_area, lip_area_on_maps
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "lip"
-MAX_CHANGED_RATIO_ON_SAMPLE = 0.03
+MAX_CHANGED_RATIO_ON_SAMPLE = 0.04
 
 
 def blank(size: int = 100) -> np.ndarray:
@@ -137,13 +138,20 @@ def test_thin_line_is_grown_and_not_lost():
 def test_sample_lip_keeps_its_shape():
     """시험 영상 립 영역을 립 세기로 펴도 칠한 칸이 거의 그대로다.
 
-    입술 넓이에서 테두리 한 줄 남짓만 달라진다.
+    바깥선만 따므로 입 안 구멍은 메운 모양과 견준다. 틴트를 고르지 않게 발라 테두리가
+    울퉁불퉁해도, 입술 넓이에서 테두리 한 줄 남짓(4% 안)만 달라진다.
     """
-    after = np.asarray(Image.open(GOLDEN / "after_s10.png").convert("RGB"))
-    mask = check_lip_area(lip_area_on_map(after)).mask
+    before, after = (
+        np.asarray(Image.open(GOLDEN / f"{name}_s27a.png").convert("RGB"))
+        for name in ("before", "after")
+    )
+    mask = check_lip_area(lip_area_on_maps(before, after)).mask
+    found, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    biggest = max(found, key=cv2.contourArea)
+    filled = cv2.drawContours(np.zeros(mask.shape, np.uint8), [biggest], -1, 1, -1).astype(bool)
 
     outline = smooth_outlines(mask, lip_area.OUTLINE_SMOOTH_CELLS)[0]
     painted = polygon_mask(outline, MAP_SIZE, MAP_SIZE)
 
-    assert (painted ^ mask).sum() <= mask.sum() * MAX_CHANGED_RATIO_ON_SAMPLE
+    assert (painted ^ filled).sum() <= filled.sum() * MAX_CHANGED_RATIO_ON_SAMPLE
     assert not math.isclose(len(outline), 0)
