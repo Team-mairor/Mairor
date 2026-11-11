@@ -1,4 +1,5 @@
 import type {
+  AnalysisJobSummary,
   ApiErrorBody,
   CodeSent,
   EmailAvailability,
@@ -6,7 +7,9 @@ import type {
   GoogleSignupPending,
   Health,
   LoginResponse,
+  Page,
   PasswordResetVerified,
+  PopularVideoResponse,
   User,
   VideoSearchItem,
   VideoSearchPage,
@@ -281,6 +284,71 @@ const ROUTES: MockRoute[] = [
         code: "VIDEO_UNSUPPORTED_FOR_ANALYSIS",
         message: "분석할 수 없는 영상입니다. 크리에이티브 커먼즈(CC BY) 영상만 분석할 수 있습니다.",
       }),
+  },
+  {
+    // 첫 영상은 모의 가이드가 있어 바로 따라 하기, 둘째는 가이드가 없어 분석 요청으로 간다
+    method: "GET",
+    path: /^\/v1\/videos\/popular$/,
+    success: () => ({
+      status: 200,
+      body: {
+        items: [
+          {
+            ...MOCK_VIDEO,
+            viewCount: null,
+            rank: 1,
+            videoId: "b0000000-0000-4000-8000-000000000001",
+          },
+          {
+            ...MOCK_VIDEO,
+            ...NO_GUIDE,
+            viewCount: null,
+            rank: 2,
+            videoId: "b0000000-0000-4000-8000-000000000002",
+            youtubeVideoId: "eoNi1sl-5RQ",
+            title: "10분 완성 코랄 블러셔 메이크업",
+            thumbnailUrl: "https://i.ytimg.com/vi/eoNi1sl-5RQ/hqdefault.jpg",
+          },
+        ],
+        rankingBasis: "DISTINCT_MEMBER_SELECTIONS",
+        aggregationScope: "LAST_30_DAYS",
+        updatedAt: "2026-11-11T00:00:00Z",
+        nextRefreshAt: "2026-11-11T00:10:00Z",
+      } satisfies PopularVideoResponse,
+    }),
+    error: () =>
+      error(503, {
+        code: "VIDEO_POPULAR_UNAVAILABLE",
+        message: "아직 인기 영상을 보여 드릴 수 없습니다.",
+      }),
+  },
+  {
+    // 내 분석 목록(홈 검수 카드). 모의 가이드로 승인된 분석 하나
+    method: "GET",
+    path: /^\/v1\/users\/me\/analysis-jobs$/,
+    success: () => ({
+      status: 200,
+      body: {
+        items: [
+          {
+            jobId: "c0000000-0000-4000-8000-000000000001",
+            videoId: "b0000000-0000-4000-8000-000000000001",
+            youtubeVideoId: MOCK_VIDEO.youtubeVideoId,
+            title: MOCK_VIDEO.title,
+            thumbnailUrl: MOCK_VIDEO.thumbnailUrl,
+            status: "COMPLETED",
+            reviewStatus: "APPROVED",
+            guideId: MOCK_VIDEO.guideId,
+            requestedAt: "2026-11-11T00:00:00Z",
+            reviewedAt: "2026-11-11T01:00:00Z",
+          },
+        ],
+        page: 0,
+        size: 1,
+        hasNext: false,
+      } satisfies Page<AnalysisJobSummary>,
+    }),
+    error: () => error(401, { code: "UNAUTHORIZED", message: "로그인이 필요합니다." }),
   },
 ];
 

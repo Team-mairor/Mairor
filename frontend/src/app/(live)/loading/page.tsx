@@ -20,7 +20,7 @@ import {
   useAnalysisJob,
 } from "@/features/loading";
 import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
-import { hasSame, runHref, useSession } from "@/features/session";
+import { hasSame, isGuideId, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
 import { type AnalysisJobStatus, type ApiError } from "@/lib/api";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
@@ -105,6 +105,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const pct = jobId ? live.pct : demoPct;
   const fail = jobId ? jobFail(live.error, job) : demoFail;
   const review: Review = job ? jobReview(job) : demoReview;
+  // 검수 대기 중에도 상태를 계속 받으므로, 이 화면에 있는 동안 승인되면 그 가이드로 바로 넘어갈 수 있다
+  const approvedGuide =
+    job?.status === "COMPLETED" && job.reviewStatus === "APPROVED" && isGuideId(job.guideId)
+      ? job.guideId
+      : null;
 
   useEffect(() => {
     if (live.error?.code === "UNAUTHORIZED") router.replace("/login?expired=basic");
@@ -118,14 +123,15 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     return () => clearInterval(t);
   }, [running, sample]);
 
-  // 4%가 되면 얼굴 등록 모달을 한 번 띄운다. 실패·검수 안내 중에는 띄우지 않는다
+  // 4%가 되면 얼굴 등록 모달을 한 번 띄운다. 실패·검수 안내 중에는 띄우지 않는다.
+  // 실제 분석(jobId)은 오래 걸리고 검수도 거쳐 사용자가 기다리지 않으므로, 등록은 가이드를 시작할 때 받는다
   useEffect(() => {
-    if (pct >= 4 && !faceShown && !faceOk && !fail && !review) {
+    if (pct >= 4 && !jobId && !faceShown && !faceOk && !fail && !review) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 진행률이 문턱을 넘는 순간 한 번만
       setFaceShown(true);
       setFaceModal(true);
     }
-  }, [pct, faceShown, faceOk, fail, review]);
+  }, [pct, jobId, faceShown, faceOk, fail, review]);
 
   // 등록 중이 아니면 추적을 쉬게 한다. 카메라는 켜 둬서 미리보기에서 바로 다시 돌린다
   // 등록 모달이 닫히면 프레임을 받는 곳이 없어 추적은 쉬고, 카메라는 미리보기에서 이어 쓴다.
@@ -216,22 +222,40 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             sub: "검수에서 반려됐어요. 다른 영상을 골라 주세요.",
             retry: false,
           }
-        : null;
+        : approvedGuide
+          ? {
+              tag: "APPROVED",
+              title: "검수를 통과했어요",
+              sub: "이 영상의 가이드로 바로 따라 할 수 있어요. 얼굴 등록은 다음 화면에서 해요.",
+              retry: false,
+            }
+          : null;
 
-  const guideOk = run.mode === "guide" ? load.status === "ready" : replay || (done && !notice);
+  const guideOk = approvedGuide
+    ? true
+    : run.mode === "guide"
+      ? load.status === "ready"
+      : replay || (done && !notice);
   const guideState = fail
     ? "멈춤"
     : review
       ? review === "pending"
         ? "검수 대기"
         : "이용 불가"
-      : guideOk
-        ? "완료"
-        : `분석 중 ${pct}%`;
+      : approvedGuide
+        ? "검수 통과"
+        : guideOk
+          ? "완료"
+          : `분석 중 ${pct}%`;
 
   let ctaLabel = "";
   let ctaGo: (() => void) | null = null;
-  if (review === "pending") {
+  if (approvedGuide) {
+    ctaLabel = "가이드로 따라 하기";
+    // 여기서 실행을 바꾸면 실행 경로 검사가 아직 남은 ?jobId= 주소에 guideId를 붙여 덮어쓴다.
+    // 가이드 주소로만 옮기고, 새 가이드 실행은 직접 들어온 가이드 주소처럼 RunGuideProvider가 시작한다
+    ctaGo = () => router.push(runHref("/loading", approvedGuide));
+  } else if (review === "pending") {
     ctaLabel = "홈으로";
     ctaGo = () => {
       if (picked) {
@@ -345,7 +369,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
         <ReadyStatus
           items={[
             ["가이드 준비", guideState, guideOk],
-            ["얼굴 인식 준비", faceOk ? "완료" : faceModal ? "등록 중" : "등록 필요", faceOk],
+            [
+              "얼굴 인식 준비",
+              faceOk ? "완료" : faceModal ? "등록 중" : jobId ? "가이드 시작 때 등록" : "등록 필요",
+              faceOk,
+            ],
           ]}
         />
         {fail ? (

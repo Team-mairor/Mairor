@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldError } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { useLogout } from "@/features/auth";
+import { toPendingGuide, useLatestAnalysis } from "@/features/loading";
 import { PouchBoard, usePouchSync } from "@/features/pouch";
 import { displayName, isGuideId, runHref, useSession } from "@/features/session";
 import { videoThumb } from "@/features/video";
@@ -33,7 +34,7 @@ const MONTHS = [
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
 
-/** 02 홈. 최근 리포트·다시 하기·파우치·검수 카드 */
+/** 02 홈. 최근 리포트·다시 하기·파우치·검수 카드(로그인하면 API-VIDEO-007) */
 export default function HomePage() {
   const router = useRouter();
   const { state, sessionChecked, startRun } = useSession();
@@ -52,7 +53,19 @@ export default function HomePage() {
   const d = new Date();
   const today = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
   const last = reports[0];
-  const pg = empty ? null : state.pendingGuide;
+  // 로그인했으면 검수 카드는 내 분석 목록(API-VIDEO-007)의 가장 최근 것이다. 받기 전에는 띄우지 않고,
+  // 비로그인이거나 목록을 받지 못하면 기기에 저장한 카드(샘플 흐름 · 개발 도구)를 쓴다
+  const mine = useLatestAnalysis(sessionChecked && state.loggedIn ? state.email : null);
+  const cardWaiting = state.loggedIn && (!sessionChecked || mine.load.status === "loading");
+  const latest = mine.load.status === "ready" ? mine.load.data.items[0] : undefined;
+  const pg =
+    empty || cardWaiting
+      ? null
+      : mine.load.status === "ready"
+        ? latest
+          ? toPendingGuide(latest)
+          : null
+        : state.pendingGuide;
   const approved = pg?.status === "approved";
   // 승인됐어도 guideId가 올바르지 않으면 시작하지 않고 다시 확인을 안내한다
   const ready = approved && isGuideId(pg?.guideId);

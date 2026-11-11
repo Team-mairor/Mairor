@@ -266,12 +266,6 @@ const ITEMS: Item[] = [
       ],
     }),
   },
-  {
-    label: "영상 입력 · 조회 실패",
-    sub: "검색·Top 4 불러오기 실패",
-    href: "/select?fail=1",
-    prep: () => loggedIn,
-  },
   { label: "확인 · 얼굴 추적", sub: "랜드마크 · FPS · 색 측정", href: "/debug/face" },
   ...(process.env.GUIDE_EXPERIMENTS
     ? [

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { AnalysisJobReceipt, VideoSelection } from "@/lib/api";
+import type { AnalysisJobReceipt, PopularVideoItem, VideoSelection } from "@/lib/api";
 
-import { targetOfReceipt, targetOfSelection } from "./start-target";
+import { targetOfPopular, targetOfReceipt, targetOfSelection } from "./start-target";
 
 const GUIDE_ID = "a0000000-0000-4000-8000-000000000001";
 const JOB_ID = "c0000000-0000-4000-8000-000000000001";
@@ -72,5 +72,25 @@ describe("targetOfReceipt", () => {
   it("받은 ID가 비면 null이다", () => {
     expect(targetOfReceipt(receipt({ receiptType: "REUSED_GUIDE", jobId: null }))).toBeNull();
     expect(targetOfReceipt(receipt({ jobId: null }))).toBeNull();
+  });
+});
+
+describe("targetOfPopular", () => {
+  const popular = (patch: Partial<PopularVideoItem>): PopularVideoItem => ({
+    ...selection({}),
+    rank: 1,
+    ...patch,
+  });
+
+  it("승인 가이드가 있으면 가이드로 시작한다", () => {
+    expect(targetOfPopular(popular({ guideAvailable: true, guideId: GUIDE_ID }))).toEqual({
+      kind: "guide",
+      guideId: GUIDE_ID,
+    });
+  });
+
+  it("가이드가 없으면 null이라 videoId로 분석을 요청한다", () => {
+    expect(targetOfPopular(popular({}))).toBeNull();
+    expect(targetOfPopular(popular({ guideAvailable: true, guideId: null }))).toBeNull();
   });
 });

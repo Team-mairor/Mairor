@@ -1,4 +1,4 @@
-import type { AnalysisJobReceipt, VideoSelection } from "@/lib/api";
+import type { AnalysisJobReceipt, PopularVideoItem, VideoSelection } from "@/lib/api";
 
 /** 고른 영상을 어디서 시작할지. guide는 승인 가이드로 바로 따라 하기, job은 그 분석 작업의 로딩 화면 */
 export type StartTarget = { kind: "guide"; guideId: string } | { kind: "job"; jobId: string };
@@ -11,6 +11,14 @@ export function targetOfSelection(s: VideoSelection): StartTarget | null {
   if (s.guideAvailable && s.guideId) return { kind: "guide", guideId: s.guideId };
   if (s.analysisJobId) return { kind: "job", jobId: s.analysisJobId };
   return null;
+}
+
+/**
+ * 인기 영상(API-VIDEO-005)만으로 정해지는 시작 지점. 승인 가이드가 있으면 가이드, 없으면 null이고 videoId로 분석을 요청한다.
+ * 인기 영상에는 내 진행 중 작업 정보가 없다(요청하면 BE가 JOINED_JOB으로 같은 작업을 준다)
+ */
+export function targetOfPopular(item: PopularVideoItem): StartTarget | null {
+  return item.guideAvailable && item.guideId ? { kind: "guide", guideId: item.guideId } : null;
 }
 
 /** 분석 요청 영수증(API-VIDEO-002)의 시작 지점. REUSED_GUIDE면 가이드, 나머지는 작업. 받은 ID가 비면 null */

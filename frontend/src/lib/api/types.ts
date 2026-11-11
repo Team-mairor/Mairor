@@ -343,3 +343,39 @@ export interface VideoSelection extends VideoSearchItem {
   /** 진행 중이면 NOT_READY, 아니면 가장 최근 가이드의 검수 상태, 분석한 적 없으면 null */
   reviewStatus: "NOT_READY" | "PENDING" | "APPROVED" | "REJECTED" | null;
 }
+
+/**
+ * GET /v1/users/me/analysis-jobs 한 줄 (AnalysisJobSummary, API-VIDEO-007). 내가 요청 · 합류한 작업 중 분석이 끝난 것만,
+ * 요청 · 합류 시각 최신순. reviewStatus를 고르지 않으면 PENDING · APPROVED만 온다. guideId는 APPROVED일 때만 있다
+ */
+export interface AnalysisJobSummary {
+  jobId: string;
+  videoId: string;
+  youtubeVideoId: string;
+  title: string;
+  thumbnailUrl: string | null;
+  status: "COMPLETED";
+  reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+  guideId: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+}
+
+/** 인기 영상 한 줄 (PopularVideoItem, API-VIDEO-005). 검색 결과 칸 + 순위 · 내부 영상 ID. viewCount는 늘 null */
+export interface PopularVideoItem extends VideoSearchItem {
+  rank: number;
+  /** 가이드가 없을 때 영상 선택 없이 바로 분석 요청(API-VIDEO-002)에 쓴다 */
+  videoId: string;
+}
+
+/**
+ * GET /v1/videos/popular 응답 (PopularVideoResponse). 최근 30일 동안 영상을 고른 서로 다른 회원 수 순으로 1~4개.
+ * 기록이 하나도 없으면 503 VIDEO_POPULAR_UNAVAILABLE
+ */
+export interface PopularVideoResponse {
+  items: PopularVideoItem[];
+  rankingBasis: "DISTINCT_MEMBER_SELECTIONS";
+  aggregationScope: "LAST_30_DAYS";
+  updatedAt: string;
+  nextRefreshAt: string;
+}
