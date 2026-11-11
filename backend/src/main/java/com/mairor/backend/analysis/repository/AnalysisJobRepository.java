@@ -46,6 +46,23 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
       nativeQuery = true)
   Optional<AnalysisJob> lockNextForProcessor(@Param("now") Instant now);
 
+  /** 노트북이 끝냈다고 알렸고 아직 AI 에 맡기지 않은 작업 하나(가장 오래된 것). S15P31A306-358. */
+  Optional<AnalysisJob>
+      findFirstByStatusAndProcessorRequestKeyIsNotNullAndAiJobIdIsNullOrderByUpdatedAtAsc(
+          AnalysisStatus status);
+
+  /**
+   * 노트북을 너무 오래 기다린 작업: {@code before} 전에 만들어졌는데 아무도 가져가지 않은 PENDING, 또는 임대가 {@code before} 전에 끝났는데
+   * 아무도 다시 가져가지 않은 RUNNING. S15P31A306-358.
+   */
+  @Query(
+      value =
+          "select id from analysis_jobs"
+              + " where (status = 'PENDING' and created_at < :before)"
+              + " or (status = 'RUNNING' and processor_lease_until < :before)",
+      nativeQuery = true)
+  List<UUID> findIdsWaitingForProcessorSince(@Param("before") Instant before);
+
   /** 행을 잠그고 찾는다. 노트북 알림(완료 · 실패 · 진행)이 임대 다시 내주기와 겹치지 않게 한다. */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select j from AnalysisJob j where j.id = :id")

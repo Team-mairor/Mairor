@@ -215,6 +215,43 @@ public class ProcessorJobService {
         job.getProgressStage());
   }
 
+  /**
+   * 노트북을 너무 오래 기다린 작업을 {@code PROCESSOR_TIMEOUT}(재시도 가능)으로 끝낸다: 아무도 가져가지 않은 대기 작업, 임대가 지나고 아무도 다시
+   * 가져가지 않은 작업. 연결 모드가 꺼져 있으면 하지 않는다(worker 가 대기 작업을 처리한다). S15P31A306-358.
+   *
+   * @return 끝낸 작업 수
+   */
+  @Transactional
+  public int expireWaiting() {
+    if (!properties.enabled()) {
+      return 0;
+    }
+    Instant now = clock.instant();
+    Instant before = now.minus(properties.waitTimeout());
+    int expired = 0;
+    for (UUID id : jobs.findIdsWaitingForProcessorSince(before)) {
+      AnalysisJob job = jobs.lockById(id).orElse(null);
+      if (job == null) {
+        continue;
+      }
+      if (job.getStatus() == AnalysisStatus.PENDING && job.getCreatedAt().isBefore(before)) {
+        job.failBeforeStart(
+            AnalysisFailureCode.PROCESSOR_TIMEOUT,
+            "영상 전처리 노트북이 " + properties.waitTimeout().toMinutes() + "분 동안 작업을 가져가지 않았습니다.",
+            now);
+      } else if (job.isWithProcessor() && job.getProcessorLeaseUntil().isBefore(before)) {
+        job.fail(
+            AnalysisFailureCode.PROCESSOR_TIMEOUT, "영상 전처리 노트북이 처리 중에 멈췄고 다시 가져가지 않았습니다.", now);
+      } else {
+        continue;
+      }
+      notifier.changed(id);
+      expired++;
+      log.warn("노트북을 기다리다 시간 초과 jobId={}", id);
+    }
+    return expired;
+  }
+
   /** 노트북이 이 작업의 파일을 두는 자리. 같은 영상을 다시 분석해도 이전 결과를 덮지 않게 작업마다 나눈다. */
   static String s3Prefix(AnalysisJob job) {
     return "videos/" + job.getVideo().getYoutubeVideoId() + "/jobs/" + job.getId();

@@ -40,6 +40,8 @@ public enum AnalysisFailureCode {
   VIDEO_DOWNLOAD_REJECTED(false, "영상을 받을 수 없습니다."),
   /** 노트북이 정해진 시간 안에 끝내지 못했다(임대가 거듭 만료 — 노트북이 꺼졌거나 멈춤). 노트북이 다시 켜지면 된다. */
   PROCESSOR_TIMEOUT(true, "영상 전처리가 시간 안에 끝나지 않았습니다."),
+  /** 노트북이 올린 AI 요청 JSON 이 없거나 형식이 틀렸다(영상 다름 · 단계 ID 겹침 · 프레임 키 없음, S15P31A306-358). 같은 결과물이면 같다. */
+  PROCESSOR_OUTPUT_INVALID(false, "영상 전처리 결과를 쓸 수 없습니다."),
   /** 노트북이 알려 온, BE 가 모르는 실패. 재시도 여부는 노트북이 정한다. */
   PROCESSOR_FAILED(true, "영상 전처리에 실패했습니다."),
   /** 예기치 않은 오류. */

@@ -221,6 +221,9 @@ app:
       # 노트북 임대 시간, 같은 작업을 내주는 최대 횟수(넘으면 PROCESSOR_TIMEOUT 실패)
       lease: ${ANALYSIS_PROCESSOR_LEASE:900s}
       max-claims: 2
+      # 노트북을 기다리는 최대 시간(아무도 안 가져감 · 처리 중 멈춤 → PROCESSOR_TIMEOUT), 노트북 결과를 AI 에 맡기는 확인 간격(worker, S15P31A306-358)
+      wait-timeout: ${ANALYSIS_PROCESSOR_WAIT_TIMEOUT:30m}
+      submit-interval: 5s
     request:
       # 회원 분석 요청(API-VIDEO-002). 회원 한 명이 하루(Asia/Seoul 0시 초기화)에 만들 수 있는 새 분석 작업 수.
       # 재사용 · 합류는 세지 않는다. 시연 중 걸리지 않게 넉넉히 둔다(S15P31A306-362)

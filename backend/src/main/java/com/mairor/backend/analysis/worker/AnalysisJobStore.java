@@ -91,6 +91,20 @@ public class AnalysisJobStore {
             });
   }
 
+  /** 노트북이 끝낸 작업(AI 에 맡길 차례). */
+  public record ProcessedJob(UUID jobId, String youtubeVideoId, String requestKey) {}
+
+  /** 노트북이 끝냈다고 알렸고 아직 AI 에 맡기지 않은 작업 하나. S15P31A306-358. */
+  @Transactional(readOnly = true)
+  public Optional<ProcessedJob> nextProcessed() {
+    return jobs.findFirstByStatusAndProcessorRequestKeyIsNotNullAndAiJobIdIsNullOrderByUpdatedAtAsc(
+            AnalysisStatus.RUNNING)
+        .map(
+            job ->
+                new ProcessedJob(
+                    job.getId(), job.getVideo().getYoutubeVideoId(), job.getProcessorRequestKey()));
+  }
+
   /** 작업의 가이드에 프레임 목록 키를 적는다. 단계 추출이 가이드를 먼저 만든다. */
   @Transactional
   public void recordFramesManifest(UUID jobId, String key) {

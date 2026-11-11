@@ -198,6 +198,13 @@ public class AnalysisJob {
 
   // --- 영상 전처리 노트북 (S15P31A306-357) ---
 
+  /** 시작하지 못한 채 실패로 끝낸다(노트북이 오래 가져가지 않음, S15P31A306-358). PENDING 일 때만. 진행 단계는 대기(QUEUED)로 남는다. */
+  public void failBeforeStart(AnalysisFailureCode code, String message, Instant now) {
+    requireStatus(AnalysisStatus.PENDING, "시작 전 실패 처리");
+    this.status = AnalysisStatus.RUNNING;
+    fail(code, message, now);
+  }
+
   /** 노트북이 가져갈 수 있는가: 대기 중이거나, 노트북이 가져갔는데 임대가 지났다(끝났다는 알림 없이). */
   public boolean isClaimableByProcessor(Instant now) {
     return status == AnalysisStatus.PENDING || isProcessorLeaseExpired(now);

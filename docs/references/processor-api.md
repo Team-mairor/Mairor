@@ -70,6 +70,29 @@ Claim:
 - 재시도 여부는 BE 표가 정한다. 표에 없는 코드만 노트북 `retryable`을 따른다.
 - 실패 메시지는 `[<code>] <message>`로 남는다(운영자 조회 · 로그).
 
+## complete 뒤 BE 처리 (S15P31A306-358)
+
+worker가 몇 초마다 끝난 작업 하나를 집어 AI에 맡긴다. 앱 단계는 `BUILDING_GUIDE` 그대로다.
+
+1. 저장소에서 요청 JSON을 읽는다.
+2. 검사: `guideInput.videoId` = 작업 영상, `guideInput.durationSeconds` 있음, 단계 1개 이상 · `stepId` 비지 않고 겹치지 않음, 프레임 항목마다 저장소 키를 얻을 수 있고 `videos/{youtubeVideoId}/` 아래. 나머지 형식은 AI가 본다.
+3. 가이드 입력을 가이드 행에 남긴다(검수 `NOT_READY`). 프레임이 있으면 그 작업은 "프레임을 보낸 작업"이다(AI 결과에 영역이 있어야 한다).
+4. 노트북 JSON을 그대로 두고 `callbackUrl` · `progressUrl`을 BE 주소로, 프레임 `url`을 서명한 주소로 바꾸고 `key`를 빼서 AI에 보낸다. `guideInput`의 다른 칸(`eyeZone` 등)은 그대로 간다.
+5. 그 뒤는 AI 콜백 → 검수 대기(기존과 같다).
+
+- 프레임 키: `key`를 쓰고, 없으면 `url`이 운영 버킷의 S3 주소(`https://mairor-prod-media.s3.<region>.amazonaws.com/<key>` 등)일 때 거기서 뽑는다.
+
+| 실패 | `failureCode` | 재시도 |
+| --- | --- | --- |
+| 요청 JSON 없음 · JSON 아님 · 영상 다름 · 필수 칸 없음 · 단계 ID 겹침 · 프레임 키 없음 · 다른 영상 경로 | `PROCESSOR_OUTPUT_INVALID` | 불가 |
+| 단계 0개 | `NO_VALID_STEPS` | 불가 |
+| 저장소에 닿지 못함 | `STORAGE_UNAVAILABLE` | 가능 |
+| AI 거절(4xx, 408 · 429 제외) / AI 못 닿음 | `AI_REQUEST_REJECTED` / `AI_UNAVAILABLE` | 불가 / 가능 |
+
+## 노트북을 기다리는 시간
+
+- 연결 모드에서 아무 노트북도 가져가지 않은 대기 작업, 임대가 지나고 아무도 다시 가져가지 않은 작업은 `wait-timeout`(기본 30분, `ANALYSIS_PROCESSOR_WAIT_TIMEOUT`) 뒤 `PROCESSOR_TIMEOUT`(재시도 가능)으로 끝낸다(노트북 꺼짐).
+
 ## 저장소
 
 - 버킷: 운영 `mairor-prod-media`. 노트북 IAM 사용자는 `videos/*`에 `PutObject`만 갖는다.

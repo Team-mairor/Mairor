@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.mairor.backend.analysis.service.AnalysisJobRequest;
 import com.mairor.backend.analysis.service.AnalysisJobService;
+import com.mairor.backend.analysis.service.ProcessorJobService;
 import com.mairor.backend.analysis.worker.AnalysisJobStore;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,7 @@ class ProcessorJobDisabledTest extends AnalysisIntegrationTest {
   @Autowired private MockMvc mockMvc;
   @Autowired private AnalysisJobService service;
   @Autowired private AnalysisJobStore store;
+  @Autowired private ProcessorJobService processorJobs;
 
   /** 연결 모드를 끄고 다시 뜨면, 노트북이 가져갔던 작업을 worker 가 다시 처리하도록 대기열로 되돌린다(MR !125 리뷰). */
   @Test
@@ -74,5 +76,14 @@ class ProcessorJobDisabledTest extends AnalysisIntegrationTest {
             post("/v1/internal/processor/jobs/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
         .andExpect(status().isNoContent());
     assertThat(store.claimNext(WORK_ROOT)).isPresent();
+  }
+
+  @Test
+  void waitingJobsAreNotTimedOut() {
+    service.register(
+        new AnalysisJobRequest("disabled002", "videos/disabled002/source.mp4", "제목", "채널", 600));
+    jdbc.update("update analysis_jobs set created_at = now() - interval '2 hours'");
+
+    assertThat(processorJobs.expireWaiting()).as("worker 가 처리하는 대기 작업은 노트북 시간 초과 대상이 아니다").isZero();
   }
 }

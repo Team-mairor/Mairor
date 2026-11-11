@@ -86,7 +86,7 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `LOGIN_MAX_CONCURRENT_HASHES` | `4` | 서버 전체에서 동시에 처리하는 로그인 수. 사용자 조회부터 BCrypt 비교까지를 한 번에 묶어 센다(DB 연결 대기가 쌓이는 것도 막는다). 넘으면 DB 에 가지 않고 기다리지 않고 429 로 거절한다. 서버 코어 수에 맞춰 조정한다 |
 | `DB_CONNECTION_TIMEOUT_MS` | `5000` | DB 연결을 얻기까지 기다리는 최대 시간(ms). 넘으면 요청이 `503 SERVICE_UNAVAILABLE` 로 끝난다. 쿼리 실행 시간 제한은 두지 않았다(아래 "운영 전 확인") |
 | `PROCESSOR_API_TOKEN` | (없음) | 영상 전처리 노트북 API(`/api/v1/internal/processor/**`)의 토큰. `X-Processor-Token` 헤더와 비교한다. 운영자 토큰과 다른 값. **비우면 노트북 API 는 모두 401**(앱은 뜬다). 계약 `docs/references/processor-api.md` |
-| `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` | `false` · `900s` | 노트북 연결 모드와 임대 시간. 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않는다. 노트북 결과로 AI 에 맡기는 처리(S15P31A306-358) 전에는 끈다 |
+| `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` · `ANALYSIS_PROCESSOR_WAIT_TIMEOUT` | `false` · `900s` · `30m` | 노트북 연결 모드, 임대 시간, 노트북을 기다리는 최대 시간. 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않으며, 노트북이 끝낸 작업을 worker 가 AI 에 맡긴다(S15P31A306-358). 끄면 지금처럼 worker 가 운영자가 올린 영상으로 처리한다 |
 | `INTERNAL_API_TOKEN` | (없음) | 내부 API(`/api/v1/internal/**`: 운영자 분석 명령, AI 콜백)의 공유 토큰. `X-Internal-Token` 헤더와 비교한다. **비우면 내부 API 는 모두 401**(앱은 뜬다). 코드·문서에 적지 않는다 ([분석 작업](#분석-작업-운영-명령--worker)) |
 | `APP_STORAGE_TYPE` | dev `local` / prod `s3` | 객체 저장소. `local` 은 아래 폴더, `s3` 는 버킷(자격 증명은 AWS 기본 공급자 체인, 운영은 EC2 역할) |
 | `APP_STORAGE_LOCAL_ROOT` | `<임시 폴더>/mairor-storage` | `local` 저장소의 뿌리 폴더. 저장소 키가 이 아래 상대 경로다 |
