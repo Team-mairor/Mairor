@@ -21,6 +21,7 @@ import numpy as np
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import LandmarksResult
+from app.tasks.area.common.eye_line import above_eye_line, eye_corners
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -191,7 +192,7 @@ def symmetric_eyeliner(
     picked = False
     for upper in (True, False):
         parts = {
-            eye: mask & (_upper_side(eye) if upper else ~_upper_side(eye))
+            eye: mask & (above_eye_line(eye) if upper else ~above_eye_line(eye))
             for eye, mask in masks.items()
         }
         counts = {eye: int(part.sum()) for eye, part in parts.items()}
@@ -228,28 +229,12 @@ def _hole(eye: RegionName) -> np.ndarray:
     return polygon_mask(map_points(REGION_POINTS[eye]), MAP_SIZE, MAP_SIZE)
 
 
-def _corners(eye: RegionName) -> tuple[np.ndarray, np.ndarray]:
-    """눈꼬리 점과 앞머리 점. 지도 가운데 세로선에서 가장 먼 점과 가장 가까운 점이다."""
-    points = np.array(map_points(REGION_POINTS[eye]))
-    gap = np.abs(points[:, 0] - MAP_SIZE / 2)
-    return points[int(np.argmax(gap))], points[int(np.argmin(gap))]
-
-
 @lru_cache
 def _corner_distance(eye: RegionName) -> np.ndarray:
     """칸마다 눈꼬리 점까지의 거리(칸)."""
-    outer, _ = _corners(eye)
+    outer, _ = eye_corners(eye)
     rows, cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE]
     return np.hypot(cols - outer[0], rows - outer[1])
-
-
-@lru_cache
-def _upper_side(eye: RegionName) -> np.ndarray:
-    """눈꼬리 점과 앞머리 점을 잇는 직선보다 위(윗선 쪽)인 칸."""
-    outer, inner = _corners(eye)
-    slope = (outer[1] - inner[1]) / (outer[0] - inner[0])
-    rows, cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE]
-    return rows < inner[1] + (cols - inner[0]) * slope
 
 
 @lru_cache

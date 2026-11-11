@@ -39,7 +39,7 @@ manifest는 `local_01`의 505초 사진을 립을 다 바른 뒤 사진으로, `
 | `steps[].order` | ✓ | 1부터 시작하는 순서. 겹치면 안 된다 |
 | `steps[].startSeconds` · `endSeconds` | ✓ | 단계 구간. 끝이 시작보다 커야 하고, 영상 길이를 넘으면 안 된다 |
 | `steps[].makeup` | ✓ | 부위 분류: `foundation` · `eyeshadow` · `eyeliner` · `blush` · `lip` · `brow` · `mascara` · `contour` · `highlight` · `other` |
-| `steps[].eyeZone` | | 눈 화장 단계에서 바른 자리: `upper`(아이섀도 윗눈두덩 · 아이라인 윗라인) · `under`(아이섀도 눈 밑·애교살 · 아이라인 아랫라인·아랫점막) · `both`(위아래 둘 다) · `waterline`(아이라인 윗점막). 없으면 AI가 `partLabel`·`facts.area` 글로 고른다 |
+| `steps[].eyeZone` | | 눈 화장 단계에서 바른 자리: `upper`(아이섀도 윗눈두덩 · 아이라인 윗라인) · `under`(아이섀도 눈 밑·애교살 · 아이라인 아랫라인·아랫점막) · `both`(위아래 둘 다) · `waterline`(아이라인 윗점막). 없으면 AI가 `partLabel`·`facts.area` 글로 고른다. 아이섀도는 이렇게 고른 자리만 영역을 찾아 자리마다 하위 단계로 보낸다 |
 | `steps[].partLabel` | ✓ | 한국어 부위 이름 (예: 스킨케어 패드, 컨실러). `other`인 단계가 무엇인지 알려 준다 |
 | `steps[].summary` | ✓ | 이 단계에서 하는 일 한 문장 |
 | `steps[].product` | | 영상에 나온 제품. `brand` · `name` · `shade`는 선택 |

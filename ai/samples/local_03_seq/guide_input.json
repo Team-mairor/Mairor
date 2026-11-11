@@ -346,14 +346,15 @@
       "order": 22,
       "startSeconds": 1194,
       "endSeconds": 1203,
-      "makeup": "eyeshadow",
-      "partLabel": "마무리 음영",
-      "summary": "브러시로 눈꼬리 아래에 음영을 넣습니다.",
+      "makeup": "eyeliner",
+      "partLabel": "아이라인",
+      "summary": "가는 브러시로 아이라인 뒤쪽과 쌍꺼풀 라인을 살짝 연장합니다.",
       "product": null,
       "facts": {
         "area": {
-          "value": "눈꼬리 아래",
-          "source": "scene"
+          "value": "아이라인 뒤쪽",
+          "source": "onscreenText",
+          "at": 1194
         }
       }
     },

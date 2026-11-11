@@ -86,7 +86,7 @@ from tools.noise_metric import (
     sharp_filter,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
-from tools.output_area import Area, found_side, output_area
+from tools.output_area import Area, found_side, output_area, step_zones
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "timing.json"
@@ -505,6 +505,7 @@ def main() -> None:
 
     out = []
     bounds = step_bounds(reference.manifest.steps)
+    eye_zones = step_zones(folder)
     for part in selected_parts(PARTS, part_names):
 
         def load_map(
@@ -522,7 +523,9 @@ def main() -> None:
                     side: part.find(result, start, end, photos, side, occlusion)
                     for side in part.sides
                 }
-            drawn_areas, _, drawn = output_area(part.makeup, areas, drawn)
+            drawn_areas, _, drawn = output_area(
+                part.makeup, areas, drawn, eye_zones.get(step.step_id)
+            )
 
             def find(side: RegionName, areas=areas) -> np.ndarray | None:
                 return areas[side].mask

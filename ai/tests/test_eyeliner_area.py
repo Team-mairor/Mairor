@@ -5,6 +5,7 @@ import numpy as np
 from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
+from app.tasks.area.common.eye_line import above_eye_line, eye_corners
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -49,7 +50,7 @@ def lash_line(eye: str, upper: bool = True) -> np.ndarray:
     """울타리 중 눈 테두리 바깥 LINE_CELLS칸 안의 윗선(또는 아랫선). 그린 아이라인으로 쓴다."""
     outside = ~eye_hole(eye)
     near = cv2.distanceTransform(outside.astype(np.uint8), cv2.DIST_L2, 5) <= LINE_CELLS
-    side = eyeliner_area._upper_side(eye)
+    side = above_eye_line(eye)
     return eyeliner_range(eye) & near & (side if upper else ~side)
 
 
@@ -91,7 +92,7 @@ def test_range_leaves_out_eye_hole_and_reaches_the_wing():
     for eye in EYES:
         cells = eyeliner_range(eye)
         assert not (cells & eye_hole(eye)).any()
-        outer, _ = eyeliner_area._corners(eye)
+        outer, _ = eye_corners(eye)
         step = 1 if outer[0] > MAP_SIZE / 2 else -1
         row, col = round(outer[1]), round(outer[0])
         assert cells[row, col + step * (WING_CELLS - 5)]
@@ -207,7 +208,7 @@ def test_symmetric_eyeliner_leaves_out_lines_already_guided():
     )
     for eye in EYES:
         assert masks[eye].any()
-        assert not (masks[eye] & eyeliner_area._upper_side(eye)).any()
+        assert not (masks[eye] & above_eye_line(eye)).any()
 
 
 def test_symmetric_eyeliner_is_none_when_only_guided_lines_are_found():
@@ -275,7 +276,7 @@ def test_upper_line_drawn_off_screen_is_left_out_of_the_next_step_on_sample_vide
     drawn = s12["leftEye"] | s12["rightEye"]
     with_drawn = eyeliner_on_sample(change_on_sample("s13"), drawn)
     without = eyeliner_on_sample(change_on_sample("s13"))
-    upper = {eye: eyeliner_area._upper_side(eye) for eye in EYES}
+    upper = {eye: above_eye_line(eye) for eye in EYES}
     assert not any((with_drawn[eye] & upper[eye]).any() for eye in EYES)
     assert any((without[eye] & upper[eye]).any() for eye in EYES)
     answer = load_answer("s13")

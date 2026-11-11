@@ -53,10 +53,12 @@ from tools.metric_settings import (
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
 from tools.output_area import (
     Area,
+    Zones,
     found_side,
     not_found_reason,
     output_area,
     reused_previous,
+    step_zones,
 )
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
@@ -230,12 +232,14 @@ def measure_part_step(
     start_ms: int,
     end_ms: int,
     drawn: np.ndarray | None = None,
+    zones: Zones = None,
 ) -> tuple[list[dict], np.ndarray | None]:
     """한 단계에서 쪽마다 찾은 영역과 나가는 영역의 흔들림을 잰다.
 
     find는 (시작 ms, 끝 ms, 쪽)으로 찾기 결과를 낸다. 조합마다 두 쪽을 한 번씩만 찾고,
     그 결과를 쪽별 숫자와 나가는 영역(output) 숫자에 함께 쓴다.
     drawn은 앞 아이라인 단계들에서 안내한 칸이나 앞 눈썹 단계들에서 보낸 마스크다(output_area).
+    zones는 아이섀도 단계의 바른 자리(step_zones)다.
     서비스 창에서 앞 눈썹 단계 영역을 그대로 보내면 나가는 영역 줄에 reusedArea를 참으로 적는다.
     (쪽 순서대로 줄, 서비스 창 결과까지 더한 넘길 칸)을 낸다.
     """
@@ -245,7 +249,7 @@ def measure_part_step(
     reused = False
     for before, after in shift_combos(part.before_shift):
         areas = {side: find(start_ms - before, end_ms + after, side) for side in part.sides}
-        masks, sub_step, next_drawn = output_area(part.makeup, areas, drawn)
+        masks, sub_step, next_drawn = output_area(part.makeup, areas, drawn, zones)
         if before == 0 and after == 0:
             guided = next_drawn
             reused = reused_previous(part.makeup, areas, drawn)
@@ -291,6 +295,7 @@ def main() -> None:
     photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     out = []
     bounds = step_bounds(reference.manifest.steps)
+    zones = step_zones(folder)
     for part in selected_parts(PARTS, part_names):
         drawn = None
         for step in sorted(reference.manifest.steps, key=lambda s: s.order):
@@ -302,7 +307,9 @@ def main() -> None:
                 return part.find(result, s, e, photos, side, occlusion)
 
             with within_step(*bounds[step.step_id]):
-                rows, drawn = measure_part_step(part, find, start, end, drawn)
+                rows, drawn = measure_part_step(
+                    part, find, start, end, drawn, zones.get(step.step_id)
+                )
             for side, measured in zip(part.sides, rows, strict=True):
                 row = {"part": part.name, "stepId": step.step_id, "side": side} | measured
                 out.append(row)

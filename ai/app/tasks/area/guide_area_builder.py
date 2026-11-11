@@ -2,7 +2,9 @@
 
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
 아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 하고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을
-써야 해서, 두 부위(ORDERED_MAKEUPS)는 단계 순서대로 따로 부른다.
+써야 하고, 아이섀도는 단계 글로 바른 자리(윗눈두덩·눈 밑)를 골라야 해서,
+세 부위(STEP_MAKEUPS)는 단계마다 따로 부른다. 그중 앞 단계 결과를 이어받는 아이라인·눈썹
+(ORDERED_MAKEUPS)은 단계를 여러 줄로 나눠 만들 때도 한 줄에 순서대로 둬야 한다.
 가림 찾기 함수를 받으면 모든 부위 분석에 그대로 넘겨 사진마다 가린 칸을 빼고 보게 한다.
 단계마다 area_step 기록(이름 뒤에 단계 ID)을 남기고, 부위 분석에서 빠진 사진 번호를 이유별로 적는다.
 """
@@ -48,9 +50,11 @@ from app.tasks.area.parts.eyeliner_area import (
 )
 from app.tasks.area.parts.eyeshadow_area import (
     EYES,
+    ZONES,
     EyeshadowArea,
+    Zone,
     find_eyeshadow_area,
-    symmetric_eyeshadow,
+    paired_eyeshadow,
 )
 from app.tasks.area.parts.lip_area import LipArea, PhotoLoader, find_lip_area
 
@@ -70,13 +74,15 @@ EYE_EXCLUSION_PATTERN = re.compile(
 NOSE_WORDS = ("코끝", "콧등", "콧대", "콧볼", "콧방울", "코볼", "코블러셔")
 NOSE_PATTERN = re.compile("|".join(NOSE_WORDS))
 CHEEK_WORDS = ("볼", "광대", "뺨", "애플존")
-EYE_ZONE_TEMPLATES: dict[EyeZone, TemplateId] = {
-    "upper": "eyeshadowUpper",
-    "under": "eyeshadowUnder",
-    "both": "eyeshadow",
+EYE_ZONES: dict[EyeZone, tuple[Zone, ...]] = {
+    "upper": ("upper",),
+    "under": ("under",),
+    "both": ZONES,
 }
+ZONE_TEMPLATES: dict[Zone, TemplateId] = {"upper": "eyeshadowUpper", "under": "eyeshadowUnder"}
 
 ORDERED_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow")
+STEP_MAKEUPS: tuple[Makeup, ...] = (*ORDERED_MAKEUPS, "eyeshadow")
 
 AreaFinder = Callable[
     [LandmarksResult, int, int, PhotoLoader, str, OcclusionFinder | None], AreaSubStep
@@ -100,6 +106,9 @@ def build_guide_area(
     아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
     눈썹은 _brow_step이 단계 순서대로 앞 눈썹 단계들에서 보낸 눈썹 영역을 넘겨받는다.
     못 찾아 앞 단계 영역을 쓰면 area_step 기록에 reusedAreaFrom(그 영역을 보낸 단계 ID)을 남긴다.
+    아이섀도는 _eyeshadow_step이 단계 글의 바른 자리마다 하위 단계를 하나씩 만들고, area_step 기록에
+    본 자리(eyeZones, 모르면 None)를 남긴다. 하위 단계가 둘 이상이면 하위 단계마다 상태·이유를
+    subSteps에 더한다. 기록의 status·reasons는 첫 하위 단계의 것이다.
     나머지(베이스·마스카라처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로
     기본 가이드(template)를 쓴다.
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
@@ -121,6 +130,7 @@ def build_guide_area(
     area_steps = []
     for step in ordered:
         reused_from = None
+        zones: tuple[Zone, ...] | None = None
         with (
             traced(
                 f"area_step {step.step_id}", {"makeup": step.makeup}, step_id=step.step_id
@@ -130,26 +140,38 @@ def build_guide_area(
         ):
             if step.makeup == "eyeliner":
                 sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
+                sub_steps = [sub_step]
             elif step.makeup == "brow":
                 sub_step, drawn_brow, reused_from = _brow_step(
                     step, result, load_photo, drawn_brow, occlusion
                 )
+                sub_steps = [sub_step]
+            elif step.makeup == "eyeshadow":
+                zones = eyeshadow_zones(step)
+                sub_steps = _eyeshadow_step(step, result, load_photo, occlusion, zones)
             else:
-                sub_step = _sub_step(step, result, load_photo, occlusion)
+                sub_steps = [_sub_step(step, result, load_photo, occlusion)]
             record = {
-                "status": sub_step.status,
-                "reasons": sub_step.reasons,
+                "status": sub_steps[0].status,
+                "reasons": sub_steps[0].reasons,
                 "droppedPhotos": {reason: sorted(ids) for reason, ids in dropped.items()},
             }
             if reused_from is not None:
                 record["reusedAreaFrom"] = reused_from
+            if step.makeup == "eyeshadow":
+                record["eyeZones"] = None if zones is None else list(zones)
+            if len(sub_steps) > 1:
+                record["subSteps"] = [
+                    {"subStepId": sub.sub_step_id, "status": sub.status, "reasons": sub.reasons}
+                    for sub in sub_steps
+                ]
             set_output(span, record)
         area_steps.append(
             AreaStep(
                 step_id=step.step_id,
                 order=step.order,
                 makeup=step.makeup,
-                sub_steps=[sub_step],
+                sub_steps=sub_steps,
             )
         )
         if on_step is not None:
@@ -183,7 +205,6 @@ def _sub_step(
 ) -> AreaSubStep:
     """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
 
-    아이섀도를 못 찾아 기본 가이드로 보낼 때는 단계 글로 바른 자리별 키를 고른다.
     단계 글이 코에만 바른 블러셔이면(_nose_blush) 색으로 찾지 않고 notAnalyzed 이유로
     코 블러셔 기본 가이드(blushNose)를 쓴다. 코는 고개를 조금만 돌려도 그림자·반사가 크게 바뀌어
     바르지 않은 시간의 변화와 블러셔를 가를 수 없었고, 볼을 찾으면 코 단계가 볼에 그려진다.
@@ -207,28 +228,26 @@ def _sub_step(
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
         return _failed(sub_step_id)
-    if step.makeup == "eyeshadow" and sub_step.status == "template":
-        return template_sub_step(sub_step_id, _eyeshadow_template_id(step), sub_step.reasons)
     return sub_step
 
 
-def _eyeshadow_template_id(step: Step | GuideInputStep) -> TemplateId:
-    """아이섀도 기본 가이드 키를 BE가 준 바른 자리(eyeZone)나 단계 글로 고른다.
+def eyeshadow_zones(step: Step | GuideInputStep) -> tuple[Zone, ...] | None:
+    """아이섀도 단계의 바른 자리를 BE가 준 바른 자리(eyeZone)나 단계 글로 고른다. 위 → 아래 순서다.
 
-    단계 글은 partLabel·facts.area다.
-    eyeZone이 upper·under·both이면 그 값(EYE_ZONE_TEMPLATES)을 먼저 쓴다.
+    모르면 None이다. 단계 글은 partLabel·facts.area다.
+    eyeZone이 upper·under·both이면 그 값(EYE_ZONES)을 먼저 쓴다.
     waterline(아이라인 윗점막)은 아이섀도 자리가 아니라서, 값이 없을 때처럼 글로 고른다.
-    띄어쓰기를 지운 글에 윗눈두덩 낱말(UPPER_EYE_WORDS)만 있으면 eyeshadowUpper,
-    눈 밑 낱말(UNDER_EYE_WORDS)만 있으면 eyeshadowUnder, 둘 다 있거나 둘 다 없으면
-    위아래 모두인 eyeshadow다. 점막·눈꼬리는 위아래를 가르지 않아 낱말에 넣지 않았다.
+    띄어쓰기를 지운 글에 윗눈두덩 낱말(UPPER_EYE_WORDS)만 있으면 upper,
+    눈 밑 낱말(UNDER_EYE_WORDS)만 있으면 under, 둘 다 있으면 둘 다, 둘 다 없으면 모름이다.
+    점막·눈꼬리는 위아래를 가르지 않아 낱말에 넣지 않았다.
     위 낱말은 눈 밑 낱말을 지운 글에서 찾아, 「아랫눈꺼풀」의 「눈꺼풀」을 윗눈두덩으로 보지 않는다.
     부위 뒤에 피하고·제외하고 같은 말이 붙으면 그 부위를 지운 뒤 찾는다.
-    글이 없는 매니페스트 단계는 eyeshadow다.
+    글이 없는 매니페스트 단계는 모름이다.
     """
     if not isinstance(step, GuideInputStep):
-        return "eyeshadow"
-    if step.eye_zone in EYE_ZONE_TEMPLATES:
-        return EYE_ZONE_TEMPLATES[step.eye_zone]
+        return None
+    if step.eye_zone in EYE_ZONES:
+        return EYE_ZONES[step.eye_zone]
     texts = [
         EYE_EXCLUSION_PATTERN.sub("", "".join(text.split()))
         for text in (step.part_label, step.facts.area.value)
@@ -237,11 +256,13 @@ def _eyeshadow_template_id(step: Step | GuideInputStep) -> TemplateId:
     upper = any(
         word in UNDER_EYE_PATTERN.sub("", text) for text in texts for word in UPPER_EYE_WORDS
     )
-    if upper and not under:
-        return "eyeshadowUpper"
-    if under and not upper:
-        return "eyeshadowUnder"
-    return "eyeshadow"
+    if upper and under:
+        return ZONES
+    if upper:
+        return ("upper",)
+    if under:
+        return ("under",)
+    return None
 
 
 def _nose_blush(step: Step | GuideInputStep) -> bool:
@@ -348,13 +369,13 @@ def eyeliner_sub_step(
 def _fixed_sub_step(makeup: Makeup, sub_step_id: str) -> AreaSubStep | None:
     """분석과 상관없이 정해지는 하위 단계.
 
-    분석하는 부위(AREA_FINDERS와 단계 순서대로 따로 부르는 ORDERED_MAKEUPS)면 None이다.
+    분석하는 부위(AREA_FINDERS와 단계마다 따로 부르는 STEP_MAKEUPS)면 None이다.
     other는 notApplicable이다.
     베이스·마스카라처럼 분석하지 않는 부위는 notAnalyzed 이유로 기본 가이드(template)다.
     """
     if makeup in NO_AREA_MAKEUPS:
         return _not_applicable(sub_step_id)
-    if makeup in ORDERED_MAKEUPS or makeup in AREA_FINDERS:
+    if makeup in STEP_MAKEUPS or makeup in AREA_FINDERS:
         return None
     return template_sub_step(sub_step_id, makeup, [NOT_ANALYZED])
 
@@ -584,34 +605,87 @@ def _brow_pair(
     )
 
 
-def _eyeshadow_sub_step(
+def _eyeshadow_step(
+    step: Step | GuideInputStep,
     result: LandmarksResult,
-    step_start_ms: int,
-    step_end_ms: int,
     load_photo: PhotoLoader,
-    sub_step_id: str,
     occlusion: OcclusionFinder | None,
-) -> AreaSubStep:
-    """섀도를 눈마다 찾아 symmetric_eyeshadow로 좌우 같은 모양을 만들고, 눈마다 영역 하나씩 적는다.
+    zones: tuple[Zone, ...] | None,
+) -> list[AreaSubStep]:
+    """아이섀도 단계의 하위 단계들. 눈마다 찾아 eyeshadow_sub_steps로 바른 자리마다 적는다.
 
-    윗눈두덩과 눈 아래를 같이 바르면 영역이 눈을 감싸므로, 묶음마다 그 눈을 exclude에 넣어
-    FE가 눈 구멍을 뚫고 그리게 한다.
+    zones는 단계의 바른 자리(eyeshadow_zones)이고 None이면 모른다.
+    분석 중 오류가 나면 이 단계만 failed 하나로 적고 로그를 남긴다.
     """
-    areas = {
-        eye: find_eyeshadow_area(
-            result, step_start_ms, step_end_ms, load_photo, eye, occlusion=occlusion
+    try:
+        areas = {
+            eye: find_eyeshadow_area(
+                result,
+                round(step.start_seconds * 1000),
+                round(step.end_seconds * 1000),
+                load_photo,
+                eye,
+                occlusion=occlusion,
+            )
+            for eye in EYES
+        }
+    except Exception:
+        logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
+        return [_failed(f"{step.step_id}-1")]
+    return eyeshadow_sub_steps(step.step_id, areas, zones)
+
+
+def eyeshadow_sub_steps(
+    step_id: str, areas: Mapping[RegionName, EyeshadowArea], zones: tuple[Zone, ...] | None
+) -> list[AreaSubStep]:
+    """두 눈의 찾기 결과를 바른 자리마다 하위 단계로 적는다. 하위 단계 순서는 위 → 아래다.
+
+    zones(단계 글의 바른 자리)가 있으면 그 자리만 본다. 자리마다 두 눈 모두 찾았으면
+    (paired_eyeshadow) 눈마다 영역 하나씩 적은 extracted, 못 찾았으면 그 자리 기본 가이드
+    (eyeshadowUpper·eyeshadowUnder)다. 글에 없는 자리에서 찾은 조각은 버린다.
+    zones가 None(모름)이면 두 자리를 다 보고 찾은 자리만 적는다.
+    어느 자리도 찾지 못하면 하위 단계 하나만 쓴다. 자리가 하나면 그 자리 기본 가이드,
+    둘이거나 모르면 위아래 모두인 eyeshadow 기본 가이드이고, 이유는 자리·눈마다의 이유를 모은다.
+    윗눈두덩과 눈 밑 영역은 눈을 감싸지 않지만 테두리를 펴면 눈 구멍에 조금 걸칠 수 있어,
+    묶음마다 그 눈을 exclude에 넣어 FE가 눈 구멍을 뚫고 그리게 한다.
+    지표 도구(tools/output_area.py)도 이 함수로 서비스가 보낼 하위 단계를 만든다.
+    """
+    looked = zones if zones is not None else ZONES
+    picked: dict[Zone, AreaSubStep] = {}
+    reasons: dict[Zone, list[str]] = {}
+    for zone in looked:
+        masks = paired_eyeshadow(areas, zone, zone_known=zones is not None)
+        if masks is not None:
+            sub_step = pair_sub_step(
+                step_id,
+                "eyeshadow",
+                {eye: areas[eye].zone(zone) for eye in EYES},
+                masks,
+                "eyeshadowColorNotFound",
+                True,
+                eyeshadow_area.OUTLINE_SMOOTH_CELLS,
+            )
+            if sub_step.status == "extracted":
+                picked[zone] = sub_step
+                continue
+        reasons[zone] = list(
+            dict.fromkeys(areas[eye].zone(zone).reason or "eyeshadowColorNotFound" for eye in EYES)
         )
-        for eye in EYES
-    }
-    return pair_sub_step(
-        sub_step_id,
-        "eyeshadow",
-        areas,
-        symmetric_eyeshadow(areas),
-        "eyeshadowColorNotFound",
-        True,
-        eyeshadow_area.OUTLINE_SMOOTH_CELLS,
-    )
+    if not picked:
+        template_id = ZONE_TEMPLATES[looked[0]] if len(looked) == 1 else "eyeshadow"
+        merged = list(dict.fromkeys(reason for zone in looked for reason in reasons[zone]))
+        return [template_sub_step(f"{step_id}-1", template_id, merged)]
+    out = [
+        picked[zone]
+        if zone in picked
+        else template_sub_step(step_id, ZONE_TEMPLATES[zone], reasons[zone])
+        for zone in looked
+        if zone in picked or zones is not None
+    ]
+    return [
+        sub_step.model_copy(update={"sub_step_id": f"{step_id}-{order}", "order": order})
+        for order, sub_step in enumerate(out, start=1)
+    ]
 
 
 def pair_sub_step(
@@ -666,5 +740,4 @@ def pair_sub_step(
 AREA_FINDERS: dict[Makeup, AreaFinder] = {
     "lip": _lip_sub_step,
     "blush": _blush_sub_step,
-    "eyeshadow": _eyeshadow_sub_step,
 }

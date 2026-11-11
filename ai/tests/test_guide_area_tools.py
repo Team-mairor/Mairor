@@ -8,7 +8,7 @@ from app.schemas.guide_area import AreaStep, AreaSubStep, GuideArea, MeshAnchor
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, LandmarksResult, Point, Pose
 from app.schemas.manifest import Manifest
 from app.tasks.area.common.region_points import REGION_POINTS
-from app.tasks.area.guide_area_builder import _eyeshadow_template_id
+from app.tasks.area.guide_area_builder import eyeshadow_zones
 from tools import build_guide_area, draw_guide_area
 
 
@@ -173,5 +173,5 @@ def test_guide_input_steps_are_used_when_the_sample_has_them():
     without = manifest_steps("local_01_lip_seq")
 
     assert isinstance(upper, GuideInputStep)
-    assert _eyeshadow_template_id(upper) == "eyeshadowUpper"
+    assert eyeshadow_zones(upper) == ("upper",)
     assert build_guide_area.guide_steps(samples / "local_01_lip_seq", without) == without

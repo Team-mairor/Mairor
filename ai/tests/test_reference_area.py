@@ -11,7 +11,7 @@ from app.schemas.landmarks import LandmarksResult
 from app.tasks.area import guide_area_builder, reference_area
 from app.tasks.area.guide_area_builder import (
     AREA_FINDERS,
-    ORDERED_MAKEUPS,
+    STEP_MAKEUPS,
     build_guide_area,
     failed_guide_area,
 )
@@ -148,9 +148,9 @@ def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
     부위 분석의 창이 바뀌었는데 PART_WINDOWS를 그대로 두면, 서비스가 그 사진을 받지 않아
     결과가 조용히 바뀐다. 실제 build_guide_area가 usable_rows에 묻는 구간을 모두 모아 본다.
     분석하는 부위를 새로 넣고 PART_WINDOWS에 빠뜨려도 같은 일이 생기므로, 분석하는 부위
-    (AREA_FINDERS와 단계 순서대로 따로 부르는 ORDERED_MAKEUPS)가 PART_WINDOWS와 같은지도 본다.
+    (AREA_FINDERS와 단계마다 따로 부르는 STEP_MAKEUPS)가 PART_WINDOWS와 같은지도 본다.
     """
-    assert set(PART_WINDOWS) == set(AREA_FINDERS) | set(ORDERED_MAKEUPS)
+    assert set(PART_WINDOWS) == set(AREA_FINDERS) | set(STEP_MAKEUPS)
     asked = []
 
     def record(result, start_ms, end_ms, regions):
@@ -331,6 +331,19 @@ def test_eyeliner_and_brow_steps_stay_in_the_first_line_in_order(lines):
     assert not set(CARRIED_OVER) & {i for group in ids[1:] for i in group}
     assert sorted(i for group in ids for i in group) == [f"s{i}" for i in range(1, 8)]
     assert ids[-1][-1] == "s1"
+
+
+def test_eyeshadow_steps_are_spread_over_lines():
+    """아이섀도도 단계마다 따로 부르지만 앞 단계 결과를 이어받지 않는다.
+
+    첫 줄에 모으면 줄을 나눠 동시에 만드는 뜻이 없어지므로, 섀도 단계 둘이 두 줄로 갈라지는지 본다.
+    이어받는 부위(아이라인·눈썹)와 단계마다 부르는 부위(섀도까지)를 한 이름으로 합치면 깨진다.
+    """
+    steps = guide_input(("s1", "eyeshadow", 10, 25), ("s2", "eyeshadow", 30, 45)).steps
+
+    groups = split_steps(steps, landmarks_every_half_second(60_000), 2)
+
+    assert [[step.step_id for step in group] for group in groups] == [["s1"], ["s2"]]
 
 
 def returns(area):

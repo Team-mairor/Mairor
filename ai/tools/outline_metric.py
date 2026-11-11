@@ -48,7 +48,15 @@ from tools.metric_settings import (
     write_result,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
-from tools.output_area import Area, anchor_points, outlined_masks, output_area, smooth_points
+from tools.output_area import (
+    Area,
+    Zones,
+    anchor_points,
+    outlined_masks,
+    output_area,
+    smooth_points,
+    step_zones,
+)
 from tools.stability_metric import CHECKED_FILE, FACE_MAP_KEEP, PARTS
 
 OUTPUT_FILE = "outline.json"
@@ -200,13 +208,15 @@ def measure_step(
     sides: Sequence[RegionName],
     areas: Mapping[RegionName, Area],
     drawn: np.ndarray | None,
+    zones: Zones = None,
 ) -> tuple[list[dict], AreaSubStep, np.ndarray | None]:
     """한 단계의 쪽별 찾기 결과로 쪽마다 테두리 값을 낸다.
 
     (쪽 순서대로 줄, 서비스가 보낼 하위 단계, 다음 아이라인 단계가 받을 안내한 칸)을 돌려준다.
+    zones는 아이섀도 단계의 바른 자리(step_zones)다.
     """
-    outlined = outlined_masks(makeup, areas, drawn)
-    masks, sub_step, guided = output_area(makeup, areas, drawn)
+    outlined = outlined_masks(makeup, areas, drawn, zones)
+    masks, sub_step, guided = output_area(makeup, areas, drawn, zones)
     polygons = polygon_rows(sub_step)
     rows = [
         {"side": side, "status": sub_step.status}
@@ -271,6 +281,7 @@ def main() -> None:
     photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     rows = []
     bounds = step_bounds(reference.manifest.steps)
+    zones = step_zones(folder)
     for part in selected_parts(PARTS, part_names):
         drawn = None
         for step in sorted(reference.manifest.steps, key=lambda s: s.order):
@@ -282,7 +293,9 @@ def main() -> None:
                     side: part.find(result, start, end, photos, side, occlusion)
                     for side in part.sides
                 }
-            measured, _, drawn = measure_step(part.makeup, part.sides, areas, drawn)
+            measured, _, drawn = measure_step(
+                part.makeup, part.sides, areas, drawn, zones.get(step.step_id)
+            )
             for row in measured:
                 rows.append({"part": part.name, "stepId": step.step_id} | row)
                 print(

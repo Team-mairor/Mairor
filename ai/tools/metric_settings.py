@@ -95,6 +95,7 @@ def converted(before: Any, value: Any) -> Any:
     """value를 before와 맞는 종류로 바꾼다. 맞출 수 없으면 None이다.
 
     숫자끼리는 서로 받는다. 소수 자리의 정수는 소수로, 정수 자리의 딱 떨어지는 소수는 정수로 바꾼다.
+    튜플은 같은 길이, dict(자리마다 값 등)는 같은 키일 때 칸마다 맞춘다.
     """
     if isinstance(before, bool) or isinstance(value, bool):
         return value if isinstance(before, bool) and isinstance(value, bool) else None
@@ -107,6 +108,9 @@ def converted(before: Any, value: Any) -> Any:
     if isinstance(before, tuple) and isinstance(value, tuple) and len(before) == len(value):
         items = [converted(old, new) for old, new in zip(before, value, strict=True)]
         return None if any(item is None for item in items) else tuple(items)
+    if isinstance(before, dict) and isinstance(value, dict) and before.keys() == value.keys():
+        pairs = {key: converted(before[key], value[key]) for key in before}
+        return None if any(item is None for item in pairs.values()) else pairs
     return None
 
 

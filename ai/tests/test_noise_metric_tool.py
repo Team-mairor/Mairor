@@ -5,6 +5,7 @@ import pytest
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, Point, Pose
 from app.schemas.manifest import Manifest
+from app.tasks.area.common.eye_line import above_eye_line
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -270,64 +271,100 @@ def test_a_false_find_on_one_cheek_is_not_output(monkeypatch):
     assert not any(r["outputFound"] for r in records)
 
 
-@pytest.mark.parametrize(
-    ("part", "least"),
-    [
-        ("eyeshadow", eyeshadow_area.MIN_PIECE_CELLS),
-        ("eyeliner", eyeliner_area.FOUND_MIN_CELLS),
-    ],
-)
-def test_a_side_of_the_eye_line_counts_only_with_enough_cells(part, least):
-    """선 아래로 넘친 칸이 서비스가 영역으로 보는 가장 작은 크기보다 적으면 눈 밑 헛것이 아니다.
+def test_a_side_of_the_eye_line_counts_only_with_enough_cells():
+    """아이라인이 선 아래로 넘친 칸이 찾음으로 보는 가장 적은 칸보다 적으면 아랫선 헛것이 아니다.
 
-    선에 걸친 몇 칸 때문에 윗눈두덩 헛것이 두 자리 모두에 세어지지 않게 하려고 고른 경계다.
+    선에 걸친 몇 칸 때문에 윗선 헛것이 두 자리 모두에 세어지지 않게 하려고 고른 경계다.
     """
-    upper = eyeliner_area._upper_side("leftEye")
+    least = eyeliner_area.FOUND_MIN_CELLS
+    upper = above_eye_line("leftEye")
     rows, cols = np.nonzero(~upper)
     mask = upper.copy()
     mask[rows[: least - 1], cols[: least - 1]] = True
 
-    assert noise_metric.zone_finds(part, "leftEye", mask) == {"upper": True, "under": False}
+    assert noise_metric.zone_finds("eyeliner", "leftEye", mask) == {"upper": True, "under": False}
     mask[rows[least - 1], cols[least - 1]] = True
-    assert noise_metric.zone_finds(part, "leftEye", mask) == {"upper": True, "under": True}
-    assert noise_metric.zone_finds(part, "leftEye", None) == {"upper": False, "under": False}
+    assert noise_metric.zone_finds("eyeliner", "leftEye", mask) == {"upper": True, "under": True}
+    assert noise_metric.zone_finds("eyeliner", "leftEye", None) == {"upper": False, "under": False}
     assert noise_metric.zone_finds("blush", "leftCheek", mask) == {}
 
 
-def test_a_false_find_above_the_eye_line_counts_as_upper_only(monkeypatch):
-    """한쪽 눈 윗눈두덩에만 헛것이 나면 뒤집어 그린 반대쪽 눈까지 위 자리 헛것으로만 센다.
-
-    섀도 불합격만으로는 윗눈두덩·눈 밑 중 어디를 고칠지 모르므로, 나가는 영역으로 자리를
-    가르는지 본다.
-    """
+def eyeshadow_tallies(monkeypatch, found_eyes, upper_strength):
+    """found_eyes 눈만 윗눈두덩을 upper_strength 세기로 찾는 가짜 재기로 섀도를 잰다."""
     monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
     monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
 
     def measure(before, after, eye, unknown=None):
-        if eye == "leftEye":
-            upper = eyeshadow_area.eyeshadow_range(eye) & eyeliner_area._upper_side(eye)
-            area = eyeshadow_area.EyeshadowArea(mask=upper, strength=2.0)
-        else:
-            area = eyeshadow_area.EyeshadowArea(mask=None, reason="eyeshadowColorNotFound")
-        return noise_metric.Measure(None, 0.0, None, area.mask is not None, area)
+        upper = eyeshadow_area.eyeshadow_range(eye, "upper")
+        zones = {
+            "upper": eyeshadow_area.ZoneArea(mask=upper, strength=upper_strength)
+            if eye in found_eyes
+            else eyeshadow_area.ZoneArea(mask=None, strength=0.5, reason="eyeshadowColorNotFound"),
+            "under": eyeshadow_area.ZoneArea(
+                mask=None, strength=0.5, reason="eyeshadowColorNotFound"
+            ),
+        }
+        mask = zones["upper"].mask
+        area = eyeshadow_area.EyeshadowArea(
+            mask=mask, reason=None if mask is not None else "eyeshadowColorNotFound", zones=zones
+        )
+        return noise_metric.Measure(None, 0.0, None, mask is not None, area)
 
     part = noise_metric.Part(
         "eyeshadow", eyeshadow_area.EYES, 1000, 1000, 0.5, None, lambda side: [side], measure
     )
     empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
-
     tallies, records = noise_metric.measure_part(
         part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty), keep_sharp=keep_all
     )
+    return part, tallies, records
+
+
+def test_a_false_find_on_both_upper_lids_counts_for_upper_steps_only(monkeypatch):
+    """두 눈 윗눈두덩에만 헛것이 나면 윗눈두덩 단계의 헛것으로만 센다.
+
+    서비스는 단계 글의 바른 자리만 보므로, 자리 하나만 보는 단계로 바꿔 다시 센다.
+    세기가 자리를 모를 때의 관문(UNKNOWN_ZONE_TOP_MIN)도 넘으면 자리를 모르는 단계의 헛것(나가는
+    영역 헛것)에도 든다.
+    """
+    strength = eyeshadow_area.UNKNOWN_ZONE_TOP_MIN["upper"] + 0.5
+    part, tallies, records = eyeshadow_tallies(monkeypatch, eyeshadow_area.EYES, strength)
 
     for eye in eyeshadow_area.EYES:
         tally = tallies[(eye, 1)]
         assert tally.pairs > 0
         assert tally.zone_found == {"upper": tally.pairs, "under": 0}
+        assert tally.output_found == tally.pairs
     assert all(r["outputZones"] == {"upper": True, "under": False} for r in records)
     row = next(r for r in noise_metric.summarize(part, tallies) if r["gapSeconds"] == 1)
     assert row["outputUpperFalsePositiveRatio"] == 1.0
     assert row["outputUnderFalsePositiveRatio"] == 0.0
+
+
+def test_a_weak_false_find_counts_only_when_the_step_names_the_zone(monkeypatch):
+    """자리 관문(FOUND_TOP_MIN)만 넘고 자리를 모를 때의 관문에 못 미치는 헛것은
+    윗눈두덩 단계에서만 나가고, 자리를 모르는 단계에서는 나가지 않는다."""
+    strength = (
+        eyeshadow_area.FOUND_TOP_MIN["upper"] + eyeshadow_area.UNKNOWN_ZONE_TOP_MIN["upper"]
+    ) / 2
+    _, tallies, _ = eyeshadow_tallies(monkeypatch, eyeshadow_area.EYES, strength)
+
+    for eye in eyeshadow_area.EYES:
+        tally = tallies[(eye, 1)]
+        assert tally.zone_found["upper"] == tally.pairs > 0
+        assert tally.output_found == 0
+
+
+def test_one_eye_reddening_alone_is_not_a_false_find(monkeypatch):
+    """한 눈만 붉어진 쌍은 서비스가 섀도로 보지 않으므로(두 눈 모두 찾아야 씀) 헛것이 아니다."""
+    strength = eyeshadow_area.UNKNOWN_ZONE_TOP_MIN["upper"] + 0.5
+    _, tallies, records = eyeshadow_tallies(monkeypatch, ("leftEye",), strength)
+
+    left = tallies[("leftEye", 1)]
+    assert left.found == left.pairs > 0
+    assert left.output_found == 0
+    assert left.zone_found == {"upper": 0, "under": 0}
+    assert not any(r["outputFound"] for r in records)
 
 
 def face_row(width: float) -> SimpleNamespace:

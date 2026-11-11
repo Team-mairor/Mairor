@@ -26,7 +26,14 @@ from app.tasks.area.parts.area_preparation import usable_rows
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, brow_range, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import EyelinerArea
-from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, eyeshadow_range
+from app.tasks.area.parts.eyeshadow_area import (
+    EYES,
+    FOUND_TOP_MIN,
+    UNKNOWN_ZONE_TOP_MIN,
+    EyeshadowArea,
+    ZoneArea,
+    eyeshadow_range,
+)
 from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_maps
 from tests.test_area_preparation import make_row
 from tests.test_eyeliner_area import lash_line, with_gap
@@ -358,10 +365,34 @@ def test_brow_sub_step_adds_found_brows_to_what_earlier_steps_sent():
     assert all(np.array_equal(masks[brow], upper[brow]) for brow in BROWS)
 
 
-def test_eyeshadow_step_leaves_out_each_eye_from_its_own_area(monkeypatch):
-    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
-        return EyeshadowArea(mask=eyeshadow_range(eye), strength=2.0)
+def shadow_found(zones: dict[str, float], eyes=EYES):
+    """eyes 눈은 zones의 자리마다 그 세기로 자리 전체를 찾고, 나머지 자리·눈은 못 찾는 가짜 찾기."""
 
+    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
+        areas = {
+            zone: ZoneArea(mask=eyeshadow_range(eye, zone), strength=zones[zone])
+            if eye in eyes and zone in zones
+            else ZoneArea(mask=None, strength=0.5, reason="eyeshadowColorNotFound")
+            for zone in ("upper", "under")
+        }
+        masks = [area.mask for area in areas.values() if area.mask is not None]
+        if not masks:
+            return EyeshadowArea(mask=None, reason="eyeshadowColorNotFound", zones=areas)
+        return EyeshadowArea(mask=np.any(masks, axis=0), zones=areas)
+
+    return found
+
+
+STRONG = max(UNKNOWN_ZONE_TOP_MIN.values()) + 1
+
+
+def shadow_sub_steps(monkeypatch, finder, step):
+    monkeypatch.setattr(guide_area_builder, "find_eyeshadow_area", finder)
+    return build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps
+
+
+def test_eyeshadow_step_leaves_out_each_eye_from_its_own_area(monkeypatch):
+    found = shadow_found({"upper": STRONG})
     sub_step = build_one(monkeypatch, "find_eyeshadow_area", found, "eyeshadow")
     assert sub_step.status == "extracted"
     assert [(s.region, s.exclude) for s in sub_step.guide_sets] == [
@@ -369,6 +400,84 @@ def test_eyeshadow_step_leaves_out_each_eye_from_its_own_area(monkeypatch):
         ("rightEye", ["rightEye"]),
     ]
     assert all(len(s.guides[0].outline) >= 3 for s in sub_step.guide_sets)
+
+
+def test_eyeshadow_found_outside_the_step_zone_is_dropped(monkeypatch):
+    """애교살 단계에서 윗눈두덩만 붉어졌으면 그 조각은 보내지 않고 눈 밑 기본 가이드를 쓴다.
+
+    애교살 단계의 바깥 윗눈두덩 갈고리 조각처럼 단계 글에 없는 자리의 영역이 나가지 않게 한다.
+    """
+    step = input_step("eyeshadow", "애교살", "애교살")
+    sub_steps = shadow_sub_steps(monkeypatch, shadow_found({"upper": STRONG}), step)
+    assert [(s.sub_step_id, s.status, s.template_id) for s in sub_steps] == [
+        ("s5-1", "template", "eyeshadowUnder")
+    ]
+    assert sub_steps[0].reasons == ["eyeshadowColorNotFound"]
+
+
+def test_eyeshadow_sub_steps_follow_the_step_zones_from_upper_to_under(monkeypatch):
+    """글에 두 자리가 다 있으면 위 → 아래로 하위 단계를 만들고, 못 찾은 자리만 기본 가이드다."""
+    step = input_step("eyeshadow", "음영 섀도", "윗눈두덩과 애교살")
+    sub_steps = shadow_sub_steps(monkeypatch, shadow_found({"under": STRONG}), step)
+    assert [(s.sub_step_id, s.order, s.status, s.template_id) for s in sub_steps] == [
+        ("s5-1", 1, "template", "eyeshadowUpper"),
+        ("s5-2", 2, "extracted", None),
+    ]
+    under = sub_steps[1].guide_sets
+    assert [s.region for s in under] == list(EYES)
+    for guide_set in under:
+        assert guide_set.exclude == [guide_set.region]
+
+
+def test_eyeshadow_with_both_zones_found_sends_both(monkeypatch):
+    step = input_step("eyeshadow", "음영 섀도", "윗눈두덩과 애교살")
+    found = shadow_found({"upper": STRONG, "under": STRONG})
+    sub_steps = shadow_sub_steps(monkeypatch, found, step)
+    assert [(s.sub_step_id, s.status) for s in sub_steps] == [
+        ("s5-1", "extracted"),
+        ("s5-2", "extracted"),
+    ]
+
+
+def test_eyeshadow_found_in_one_eye_only_is_not_sent(monkeypatch):
+    """한 눈만 붉어진 자리는 바르지 않은 시간에도 자주 생기는 흔들림이라 영역으로 보내지 않는다."""
+    step = input_step("eyeshadow", "애교살", "애교살")
+    found = shadow_found({"under": STRONG}, eyes=("leftEye",))
+    sub_steps = shadow_sub_steps(monkeypatch, found, step)
+    assert [(s.status, s.template_id) for s in sub_steps] == [("template", "eyeshadowUnder")]
+
+
+@pytest.mark.parametrize(
+    ("strength", "status"),
+    [
+        (STRONG, "extracted"),
+        ((FOUND_TOP_MIN["under"] + UNKNOWN_ZONE_TOP_MIN["under"]) / 2, "template"),
+    ],
+)
+def test_eyeshadow_without_zone_words_needs_the_higher_gate(monkeypatch, strength, status):
+    """글로 자리를 모르면 두 자리를 다 보므로, 자리를 모를 때의 관문(UNKNOWN_ZONE_TOP_MIN)을 넘어야
+    찾은 자리만 보내고, 아무 자리도 못 쓰면 위아래 모두인 기본 가이드 하나다."""
+    step = input_step("eyeshadow", "포인트 섀도", "눈꼬리")
+    sub_steps = shadow_sub_steps(monkeypatch, shadow_found({"under": strength}), step)
+    assert [s.status for s in sub_steps] == [status]
+    if status == "template":
+        assert sub_steps[0].template_id == "eyeshadow"
+    else:
+        assert sub_steps[0].sub_step_id == "s5-1"
+
+
+def test_eyeshadow_step_record_has_zones_and_each_sub_step(monkeypatch):
+    """Phoenix area_step 기록에 본 자리(eyeZones)와 하위 단계마다의 상태(subSteps)가 남는다."""
+    records = []
+    monkeypatch.setattr(guide_area_builder, "set_output", lambda span, out: records.append(out))
+    step = input_step("eyeshadow", "음영 섀도", "윗눈두덩과 애교살")
+    shadow_sub_steps(monkeypatch, shadow_found({"under": STRONG}), step)
+    assert records[0]["eyeZones"] == ["upper", "under"]
+    assert records[0]["status"] == "template"
+    assert [(s["subStepId"], s["status"]) for s in records[0]["subSteps"]] == [
+        ("s5-1", "template"),
+        ("s5-2", "extracted"),
+    ]
 
 
 def test_brow_and_eyeshadow_not_found_use_default_guide_with_reasons(monkeypatch):
@@ -507,16 +616,6 @@ def test_eye_zone_from_be_comes_before_step_words(
     step = input_step("eyeshadow", part_label, area, eye_zone)
     sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
     assert (sub_step.status, sub_step.template_id) == ("template", template_id)
-
-
-def test_found_eyeshadow_keeps_its_area_whatever_the_step_says(monkeypatch):
-    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
-        return EyeshadowArea(mask=eyeshadow_range(eye), strength=2.0)
-
-    monkeypatch.setattr(guide_area_builder, "find_eyeshadow_area", found)
-    step = input_step("eyeshadow", "애교살 하이라이트", "눈 점막 바로 밑 애교살")
-    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
-    assert (sub_step.status, sub_step.template_id) == ("extracted", None)
 
 
 def test_other_default_guides_ignore_eye_words_and_zone(monkeypatch):

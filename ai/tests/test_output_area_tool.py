@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -6,11 +8,11 @@ from app.tasks.area import guide_area_builder
 from app.tasks.area.common.face_map import MAP_SIZE, map_points, points_to_anchors
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
-from app.tasks.area.guide_area_builder import build_guide_area
+from app.tasks.area.guide_area_builder import build_guide_area, eyeshadow_sub_steps
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
 from app.tasks.area.parts.brow_area import BrowArea, brow_range
 from app.tasks.area.parts.eyeliner_area import EyelinerArea
-from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, eyeshadow_range
+from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, ZoneArea, eyeshadow_range
 from app.tasks.area.parts.lip_area import LipArea
 from tests.test_eyeliner_area import lash_line, with_gap
 from tests.test_guide_area_builder import RESULT, never
@@ -95,12 +97,23 @@ def test_each_cheek_keeps_its_own_shape_in_the_output():
     assert iou(masks["rightCheek"], left[:, ::-1]) < 0.8
 
 
+def shadow(eye: str, zones: dict[str, float]) -> EyeshadowArea:
+    """zones의 자리마다 그 세기로 자리 전체를 찾고 나머지 자리는 못 찾은 눈 하나의 결과."""
+    found = {
+        zone: ZoneArea(mask=eyeshadow_range(eye, zone), strength=zones[zone])
+        if zone in zones
+        else ZoneArea(mask=None, strength=0.5, reason="eyeshadowColorNotFound")
+        for zone in ("upper", "under")
+    }
+    masks = [area.mask for area in found.values() if area.mask is not None]
+    if not masks:
+        return EyeshadowArea(mask=None, reason="eyeshadowColorNotFound", zones=found)
+    return EyeshadowArea(mask=np.any(masks, axis=0), zones=found)
+
+
 def test_eyeshadow_output_leaves_out_the_eye_hole():
     """섀도는 눈 구멍을 exclude로 보내므로 나가는 영역에 눈 점 테두리 안 칸이 없어야 한다."""
-    areas = {
-        eye: EyeshadowArea(mask=eyeshadow_range(eye), strength=2.0)
-        for eye in ("leftEye", "rightEye")
-    }
+    areas = {eye: shadow(eye, {"upper": 5.0, "under": 5.0}) for eye in ("leftEye", "rightEye")}
 
     masks, _, _ = output_area.output_area("eyeshadow", areas)
 
@@ -121,6 +134,47 @@ def test_step_sent_as_default_guide_has_no_output_area():
     assert masks == {}
     assert output_area.found_side(masks, "leftBrow") is None
     assert output_area.not_found_reason(sub_step) == "template,browColorNotFound,noUsableFrame"
+
+
+def test_eyeshadow_sub_steps_of_both_zones_are_measured_as_one_area():
+    """윗눈두덩·눈 밑 하위 단계가 둘 다 나가면, 도구는 눈마다 두 영역을 합친 하나로 잰다."""
+    areas = {eye: shadow(eye, {"upper": 5.0, "under": 5.0}) for eye in ("leftEye", "rightEye")}
+    zones = ("upper", "under")
+
+    masks, sub_step, _ = output_area.output_area("eyeshadow", areas, zones=zones)
+    each = [output_area.output_masks(s) for s in eyeshadow_sub_steps("s1", areas, zones)]
+
+    assert sub_step.status == "extracted" and len(sub_step.guide_sets) == 4
+    for eye in ("leftEye", "rightEye"):
+        assert np.array_equal(masks[eye], each[0][eye] | each[1][eye])
+
+
+def test_eyeshadow_output_follows_the_step_zone():
+    """도구도 서비스처럼 단계의 바른 자리만 낸다. 윗눈두덩만 찾았으면 눈 밑 단계는 빈 영역이다."""
+    upper_only = {eye: shadow(eye, {"upper": 5.0}) for eye in ("leftEye", "rightEye")}
+
+    masks, sub_step, _ = output_area.output_area("eyeshadow", upper_only, zones=("under",))
+    upper_masks, _, _ = output_area.output_area("eyeshadow", upper_only, zones=("upper",))
+
+    assert masks == {}
+    assert (sub_step.status, sub_step.template_id) == ("template", "eyeshadowUnder")
+    assert all(upper_masks[eye].any() for eye in ("leftEye", "rightEye"))
+
+
+def test_step_zones_come_from_the_sample_guide_input():
+    """시험 영상 가이드 입력 글로 섀도 단계마다 자리를 정한다. 가이드 입력이 없으면 빈 dict다."""
+    samples = Path(__file__).resolve().parents[1] / "samples"
+
+    zones = output_area.step_zones(samples / "local_03_seq")
+
+    assert zones == {
+        "s10a": ("upper",),
+        "s10b": ("under",),
+        "s11a": ("under",),
+        "s11b": ("upper",),
+        "s17": ("under",),
+    }
+    assert output_area.step_zones(samples / "local_01_lip_seq") == {}
 
 
 def test_missing_area_is_the_service_reason_for_no_photos():
@@ -148,10 +202,8 @@ FIXED_AREAS = {
     "brow": lambda side: BrowArea(
         mask=brow_range(side), darkening=3.0 if side == "leftBrow" else 2.0
     ),
-    "eyeshadow": lambda side: (
-        EyeshadowArea(mask=eyeshadow_range(side), strength=2.0)
-        if side == "leftEye"
-        else EyeshadowArea(mask=None, reason="eyeshadowColorNotFound")
+    "eyeshadow": lambda side: shadow(
+        side, {"upper": 5.0, "under": 5.0} if side == "leftEye" else {"under": 5.0}
     ),
     "blush": lambda side: BlushArea(mask=cheek_range(side)),
     "lip": lambda side: LipArea(mask=lips()),
@@ -185,8 +237,8 @@ def fixed_finders(monkeypatch):
 def test_output_sub_step_is_what_build_guide_area_sends(fixed_finders):
     """나가는 영역은 서비스가 실제로 보내는 하위 단계여야 한다.
 
-    부위 찾기를 고정하고 build_guide_area 결과와 도구 결과를 견준다. 섀도는 한쪽만 찾은 경우,
-    아이라인은 두 단계 연속이라 둘째 단계가 앞 단계 안내 칸을 빼는 경우까지 넣었다.
+    부위 찾기를 고정하고 build_guide_area 결과와 도구 결과를 견준다. 섀도는 한 눈만 찾은 자리가
+    있는 경우, 아이라인은 두 단계 연속이라 둘째 단계가 앞 단계 안내 칸을 빼는 경우까지 넣었다.
     도구처럼 앞 단계에서 넘길 칸은 부위마다 따로 둔다.
     빌더가 쪽별 결과를 하위 단계로 바꾸는 방식을 바꾸면 이 테스트가 깨져 도구도 같이 고치게 된다.
     """

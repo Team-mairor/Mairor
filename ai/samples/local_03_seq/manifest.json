@@ -23,7 +23,7 @@
     { "stepId": "s16b", "order": 19, "startSeconds": 1149.0, "endSeconds": 1153.0, "makeup": "eyeliner",   "product": null },
     { "stepId": "s17",  "order": 20, "startSeconds": 1171.0, "endSeconds": 1182.0, "makeup": "eyeshadow",  "product": null },
     { "stepId": "s18",  "order": 21, "startSeconds": 1183.0, "endSeconds": 1191.0, "makeup": "other",      "product": null },
-    { "stepId": "s19",  "order": 22, "startSeconds": 1194.0, "endSeconds": 1203.0, "makeup": "eyeshadow",  "product": null },
+    { "stepId": "s19",  "order": 22, "startSeconds": 1194.0, "endSeconds": 1203.0, "makeup": "eyeliner",   "product": null },
     { "stepId": "s20",  "order": 23, "startSeconds": 1223.0, "endSeconds": 1383.0, "makeup": "highlight",  "product": null },
     { "stepId": "s21",  "order": 24, "startSeconds": 1383.0, "endSeconds": 1402.0, "makeup": "foundation", "product": null },
     { "stepId": "s22a", "order": 25, "startSeconds": 1407.0, "endSeconds": 1432.0, "makeup": "blush",      "product": null },

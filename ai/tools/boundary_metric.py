@@ -27,7 +27,7 @@ uv run python tools/boundary_metric.py samples/local_03_seq <모델 파일>
 
 import hashlib
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -64,7 +64,7 @@ from tools.metric_settings import (
     write_result,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
-from tools.output_area import Area, found_side, output_area
+from tools.output_area import Area, Zones, found_side, output_area, step_zones
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "boundary.json"
@@ -278,11 +278,13 @@ def measure_part(
     load_photo: PhotoLoader,
     label_map: Callable[[FrameLandmarks, str], np.ndarray],
     occlusion: OcclusionFinder | None = None,
+    zones: Mapping[str, Zones] | None = None,
 ) -> list[dict]:
     """부위 하나의 실제로 바른 단계마다, 쪽마다 경계 점수를 낸다. occlusion은 영역 찾기에 넘긴다.
 
     쪽마다 찾은 영역 점수는 줄에 바로 두고, 나가는 영역 점수는 output 칸에 둔다.
     단계는 서비스처럼 order 순서로 보고, 아이라인은 앞 단계에서 안내한 칸을 빼고 본다.
+    zones는 아이섀도 단계마다의 바른 자리(step_zones)이고 없는 단계는 모르는 것이다.
     """
     out = []
     drawn = None
@@ -300,7 +302,8 @@ def measure_part(
                 side: usable_rows(result, end, end + part.after_ms, part.regions(side))
                 for side in part.sides
             }
-        output, _, drawn = output_area(part.makeup, areas, drawn)
+        zone = None if zones is None else zones.get(step.step_id)
+        output, _, drawn = output_area(part.makeup, areas, drawn, zone)
         for side in part.sides:
             area, drawn_area = areas[side].mask, found_side(output, side)
             rows = side_rows[side]
@@ -358,7 +361,15 @@ def main() -> None:
     photos = tool_photos(reference, folder, occlusion_name, load_photo, FACE_MAP_KEEP, use_store)
     out = []
     for part in selected_parts(PARTS, part_names):
-        rows = measure_part(part, result, reference.manifest.steps, photos, label_map, occlusion)
+        rows = measure_part(
+            part,
+            result,
+            reference.manifest.steps,
+            photos,
+            label_map,
+            occlusion,
+            step_zones(folder),
+        )
         out += rows
         for row in rows:
             keys = ("cover", "overflow", "intrude", "pointOutlineIoU")

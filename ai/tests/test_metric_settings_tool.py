@@ -51,6 +51,7 @@ def test_apply_settings_takes_any_number_for_number_constants(monkeypatch):
     """코드에 1로 적힌 섀도 붉어짐 기준을 1.2로 바꿔 볼 수 있어야 기준값 튜닝이 된다.
 
     소수 상수에 정수를 주면 소수로, 정수 상수에 딱 떨어지는 소수를 주면 정수로 받는다.
+    자리마다 값을 둔 dict 상수(섀도 관문)도 같은 키면 칸마다 맞춰 받는다.
     """
     keep_original(monkeypatch, eyeshadow_area, "REDDENING_MIN")
     keep_original(monkeypatch, eyeshadow_area, "FOUND_TOP_MIN")
@@ -60,13 +61,14 @@ def test_apply_settings_takes_any_number_for_number_constants(monkeypatch):
     settings = apply_settings(
         [
             "eyeshadow_area.REDDENING_MIN=1.2",
-            "eyeshadow_area.FOUND_TOP_MIN=2",
+            "eyeshadow_area.FOUND_TOP_MIN={'upper': 3, 'under': 1.5}",
             "blush_area.BLUR_SIGMA=6.0",
         ]
     )
 
     assert eyeshadow_area.REDDENING_MIN == 1.2
-    assert eyeshadow_area.FOUND_TOP_MIN == 2.0 and isinstance(eyeshadow_area.FOUND_TOP_MIN, float)
+    assert eyeshadow_area.FOUND_TOP_MIN == {"upper": 3.0, "under": 1.5}
+    assert isinstance(eyeshadow_area.FOUND_TOP_MIN["upper"], float)
     assert blush_area.BLUR_SIGMA == 6 and isinstance(blush_area.BLUR_SIGMA, int)
     assert (settings[0].module, settings[0].name, settings[0].before) == (
         "eyeshadow_area",
@@ -84,6 +86,8 @@ def test_apply_settings_takes_any_number_for_number_constants(monkeypatch):
         "guide_area_builder.SOMETHING=1",
         "eyeshadow_area.REDDENING_MIN",
         "eyeshadow_area.REDDENING_MIN=abc",
+        "eyeshadow_area.FOUND_TOP_MIN={'upper': 3}",
+        "eyeshadow_area.FOUND_TOP_MIN={'upper': 3, 'under': 'low'}",
     ],
 )
 def test_wrong_setting_is_refused_and_nothing_is_changed(monkeypatch, text):
