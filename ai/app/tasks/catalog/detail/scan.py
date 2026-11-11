@@ -14,6 +14,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from statistics import median
 
 from PIL import Image
 
@@ -27,8 +28,11 @@ from app.tasks.catalog.detail.images import DetailImage
 from app.tasks.catalog.detail.overview import SHEET_CAPACITY, build_sheet, find_chart_tiles
 from app.tasks.catalog.detail.snap import (
     MIN_ROW_CELLS,
+    assign_blobs,
+    blob_box,
     chip_box,
     chip_rows,
+    detect_blobs,
     detect_chips,
     edge_background,
     group_rows,
@@ -97,13 +101,24 @@ def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
     rows = group_rows(boxes)
     chips = chip_rows(detect_chips(crop)) if any(len(r) >= MIN_ROW_CELLS for r in rows) else []
     resolved: dict[int, BBox | None] = {}
+    loose: list[int] = []
     for row in rows:
         if len(row) < MIN_ROW_CELLS:
             resolved.update({index: boxes[index] for index in row})
+            loose.extend(row)
             continue
         matched = match_row([boxes[i] for i in row], chips)
         for position, index in enumerate(row):
             resolved[index] = None if matched is None else chip_box(matched[position])
+            if matched is None:
+                loose.append(index)
+    if loose:
+        loose_boxes = [boxes[i] for i in loose]
+        blobs = detect_blobs(crop, median(max(b.width, b.height) for b in loose_boxes))
+        assigned = assign_blobs(loose_boxes, blobs)
+        for position, index in enumerate(loose):
+            if position in assigned:
+                resolved[index] = blob_box(assigned[position])
     cells: list[ChartCell] = []
     for index, (cell, model_box) in enumerate(entries):
         box = resolved[index]

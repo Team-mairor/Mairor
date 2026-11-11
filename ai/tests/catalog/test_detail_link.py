@@ -1,5 +1,11 @@
 import pytest
+from PIL import Image
 
+from app.tasks.catalog.color.cell_reading import (
+    NEUTRAL_QUALITY_CAP,
+    SKIN_QUALITY_CAP,
+    read_cell,
+)
 from app.tasks.catalog.color.pixels import ColorReading
 from app.tasks.catalog.contract import (
     BBox,
@@ -62,32 +68,66 @@ def scan_of(*cells: ChartCell, url: str = "https://cdn.example/a.png") -> ImageS
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("01 니어", ("", 1)),
-        ("1 NEAR", ("", 1)),
-        ("#03 피치", ("", 3)),
-        ("No.05", ("", 5)),
-        ("05호", ("", 5)),
-        ("B01 브라운", ("B", 1)),
-        ("로즈 07", ("", 7)),
-        ("리치 2 로즈", ("", 2)),
-        ("21 크레이브 핑", ("", 21)),
+        ("01 니어", ("", 1, "")),
+        ("1 NEAR", ("", 1, "")),
+        ("#03 피치", ("", 3, "")),
+        ("No.05", ("", 5, "")),
+        ("05호", ("", 5, "")),
+        ("B01 브라운", ("B", 1, "")),
+        ("로즈 07", ("", 7, "")),
+        ("리치 2 로즈", ("", 2, "")),
+        ("21 크레이브 핑", ("", 21, "")),
+        ("13N", ("", 13, "N")),
+        ("21NW", ("", 21, "NW")),
+        ("17c 로지페어", ("", 17, "C")),
+        ("23N 베이지", ("", 23, "N")),
+        ("(GLIT ANGEL) 15 페어", ("", 15, "")),
     ],
 )
 def test_a_number_is_read_from_the_front_or_the_only_number(text: str, expected) -> None:
     assert number_key(text) == expected
 
 
-@pytest.mark.parametrize("text", ["로즈", "", "리치 2 로즈 3", "2in1 로즈 04 07"])
+@pytest.mark.parametrize(
+    "text", ["로즈", "", "리치 2 로즈 3", "2in1 로즈 04 07", "3CE 로즈", "5g", "21X", "21NWW"]
+)
 def test_no_number_or_an_unclear_one_gives_none(text: str) -> None:
     assert number_key(text) is None
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("[2P] 01 니어", ("", 1, "")),
+        ("2P 01 니어", ("", 2, "P")),
+        ("01 니어 (2P)", ("", 1, "")),
+        ("[NEW] [2P] 03 로즈", ("", 3, "")),
+        ("[01] 니어", ("", 1, "")),
+        ("(03) 로즈 [NEW]", ("", 3, "")),
+        ("[2P]", ("", 2, "P")),
+        ("[NEW] 21N 아이보리", ("", 21, "N")),
+    ],
+)
+def test_tag_text_is_not_read_as_the_number(text: str, expected) -> None:
+    assert number_key(text) == expected
+
+
+def test_a_name_whose_numbers_are_unclear_after_removing_tags_stays_unclear() -> None:
+    assert number_key("[2P] 리치 2 로즈 3") is None
+
+
 def test_a_leading_number_wins_even_when_there_are_other_numbers() -> None:
-    assert number_key("02 로즈 5g") == ("", 2)
+    assert number_key("02 로즈 5g") == ("", 2, "")
 
 
 def test_letter_prefixed_codes_are_not_mixed_with_plain_numbers() -> None:
     assert number_key("B01") != number_key("01")
+
+
+def test_tones_make_different_numbers() -> None:
+    assert number_key("21N") != number_key("21NW")
+    assert number_key("21N") != number_key("21")
+    assert number_key("21N") == number_key("21n 아이보리")
 
 
 # --- 이름 충돌 ---
@@ -145,6 +185,50 @@ def test_shades_without_a_number_or_with_the_same_number_are_not_linked() -> Non
     assert result.reasons == {"a": NO_NUMBER, "b": NUMBER_DUPLICATE, "c": NUMBER_DUPLICATE}
 
 
+def test_tone_suffixed_shades_link_to_cells_with_the_same_tone_only() -> None:
+    shades = [shade("a", "21N"), shade("b", "21NW"), shade("c", "13N")]
+    fillers = [cell(label) for label in ("17N", "19N", "23N")]
+    scans = [
+        scan_of(cell("21N", "#C9A58A"), cell("21NW", "#C99F82"), cell("13N", "#E3C3A8"), *fillers)
+    ]
+
+    result = match_shades(shades, scans)
+
+    assert {k: v.cell.reading.hex for k, v in result.matches.items()} == {
+        "a": "#C9A58A",
+        "b": "#C99F82",
+        "c": "#E3C3A8",
+    }
+
+
+def test_shades_that_differ_only_by_an_event_tag_are_one_shade_and_share_the_cell() -> None:
+    shades = [
+        shade("a", "15 페어"),
+        shade("b", "(GLIT ANGEL) 15 페어"),
+        shade("c", "[NEW] 15 페어"),
+    ]
+    scans = [scan_of(cell("15 페어", "#E8B9A5"))]
+
+    result = match_shades(shades, scans)
+
+    assert set(result.matches) == {"a", "b", "c"}
+    assert result.reasons == {}
+
+
+def test_an_event_tag_does_not_hide_a_real_number_duplicate() -> None:
+    shades = [shade("a", "15 페어"), shade("b", "(GLIT ANGEL) 15 라이트")]
+
+    result = match_shades(shades, [scan_of(cell("15 페어"))])
+
+    assert result.matches == {}
+    assert result.reasons == {"a": NUMBER_DUPLICATE, "b": NUMBER_DUPLICATE}
+
+
+def test_an_event_tag_in_the_shade_name_is_not_a_name_conflict() -> None:
+    assert not name_conflict("(GLIT ANGEL) 15 페어", "15 페어")
+    assert name_conflict("(GLIT ANGEL) 15 페어", "15 라이트")
+
+
 def test_a_number_that_is_not_in_any_chart_has_no_match() -> None:
     result = match_shades([shade("a", "09 레드")], [scan_of(cell("01 니어"), cell("로즈"))])
 
@@ -175,6 +259,51 @@ def test_equal_kind_cells_that_agree_use_the_higher_quality_and_that_disagree_do
 
     assert agreed.matches["a"].cell.reading.quality == 0.9
     assert disagreed.reasons == {"a": AMBIGUOUS}
+
+
+def test_a_much_lower_quality_cell_does_not_make_the_others_ambiguous() -> None:
+    pale = cell("01 니어", "#F4F1EA", kind=ImageKind.SKIN_SWATCH, quality=0.3)
+    red = cell("01 니어", "#B63C49", kind=ImageKind.SKIN_SWATCH, quality=0.4)
+
+    result = match_shades([shade("a", "01")], [scan_of(pale, red)])
+
+    assert result.matches["a"].cell.reading.hex == "#B63C49"
+
+
+def test_cells_with_close_quality_and_different_colors_stay_ambiguous() -> None:
+    first = cell("01 니어", "#DF9886", kind=ImageKind.SKIN_SWATCH, quality=0.4)
+    second = cell("01 니어", "#F2CBC4", kind=ImageKind.SKIN_SWATCH, quality=0.35)
+
+    result = match_shades([shade("a", "01")], [scan_of(first, second)])
+
+    assert result.reasons == {"a": AMBIGUOUS}
+
+
+def test_a_lone_low_quality_cell_is_still_linked() -> None:
+    result = match_shades([shade("a", "01")], [scan_of(cell("01 니어", "#FFFFFF", quality=0.3))])
+
+    assert result.matches["a"].cell.reading.quality == 0.3
+
+
+@pytest.mark.parametrize(
+    ("hex_value", "kind", "expected"),
+    [
+        ("#F4F1EA", ImageKind.SKIN_SWATCH, NEUTRAL_QUALITY_CAP),
+        ("#B63C49", ImageKind.SKIN_SWATCH, SKIN_QUALITY_CAP),
+        ("#F4F1EA", ImageKind.SWATCH_CHIP, NEUTRAL_QUALITY_CAP),
+        ("#B63C49", ImageKind.SWATCH_CHIP, 0.9),
+    ],
+)
+def test_cell_quality_caps_apply_together_and_the_lower_one_wins(
+    monkeypatch: pytest.MonkeyPatch, hex_value: str, kind: ImageKind, expected: float
+) -> None:
+    fixed = ColorReading(hex_value, 0.9, {"homogeneity": 0.9})
+    monkeypatch.setattr("app.tasks.catalog.color.cell_reading.read_color", lambda *_: fixed)
+
+    reading = read_cell(Image.new("RGB", (10, 10)), BBox(x=0, y=0, width=10, height=10), kind)
+
+    assert reading is not None
+    assert reading.quality == expected
 
 
 def test_a_cell_without_a_reliable_color_is_not_linked() -> None:

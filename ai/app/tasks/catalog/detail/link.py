@@ -3,14 +3,16 @@
 색을 잘못 잇는 것이 색이 없는 것보다 나쁘므로, 근거가 분명할 때만 연결(LABEL_IN_IMAGE)하고
 조금이라도 모호하면 잇지 않는다.
 
-- 번호: 이름 맨 앞의 번호("01 니어", "#03", "05호", "B01"). 맨 앞이 번호가 아니면
-  이름 안에 번호가 하나일 때만 쓴다.
-- 호수 쪽 번호가 없거나 한 상품 안에서 겹치면 그 호수들은 잇지 않는다.
+- 번호: 이름 맨 앞의 번호("01 니어", "#03", "05호", "B01", 톤이 붙은 "13N"·"21NW"). 맨 앞이
+  번호가 아니면 이름 안에 번호가 하나일 때만 쓴다. 톤 글자(TONE_SUFFIX)가 다르면 다른 번호다.
+- 호수 쪽 번호가 없거나 한 상품 안에서 겹치면 그 호수들은 잇지 않는다. 다만 번호가 같아도
+  이벤트 꼬리표("(GLIT ANGEL)", "[NEW]")를 걷어낸 이름이 같으면 같은 호수의 다른 판본이므로
+  하나로 보고 같은 칸에 잇는다.
 - 번호만 적힌 라벨("2")은 같은 이미지에 서로 다른 번호가 MIN_BARE_NUMBERS개 이상 나열될 때만
   쓴다. 사용법 이미지의 단계 번호(1·2·3)가 호수에 이어지는 것을 막으려는 것이다.
 - 같은 번호의 칸이 여러 개면(칩 차트와 발색 컷이 둘 다 있는 경우) 칩 > 제품 내용물 > 피부 발색
-  순으로 하나만 고른다. 같은 종류가 여럿이면 색이 AGREE_DELTA_E 안에서 같을 때만
-  품질이 높은 쪽을 쓰고, 다르면 잇지 않는다.
+  순으로 하나만 고른다. 같은 종류가 여럿이면 가장 높은 품질보다 QUALITY_MARGIN 이상 낮은 칸은
+  빼고, 남은 칸의 색이 AGREE_DELTA_E 안에서 같을 때만 품질이 높은 쪽을 쓴다. 다르면 잇지 않는다.
 - 번호가 같아도 이름이 같은 문자(한글끼리, 영문끼리)인데 서로 다르면 다른 제품의 차트로 보고
   잇지 않는다. 한글 이름과 영문 이름("01 니어"와 "01 NEAR")은 비교할 수 없어 번호로 잇는다.
 """
@@ -25,6 +27,7 @@ from app.tasks.catalog.detail.scan import ImageScan
 from app.tasks.catalog.text import compact_key, tokens
 
 AGREE_DELTA_E = 12.0
+QUALITY_MARGIN = 0.1
 MIN_BARE_NUMBERS = 5
 
 NO_NUMBER = "SHADE_NO_NUMBER"
@@ -35,11 +38,15 @@ AMBIGUOUS = "CHART_NUMBER_AMBIGUOUS"
 CELL_UNREADABLE = "CHART_CELL_UNREADABLE"
 
 _SPLIT = re.compile(r"[\s#.\-_/()\[\]:·,]+")
-_CODE = re.compile(r"^([A-Za-z]{0,3})0*(\d{1,3})(?:호)?$")
+TONE_SUFFIX = "NWCPYR"
+_CODE = re.compile(
+    rf"^([A-Za-z]{{0,3}})0*(\d{{1,3}})([{TONE_SUFFIX}]{{1,2}})?(?:호)?$", re.IGNORECASE
+)
+_TAG = re.compile(r"\[[^\]]*\]|\([^)]*\)")
 _HANGUL = re.compile(r"[가-힣]")
 _KIND_RANK = {ImageKind.SWATCH_CHIP: 0, ImageKind.PRODUCT_SINGLE: 1, ImageKind.SKIN_SWATCH: 2}
 
-NumberKey = tuple[str, int]
+NumberKey = tuple[str, int, str]
 
 
 @dataclass(frozen=True)
@@ -61,18 +68,32 @@ def _chunks(text: str) -> list[str]:
 
 
 def number_key(text: str) -> NumberKey | None:
-    """이름의 번호. 맨 앞 덩어리가 번호면 그것, 아니면 번호가 하나일 때만. 없거나 모호하면 None."""
+    """이름의 번호. 맨 앞 덩어리가 번호면 그것, 아니면 번호가 하나일 때만. 없거나 모호하면 None.
+
+    "[2P] 01 니어"의 2P(2개입)처럼 꼬리표 안의 글자가 번호로 읽히지 않게, 꼬리표를 걷어 낸 이름에서
+    먼저 찾는다. 걷어 낸 이름에 번호가 하나도 없을 때만("[01] 니어") 원문에서 찾는다.
+    """
+    key, seen = _find_number(_TAG.sub(" ", text))
+    return key if seen else _find_number(text)[0]
+
+
+def _find_number(text: str) -> tuple[NumberKey | None, bool]:
+    """(번호, 번호처럼 읽히는 덩어리가 있었는가). 있었지만 모호하면 (None, True)다."""
     parsed = [(chunk, _CODE.match(chunk)) for chunk in _chunks(text)]
-    found = [(m.group(1).upper(), int(m.group(2))) for _, m in parsed if m]
+    found = [
+        (m.group(1).upper(), int(m.group(2)), (m.group(3) or "").upper()) for _, m in parsed if m
+    ]
     if not found:
-        return None
+        return None, False
     if parsed[0][1] is not None:
-        return found[0]
-    return found[0] if len(found) == 1 else None
+        return found[0], True
+    return (found[0] if len(found) == 1 else None), True
 
 
 def _name_part(text: str) -> str:
-    return " ".join(chunk for chunk in _chunks(text) if _CODE.match(chunk) is None)
+    """번호와 이벤트 꼬리표를 뺀 이름."""
+    plain = _TAG.sub(" ", text)
+    return " ".join(chunk for chunk in _chunks(plain) if _CODE.match(chunk) is None)
 
 
 def is_bare_number(label: str | None) -> bool:
@@ -98,6 +119,8 @@ def _pick(cells: list[ChartCell]) -> tuple[ChartCell | None, str | None]:
         return None, CELL_UNREADABLE
     best_rank = min(_KIND_RANK.get(c.kind, 3) for c in readable)
     top = [c for c in readable if _KIND_RANK.get(c.kind, 3) == best_rank]
+    best_quality = max(c.reading.quality for c in top)
+    top = [c for c in top if best_quality - c.reading.quality < QUALITY_MARGIN - 1e-9]
     if len(top) > 1 and any(
         hex_delta_e(a.reading.hex, b.reading.hex) > AGREE_DELTA_E
         for i, a in enumerate(top)
@@ -116,10 +139,11 @@ def match_shades(
     """
     result = MatchResult()
     keys = {shade.source_option_id: number_key(shade.name) for shade in shades}
-    counts: dict[NumberKey, int] = {}
-    for key in keys.values():
+    names: dict[NumberKey, set[str]] = {}
+    for shade in shades:
+        key = keys[shade.source_option_id]
         if key is not None:
-            counts[key] = counts.get(key, 0) + 1
+            names.setdefault(key, set()).add(compact_key(_name_part(shade.name)))
     groups: dict[NumberKey, list[tuple[ImageScan, ChartCell]]] = {}
     for scan in scans:
         numbered = {number_key(c.label) for c in scan.cells if c.label} - {None}
@@ -134,7 +158,7 @@ def match_shades(
             continue
         if key is None:
             result.reasons[option_id] = NO_NUMBER
-        elif counts[key] > 1:
+        elif len(names[key]) > 1:
             result.reasons[option_id] = NUMBER_DUPLICATE
         elif key not in groups:
             result.reasons[option_id] = NO_MATCH

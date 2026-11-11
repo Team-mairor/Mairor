@@ -11,8 +11,11 @@ from app.tasks.catalog.detail.overview import PresenceAnswer
 from app.tasks.catalog.detail.scan import ImageScan, scan_detail_images
 from app.tasks.catalog.detail.snap import (
     Chip,
+    _min_cost_assignment,
+    assign_blobs,
     chip_box,
     chip_rows,
+    detect_blobs,
     detect_chips,
     edge_background,
     group_rows,
@@ -295,3 +298,205 @@ def test_scanning_stops_once_the_caller_says_everything_is_linked() -> None:
 
     assert client.requested == urls[:2]
     assert any(s.cells for s in scans) and isinstance(scans[0], ImageScan)
+
+
+# --- 둥근 점: 모델 칸이 점에서 비껴 있어도 점의 색을 읽는다 ---
+
+DOT_CENTERS = [(200, 300), (450, 300), (700, 300), (200, 560), (450, 560), (700, 560)]
+DOT_RADIUS = 45
+
+
+def dots(count: int = 6) -> Image.Image:
+    """흰 바탕의 둥근 점. 칩 찾기(채워진 사각형)에는 걸리지 않는다."""
+    image = Image.new("RGB", (900, 1080), "white")
+    draw = ImageDraw.Draw(image)
+    for (cx, cy), color in zip(DOT_CENTERS[:count], COLORS, strict=False):
+        draw.ellipse(
+            (cx - DOT_RADIUS, cy - DOT_RADIUS, cx + DOT_RADIUS, cy + DOT_RADIUS), fill=color
+        )
+    return image
+
+
+def dot_cells(labels: list[str], shift: tuple[int, int] = (-35, -30)) -> list[Cell]:
+    return [
+        Cell(
+            x=(cx + shift[0] - 35) / 900,
+            y=(cy + shift[1] - 35) / 1080,
+            width=70 / 900,
+            height=70 / 1080,
+            label=label,
+        )
+        for (cx, cy), label in zip(DOT_CENTERS, labels, strict=False)
+    ]
+
+
+def dot_boxes(count: int, shift: tuple[int, int] = (-35, -30)) -> list[BBox]:
+    return [
+        BBox(x=cx + shift[0] - 17, y=cy + shift[1] - 17, width=35, height=35)
+        for cx, cy in DOT_CENTERS[:count]
+    ]
+
+
+def test_round_dots_are_found_with_their_centers() -> None:
+    blobs = detect_blobs(dots(), 49)
+
+    assert len(blobs) == 6
+    for (cx, cy), blob in zip(
+        DOT_CENTERS, sorted(blobs, key=lambda b: (b.y > 400, b.x)), strict=True
+    ):
+        assert abs(blob.x - cx) < 4 and abs(blob.y - cy) < 4
+        assert abs(blob.radius - DOT_RADIUS) < 5
+
+
+def test_a_blank_image_or_square_chips_have_no_dots() -> None:
+    assert detect_blobs(Image.new("RGB", (900, 600), "white"), 49) == []
+    assert detect_blobs(chart([(300, 9)]), 49) == []
+
+
+def test_boxes_shifted_off_the_dots_are_paired_one_to_one() -> None:
+    blobs = sorted(detect_blobs(dots(), 49), key=lambda b: (b.y > 400, b.x))
+
+    paired = assign_blobs(dot_boxes(6), blobs)
+
+    assert sorted(paired) == list(range(6))
+    for i, blob in paired.items():
+        assert abs(blob.x - DOT_CENTERS[i][0]) < 4 and abs(blob.y - DOT_CENTERS[i][1]) < 4
+
+
+def test_the_pairing_is_dropped_when_the_cell_count_differs_from_the_dot_count() -> None:
+    blobs = detect_blobs(dots(), 49)
+
+    assert assign_blobs(dot_boxes(5), blobs) == {}
+    assert assign_blobs(dot_boxes(6) + dot_boxes(1), blobs) == {}
+
+
+def test_the_pairing_is_dropped_when_a_box_is_far_from_every_dot() -> None:
+    blobs = detect_blobs(dots(), 49)
+    boxes = dot_boxes(6)
+    boxes[2] = BBox(x=780, y=900, width=35, height=35)
+
+    assert assign_blobs(boxes, blobs) == {}
+
+
+def test_the_minimum_cost_pairing_beats_picking_the_nearest_first() -> None:
+    cost = np.array([[1.0, 2.0, 9.0], [1.2, 9.0, 9.0], [9.0, 9.0, 1.0]])
+
+    assert _min_cost_assignment(cost) == [1, 0, 2]
+
+
+def test_colors_come_from_the_dots_even_when_the_model_boxes_are_shifted() -> None:
+    labels = [f"{n:02d} 이름{n}" for n in range(1, 7)]
+
+    result = scan_chart(dots(), dot_cells(labels))
+
+    by_label = {c.label: c for c in result.cells}
+    assert sorted(by_label) == labels
+    for label, expected in zip(labels, COLORS, strict=False):
+        reading = by_label[label].reading
+        assert reading is not None and close(reading.hex, expected, 8)
+
+
+def test_dots_are_not_used_when_the_model_missed_one() -> None:
+    labels = [f"{n:02d} 이름{n}" for n in range(1, 6)]
+
+    result = scan_chart(dots(), dot_cells(labels, shift=(-75, -65)))
+
+    assert sorted(c.label for c in result.cells) == labels
+    assert all(c.reading is None for c in result.cells)
+
+
+# --- 칩 줄과 둥근 점이 한 조각에 섞인 경우: 점 짝은 칩이 못 해결한 칸끼리만 맞춘다 ---
+
+MIXED_DOT_CENTERS = [(200, 800), (450, 800), (700, 800)]
+
+
+def mixed_chart(dot_count: int = 3) -> Image.Image:
+    image = chart([(300, 9)])
+    draw = ImageDraw.Draw(image)
+    for (cx, cy), color in zip(MIXED_DOT_CENTERS[:dot_count], COLORS[3:], strict=False):
+        draw.ellipse(
+            (cx - DOT_RADIUS, cy - DOT_RADIUS, cx + DOT_RADIUS, cy + DOT_RADIUS), fill=color
+        )
+    return image
+
+
+def mixed_cells(dot_labels: list[str]) -> list[Cell]:
+    chip_labels = [f"{n:02d} 칩{n}" for n in range(1, 10)]
+    shifted_dots = [
+        Cell(
+            x=(cx - 70) / 900,
+            y=(cy - 65) / 1080,
+            width=70 / 900,
+            height=70 / 1080,
+            label=label,
+        )
+        for (cx, cy), label in zip(MIXED_DOT_CENTERS, dot_labels, strict=False)
+    ]
+    return cell_row(chip_labels, 340, drift=-60) + shifted_dots
+
+
+def test_dots_are_paired_among_the_unresolved_cells_not_all_cells_of_the_tile() -> None:
+    dot_labels = ["10 점가", "11 점나", "12 점다"]
+
+    result = scan_chart(mixed_chart(), mixed_cells(dot_labels))
+
+    by_label = {c.label: c for c in result.cells}
+    assert len(by_label) == 12
+    for n, expected in enumerate(COLORS, start=1):
+        reading = by_label[f"{n:02d} 칩{n}"].reading
+        assert reading is not None and close(reading.hex, expected, 6)
+    for label, expected in zip(dot_labels, COLORS[3:], strict=False):
+        reading = by_label[label].reading
+        assert reading is not None and close(reading.hex, expected, 8)
+
+
+def test_a_chip_row_matched_by_chips_is_never_replaced_by_a_dot() -> None:
+    result = scan_chart(mixed_chart(), mixed_cells(["10 점가", "11 점나", "12 점다"]))
+
+    chips = [c for c in result.cells if c.label and "칩" in c.label]
+    for cell, expected in zip(chips, COLORS, strict=True):
+        assert close(cell.reading.hex, expected, 6)
+
+
+def test_a_missed_dot_drops_only_the_dot_cells_and_keeps_the_chip_row() -> None:
+    result = scan_chart(mixed_chart(dot_count=2), mixed_cells(["10 점가", "11 점나", "12 점다"]))
+
+    by_label = {c.label: c for c in result.cells}
+    assert all(by_label[f"{n:02d} 칩{n}"].reading is not None for n in range(1, 10))
+    assert all(by_label[label].reading is None for label in ("10 점가", "11 점나", "12 점다"))
+
+
+# --- 한 줄에 칸이 셋 미만인 점 도표(톤 지도): 칩 짝은 찾지 않아도 점 짝은 맞춘다 ---
+
+TONE_CENTERS = [(300, 300), (600, 300), (300, 560), (600, 560), (300, 820), (600, 820)]
+
+
+def tone_map() -> Image.Image:
+    image = Image.new("RGB", (900, 1080), "white")
+    draw = ImageDraw.Draw(image)
+    for (cx, cy), color in zip(TONE_CENTERS, COLORS[:6], strict=True):
+        draw.ellipse(
+            (cx - DOT_RADIUS, cy - DOT_RADIUS, cx + DOT_RADIUS, cy + DOT_RADIUS), fill=color
+        )
+    return image
+
+
+def test_rows_of_fewer_than_three_cells_still_get_their_dot_colors() -> None:
+    labels = [f"{n:02d} 톤{n}" for n in range(1, 7)]
+    cells = [
+        Cell(
+            x=(cx - 70) / 900,
+            y=(cy - 65) / 1080,
+            width=70 / 900,
+            height=70 / 1080,
+            label=label,
+        )
+        for (cx, cy), label in zip(TONE_CENTERS, labels, strict=True)
+    ]
+
+    result = scan_chart(tone_map(), cells)
+
+    by_label = {c.label: c for c in result.cells}
+    for label, expected in zip(labels, COLORS[:6], strict=True):
+        reading = by_label[label].reading
+        assert reading is not None and close(reading.hex, expected, 8)

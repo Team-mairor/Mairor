@@ -2,7 +2,7 @@
 
 칸의 안쪽만 읽도록 가장자리를 줄이고(CELL_INSET), 한 색으로 모이지 않는 칸은 색을 만들지 않는다.
 피부에 바른 발색 컷은 피부색이 섞이므로 품질을 막고, 거의 무채색의 밝은 값은 배경이나 투명 젤일
-가능성이 커서 품질을 막는다.
+가능성이 커서 품질을 막는다. 두 조건에 모두 해당하면 더 낮은 상한을 쓴다.
 """
 
 from PIL import Image
@@ -33,8 +33,11 @@ def read_cell(image: Image.Image, box: BBox, kind: ImageKind) -> ColorReading | 
     reading = read_color(image, box)
     if reading is None or reading.scores["homogeneity"] < MIN_CELL_HOMOGENEITY:
         return None
-    if kind is ImageKind.SKIN_SWATCH and reading.quality > SKIN_QUALITY_CAP:
-        return ColorReading(reading.hex, SKIN_QUALITY_CAP, reading.scores)
-    if is_neutral_light(reading.hex) and reading.quality > NEUTRAL_QUALITY_CAP:
-        return ColorReading(reading.hex, NEUTRAL_QUALITY_CAP, reading.scores)
-    return reading
+    quality = reading.quality
+    if kind is ImageKind.SKIN_SWATCH:
+        quality = min(quality, SKIN_QUALITY_CAP)
+    if is_neutral_light(reading.hex):
+        quality = min(quality, NEUTRAL_QUALITY_CAP)
+    if quality == reading.quality:
+        return reading
+    return ColorReading(reading.hex, quality, reading.scores)
