@@ -7,7 +7,12 @@ import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
 import { PillButton } from "@/components/ui/pill-button";
 import { facePhoto, useCamera, useHiddenVideo } from "@/features/face";
-import { useGuide, useRunQuery as useQuery } from "@/features/guide";
+import {
+  faceRegistrationRequest,
+  registerFace,
+  useGuide,
+  useRunQuery as useQuery,
+} from "@/features/guide";
 import {
   AnalysisProgress,
   FaceRegisterModal,
@@ -20,7 +25,7 @@ import {
   useAnalysisJob,
 } from "@/features/loading";
 import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
-import { hasSame, isGuideId, runHref, useSession } from "@/features/session";
+import { faceReady, hasSame, isGuideId, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
 import { type AnalysisJobStatus, type ApiError } from "@/lib/api";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
@@ -65,8 +70,8 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   // 상태 응답에 영상 정보가 없어, 이 작업으로 시작한 실행의 영상만 쓰고 모르면 비워 둔다
   const picked = jobId ? (run.jobId === jobId ? run.picked : null) : (run.picked ?? VIDEOS[0]);
   const href = (path: string) => runHref(path, run.guideId);
-  // 사진은 메모리에만 있어서, 새로 고침으로 사라졌으면 다시 등록해야 한다
-  const faceOk = run.faceReg && facePhoto(run.id) !== null;
+  // 사진은 메모리에만 있어서, 새로 고침으로 사라졌으면 다시 등록해야 한다. 가이드 실행은 서버 등록 ID도 있어야 한다
+  const faceOk = faceReady(run) && facePhoto(run.id) !== null;
 
   const [demoPct, setDemoPct] = useState(replay ? 100 : 0);
   const [joined, setJoined] = useState(false);
@@ -416,8 +421,16 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             setFaceModal(false);
             camera.stop();
           }}
-          onDone={() => {
-            updateRun({ faceReg: true }, run.id);
+          onDone={async () => {
+            // 실제 가이드는 찍은 사진을 서버에 등록한다. 실패하면 등록 창이 오류를 보여 준다
+            let faceRegistrationId: string | null = null;
+            if (run.mode === "guide") {
+              const photo = facePhoto(run.id);
+              if (load.status !== "ready" || !photo) throw new Error("가이드나 얼굴 사진이 없다");
+              const metadata = faceRegistrationRequest(load.guide.videoId, load.guide.guideId);
+              faceRegistrationId = (await registerFace(photo, metadata)).faceRegistrationId;
+            }
+            updateRun({ faceReg: true, faceRegistrationId }, run.id);
             setFaceModal(false);
             if (pct < 100 || replay) setPouchModal(true);
           }}

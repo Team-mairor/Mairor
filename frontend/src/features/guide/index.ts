@@ -1,6 +1,17 @@
 export { buildDefaultGuideSet } from "./default-guides";
 export { resolveStep, resolveSubStep } from "./area";
 export {
+  abandonExecution,
+  completeExecution,
+  executionSelections,
+  ExecutionMismatchError,
+  faceRegistrationRequest,
+  isFaceRegistrationGone,
+  registerFace,
+  setPhotoConsent,
+  startExecution,
+} from "./execution-api";
+export {
   fetchGuide,
   type GuideActionDto,
   type GuideDto,

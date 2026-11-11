@@ -99,7 +99,11 @@ async function navigate(url: string) {
 async function registerFace() {
   await act(async () => {
     saveFacePhoto(session.state.run.id, new Blob());
-    session.updateRun({ faceReg: true }, session.state.run.id);
+    // 서버 얼굴 등록 · 제품 체크의 실행 시작까지 마친 상태
+    session.updateRun(
+      { faceReg: true, faceRegistrationId: "f1", executionId: "e1" },
+      session.state.run.id,
+    );
   });
 }
 beforeEach(() => {
@@ -121,6 +125,8 @@ beforeEach(() => {
     csrfToken: "csrf",
   });
   fetch.mockReset().mockImplementation(async (id: string) => raw(id));
+  // 사진 동의
+  vi.spyOn(api, "patch").mockResolvedValue({ photoConsent: true });
   element = document.createElement("div");
   document.body.append(element);
   root = createRoot(element);
@@ -205,6 +211,9 @@ describe("루트 실행·가이드 연동", () => {
       button.click();
     });
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(api.patch).toHaveBeenCalledWith("/v1/users/me/executions/e1/photo-consent", {
+      body: { enabled: true },
+    });
     expect(session.state.run).toMatchObject({ id, phase: "tutorial", photoOk: true });
     expect(nav.router.push).toHaveBeenCalledWith(`/tutorial?guideId=${A}`);
   });

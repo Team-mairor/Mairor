@@ -1,5 +1,9 @@
 import type {
   AnalysisJobSummary,
+  ExecutionAbandonment,
+  ExecutionCompletion,
+  ExecutionSummary,
+  FaceRegistration,
   ApiErrorBody,
   CodeSent,
   EmailAvailability,
@@ -63,6 +67,8 @@ const MOCK_VIDEO: VideoSearchItem = {
   guideAvailable: true,
 };
 const NO_GUIDE = { guideId: null, guideAvailable: false } as const;
+const MOCK_FACE_ID = "f0000000-0000-4000-8000-000000000001";
+const MOCK_EXECUTION_ID = "e0000000-0000-4000-8000-000000000001";
 
 const NOT_FOUND = () =>
   error(404, { code: "NOT_FOUND", message: "요청한 리소스를 찾을 수 없습니다." });
@@ -349,6 +355,82 @@ const ROUTES: MockRoute[] = [
       } satisfies Page<AnalysisJobSummary>,
     }),
     error: () => error(401, { code: "UNAUTHORIZED", message: "로그인이 필요합니다." }),
+  },
+  {
+    // 가이드 실행: 얼굴 등록. 모의 응답은 사진 · metadata를 보지 않는다
+    method: "POST",
+    path: /^\/v1\/users\/me\/face-registrations$/,
+    success: () => ({
+      status: 201,
+      body: {
+        faceRegistrationId: MOCK_FACE_ID,
+        videoId: "b0000000-0000-4000-8000-000000000001",
+        guideId: MOCK_VIDEO.guideId,
+        executionId: null,
+        status: "REGISTERED",
+        noticeVersion: "v1",
+        createdAt: "2026-11-11T00:00:00Z",
+      } satisfies FaceRegistration,
+    }),
+    error: () =>
+      error(400, {
+        code: "FACE_CONDITIONS_NOT_MET",
+        message: "필수 촬영 조건을 모두 만족해야 합니다.",
+      }),
+  },
+  {
+    // 실행 시작
+    method: "POST",
+    path: /^\/v1\/users\/me\/executions$/,
+    success: () => ({
+      status: 201,
+      body: {
+        executionId: MOCK_EXECUTION_ID,
+        guideId: MOCK_VIDEO.guideId ?? "",
+        status: "IN_PROGRESS",
+        recordId: null,
+        steps: [],
+      } satisfies ExecutionSummary,
+    }),
+    error: () =>
+      error(409, { code: "GUIDE_MATCH_STALE", message: "제품 정보를 다시 매칭해 주세요." }),
+  },
+  {
+    // 사진 동의
+    method: "PATCH",
+    path: /^\/v1\/users\/me\/executions\/[^/]+\/photo-consent$/,
+    success: () => ({ status: 200, body: { photoConsent: true, consentPolicyVersion: "v1" } }),
+    error: () => NOT_FOUND(),
+  },
+  {
+    // 완료. 실행 ID와 상관없이 같은 기록
+    method: "POST",
+    path: /^\/v1\/users\/me\/executions\/[^/]+\/completion$/,
+    success: () => ({
+      status: 201,
+      body: {
+        executionId: MOCK_EXECUTION_ID,
+        status: "COMPLETED",
+        recordId: "d0000000-0000-4000-8000-000000000001",
+        completedAt: "2026-11-11T00:00:00Z",
+      } satisfies ExecutionCompletion,
+    }),
+    error: () =>
+      error(503, { code: "SERVICE_UNAVAILABLE", message: "잠시 후 다시 시도해 주세요." }),
+  },
+  {
+    // 중도 종료
+    method: "POST",
+    path: /^\/v1\/users\/me\/executions\/[^/]+\/abandonment$/,
+    success: () => ({
+      status: 200,
+      body: {
+        executionId: MOCK_EXECUTION_ID,
+        status: "ABANDONED",
+        cleanupPending: false,
+      } satisfies ExecutionAbandonment,
+    }),
+    error: () => NOT_FOUND(),
   },
 ];
 

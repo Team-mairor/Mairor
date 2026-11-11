@@ -3,11 +3,12 @@ import { act, useLayoutEffect, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { saveFacePhoto } from "@/features/face";
 import type { GuideModel, GuideStepModel } from "@/features/guide";
 import { RunGuideContext } from "@/features/guide/use-guide";
 import type { PouchItem } from "@/features/pouch";
 import { SessionProvider, useSession } from "@/features/session/session-provider";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 import { GuideCheck } from "./guide-check-view";
 
@@ -130,7 +131,10 @@ beforeEach(async () => {
   });
   vi.clearAllMocks();
   vi.spyOn(api, "get").mockResolvedValue({ user: { email: "t@example.com" }, csrfToken: "c" });
-  vi.spyOn(api, "post").mockResolvedValue(MATCH);
+  // 매칭과 실행 시작
+  vi.spyOn(api, "post").mockImplementation(async (path: string) =>
+    path === "/v1/users/me/executions" ? { executionId: "e1" } : MATCH,
+  );
   element = document.createElement("div");
   document.body.append(element);
   root = createRoot(element);
@@ -154,6 +158,10 @@ beforeEach(async () => {
     // 로그인 확인 뒤 서버 파우치 목록을 받은 상태
     session.update({ pouch });
     session.startRun({ kind: "guide", guideId: GUIDE_ID });
+  });
+  await act(async () => {
+    // 로딩 화면에서 서버에 얼굴을 등록한 상태
+    session.updateRun({ faceReg: true, faceRegistrationId: "f1" }, session.state.run.id);
   });
 });
 afterEach(async () => {
@@ -210,7 +218,137 @@ describe("실제 가이드 제품 체크", () => {
       s8: { kind: "none", auto: true },
       s9: { kind: "none", auto: true },
     });
+    // 그 선택으로 서버 실행을 만들고, 받은 ID로 동의 화면에 간다
+    expect(api.post).toHaveBeenCalledWith("/v1/users/me/executions", {
+      body: {
+        guideId: GUIDE_ID,
+        matchId: "m1",
+        faceRegistrationId: "f1",
+        selections: [
+          { stepId: "s2", selectedPouchItemId: "same" },
+          { stepId: "s5", selectedPouchItemId: "tint" },
+          { stepId: "s8", selectedPouchItemId: null },
+          { stepId: "s9", selectedPouchItemId: null },
+        ],
+        acceptMissingProducts: true,
+      },
+    });
+    expect(session.state.run.executionId).toBe("e1");
     expect(router.push).toHaveBeenCalledWith(`/tutorial/guide?guideId=${GUIDE_ID}`);
+  });
+
+  it("실행 생성 404인데 얼굴 등록이 남아 있으면 등록은 두고 다시 맞춰 안내한다", async () => {
+    vi.mocked(api.post).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/executions") throw new ApiError(404, "NOT_FOUND", "없음");
+      return MATCH;
+    });
+    await click(button("이 조합으로 시작"));
+    await click(button("건너뛰고 시작"));
+    expect(api.get).toHaveBeenCalledWith("/v1/users/me/face-registrations/f1");
+    expect(text()).toContain("가이드나 제품 매칭을 찾지 못해 다시 맞췄어요");
+    expect(session.state.run.faceRegistrationId).toBe("f1");
+  });
+
+  it("실행 생성 404의 원인이 사라진 얼굴 등록이면 등록을 지워 다시 등록하게 한다", async () => {
+    vi.mocked(api.post).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/executions") throw new ApiError(404, "NOT_FOUND", "없음");
+      return MATCH;
+    });
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path.startsWith("/v1/users/me/face-registrations/"))
+        throw new ApiError(404, "NOT_FOUND", "없음");
+      return { user: { email: "t@example.com" }, csrfToken: "c" };
+    });
+    await click(button("이 조합으로 시작"));
+    await click(button("건너뛰고 시작"));
+    expect(session.state.run.faceRegistrationId).toBeNull();
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("이 얼굴로 만든 실행과 선택이 다르면 같은 사진으로 새로 등록해 새 실행을 만든다", async () => {
+    saveFacePhoto(session.state.run.id, new Blob(["jpeg"], { type: "image/jpeg" }));
+    let creates = 0;
+    vi.mocked(api.post).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/executions") {
+        creates += 1;
+        if (creates === 1) throw new ApiError(409, "FACE_REGISTRATION_ALREADY_USED", "이미 사용");
+        return { executionId: "e2" };
+      }
+      if (path === "/v1/users/me/face-registrations") return { faceRegistrationId: "f2" };
+      return MATCH;
+    });
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/face-registrations/f1") return { executionId: "e1" };
+      if (path === "/v1/users/me/executions/e1")
+        return { executionId: "e1", status: "IN_PROGRESS", steps: [] };
+      return { user: { email: "t@example.com" }, csrfToken: "c" };
+    });
+    await click(button("이 조합으로 시작"));
+    await click(button("건너뛰고 시작"));
+    expect(session.state.run).toMatchObject({ faceRegistrationId: "f2", executionId: "e2" });
+    expect(router.push).toHaveBeenCalledWith(`/tutorial/guide?guideId=${GUIDE_ID}`);
+  });
+
+  it("새로 등록한 뒤 실행 생성이 404면 새 등록으로 원인을 가리고 새 등록을 남긴다", async () => {
+    saveFacePhoto(session.state.run.id, new Blob(["jpeg"], { type: "image/jpeg" }));
+    let creates = 0;
+    vi.mocked(api.post).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/executions") {
+        creates += 1;
+        if (creates === 1) throw new ApiError(409, "FACE_REGISTRATION_ALREADY_USED", "이미 사용");
+        throw new ApiError(404, "NOT_FOUND", "없음");
+      }
+      if (path === "/v1/users/me/face-registrations") return { faceRegistrationId: "f2" };
+      return MATCH;
+    });
+    // 옛 등록(f1)은 처음 조회 때 기존 실행을 주고, 새로 등록한 뒤에는 사라진다
+    let f1Reads = 0;
+    vi.mocked(api.get).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/face-registrations/f1") {
+        f1Reads += 1;
+        if (f1Reads === 1) return { executionId: "e1" };
+        throw new ApiError(404, "NOT_FOUND", "없음");
+      }
+      if (path === "/v1/users/me/executions/e1")
+        return { executionId: "e1", status: "IN_PROGRESS", steps: [] };
+      if (path === "/v1/users/me/face-registrations/f2") return { executionId: null };
+      return { user: { email: "t@example.com" }, csrfToken: "c" };
+    });
+    await click(button("이 조합으로 시작"));
+    await click(button("건너뛰고 시작"));
+    expect(api.get).toHaveBeenCalledWith("/v1/users/me/face-registrations/f2");
+    expect(session.state.run.faceRegistrationId).toBe("f2");
+    expect(text()).toContain("가이드나 제품 매칭을 찾지 못해 다시 맞췄어요");
+  });
+
+  it("실행 생성 응답을 기다리는 사이 실행이 끝나면 화면을 옮기지 않는다", async () => {
+    let answer: (v: unknown) => void = () => {};
+    vi.mocked(api.post).mockImplementation((path: string) =>
+      path === "/v1/users/me/executions"
+        ? new Promise((resolve) => (answer = resolve))
+        : Promise.resolve(MATCH),
+    );
+    await click(button("이 조합으로 시작"));
+    await click(button("건너뛰고 시작"));
+    await act(async () => {
+      session.endRun(session.state.run.id);
+    });
+    await act(async () => answer({ executionId: "late" }));
+    expect(router.push).not.toHaveBeenCalled();
+    expect(session.state.run.executionId).toBeNull();
+  });
+
+  it("매칭이 낡았으면(409) 다시 맞추고 시작 창에 안내한다", async () => {
+    vi.mocked(api.post).mockImplementation(async (path: string) => {
+      if (path === "/v1/users/me/executions")
+        throw new ApiError(409, "GUIDE_MATCH_STALE", "매칭이 바뀜");
+      return MATCH;
+    });
+    await click(button("이 조합으로 시작"));
+    await click(button("건너뛰고 시작"));
+    expect(text()).toContain("제품 정보가 바뀌어 다시 맞췄어요");
+    expect(router.push).not.toHaveBeenCalled();
+    expect(session.state.run.executionId).toBeNull();
   });
 
   it("직접 고른 단계는 그대로 두고, 자동 저장한 단계는 다시 맞추면 새 결과를 쓴다", async () => {

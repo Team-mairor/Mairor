@@ -17,6 +17,7 @@ import {
   type CheckName,
 } from "@/features/face";
 import { useCameraErrorNote } from "@/features/live";
+import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { FaceDemo } from "./face-demo";
@@ -54,7 +55,8 @@ export function FaceRegisterModal({
   pct: number;
   barText: string;
   replay: boolean;
-  onDone: () => void;
+  /** 실패하면 던진 오류를 창에 보여 준다 */
+  onDone: () => Promise<void> | void;
   onLater: () => void;
 }) {
   const camera = useCamera();
@@ -64,6 +66,9 @@ export function FaceRegisterModal({
   const [scan, setScan] = useState(0);
   /** 마지막 촬영을 다시 하는 이유 */
   const [retake, setRetake] = useState<null | "failed" | "eyes">(null);
+  /** 등록 완료(onDone)를 기다리는 중 · 실패한 오류 */
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<unknown>(null);
   const cameraReady = camera.status === "ready";
   const { check, found, hint, frame, passedNow } = useFaceCheck(
     step === "cam" && cameraReady && !done,
@@ -81,7 +86,19 @@ export function FaceRegisterModal({
     setDone(false);
     setScan(0);
     setRetake(null);
+    setSaveError(null);
     void camera.start();
+  };
+  const finish = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onDone();
+    } catch (e) {
+      setSaveError(e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const capturing = useRef(false);
@@ -138,7 +155,9 @@ export function FaceRegisterModal({
   const firstFailed = ok === 0 ? "distance" : CHECKS.find((name) => !check[name]);
   const title =
     stage === "done"
-      ? "환경 기준을 저장했어요"
+      ? saveError
+        ? "얼굴 등록을 저장하지 못했어요"
+        : "환경 기준을 저장했어요"
       : errorNote
         ? errorNote.title
         : !cameraReady
@@ -148,27 +167,33 @@ export function FaceRegisterModal({
             : "얼굴을 원 안에 맞춰 주세요";
   const sub = errorNote
     ? errorNote.desc
-    : retake === "eyes"
-      ? "눈을 감은 것 같아요. 눈을 뜨고 그대로 있으면 다시 찍어요"
-      : retake === "failed"
-        ? "사진을 찍지 못했어요. 그대로 있으면 다시 찍어요"
-        : stage === "done"
-          ? "정면 1장을 이번 메이크업의 조명·색온도 기준으로 저장했어요"
-          : stage === "scan"
-            ? "정면 얼굴을 찍고 조명·색온도를 확인하고 있어요"
-            : passed
-              ? "필수 조건 4가지를 통과했어요"
-              : found && !check.distance
-                ? "실선 얼굴이 점선 타원을 채우고 원 가운데에 오면 돼요"
-                : "";
+    : saveError
+      ? `등록을 저장하지 못했어요. ${errorMessage(saveError)}`
+      : retake === "eyes"
+        ? "눈을 감은 것 같아요. 눈을 뜨고 그대로 있으면 다시 찍어요"
+        : retake === "failed"
+          ? "사진을 찍지 못했어요. 그대로 있으면 다시 찍어요"
+          : stage === "done"
+            ? "정면 1장을 이번 메이크업의 조명·색온도 기준으로 저장했어요"
+            : stage === "scan"
+              ? "정면 얼굴을 찍고 조명·색온도를 확인하고 있어요"
+              : passed
+                ? "필수 조건 4가지를 통과했어요"
+                : found && !check.distance
+                  ? "실선 얼굴이 점선 타원을 채우고 원 가운데에 오면 돼요"
+                  : "";
   const cta =
     stage === "ready"
       ? `조건 맞추는 중 · ${ok} / ${CHECKS.length}`
       : stage === "scan"
         ? `인식 중… ${Math.round(scan)}%`
-        : replay
-          ? "등록 완료 · 파우치 확인"
-          : "등록 완료 · 분석 계속 보기";
+        : saving
+          ? "등록하는 중"
+          : saveError
+            ? "다시 등록하기"
+            : replay
+              ? "등록 완료 · 파우치 확인"
+              : "등록 완료 · 분석 계속 보기";
   const alert =
     errorNote || !cameraReady || stage !== "ready"
       ? null
@@ -301,7 +326,12 @@ export function FaceRegisterModal({
           </div>
 
           <div className="mt-1.5 flex w-full gap-3">
-            <PillButton variant="line" size="hero" onClick={stage === "done" ? start : onLater}>
+            <PillButton
+              variant="line"
+              size="hero"
+              disabled={saving}
+              onClick={stage === "done" ? start : onLater}
+            >
               {stage === "done" ? "다시 촬영" : "나중에"}
             </PillButton>
             {errorNote ? (
@@ -316,8 +346,8 @@ export function FaceRegisterModal({
             ) : (
               <PillButton
                 size="hero"
-                onClick={onDone}
-                disabled={stage !== "done"}
+                onClick={() => void finish()}
+                disabled={stage !== "done" || saving}
                 className="min-w-0 flex-1"
               >
                 {cta}

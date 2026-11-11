@@ -14,7 +14,7 @@ import {
 } from "react";
 
 import { facePhoto } from "@/features/face";
-import { isRunPath, runHref, runRouteAction, useSession } from "@/features/session";
+import { faceReady, isRunPath, runHref, runRouteAction, useSession } from "@/features/session";
 import { GuideStatus } from "@/features/tutorial";
 
 import { fetchGuide } from "./guide-api";
@@ -125,7 +125,8 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
         route.path !== "/loading" &&
         run.phase !== "invalidated" &&
         run.phase !== "completed" &&
-        !facePhoto(run.id)
+        // 화면용 사진(메모리)과 서버 등록 ID가 둘 다 있어야 실행을 이어 간다
+        (!facePhoto(run.id) || !faceReady(run))
       ) {
         router.replace(runHref("/loading", run.guideId));
       }

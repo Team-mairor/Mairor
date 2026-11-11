@@ -67,6 +67,9 @@ const guideDone = (s: SessionState): Pick<SessionState, "loggedIn" | "email" | "
     run: {
       ...prepared,
       faceReg: true,
+      // 서버 등록 · 실행 대신 넣는 가짜 ID(완료 저장은 모의 응답에서만 된다)
+      faceRegistrationId: "dev-face",
+      executionId: "dev-execution",
       phase: "completed",
       photoOk: true,
       choice: {
@@ -82,7 +85,7 @@ const guideDone = (s: SessionState): Pick<SessionState, "loggedIn" | "email" | "
 const guidePreview = (): Pick<SessionState, "loggedIn" | "email" | "run"> => {
   const prepared = createRun({ kind: "guide", guideId: MOCK_GUIDE_ID }, "dev-guide-preview");
   saveFacePhoto(prepared.id, new Blob());
-  return { ...loggedIn, run: { ...prepared, faceReg: true } };
+  return { ...loggedIn, run: { ...prepared, faceReg: true, faceRegistrationId: "dev-face" } };
 };
 
 /** 프로토타입 왼쪽 '화면 바로가기' 목록. 개발 모드에서만 보인다 */

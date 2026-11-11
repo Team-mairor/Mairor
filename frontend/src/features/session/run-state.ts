@@ -15,6 +15,10 @@ export interface RunState {
   /** 이 실행이 요청한 분석 작업. 로딩 화면은 주소의 jobId와 같을 때만 picked를 쓴다 */
   jobId: string | null;
   faceReg: boolean;
+  /** 가이드 실행에서 서버에 등록한 얼굴. 샘플 실행은 늘 null */
+  faceRegistrationId: string | null;
+  /** 제품 체크에서 시작한 서버 실행. 동의 · 나가기 · 완료가 이 ID로 간다 */
+  executionId: string | null;
   choice: Record<string, Choice>;
   subOn: Record<string, boolean>;
   photoOk: boolean;
@@ -31,6 +35,8 @@ export const EMPTY_RUN: RunState = {
   replay: null,
   jobId: null,
   faceReg: false,
+  faceRegistrationId: null,
+  executionId: null,
   choice: {},
   subOn: {},
   photoOk: false,
@@ -47,8 +53,16 @@ export type StartRunInput =
     };
 
 export type RunPatch = Partial<
-  Pick<RunState, "faceReg" | "choice" | "subOn" | "photoOk" | "captures">
+  Pick<
+    RunState,
+    "faceReg" | "faceRegistrationId" | "executionId" | "choice" | "subOn" | "photoOk" | "captures"
+  >
 >;
+
+/** 얼굴 등록을 마쳤나. 가이드 실행은 서버 등록 ID까지 있어야 한다 */
+export function faceReady(run: RunState) {
+  return run.faceReg && (run.mode !== "guide" || run.faceRegistrationId !== null);
+}
 
 export function createRun(input: StartRunInput, id: string): RunState {
   return {
@@ -112,8 +126,11 @@ export function runRouteAction(path: string, search: string, run: RunState): Run
   // 완료 화면은 얼굴 등록과 상관없이 연다
   if (run.phase === "completed")
     return path === "/done" ? { kind: "allow" } : { kind: "redirect", href: runHref("/done", id) };
-  if (path !== "/loading" && !run.faceReg)
+  if (path !== "/loading" && !faceReady(run))
     return { kind: "redirect", href: runHref("/loading", id) };
+  // 가이드 실행은 제품 체크에서 서버 실행을 만든 뒤에만 안내 · 튜토리얼로 간다
+  if ((path === "/tutorial" || path === "/tutorial/guide") && !run.executionId)
+    return { kind: "redirect", href: runHref("/check", id) };
   if (path === "/tutorial" && run.phase === "preparing")
     return { kind: "redirect", href: runHref("/tutorial/guide", id) };
   // 완료하지 않은 실행은 완료 화면을 열지 않는다

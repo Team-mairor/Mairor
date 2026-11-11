@@ -21,7 +21,7 @@ import {
   type GuideSet,
   type Makeup,
 } from "@/features/guide";
-import { useRunQuery as useQuery } from "@/features/guide";
+import { abandonExecution, useRunQuery as useQuery } from "@/features/guide";
 import { LiveNote, parseAlert, RoundBack, useLiveState } from "@/features/live";
 import {
   matchFor,
@@ -339,6 +339,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   };
   const quit = () => {
     timer.clear();
+    // 실제 가이드는 서버 실행을 중도 종료한다. 실패해도 서버가 세션 종료 때 정리하므로 기다리지 않는다
+    if (run.mode === "guide" && run.executionId)
+      abandonExecution(run.executionId).catch((e: unknown) => console.warn("중도 종료 실패", e));
     endRun(run.id);
     router.push("/home");
   };

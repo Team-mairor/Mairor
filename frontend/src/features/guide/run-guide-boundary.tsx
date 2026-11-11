@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { facePhoto } from "@/features/face";
-import { isRunPath, useSession, type RunRouteAction } from "@/features/session";
+import { faceReady, isRunPath, useSession, type RunRouteAction } from "@/features/session";
 import { GuideStatus } from "@/features/tutorial";
 
 import { useGuide } from "./use-guide";
@@ -88,7 +88,7 @@ export function RunGuideBoundary({
     return <GuideStatus title="가이드를 확인하고 있어요" />;
   if (!load.guide.steps.length)
     return <GuideStatus title="따라 할 단계가 없는 가이드예요" action={home} />;
-  if (path !== "/loading" && run.phase !== "completed" && !facePhoto(run.id))
+  if (path !== "/loading" && run.phase !== "completed" && (!facePhoto(run.id) || !faceReady(run)))
     return <GuideStatus title="얼굴을 다시 등록해 주세요" />;
   const paused = load.checking || !!load.error;
   return (

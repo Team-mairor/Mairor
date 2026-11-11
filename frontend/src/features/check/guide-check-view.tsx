@@ -2,14 +2,24 @@
 
 import { Check, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { useHiddenVideo } from "@/features/face";
-import { useGuide, type GuideStepModel } from "@/features/guide";
+import { facePhoto, useHiddenVideo } from "@/features/face";
+import {
+  ExecutionMismatchError,
+  executionSelections,
+  faceRegistrationRequest,
+  isFaceRegistrationGone,
+  registerFace,
+  startExecution,
+  useGuide,
+  type GuideStepModel,
+} from "@/features/guide";
 import { GlassPanel, LiveNote, LiveTag, RoundBack, useLiveState } from "@/features/live";
 import { emptyDraft, ProductSheet, type PouchItem, type ProductDraft } from "@/features/pouch";
 import { runHref, useSession, type Choice, type MatchKind } from "@/features/session";
+import { ApiError, errorMessage } from "@/lib/api";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +58,15 @@ const productText = (step: GuideStepModel) =>
 /** 실제 가이드의 제품 체크. 서버 매칭으로 보유·대체·없음을 나누고, 사용자가 바꾼 것은 선택으로 남긴다 */
 export function GuideCheck() {
   const router = useRouter();
-  const { state, updateRun } = useSession();
+  const { state, updateRun, isCurrentRun } = useSession();
+  /** 이 화면이 떠 있는지. 늦게 온 실행 생성 응답으로 다른 화면을 옮기지 않는다 */
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const { load } = useGuide();
   const run = state.run;
   const pouch = state.pouch;
@@ -58,6 +76,9 @@ export function GuideCheck() {
   const [pouchModal, setPouchModal] = useState(false);
   const [form, setForm] = useState<ProductDraft | null>(null);
   const [startAsk, setStartAsk] = useState(false);
+  /** 시작 버튼이 서버 실행을 만드는 중 · 실패한 이유 */
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const toastT = useTimeout();
   const { note, reason } = useLiveState();
@@ -81,6 +102,83 @@ export function GuideCheck() {
   const shown = rows.filter((r) => r.pick.kind === active);
   const swapRow = rows.find((r) => r.step.stepId === swapFor) ?? null;
   const href = (path: string) => runHref(path, run.guideId);
+
+  /** 화면에 보이는 결과로 선택을 정해 서버 실행을 만든다. 매칭이 낡았으면 다시 맞추고, 얼굴 등록이 없으면(404) 다시 등록하게 한다 */
+  const start = async () => {
+    if (starting) return;
+    const choice = rows.reduce(
+      (c, r) => (userChoice(c, r.step.stepId) ? c : withChoice(c, r.step.stepId, choiceOf(r.pick))),
+      run.choice,
+    );
+    const faceRegistrationId = run.faceRegistrationId;
+    if (matching.status !== "ready" || !faceRegistrationId) {
+      setStartError("제품 맞춰 보기가 끝나면 시작할 수 있어요.");
+      return;
+    }
+    const runId = run.id;
+    const guide = load.guide;
+    const create = (faceId: string) =>
+      startExecution({
+        guideId: guide.guideId,
+        matchId: matching.matchId,
+        faceRegistrationId: faceId,
+        ...executionSelections(
+          guide.steps.map((s) => s.stepId),
+          choice,
+        ),
+      });
+    // 응답을 기다리는 동안 화면을 떠났거나 실행이 바뀌었으면 결과를 쓰지 않는다
+    const current = () => alive.current && isCurrentRun(runId);
+    setStarting(true);
+    setStartError(null);
+    // 마지막으로 보낸 얼굴 등록. 다시 등록하면 바뀌고, 실패 원인도 이 ID로 가른다
+    let faceId = faceRegistrationId;
+    try {
+      let executionId: string;
+      try {
+        executionId = await create(faceId);
+      } catch (e) {
+        if (!(e instanceof ExecutionMismatchError)) throw e;
+        // 이 얼굴로 만든 실행이 지금 선택과 다르다: 같은 사진으로 새로 등록해 새 실행을 만든다(서버가 이전 실행을 끝낸다)
+        const photo = facePhoto(runId);
+        if (!photo) {
+          if (!current()) return;
+          setStartAsk(false);
+          updateRun({ faceReg: false, faceRegistrationId: null }, runId);
+          return;
+        }
+        const metadata = faceRegistrationRequest(guide.videoId, guide.guideId);
+        faceId = (await registerFace(photo, metadata)).faceRegistrationId;
+        if (current()) updateRun({ faceRegistrationId: faceId }, runId);
+        executionId = await create(faceId);
+      }
+      if (!current()) return;
+      updateRun({ choice, executionId, faceRegistrationId: faceId }, runId);
+      setStartAsk(false);
+      router.push(href("/tutorial/guide"));
+    } catch (e) {
+      if (!current()) return;
+      if (e instanceof ApiError && e.code === "GUIDE_MATCH_STALE") {
+        retry();
+        setStartError("제품 정보가 바뀌어 다시 맞췄어요. 확인하고 다시 시작해 주세요.");
+      } else if (e instanceof ApiError && e.status === 404) {
+        // 404는 얼굴 등록 · 가이드 · 매칭 어느 쪽이든 같은 코드라, 얼굴 등록을 조회해 원인을 가른다
+        if (await isFaceRegistrationGone(faceId)) {
+          setStartAsk(false);
+          updateRun({ faceReg: false, faceRegistrationId: null }, runId);
+        } else {
+          retry();
+          setStartError(
+            "가이드나 제품 매칭을 찾지 못해 다시 맞췄어요. 확인하고 다시 시작해 주세요.",
+          );
+        }
+      } else {
+        setStartError(errorMessage(e));
+      }
+    } finally {
+      setStarting(false);
+    }
+  };
 
   const setChoice = (stepId: string, value: Choice | null) =>
     updateRun((prev) => ({ choice: withChoice(prev.choice, stepId, value) }), run.id);
@@ -336,21 +434,13 @@ export function GuideCheck() {
           setStartAsk(false);
           setGroup("none");
         }}
-        onStart={() => {
+        busy={starting}
+        error={startError}
+        onStart={() => void start()}
+        onClose={() => {
           setStartAsk(false);
-          updateRun(
-            (prev) => ({
-              choice: rows.reduce(
-                (c, r) =>
-                  userChoice(c, r.step.stepId) ? c : withChoice(c, r.step.stepId, choiceOf(r.pick)),
-                prev.choice,
-              ),
-            }),
-            run.id,
-          );
-          router.push(href("/tutorial/guide"));
+          setStartError(null);
         }}
-        onClose={() => setStartAsk(false)}
       />
 
       {form && <ProductSheet draft={form} onClose={() => setForm(null)} onSaved={onSaved} />}

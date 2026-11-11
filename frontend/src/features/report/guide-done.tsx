@@ -1,15 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useGuide, useRunQuery } from "@/features/guide";
+import { completeExecution, useGuide, useRunQuery } from "@/features/guide";
 import { useSession } from "@/features/session";
 
-import { DoneView, PhotoSlot, useDoneSave } from "./done-view";
+import { DoneView, PhotoSlot, type Save } from "./done-view";
 import { guideReportSummary } from "./guide-report";
 
-/** 실제 가이드 완료. 같은 실행의 가이드 단계로 스냅샷을 남긴다 */
+/** 실제 가이드 완료. 서버 실행을 완료하고 받은 recordId로 기기 리포트를 남긴다. 실패하면 같은 실행으로 다시 보낸다 */
 export function GuideDone() {
   const router = useRouter();
   const query = useRunQuery();
@@ -17,14 +17,16 @@ export function GuideDone() {
   const { state, update } = useSession();
   const run = state.run;
   const guide = load.status === "ready" ? load.guide : null;
-  const reportId = `rp-${run.id}`;
-  // 타이머가 끝날 때의 실행 상태로 저장 여부를 정한다
+  const [save, setSave] = useState<Save>("saving");
+  const [recordId, setRecordId] = useState<string | null>(null);
+  // 응답이 올 때의 실행 상태로 저장 여부를 정한다
   const latest = useRef(run);
   useEffect(() => {
     latest.current = run;
   });
 
-  const commit = () => {
+  /** 응답을 받았을 때도 같은 실행 · 같은 가이드 판이면 기기 리포트를 남긴다 */
+  const commit = (reportId: string) => {
     const r = latest.current;
     if (!guide || r.id !== run.id || r.mode !== "guide" || r.guideVersion !== guide.guideVersion)
       return false;
@@ -39,7 +41,29 @@ export function GuideDone() {
     });
     return true;
   };
-  const { save, retry } = useDoneSave(!!query && !!guide, query?.get("fail") === "1", commit);
+
+  // ?fail=1: 첫 저장을 실패로 보여 주는 확인용
+  const failFirst = query?.get("fail") === "1";
+  const persist = async (first: boolean) => {
+    setSave("saving");
+    const executionId = latest.current.executionId;
+    if ((first && failFirst) || !executionId) return setSave("fail");
+    try {
+      const id = await completeExecution(executionId);
+      if (!commit(id)) return setSave("fail");
+      setRecordId(id);
+      setSave("saved");
+    } catch (e) {
+      console.warn("완료 저장 실패", e);
+      setSave("fail");
+    }
+  };
+  const ready = !!query && !!guide;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 진입 때 한 번 저장을 시작하고, 응답에 따라 상태를 바꾼다
+    if (ready) void persist(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 진입 때 한 번만 저장한다
+  }, [ready]);
   if (!guide) return null;
 
   const last = guide.steps.at(-1)?.stepId;
@@ -56,9 +80,9 @@ export function GuideDone() {
       hasPhoto={hasPhoto}
       finalPhoto={<PhotoSlot label="마지막 단계 사진을 남겼어요" />}
       save={save}
-      onRetry={retry}
+      onRetry={() => void persist(false)}
       onHome={() => router.push("/home")}
-      onReport={() => router.replace(`/my/report?id=${reportId}`)}
+      onReport={() => recordId && router.replace(`/my/report?id=${encodeURIComponent(recordId)}`)}
     />
   );
 }

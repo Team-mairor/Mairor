@@ -12,6 +12,8 @@ export function StartModal({
   onRecheck,
   onStart,
   onClose,
+  busy = false,
+  error = null,
 }: {
   open: boolean;
   /** 제품을 생략할 단계 */
@@ -21,6 +23,10 @@ export function StartModal({
   onRecheck: () => void;
   onStart: () => void;
   onClose: () => void;
+  /** 실제 가이드는 시작 버튼이 서버 실행을 만든다. 그동안 버튼을 막는다 */
+  busy?: boolean;
+  /** 시작에 실패한 이유. 있으면 버튼 위에 보이고 다시 누를 수 있다 */
+  error?: string | null;
 }) {
   const n = missing.length;
   return (
@@ -56,12 +62,23 @@ export function StartModal({
           ))}
         </div>
       )}
+      {error && (
+        <p role="alert" className="text-[18px] leading-[1.5] text-error">
+          {error}
+        </p>
+      )}
       <div className="flex gap-3">
-        <PillButton variant="line" size="hero" onClick={onRecheck}>
+        <PillButton variant="line" size="hero" onClick={onRecheck} disabled={busy}>
           다시 확인
         </PillButton>
-        <PillButton size="hero" trailing onClick={onStart} className="ml-auto min-w-[300px]">
-          {n ? "건너뛰고 시작" : "시작하기"}
+        <PillButton
+          size="hero"
+          trailing
+          onClick={onStart}
+          disabled={busy}
+          className="ml-auto min-w-[300px]"
+        >
+          {busy ? "시작하는 중" : n ? "건너뛰고 시작" : "시작하기"}
         </PillButton>
       </div>
     </Modal>

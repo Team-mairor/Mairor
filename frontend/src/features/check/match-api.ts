@@ -25,7 +25,8 @@ export interface GuideMatch {
 
 export type MatchLoad =
   | { status: "loading" }
-  | { status: "ready"; byStep: Map<string, StepMatch> }
+  /** matchId는 실행 시작에 그대로 보낸다 */
+  | { status: "ready"; matchId: string; byStep: Map<string, StepMatch> }
   | { status: "error"; message: string };
 
 /**
@@ -43,7 +44,13 @@ export function useGuideMatch(guideId: string | null, pouchKey: string) {
     setLoad({ status: "loading" });
     api
       .post<GuideMatch>("/v1/users/me/guide-matches", { body: { guideId }, signal: ctrl.signal })
-      .then((m) => setLoad({ status: "ready", byStep: new Map(m.steps.map((s) => [s.stepId, s])) }))
+      .then((m) =>
+        setLoad({
+          status: "ready",
+          matchId: m.matchId,
+          byStep: new Map(m.steps.map((s) => [s.stepId, s])),
+        }),
+      )
       .catch((e) => {
         if (!isAbortError(e)) setLoad({ status: "error", message: errorMessage(e) });
       });

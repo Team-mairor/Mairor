@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import type { GuideModel, GuideStepModel } from "@/features/guide";
 import { RunGuideContext } from "@/features/guide/use-guide";
@@ -15,6 +15,9 @@ const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 const GUIDE_ID = "a0000000-0000-4000-8000-000000000001";
+const EXECUTION_ID = "e0000000-0000-4000-8000-000000000001";
+const RECORD_ID = "r0000000-0000-4000-8000-000000000001";
+const COMPLETION = `/v1/users/me/executions/${EXECUTION_ID}/completion`;
 const step = (stepId: string, order: number): GuideStepModel => ({
   stepId,
   order,
@@ -93,7 +96,13 @@ async function mount(search = "") {
       meta: "",
       dur: "",
     });
-    session.updateRun({ choice: { s2: { kind: "pouch", id: "p1" }, s5: { kind: "none" } } }, id);
+    session.updateRun(
+      {
+        choice: { s2: { kind: "pouch", id: "p1" }, s5: { kind: "none" } },
+        executionId: EXECUTION_ID,
+      },
+      id,
+    );
     session.enterTutorial(id, true);
   });
   await act(async () => {
@@ -102,9 +111,14 @@ async function mount(search = "") {
   });
   await act(async () => render(true));
 }
+/** 완료 응답을 받고 화면이 갱신될 때까지 */
 const flush = async () => {
-  await act(async () => vi.advanceTimersByTime(1200));
+  await act(async () => {
+    await vi.runAllTimersAsync();
+  });
 };
+/** 완료 요청. 기본은 바로 recordId를 준다 */
+let post: MockInstance<typeof api.post>;
 
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -117,6 +131,12 @@ beforeEach(() => {
   });
   vi.clearAllMocks();
   vi.spyOn(api, "get").mockResolvedValue({ user: { email: "t@example.com" }, csrfToken: "c" });
+  post = vi.spyOn(api, "post").mockResolvedValue({
+    executionId: EXECUTION_ID,
+    status: "COMPLETED",
+    recordId: RECORD_ID,
+    completedAt: "2026-11-11T00:00:00Z",
+  });
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -135,13 +155,13 @@ describe("실제 가이드 완료", () => {
     expect(element.querySelector("img")).toBeNull();
   });
 
-  it("저장 성공 때 단계 스냅샷 기록을 남긴다", async () => {
+  it("서버 실행을 완료하고 받은 recordId로 단계 스냅샷 기록을 남긴다", async () => {
     await mount();
-    expect(session.state.reports).toHaveLength(0);
     await flush();
+    expect(post).toHaveBeenCalledWith(COMPLETION);
     const [report] = session.state.reports;
     expect(report).toMatchObject({
-      id: `rp-${session.state.run.id}`,
+      id: RECORD_ID,
       guideId: GUIDE_ID,
       guideVersion: 2,
       steps: 3,
@@ -154,32 +174,47 @@ describe("실제 가이드 완료", () => {
     ]);
   });
 
-  it("저장에 실패하면 다시 시도로 실행 id 기록을 남긴다", async () => {
-    await mount("fail=1");
+  it("저장에 실패하면 다시 시도가 같은 실행으로 완료를 다시 보낸다", async () => {
+    post.mockRejectedValueOnce(new Error("network"));
+    await mount();
     await flush();
     expect(text()).toContain("기록을 저장하지 못했어요");
     expect(session.state.reports).toHaveLength(0);
     await act(async () => button("다시 시도").click());
     await flush();
-    expect(session.state.reports.map((r) => r.id)).toEqual([`rp-${session.state.run.id}`]);
+    expect(post).toHaveBeenNthCalledWith(2, COMPLETION);
+    expect(session.state.reports.map((r) => r.id)).toEqual([RECORD_ID]);
+  });
+
+  it("?fail=1은 첫 저장을 보내지 않고 실패로 보여 준다", async () => {
+    await mount("fail=1");
+    await flush();
+    expect(post).not.toHaveBeenCalled();
+    expect(text()).toContain("기록을 저장하지 못했어요");
   });
 
   it("리포트 보기는 저장 뒤에만 이동하고 실행은 직접 끝내지 않는다", async () => {
+    let answer: (v: unknown) => void = () => {};
+    post.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     await mount();
     await act(async () => button("리포트 보기").click());
     expect(router.replace).not.toHaveBeenCalled();
+    await act(async () => answer({ recordId: RECORD_ID }));
     await flush();
     const id = session.state.run.id;
     await act(async () => button("리포트 보기").click());
-    expect(router.replace).toHaveBeenCalledWith(`/my/report?id=rp-${id}`);
+    expect(router.replace).toHaveBeenCalledWith(`/my/report?id=${RECORD_ID}`);
     expect(session.state.run.id).toBe(id);
   });
 
-  it("저장 전에 실행이 바뀌면 기록하지 않는다", async () => {
+  it("완료 응답 전에 실행이 바뀌면 기록하지 않는다", async () => {
+    let answer: (v: unknown) => void = () => {};
+    post.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
     await mount();
     await act(async () => {
       session.endRun(session.state.run.id);
     });
+    await act(async () => answer({ recordId: RECORD_ID }));
     await flush();
     expect(session.state.reports).toHaveLength(0);
     expect(text()).toContain("기록을 저장하지 못했어요");

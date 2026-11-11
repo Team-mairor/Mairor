@@ -60,9 +60,25 @@ describe("실행 진입과 초기화", () => {
       kind: "redirect",
       href: runHref("/loading", A),
     });
+    // 가이드 실행은 서버 얼굴 등록 ID까지 있어야 등록을 마친 것이다
     expect(runRouteAction("/tutorial", `guideId=${A}`, { ...run, faceReg: true })).toEqual({
       kind: "redirect",
+      href: runHref("/loading", A),
+    });
+    // 서버 실행을 만들기 전에는 안내 · 튜토리얼에 들어가지 않고 제품 체크로 간다
+    const registered = { ...run, faceReg: true, faceRegistrationId: "f1" };
+    for (const path of ["/tutorial", "/tutorial/guide"])
+      expect(runRouteAction(path, `guideId=${A}`, registered)).toEqual({
+        kind: "redirect",
+        href: runHref("/check", A),
+      });
+    const started = { ...registered, executionId: "e1" };
+    expect(runRouteAction("/tutorial", `guideId=${A}`, started)).toEqual({
+      kind: "redirect",
       href: runHref("/tutorial/guide", A),
+    });
+    expect(runRouteAction("/tutorial/guide", `guideId=${A}`, started)).toEqual({
+      kind: "allow",
     });
     expect(runRouteAction("/check", "view=try", run)).toEqual({
       kind: "redirect",

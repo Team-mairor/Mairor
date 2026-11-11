@@ -379,3 +379,71 @@ export interface PopularVideoResponse {
   updatedAt: string;
   nextRefreshAt: string;
 }
+
+/** 얼굴 등록 촬영 조건 (FaceChecks). 앞 4개가 모두 true여야 등록된다. makeupDetected는 저장만 한다 */
+export interface FaceChecks {
+  lighting: boolean;
+  distance: boolean;
+  frontal: boolean;
+  unobstructed: boolean;
+  makeupDetected: boolean;
+}
+
+/** POST /v1/users/me/face-registrations의 metadata 파트 (FaceRegistrationRequest). videoId는 내부 영상 ID */
+export interface FaceRegistrationRequest {
+  videoId: string;
+  guideId: string | null;
+  noticeVersion: string;
+  agreed: boolean;
+  checks: FaceChecks;
+}
+
+/** 얼굴 등록 (FaceRegistration) 중 FE가 쓰는 칸. 실행을 시작하면 executionId가 채워진다 */
+export interface FaceRegistration {
+  faceRegistrationId: string;
+  videoId: string;
+  guideId: string | null;
+  executionId: string | null;
+  status: string;
+  noticeVersion: string;
+  createdAt: string;
+}
+
+/** 실행 시작 때 단계 하나의 제품 선택. 고르지 않은 단계도 null로 보낸다 */
+export interface ExecutionSelection {
+  stepId: string;
+  selectedPouchItemId: string | null;
+}
+
+/** POST /v1/users/me/executions 요청 (CreateExecutionRequest). selections는 GUIDE 단계 전부 */
+export interface CreateExecutionRequest {
+  guideId: string;
+  matchId: string;
+  faceRegistrationId: string;
+  selections: ExecutionSelection[];
+  acceptMissingProducts: boolean;
+}
+
+/** 실행 (Execution) 중 FE가 쓰는 칸. steps는 단계마다 확정한 제품 선택 */
+export interface ExecutionSummary {
+  executionId: string;
+  guideId: string;
+  status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+  recordId: string | null;
+  steps: ExecutionSelection[];
+}
+
+/** POST …/executions/{executionId}/completion 응답. 처음 201, 다시 보내면 200이고 recordId가 같다 */
+export interface ExecutionCompletion {
+  executionId: string;
+  status: "COMPLETED";
+  recordId: string;
+  completedAt: string;
+}
+
+/** POST …/executions/{executionId}/abandonment 응답. cleanupPending은 파일 정리가 남았는지 */
+export interface ExecutionAbandonment {
+  executionId: string;
+  status: "ABANDONED";
+  cleanupPending: boolean;
+}

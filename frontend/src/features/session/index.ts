@@ -31,6 +31,7 @@ export {
 
 export {
   createRun,
+  faceReady,
   isGuideId,
   isRunPath,
   runHref,

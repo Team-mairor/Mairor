@@ -6,10 +6,11 @@ import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
 import { useHiddenVideo } from "@/features/face";
-import { useGuide, useRunQuery as useQuery } from "@/features/guide";
+import { setPhotoConsent, useGuide, useRunQuery as useQuery } from "@/features/guide";
 import { CameraErrorNote } from "@/features/live";
 import { runHref, useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial";
+import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { GUIDE_STEPS } from "@/mocks/mock-data";
 
@@ -43,14 +44,27 @@ export default function TutorialGuidePage() {
     setSlide(3);
   };
   const consenting = useRef(false);
+  /** 동의를 서버에 저장하지 못한 이유. 버튼을 다시 누를 수 있다 */
+  const [consentError, setConsentError] = useState<string | null>(null);
   const consent = async (ok: boolean) => {
     if (consenting.current) return;
     consenting.current = true;
+    setConsentError(null);
     try {
       if (run.mode === "guide" && !(await retry())) return;
+      // 실제 가이드는 동의 여부를 서버 실행에 저장한다
+      if (run.mode === "guide") {
+        if (!run.executionId) {
+          setConsentError("실행 정보가 없어요. 제품 확인에서 다시 시작해 주세요.");
+          return;
+        }
+        await setPhotoConsent(run.executionId, ok);
+      }
       if (!isCurrentRun(run.id)) return;
       enterTutorial(run.id, ok);
       router.push(href("/tutorial"));
+    } catch (e) {
+      setConsentError(errorMessage(e));
     } finally {
       consenting.current = false;
     }
@@ -148,6 +162,11 @@ export default function TutorialGuidePage() {
               얼굴 등록 사진은 이번 메이크업의 조명 기준으로만 쓰여요. 단계 사진 저장 여부와는
               관계없어요.
             </span>
+            {consentError && (
+              <p role="alert" className="text-[17px] leading-[1.5] text-error">
+                {consentError}
+              </p>
+            )}
             <div className="flex gap-3">
               <PillButton
                 variant="line"
