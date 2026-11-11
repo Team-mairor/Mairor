@@ -31,3 +31,4 @@
 | [노트북 처리기의 사진 뽑기 규칙을 BE FramePlan과 맞추기](2026-11-09-hyeonsoo-hyeongjun-processor-frame-rule.md) | 2026-11-09 | 김현수 → 박형준(김정윤 함께) | 요청 |
 | [Google 로그인 시작 오류도 로그인 화면으로 보내기](2026-11-10-seoyun-seoyeon-google-start-error-redirect.md) | 2026-11-10 | 한서윤 → 김서연 | 요청 |
 | [운영 단계 추출에서 어긋난 종류·나누기·경계 고치기](2026-11-10-hyeonsoo-hyeongjun-step-extraction-misses.md) | 2026-11-10 | 김현수 → 박형준 | 요청 |
+| [노트북 연결 모드(--serve) 구현 가이드](2026-11-11-jungyoon-hyeongjun-processor-serve-guide.md) | 2026-11-11 | 김정윤 → 박형준 | 요청 |
