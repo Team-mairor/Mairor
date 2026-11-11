@@ -94,13 +94,14 @@ public class FaceRegistrationExecutionService {
     registration.retain(executionId);
   }
 
-  public void abandon(UUID userId, String sessionId, UUID registrationId, UUID executionId) {
+  public UUID abandon(UUID userId, String sessionId, UUID registrationId, UUID executionId) {
     FaceRegistration registration = forExecution(userId, sessionId, registrationId, executionId);
     if (registration.getStatus() != FaceRegistrationStatus.LINKED) {
       throw inUse();
     }
     registration.discard(clock.instant());
     photoRecords.requestCleanupInCurrentTransaction(registration.getPhotoId());
+    return registration.getPhotoId();
   }
 
   private FaceRegistration forExecution(

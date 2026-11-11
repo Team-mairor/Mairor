@@ -33,7 +33,8 @@ public final class RecommendationCandidateSelector {
         .toList();
   }
 
-  private static RankedCandidate closestColor(Candidate candidate, String referenceHex) {
+  /** 실행의 수동 선택은 호출자가 같은 카테고리를 검사한 뒤 이 색 칸 선택만 재사용한다. */
+  public static RankedCandidate closestColor(Candidate candidate, String referenceHex) {
     return candidate.colors().stream()
         .map(
             color ->

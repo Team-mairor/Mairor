@@ -17,6 +17,8 @@ public interface FaceRegistrationRepository extends JpaRepository<FaceRegistrati
 
   Optional<FaceRegistration> findByIdAndUserId(UUID id, UUID userId);
 
+  Optional<FaceRegistration> findByPhotoIdAndUserId(UUID photoId, UUID userId);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(
       "select registration from FaceRegistration registration where registration.id = :id and registration.userId = :userId")

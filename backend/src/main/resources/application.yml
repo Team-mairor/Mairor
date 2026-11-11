@@ -89,6 +89,8 @@ management:
       enabled: false
 
 app:
+  guide-execution:
+    orphan-cleanup-enabled: ${GUIDE_EXECUTION_ORPHAN_CLEANUP_ENABLED:true}
   face-registration:
     notice-version: ${FACE_REGISTRATION_NOTICE_VERSION:v1}
     # 미연결 등록은 세션 종료까지 유지한다. 고정 시간 만료가 아니라 사라진 세션의 누락 정리다.

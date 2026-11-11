@@ -97,10 +97,11 @@ import org.springframework.web.context.WebApplicationContext;
     properties = {
       "spring.jpa.hibernate.ddl-auto=validate",
       "spring.sql.init.mode=always",
-      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql,classpath:db/schema/pouch.sql,classpath:db/schema/camera.sql",
+      "spring.sql.init.schema-locations=classpath:db/schema/users.sql,classpath:db/schema/products.sql,classpath:db/schema/analysis.sql,classpath:db/schema/pouch.sql,classpath:db/schema/camera.sql,classpath:db/schema/executions.sql",
       "app.security.allowed-origins=http://localhost:3000",
       "app.photos.cleanup-enabled=false",
-      "app.face-registration.orphan-cleanup-enabled=false"
+      "app.face-registration.orphan-cleanup-enabled=false",
+      "app.guide-execution.orphan-cleanup-enabled=false"
     })
 @AutoConfigureMockMvc
 class FaceRegistrationApiTest {
@@ -137,6 +138,10 @@ class FaceRegistrationApiTest {
             .addFilters(sessionFilter)
             .apply(springSecurity())
             .build();
+    jdbc.update(
+        "update face_registrations set execution_id = null, status = 'REGISTERED', discarded_at = now() where execution_id is not null");
+    jdbc.update("delete from execution_steps");
+    jdbc.update("delete from guide_executions");
     registrations.deleteAll();
     photos.deleteAll();
     userId = users.saveAndFlush(new User(UUID.randomUUID() + "@camera.test", "hash")).getId();
@@ -310,12 +315,11 @@ class FaceRegistrationApiTest {
   @Test
   void linkedAndRetainedRegistrationsCannotBeDeletedDirectly() throws Exception {
     UUID id = id(register(login, metadata()).getResponse().getContentAsString());
+    UUID guide = guide(videoId, "APPROVED");
+    UUID execution = UUID.randomUUID();
+    tx(() -> linkWithExecution(userId, login.id(), id, videoId, guide, execution));
     for (String state : List.of("LINKED", "RETAINED")) {
-      jdbc.update(
-          "update face_registrations set status = ?, execution_id = ? where id = ?",
-          state,
-          UUID.randomUUID(),
-          id);
+      jdbc.update("update face_registrations set status = ? where id = ?", state, id);
       mvc.perform(delete(PATH + "/" + id).cookie(login.cookie()).secure(true).with(csrf()))
           .andExpect(status().isConflict())
           .andExpect(jsonPath("$.code").value("FACE_REGISTRATION_IN_USE"));
@@ -501,12 +505,12 @@ class FaceRegistrationApiTest {
     UUID id = id(register(login, metadata()).getResponse().getContentAsString());
     UUID guide = guide(videoId, "APPROVED");
     UUID execution = UUID.randomUUID();
-    assertThatThrownBy(() -> executions.link(userId, login.id(), id, videoId, guide, execution))
+    assertThatThrownBy(() -> linkWithExecution(userId, login.id(), id, videoId, guide, execution))
         .isInstanceOf(IllegalTransactionStateException.class);
     new TransactionTemplate(transactions)
         .executeWithoutResult(
             status -> {
-              executions.link(userId, login.id(), id, videoId, guide, execution);
+              linkWithExecution(userId, login.id(), id, videoId, guide, execution);
               status.setRollbackOnly();
             });
     FaceRegistration found = registrations.findById(id).orElseThrow();
@@ -522,24 +526,25 @@ class FaceRegistrationApiTest {
     UUID otherUser =
         users.saveAndFlush(new User(UUID.randomUUID() + "@camera.test", "hash")).getId();
     assertBusiness(
-        () -> tx(() -> executions.link(otherUser, login.id(), id, videoId, guide, execution)),
+        () -> tx(() -> linkWithExecution(otherUser, login.id(), id, videoId, guide, execution)),
         "NOT_FOUND");
     assertBusiness(
-        () -> tx(() -> executions.link(userId, "wrong-session", id, videoId, guide, execution)),
+        () -> tx(() -> linkWithExecution(userId, "wrong-session", id, videoId, guide, execution)),
         "NOT_FOUND");
     assertBusiness(
-        () -> tx(() -> executions.link(userId, login.id(), id, video(), guide, execution)),
+        () -> tx(() -> linkWithExecution(userId, login.id(), id, video(), guide, execution)),
         "NOT_FOUND");
     assertBusiness(
         () ->
             tx(
                 () ->
-                    executions.link(userId, login.id(), id, videoId, UUID.randomUUID(), execution)),
+                    linkWithExecution(
+                        userId, login.id(), id, videoId, UUID.randomUUID(), execution)),
         "NOT_FOUND");
-    tx(() -> executions.link(userId, login.id(), id, videoId, guide, execution));
+    tx(() -> linkWithExecution(userId, login.id(), id, videoId, guide, execution));
     assertThat(registrations.findById(id).orElseThrow().getGuideId()).isEqualTo(guide);
     assertBusiness(
-        () -> tx(() -> executions.link(userId, login.id(), id, videoId, guide, execution)),
+        () -> tx(() -> linkWithExecution(userId, login.id(), id, videoId, guide, execution)),
         "FACE_REGISTRATION_ALREADY_USED");
   }
 
@@ -550,7 +555,7 @@ class FaceRegistrationApiTest {
     java.util.concurrent.Callable<String> link =
         () -> {
           try {
-            tx(() -> executions.link(userId, login.id(), id, videoId, guide, UUID.randomUUID()));
+            tx(() -> linkWithExecution(userId, login.id(), id, videoId, guide, UUID.randomUUID()));
             return "LINKED";
           } catch (BusinessException e) {
             return e.code();
@@ -569,7 +574,7 @@ class FaceRegistrationApiTest {
     UUID id = id(register(login, metadata()).getResponse().getContentAsString());
     UUID execution = UUID.randomUUID();
     UUID guide = guide(videoId, "APPROVED");
-    tx(() -> executions.link(userId, login.id(), id, videoId, guide, execution));
+    tx(() -> linkWithExecution(userId, login.id(), id, videoId, guide, execution));
     new TransactionTemplate(transactions)
         .executeWithoutResult(
             status -> {
@@ -589,19 +594,37 @@ class FaceRegistrationApiTest {
   }
 
   @Test
-  void linkedAndRetainedPhotosSurviveTheUnlinkedSessionCleanup() throws Exception {
+  void sessionCleanupAbandonsLinkedRunsAndPreservesRetainedPhotos() throws Exception {
     UUID linked = id(register(login, metadata()).getResponse().getContentAsString());
     UUID guide = guide(videoId, "APPROVED");
-    tx(() -> executions.link(userId, login.id(), linked, videoId, guide, UUID.randomUUID()));
+    tx(() -> linkWithExecution(userId, login.id(), linked, videoId, guide, UUID.randomUUID()));
     UUID retained = id(register(login, metadata()).getResponse().getContentAsString());
     UUID retainedExecution = UUID.randomUUID();
-    tx(() -> executions.link(userId, login.id(), retained, videoId, guide, retainedExecution));
+    tx(() -> linkWithExecution(userId, login.id(), retained, videoId, guide, retainedExecution));
     tx(() -> executions.retain(userId, login.id(), retained, retainedExecution));
+    jdbc.update(
+        "update guide_executions set status = 'COMPLETED', record_id = ?, completed_at = now() where id = ?",
+        UUID.randomUUID(),
+        retainedExecution);
     UUID unlinked = id(register(login, metadata()).getResponse().getContentAsString());
     sessionEnd.strict(new SessionEnd(userId.toString(), login.id(), SessionEndReason.LOGOUT));
-    assertThat(registrations.findById(linked).orElseThrow().getDiscardedAt()).isNull();
+    assertThat(registrations.findById(linked).orElseThrow().getDiscardedAt()).isNotNull();
     assertThat(registrations.findById(retained).orElseThrow().getDiscardedAt()).isNull();
     assertThat(registrations.findById(unlinked).orElseThrow().getDiscardedAt()).isNotNull();
+    assertThat(registrations.findById(linked).orElseThrow().getStatus())
+        .isEqualTo(FaceRegistrationStatus.LINKED);
+    assertThat(
+            photos
+                .findById(registrations.findById(linked).orElseThrow().getPhotoId())
+                .orElseThrow()
+                .getState())
+        .isEqualTo(PhotoState.DELETED);
+    assertThat(
+            photos
+                .findById(registrations.findById(retained).orElseThrow().getPhotoId())
+                .orElseThrow()
+                .getState())
+        .isEqualTo(PhotoState.AVAILABLE);
   }
 
   @Test
@@ -609,7 +632,7 @@ class FaceRegistrationApiTest {
     UUID id = id(register(login, metadata()).getResponse().getContentAsString());
     UUID execution = UUID.randomUUID();
     UUID guide = guide(videoId, "APPROVED");
-    tx(() -> executions.link(userId, login.id(), id, videoId, guide, execution));
+    tx(() -> linkWithExecution(userId, login.id(), id, videoId, guide, execution));
     assertBusiness(
         () -> tx(() -> executions.abandon(userId, login.id(), id, UUID.randomUUID())), "NOT_FOUND");
     tx(() -> executions.abandon(userId, login.id(), id, execution));
@@ -619,6 +642,26 @@ class FaceRegistrationApiTest {
     assertThat(photos.findAll().getFirst().getState()).isEqualTo(PhotoState.CLEANUP_PENDING);
     mvc.perform(get(PATH + "/" + id).cookie(login.cookie()).secure(true))
         .andExpect(status().isNotFound());
+  }
+
+  /** 395 FK 도입 뒤에는 얼굴 연결과 함께 실제 실행/매칭 행도 같은 트랜잭션에 저장한다. */
+  private void linkWithExecution(
+      UUID user, String session, UUID registration, UUID video, UUID guide, UUID execution) {
+    executions.link(user, session, registration, video, guide, execution);
+    UUID match = UUID.randomUUID();
+    jdbc.update(
+        "insert into guide_matches (id, user_id, guide_id, guide_version, pouch_version, reference_version, compatibility_version, match_snapshot, created_at) values (?, ?, ?, 1, 0, 0, 1, '{}'::jsonb, now())",
+        match,
+        user,
+        guide);
+    jdbc.update(
+        "insert into guide_executions (id, user_id, session_id, guide_id, match_id, face_registration_id, guide_version, pouch_version, reference_version, compatibility_version, guide_snapshot, status, created_at, updated_at) values (?, ?, ?, ?, ?, ?, 1, 0, 0, 1, '{}'::jsonb, 'IN_PROGRESS', now(), now())",
+        execution,
+        user,
+        session,
+        guide,
+        match,
+        registration);
   }
 
   private void tx(Runnable call) {

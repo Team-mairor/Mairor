@@ -474,7 +474,7 @@ API-GUIDE-002 · GET /api/v1/users/me/executions/\{executionId\}
 
 관련 기능: GUIDE-003 · GUIDE-013
 
-- 회원 GET. Path executionId:string 필수. 200 Execution. 404 NOT\_FOUND(없음·타인·진행 중 원래 세션 아님).
+- 회원 GET. Path executionId:string 필수. 200 Execution, Cache-Control:no-store. IN_PROGRESS는 본인 원래 세션, COMPLETED는 본인 계정에서 조회한다. ABANDONED는 즉시 조회를 차단한다. 404 NOT\_FOUND(없음·타인·진행 중 원래 세션 아님·중도 종료됨).
 - 활성 화면·응답 유실 확인용이며 새로고침 이어 하기 제공 아님. 제품 정보는 실행 당시 스냅샷. 카메라 프레임 스트리밍·특징점 영구 저장 없음.
 </toggle>
 
@@ -485,8 +485,7 @@ API-GUIDE-003 · PATCH /api/v1/users/me/executions/\{executionId\}/photo-consent
 
 - 회원·CSRF 필요. Path executionId:string, Body enabled:boolean 필수. 200 PhotoConsent. 404 NOT\_FOUND, 종료 상태 409 GUIDE\_EXECUTION\_NOT\_ACTIVE.
 - 실행 생성 시 photoConsent=null은 저장 안 함. 매 실행 안내 후 enabled 전달, 안내 다시 보기만으로 호출하지 않는다. 서버는 고정 안내 v1과 동의 시각 기록.
-- 단계 사진 동의는 필수다. 동의 카드는 '돌아가기' / '동의하고 시작'만 있고, FE는 동의할 때만 enabled=true로 호출한 뒤 튜토리얼을 시작한다. enabled=false는 계약에 남기며 서버는 받으면 기록만 한다.
-- 실행 중 true→false 철회는 서버 계약에만 남고 FE에는 철회 경로가 없다(동의 필수). 철회가 들어오면 기존 임시 단계 사진을 삭제하는 정책은 초안이며 확인 후 구현. 얼굴 등록 이미지는 단계 사진 동의와 분리되고 자동 삭제 대상이 아니다.
+- 정책 버전 v1과 동의 시각을 enabled true/false 모두 기록한다. 미동의·철회 상태에서는 새 단계 사진 업로드를 막지만 기존 연결 사진은 보존하고 계속 조회할 수 있다. 얼굴 등록 이미지는 이 동의와 분리되고 자동 삭제 대상이 아니다.
 </toggle>
 
 <toggle>
@@ -528,6 +527,7 @@ API-GUIDE-008 · GET /api/v1/users/me/photos/\{photoId\}
 
 - 회원 GET. Path photoId:string 필수. 200 이미지 바이트(Content-Type=image/jpeg 또는 image/png), Cache-Control:private,no-store. JSON 아님.
 - 404 NOT\_FOUND(없음·타인·삭제/정리 대상). STEP과 FACE\_REGISTRATION을 같은 인증 경로로 제공. 진행/미연결 이미지는 원래 세션, 완료 리포트 연결 사진은 본인 계정에서 접근. 버킷 공개 URL 미노출.
+- 로그아웃 상태는 401. ABANDONED 실행의 단계·얼굴 사진은 404로 차단한다.
 </toggle>
 
 <toggle>
@@ -996,3 +996,9 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 사진·리포트 | 단계 사진 보관 기간(개인정보 처리방침), 미완료 임시 데이터 정리 시점·삭제 완료 기준 |
 | 영상 입력 화면 | v11 '내 가이드 목록 · 이어서 하기'는 이어 하기 미제공 정책(GUIDE-011)과 충돌 → 삭제 또는 '다시 시작'으로 의미 변경 전까지 API 미정의 |
 | 구현·내부 운영 | 표준 얼굴 좌표 버전·랜드마크 매핑, ERD 키·배포 주소·OpenAPI, 카탈로그 초기 적재 운영·만료 탐지·삭제 재시도 권한/절차(수집·적재 내부 API는 구현됨, FE에 노출하지 않음) |
+
+## 실행 중도 종료 구현 메모 (395)
+
+`POST /api/v1/users/me/executions/{executionId}/abandonment`는 본인 원래 세션의 진행 중 실행만 종료한다. DB 트랜잭션에서 실행을 `ABANDONED`로 바꾸고 단계 사진과 연결 얼굴 등록 사진을 `CLEANUP_PENDING`으로 전환해 즉시 읽기를 차단한다. 트랜잭션 커밋 뒤 객체 삭제를 시도하며, 실패한 사진은 사진 정리 스케줄러가 재시도한다. 응답의 `cleanupPending`은 이 요청의 삭제 시도 후 아직 정리 대기 중인 파일이 있는지 나타낸다.
+
+이미 `ABANDONED`인 실행의 재요청은 200이며 종료 상태와 현재 정리 대기 여부를 반환한다. `COMPLETED`는 `409 GUIDE_EXECUTION_ALREADY_COMPLETED`다. 로그아웃·기기 로그아웃·세션 만료 등의 공통 세션 종료 훅도 같은 사용자·세션의 `IN_PROGRESS` 실행만 종료한다. 완료 실행과 다른 세션 실행은 유지한다.

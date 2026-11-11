@@ -30,9 +30,9 @@ class OpenApiDocsTest {
   /**
    * 문서에 나오는 API 수(메서드 단위). 파우치 등록 POST·목록 GET·상세 GET·수정 PATCH·삭제 DELETE, 수집 상품 판정 시험 POST, 영상 검색
    * GET·선택 POST, 분석 요청 POST·내 분석 목록 GET, 노트북 작업 POST 4개, 공식 홈페이지 수집·카탈로그 적재·품질 API, 가이드 매칭
-   * POST·GET, 얼굴 등록 3개 포함. API 를 추가하면 함께 올린다.
+   * POST·GET, 얼굴 등록 3개, 실행 생성·조회·사진 동의·업로드·바이너리 조회·완료·중도 종료 포함. API 를 추가하면 함께 올린다.
    */
-  private static final int ALL_OPERATIONS = 58;
+  private static final int ALL_OPERATIONS = 65;
 
   @Autowired private MockMvc mockMvc;
 
@@ -63,6 +63,63 @@ class OpenApiDocsTest {
         .andExpect(
             jsonPath(
                     "$.paths['/v1/users/me/face-registrations/{faceRegistrationId}'].delete.responses['503']")
+                .exists());
+  }
+
+  @Test
+  void apiDocs_documentsExecutionPhotoConsentUploadAndPrivateBinaryRead() throws Exception {
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/photo-consent'].patch.responses['200']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/steps/{stepId}/photo'].put.responses['200']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/steps/{stepId}/photo'].put.responses['409'].description")
+                .value(
+                    containsString(
+                        "GUIDE_EXECUTION_NOT_ACTIVE, GUIDE_PHOTO_CONSENT_REQUIRED, GUIDE_STEP_PHOTO_NOT_ALLOWED")))
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/executions/{executionId}'].get.responses['404']")
+                .exists())
+        .andExpect(jsonPath("$.paths['/v1/users/me/executions'].post.responses['404']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/photo-consent'].patch.responses['404']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/steps/{stepId}/photo'].put.responses['404']")
+                .exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/photos/{photoId}'].get.responses['404']").exists())
+        .andExpect(
+            jsonPath("$.paths['/v1/users/me/photos/{photoId}'].get.responses['200']").exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/completion'].post.responses['201']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/completion'].post.responses['200']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/abandonment'].post.responses['200']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/completion'].post.responses['404']")
+                .exists())
+        .andExpect(
+            jsonPath(
+                    "$.paths['/v1/users/me/executions/{executionId}/abandonment'].post.responses['404']")
                 .exists());
   }
 

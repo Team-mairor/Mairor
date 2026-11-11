@@ -328,6 +328,16 @@ Swagger 확인·실패 응답·운영 DB 사전 적용 절차는 [얼굴 등록 
 - FaceRegistrationOrphanScheduler는 세션 행이 사라진 REGISTERED만 주기적으로 정리해 종료 훅 누락을 복구한다. 세션 행이 살아 있는 등록은 생성 시각이 오래돼도 정리하지 않는다. 유휴 만료는 기존 ExpiredSessionSweeper가 종료 훅을 호출한 뒤 세션을 지우는 순서를 유지한다.
 - 395는 FaceRegistrationExecutionService의 link/retain/abandon을 실행 DB 트랜잭션 안에서 호출해야 한다(MANDATORY). 회원 → 실행/얼굴 등록 → 사진 잠금 순서를 지키며, 같은 얼굴 등록의 실행 재사용은 FACE_REGISTRATION_ALREADY_USED로 거절한다. 완료 보관 전환과 중도 종료 삭제 예약은 실행 저장과 함께 롤백되고 반복 호출은 안전하다. 이 브랜치에는 executions 테이블이나 실행 API가 추가되지 않으며 실행 FK는 395에서 적용한다.
 
+## 가이드 실행 API (S15P31A306-395)
+
+실행·단계 선택 스냅샷과 생성·조회, 동의·단계 사진·사진 원본 조회, 완료 API를 구현했다. 완료는 `history_records`에 ReportRecord 스냅샷을 한 건 저장하고 실행 COMPLETED·얼굴 RETAINED 전환을 한 DB 트랜잭션으로 처리한다. 리포트 목록·상세·삭제 API 담당은 [연동 요청 계약](docs/report-api-integration-request.md)의 동일 원장을 사용한다. 가이드/단계 JSON과 버전은 저장 후 변경하지 않으며, 단계 제품/색 값은 스냅샷으로 보관하므로 현재 파우치 항목에 FK를 두지 않는다. 생성은 READ_COMMITTED에서 가이드 공유 잠금 → 회원 → 실행/등록 → 사진 순서로 처리한다. 카탈로그 색/가이드 버전 writer의 가이드 → 회원 순서와 맞추고, 같은 세션의 실행 생성·교체는 회원 잠금으로 직렬화한다.
+
+생성 시 최신 매칭·본인 선택·얼굴 등록을 검증하고 LINKED 전환·스냅샷 저장·같은 세션의 이전 진행 실행 종료/사진 정리 예약을 같은 트랜잭션으로 처리한다. 실패 시 이전 실행을 보존한다. 진행 조회는 원래 세션, 완료 조회는 본인 계정으로 제한하고 포기한 실행은 404다. [생성·조회 FE 계약](docs/guide-execution-api.md)과 [실행 모델](docs/guide-execution-model.md)에 상세 범위를 정리했다.
+
+새 실행 교체와 단계 사진 교체가 구현됐다. 사진 동의를 철회해도 기존 단계 사진은 보존하고 계속 조회할 수 있으며, 새 업로드만 차단한다. 중도 종료 POST, 세션 종료 훅과 유실 세션 정리 스케줄러도 구현됐다. 남은 BE 범위는 담당 팀원이 `history_records` 원장 계약에 맞춰 구현하는 리포트 목록·상세·삭제 API다.
+
+기존 DB의 395 SQL 사전 확인은 `guide_executions`·`execution_steps`가 없는지, 396과 `guide_matches`가 적용되어 있는지, `face_registrations.execution_id IS NOT NULL`인 기존 데이터가 있는지 확인한다. 마지막 항목이 있으면 없는 실행을 가리킬 수 있으므로 적용을 중단하고 원인을 확인한다. SQL은 빈 실행 테이블을 만들고 기존 얼굴 링크 FK를 검사하므로 미해결 링크가 있으면 전체 롤백된다. NULL로 바꾸거나 기존 사진/등록을 임의 삭제해 통과시키지 않는다. 운영 적용은 395 전체 계약과 API 검증이 끝난 뒤 진행한다.
+
 ## DB 스키마
 
 S15P31A306-326: 기존 DB에는 배포 전에 `psql -f db/upgrade/326-product-name-compact.sql`을 적용한다. `products.name_compact`는 `name_normalized`에서 공백을 제거해 DB가 자동 계산하는 파생 검색 키다. 생성 컬럼이므로 구버전 앱과 기존 샘플 SQL의 제품명 입력·수정에도 값이 자동 반영된다. 이 변경은 기존 제품 행의 파생 키 보강만 하며 제품 레코드 추가, 시드, 수집은 포함하지 않는다.
@@ -343,12 +353,14 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | `db/schema/analysis.sql` | `videos` (유튜브 영상), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
 | `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
 | `db/schema/camera.sql` | `photos` (비공개 사진 메타데이터·파일 정리 상태), `face_registrations` (실행별 기준 얼굴 등록·동의·촬영 조건) |
+| `db/schema/executions.sql` | `guide_executions`·`execution_steps` 실행 스냅샷, `history_records` 완료 기록/리포트 스냅샷, 얼굴/사진/매칭 소유권 FK |
 
-- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`, `psql -d <DB> -f analysis.sql`, `psql -d <DB> -f pouch.sql`, `psql -d <DB> -f camera.sql` (이 순서. `analysis.sql`이 `users`를, `pouch.sql`이 `users`·카탈로그 분류/제품/호수 테이블을 참조한다)
+- 운영(또는 새 환경) 배포 **전에** 대상 DB 에 먼저 적용한다. `psql -d <DB> -f users.sql`, `psql -d <DB> -f products.sql`, `psql -d <DB> -f analysis.sql`, `psql -d <DB> -f pouch.sql`, `psql -d <DB> -f camera.sql`, `psql -d <DB> -f executions.sql` (이 순서. `analysis.sql`이 `users`를, `pouch.sql`이 `users`·카탈로그 분류/제품/호수 테이블을, `executions.sql`이 매칭·얼굴 등록·사진을 참조한다)
 - **이미 `users` 테이블이 있는 DB** 에는 파일을 다시 적용할 수 없다(`already exists`). 컬럼·테이블이 추가된 변경은 아래 문장만 따로 적용한 뒤 배포한다. 적용하지 않으면 `validate` 가 `missing column`·`missing table` 로 앱 기동을 막는다.
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
+| 실행·단계 스냅샷 및 실행/얼굴/사진 소유권 FK | S15P31A306-395 | **운영 DB는 2026-11-11 적용 및 검증 완료. 재실행하지 않는다.** 다른 기존 DB에 배포할 때는 396이 적용되어 `photos`, `face_registrations`, `guide_matches`가 있고 `guide_executions`, `execution_steps`, `history_records`가 없는지 `to_regclass`로 확인한 뒤 MR 머지·배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/395-guide-executions.sql`을 1회 실행한다. 새 테이블·기존 테이블 유일 제약·FK를 한 트랜잭션으로 추가하며 적용 후 세 테이블과 네 제약의 존재/검증 상태를 확인한다. 사전 확인은 아래 실행 모델 항목 참고. |
 | 사진 메타데이터·얼굴 등록 테이블 | S15P31A306-396 | **MR 머지·배포 전** `users`·`videos`·`guides`가 있는 DB에서 `SELECT to_regclass('public.photos'), to_regclass('public.face_registrations');`가 모두 NULL인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/396-face-registrations.sql`. 파일은 한 트랜잭션에서 photos → face_registrations → 인덱스 순서로 생성한다. 새 테이블뿐이므로 기존 데이터 위반 행이나 변환은 없고, 이미 존재하면 재적용하지 않는다. 실행 테이블 FK는 395에서 추가한다. |
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
 | 개인 파우치·회원별 버전 기반 | S15P31A306-211 | 먼저 `ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;` 다음 `pouch.sql` 전체. 기존 회원도 버전 0으로 시작한다. 기존 카탈로그 테이블은 변경·재적재하지 않는다 |
@@ -601,3 +613,7 @@ backend/
 - 도메인 패키지 안에서 컨트롤러 → 서비스 → 리포지토리 순으로 의존한다. `common` 은 도메인을 import 하지 않는다.
 - 컨텍스트 경로가 `/api` 이므로 컨트롤러 매핑은 `/v1/...` 처럼 그 뒤만 적는다.
 - 스키마 마이그레이션(Flyway)은 ERD 확정 후 도입한다. 그 전까지 dev 는 `ddl-auto=update`, 세션 테이블은 Spring Session 이 만든다.
+
+`GUIDE_EXECUTION_ORPHAN_CLEANUP_ENABLED` (기본 `true`)는 세션 종료 훅을 거치지 못하고 Spring Session 행도 사라진 가이드 실행 복구를 제어한다. `app.session.sweep.interval`과 `app.session.sweep.batch-size` 설정을 사용해 실제 세션이 없는 `IN_PROGRESS` 실행만 찾아 포기 처리하며, 파일 정리는 사진 정리 스케줄러가 재시도한다.
+
+S15P31A306-395 SQL은 2026-11-11 운영 DB에 적용했고, `guide_executions`·`execution_steps`·`history_records` 및 추가 제약의 검증을 확인했다. 다시 실행하지 않는다. 남은 배포 확인은 신규 코드의 `ddl-auto=validate` 기동과 사진 저장·읽기·삭제 스모크 테스트다. FE 연결 절차와 요청 예시는 [GUIDE 실행 FE 인계](docs/guide-execution-fe-handoff.md)를 참고한다.

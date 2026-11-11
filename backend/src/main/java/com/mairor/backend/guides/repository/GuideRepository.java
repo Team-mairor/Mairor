@@ -21,6 +21,11 @@ public interface GuideRepository extends JpaRepository<Guide, UUID> {
   @Query("select g from Guide g where g.id = :guideId")
   Optional<Guide> findByIdForUpdate(@Param("guideId") UUID guideId);
 
+  /** 실행 스냅샷을 저장하는 동안 검수·연결 버전 변경을 막는다. 카탈로그 writer와 같이 가이드 → 회원 순으로 잠근다. */
+  @Lock(LockModeType.PESSIMISTIC_READ)
+  @Query("select g from Guide g where g.id = :guideId")
+  Optional<Guide> findByIdForShare(@Param("guideId") UUID guideId);
+
   /** 영상의 가이드 중 가장 큰 판 번호. 없으면 0. */
   @Query("select coalesce(max(g.version), 0) from Guide g where g.video.id = :videoId")
   int findMaxVersionByVideoId(@Param("videoId") UUID videoId);
