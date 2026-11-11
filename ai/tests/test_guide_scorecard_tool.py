@@ -144,10 +144,41 @@ def test_score_counts_not_found_steps_apart_and_needs_every_step_and_noise_to_pa
     assert [r["status"] for r in result["steps"]] == ["passed", "notFound"]
     brow = next(p for p in result["parts"] if p["part"] == "brow")
     assert brow["noisePassed"] is True
-    assert brow["steps"] == {"passed": 1, "failed": 0, "notFound": 1}
+    assert brow["steps"] == {"passed": 1, "failed": 0, "notFound": 1, "reused": 0}
     assert brow["passed"] is False
     lip = next(p for p in result["parts"] if p["part"] == "lip")
     assert lip["noisePassed"] is False and lip["passed"] is False
+
+
+def test_score_counts_steps_that_reuse_the_earlier_brow_area_apart_without_lines():
+    """못 찾아 앞 눈썹 단계 영역을 그대로 보낸 단계(나가는 영역 reusedArea)는 reused로 세고
+    선은 재지 않는다. 찾은 것이 아니라서 부위 합격으로는 치지 않는다.
+
+    쪽마다 찾은 영역 판정은 못 찾음 그대로다.
+    """
+    timing = {k: BROW_S8[k] for k in ("outsideRatio", "keepRatio", "t50", "strongShare")}
+    side = {"part": "brow", "side": "leftBrow", "found": 0, "total": 9, "baseFound": False}
+    output = {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.0, "reusedArea": True}
+    docs = {
+        "noise.json": {
+            "summary": [{"part": "brow", "side": "leftBrow", "pairs": 100, "falsePositives": 2}]
+        },
+        "stability.json": {"steps": [{"stepId": "s23", **side, "output": output}]},
+        "boundary.json": {"steps": []},
+        "timing.json": {
+            "steps": [
+                {"part": "brow", "stepId": "s23", "side": "leftBrow", "output": timing},
+            ]
+        },
+    }
+
+    result = guide_scorecard.score(docs)
+
+    row = result["steps"][0]
+    assert (row["status"], row["checks"], row["sideStatus"]) == ("reused", [], "notFound")
+    brow = next(p for p in result["parts"] if p["part"] == "brow")
+    assert brow["steps"] == {"passed": 0, "failed": 0, "notFound": 0, "reused": 1}
+    assert brow["passed"] is False
 
 
 def test_score_judges_the_drawn_area_and_keeps_the_side_result_for_reference():
@@ -301,7 +332,15 @@ def test_score_judges_noise_and_counts_steps_for_each_zone():
     ]
     shadow = next(p for p in result["parts"] if p["part"] == "eyeshadow")
     assert shadow["zones"] == [
-        {"zone": "upper", "noisePassed": False, "steps": {"passed": 1, "failed": 0, "notFound": 0}},
-        {"zone": "under", "noisePassed": True, "steps": {"passed": 0, "failed": 0, "notFound": 1}},
+        {
+            "zone": "upper",
+            "noisePassed": False,
+            "steps": {"passed": 1, "failed": 0, "notFound": 0, "reused": 0},
+        },
+        {
+            "zone": "under",
+            "noisePassed": True,
+            "steps": {"passed": 0, "failed": 0, "notFound": 1, "reused": 0},
+        },
     ]
     assert next(p for p in result["parts"] if p["part"] == "brow")["zones"] == []

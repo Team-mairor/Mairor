@@ -22,7 +22,7 @@ from app.schemas.guide_area import GuideArea
 from app.schemas.guide_job import FrameSource, ReferenceFrame
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Frame, Makeup, Manifest, Step, VideoSource
-from app.tasks.area.guide_area_builder import build_guide_area
+from app.tasks.area.guide_area_builder import ORDERED_MAKEUPS, build_guide_area
 from app.tasks.area.landmarks.face_finder import find_faces
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS, check_frames
 from app.tasks.area.landmarks.landmarks_builder import FaceFinder, build_landmarks
@@ -77,7 +77,9 @@ def split_steps(
 ) -> list[list[GuideInputStep]]:
     """단계를 lines줄로 나눠, 줄마다 동시에 영역을 만들 수 있게 한다. 빈 줄은 뺀다.
 
-    아이라인은 앞 아이라인 단계에서 안내한 칸을 이어받으므로(build_guide_area) 모두 첫 줄에 둔다.
+    단계 순서대로 앞 단계를 이어받는 부위(ORDERED_MAKEUPS)는 모두 첫 줄에 순서대로 둔다.
+    아이라인은 앞 아이라인 단계에서 안내한 칸을 빼고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을
+    그대로 쓴다(build_guide_area). 줄끼리는 서로의 결과를 모르므로 다른 줄에 가면 이어받지 못한다.
     다른 분석하는 단계는 창 안 사진이 많은 것부터, 그때까지 사진 수가 가장 적은 줄에 넣는다.
     사진 수는 영역 만들기 시간과 거의 비례한다.
     분석하지 않는 단계는 사진을 쓰지 않아 마지막 줄에 둔다.
@@ -93,10 +95,10 @@ def split_steps(
     groups: list[list[GuideInputStep]] = [[] for _ in range(lines)]
     loads = [0] * lines
     for step in steps:
-        if step.makeup == "eyeliner":
+        if step.makeup in ORDERED_MAKEUPS:
             groups[0].append(step)
             loads[0] += photos(step)
-    analyzed = [s for s in steps if s.makeup in PART_WINDOWS and s.makeup != "eyeliner"]
+    analyzed = [s for s in steps if s.makeup in PART_WINDOWS and s.makeup not in ORDERED_MAKEUPS]
     for step in sorted(analyzed, key=lambda s: (-photos(s), s.order)):
         lightest = loads.index(min(loads))
         groups[lightest].append(step)

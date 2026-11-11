@@ -11,6 +11,8 @@ stability_metric.py, boundary_metric.py, timing_metric.py를 실행해 둔다.
 단계마다 사진으로 본 바른 자리(STEP_ZONES)를 붙이고, 부위 요약에 자리별 단계 판정 수를 더한다.
 섀도·아이라인 잡음은 나가는 영역 헛것을 자리(눈꼬리·앞머리 잇는 선 위·아래)마다 다시 판정한다.
 서비스 그대로의 창에서 영역을 못 찾은 쪽은 notFound로 따로 센다.
+눈썹을 못 찾아 앞 눈썹 단계 영역을 그대로 보낸 단계는 reused로 따로 세고 선은 재지 않는다.
+찾은 것이 아니라서 부위 합격에는 못 찾음처럼 넣지 않는다.
 진한 칸 비율은 아이라인에 쓰지 않는다. 아이라인 색 값은 바뀜/안 바뀜 두 값이라 늘 1에 가깝다.
 지표마다 선까지의 배수(gap)도 낸다. 1 이하면 합격 쪽이고 클수록 선에서 멀다.
 합격·불합격은 FE로 나가는 영역(지표 결과의 output 칸, 잡음의 outputFalsePositives)으로 판정한다.
@@ -196,7 +198,13 @@ def step_values(stability: dict, boundary: dict, timing: dict) -> dict:
 
 
 def step_status(part: str, stability: dict, boundary: dict, timing: dict) -> tuple[str, list]:
-    """한 단계·쪽의 (상태, 선마다 결과). 서비스 그대로의 창에서 못 찾았으면 notFound다."""
+    """한 단계·쪽의 (상태, 선마다 결과). 서비스 그대로의 창에서 못 찾았으면 notFound다.
+
+    못 찾아 앞 눈썹 단계 영역을 그대로 보낸 나가는 영역(reusedArea)은 이 단계에서 찾은 것이 아니라
+    reused로 적고 선은 재지 않는다.
+    """
+    if stability.get("reusedArea"):
+        return "reused", []
     if not stability.get("baseFound"):
         return "notFound", []
     not_measured = frozenset(timing.get("notMeasured", ()))
@@ -205,10 +213,10 @@ def step_status(part: str, stability: dict, boundary: dict, timing: dict) -> tup
 
 
 def status_counts(rows: Sequence[dict]) -> dict[str, int]:
-    """단계 줄들의 판정(합격·불합격·못 찾음)마다 수."""
+    """단계 줄들의 판정(합격·불합격·못 찾음·앞 단계 영역 씀)마다 수."""
     return {
         status: sum(r["status"] == status for r in rows)
-        for status in ("passed", "failed", "notFound")
+        for status in ("passed", "failed", "notFound", "reused")
     }
 
 
@@ -296,7 +304,10 @@ def score(docs: dict[str, dict]) -> dict:
                 "part": part,
                 "noisePassed": noise_passed,
                 "steps": counts,
-                "passed": noise_passed and counts["failed"] == 0 and counts["notFound"] == 0,
+                "passed": noise_passed
+                and counts["failed"] == 0
+                and counts["notFound"] == 0
+                and counts["reused"] == 0,
                 "zones": zones,
             }
         )
@@ -330,7 +341,12 @@ def main() -> None:
 
     docs = {name: json.loads((folder / name).read_text(encoding="utf-8")) for name in INPUT_FILES}
     result = score(docs)
-    names = {"passed": "합격", "failed": "불합격", "notFound": "못 찾음"}
+    names = {
+        "passed": "합격",
+        "failed": "불합격",
+        "notFound": "못 찾음",
+        "reused": "앞 단계 영역 씀",
+    }
     passed_names = {True: "합격", False: "불합격", None: "-"}
     for row in result["noise"]:
         status = "합격" if row["passed"] else "불합격"
@@ -355,6 +371,7 @@ def main() -> None:
             f"부위 {row['part']:9} {'합격' if row['passed'] else '불합격'}"
             f"  잡음 {'합격' if row['noisePassed'] else '불합격'}"
             f"  단계 합격 {steps['passed']} 불합격 {steps['failed']} 못 찾음 {steps['notFound']}"
+            f" 앞 단계 영역 씀 {steps['reused']}"
         )
         for zone in row["zones"]:
             counts = zone["steps"]

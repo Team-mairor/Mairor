@@ -146,7 +146,7 @@ PARTS = (
         lambda r, s, e, load, side, occ: brow_area.find_brow_area(r, s, e, load, side, occ),
         brow_area.brow_darkening,
         brow_area.BLUR_SIGMA,
-        brow_area.brow_range,
+        brow_area.found_range,
     ),
     Part(
         "eyeshadow",

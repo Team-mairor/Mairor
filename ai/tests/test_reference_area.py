@@ -8,8 +8,13 @@ from app.clients.frames import frame_file_name
 from app.schemas.guide import GuideInput
 from app.schemas.guide_job import ReferenceFrames
 from app.schemas.landmarks import LandmarksResult
-from app.tasks.area import reference_area
-from app.tasks.area.guide_area_builder import AREA_FINDERS, build_guide_area, failed_guide_area
+from app.tasks.area import guide_area_builder, reference_area
+from app.tasks.area.guide_area_builder import (
+    AREA_FINDERS,
+    ORDERED_MAKEUPS,
+    build_guide_area,
+    failed_guide_area,
+)
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
@@ -25,6 +30,7 @@ from app.tasks.area.reference_area import (
     split_steps,
 )
 from tests.test_area_preparation import make_row
+from tests.test_guide_area_builder import found_from
 
 GUIDE_INPUT = GuideInput.model_validate(
     {
@@ -142,9 +148,9 @@ def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
     부위 분석의 창이 바뀌었는데 PART_WINDOWS를 그대로 두면, 서비스가 그 사진을 받지 않아
     결과가 조용히 바뀐다. 실제 build_guide_area가 usable_rows에 묻는 구간을 모두 모아 본다.
     분석하는 부위를 새로 넣고 PART_WINDOWS에 빠뜨려도 같은 일이 생기므로, 분석하는 부위
-    (AREA_FINDERS와 따로 만드는 아이라인)가 PART_WINDOWS와 같은지도 본다.
+    (AREA_FINDERS와 단계 순서대로 따로 부르는 ORDERED_MAKEUPS)가 PART_WINDOWS와 같은지도 본다.
     """
-    assert set(PART_WINDOWS) == set(AREA_FINDERS) | {"eyeliner"}
+    assert set(PART_WINDOWS) == set(AREA_FINDERS) | set(ORDERED_MAKEUPS)
     asked = []
 
     def record(result, start_ms, end_ms, regions):
@@ -298,7 +304,9 @@ LINE_STEPS = (
     ("s4", "eyeliner", 30, 35),
     ("s5", "brow", 40, 45),
     ("s6", "lip", 50, 55),
+    ("s7", "brow", 57, 59),
 )
+CARRIED_OVER = ["s2", "s4", "s5", "s7"]
 
 
 def landmarks_every_half_second(until_ms: int) -> LandmarksResult:
@@ -307,17 +315,64 @@ def landmarks_every_half_second(until_ms: int) -> LandmarksResult:
     )
 
 
-def test_eyeliner_steps_stay_in_the_first_line_in_order():
-    """아이라인은 앞 아이라인 단계에서 안내한 칸을 이어받아, 줄을 나눠도 한 줄에 차례로 둔다."""
+@pytest.mark.parametrize("lines", [2, 3])
+def test_eyeliner_and_brow_steps_stay_in_the_first_line_in_order(lines):
+    """아이라인은 앞 아이라인 단계에서 안내한 칸을 빼고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을 쓴다.
+
+    줄끼리는 서로의 결과를 모르므로 두 부위 단계는 줄을 나눠도 첫 줄에 차례로 둔다.
+    눈썹 s5·s7은 사진 수만 보고 나누면 두 줄일 때 다른 줄에 가서 고른 경우다.
+    """
     steps = guide_input(*LINE_STEPS).steps
 
-    groups = split_steps(steps, landmarks_every_half_second(60_000), 2)
+    groups = split_steps(steps, landmarks_every_half_second(60_000), lines)
 
     ids = [[step.step_id for step in group] for group in groups]
-    assert [i for i in ids[0] if i in ("s2", "s4")] == ["s2", "s4"]
-    assert not {"s2", "s4"} & set(ids[1])
-    assert sorted(i for group in ids for i in group) == ["s1", "s2", "s3", "s4", "s5", "s6"]
+    assert [i for i in ids[0] if i in CARRIED_OVER] == CARRIED_OVER
+    assert not set(CARRIED_OVER) & {i for group in ids[1:] for i in group}
+    assert sorted(i for group in ids for i in group) == [f"s{i}" for i in range(1, 8)]
     assert ids[-1][-1] == "s1"
+
+
+def returns(area):
+    return lambda *_, **__: area
+
+
+@pytest.mark.parametrize("lines", [2, 3])
+def test_brow_step_not_found_reuses_the_earlier_brow_area_when_split_into_lines(monkeypatch, lines):
+    """줄을 나눠 만들어도 못 찾은 눈썹 단계(s7)는 앞 눈썹 단계(s5) 영역을 이어받는다.
+
+    운영은 줄을 나눠 만들므로, 두 단계가 다른 줄에 가면 s7이 기본 가이드로 나가는 것을 막는다.
+    """
+    monkeypatch.setattr(guide_area_builder, "find_brow_area", found_from(40_000))
+    monkeypatch.setattr(
+        guide_area_builder,
+        "find_lip_area",
+        returns(lip_area.LipArea(mask=None, reason="lipColorNotFound")),
+    )
+    monkeypatch.setattr(
+        guide_area_builder,
+        "find_blush_area",
+        returns(blush_area.BlushArea(mask=None, reason="blushColorNotFound")),
+    )
+    monkeypatch.setattr(
+        guide_area_builder,
+        "find_eyeliner_area",
+        returns(eyeliner_area.EyelinerArea(mask=None, reason="eyelinerColorNotFound")),
+    )
+
+    area = build_area_in_lines(
+        "test_01",
+        guide_input(*LINE_STEPS).steps,
+        landmarks_every_half_second(60_000),
+        lambda row: np.zeros((24, 32, 3), dtype=np.uint8),
+        find_occlusion,
+        None,
+        lines,
+    )
+
+    sub_steps = {step.step_id: step.sub_steps[0] for step in area.steps}
+    assert sub_steps["s5"].status == sub_steps["s7"].status == "extracted"
+    assert sub_steps["s7"].guide_sets == sub_steps["s5"].guide_sets
 
 
 def test_one_line_keeps_steps_as_given():
@@ -377,7 +432,7 @@ def test_lines_get_their_own_memory_and_merge_in_step_order(monkeypatch):
         2,
     )
 
-    assert [step.step_id for step in area.steps] == ["s1", "s2", "s3", "s4", "s5", "s6"]
+    assert [step.step_id for step in area.steps] == [f"s{i}" for i in range(1, 8)]
     (first_photos, first_occlusion), (second_photos, second_occlusion) = seen
     assert isinstance(first_photos, RememberedPhotos)
     assert first_photos is not second_photos

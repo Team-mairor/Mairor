@@ -1,7 +1,10 @@
 """눈썹을 그린 곳을 눈썹마다 찾는다.
 
-눈썹 점 테두리를 조금 넓힌 범위 안에서, 단계 직전과 직후 얼굴 지도의 밝기(Lab L)가
-어두워진 칸을 찾는다. 원래 눈썹은 전후가 같아 잡히지 않고 이번 단계에 새로 그린 색만 잡힌다.
+단계 직전과 직후 얼굴 지도의 밝기(Lab L)가 어두워진 칸을 찾는다.
+원래 눈썹은 전후가 같아 잡히지 않고 이번 단계에 새로 그린 색만 잡힌다.
+그렸는지는 눈썹 점 테두리를 조금 넓힌 관문 범위(found_range)의 가운데 값으로 보고,
+그린 칸은 그보다 넓힌 범위(brow_range)에서 골라 원래 눈썹 밖으로 그린 갈매기 산·일자 아랫선·
+긴 꼬리도 들어오게 한다. 컨실러로 밝게 정리한 칸은 뺀다.
 바른 뒤 색만 보고 주변 피부보다 어두운 곳을 찾으면, 원래 눈썹보다 얇게 그렸을 때
 원래 눈썹까지 잡혀서 쓰지 않는다.
 전후 사이 조명이 바뀌면 피부도 함께 어두워지거나 밝아지므로 remove_lighting으로 그만큼 빼고 본다.
@@ -36,10 +39,14 @@ from app.tasks.area.parts.area_preparation import (
 
 BEFORE_WINDOW_MS = 1000
 AFTER_WINDOW_MS = 2000
-MARGIN_CELLS = 3
+FOUND_MARGIN_CELLS = 3
+MARGIN_CELLS = 15
 LIGHT_GAP_CELLS = 30
 BLUR_SIGMA = 4
 DARKENING_MIN = 3
+OUTER_PERCENTILE = 90
+OUTER_RATIO = 0.7
+BRIGHTENED_MIN = 1
 FOUND_MEDIAN_MIN = 2
 TIDY_CELLS = 5
 CURVE_DEGREE = 3
@@ -55,10 +62,10 @@ BrowAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "browColorNotFound
 class BrowArea:
     """눈썹 하나의 찾기 결과. 찾으면 mask에 얼굴 지도 크기 표(그린 칸이 True)가 든다.
 
-    darkening은 눈썹 범위 안에서 조명을 뺀 어두워진 양의 가운데 값이고,
+    darkening은 관문 범위(found_range) 안에서 조명을 뺀 어두워진 양의 가운데 값이고,
     대칭으로 쓸 눈썹을 고를 때 쓴다.
     못 찾으면 mask는 None이고 reason에 이유가 든다. reason은 가이드 영역 하위 단계의 reasons에 쓴다.
-    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없거나 눈썹 범위의 절반 넘게 모름 칸임,
+    noUsableFrame은 단계 직전이나 직후에 쓸 사진이 없거나 관문 범위의 절반 넘게 모름 칸임,
     faceSizeMismatch는 직전·직후 얼굴 크기를 맞출 사진이 없음(match_sizes),
     browColorNotFound는 어두워진 양이 기준에 못 미침이다.
     """
@@ -83,7 +90,7 @@ def find_brow_area(
     어느 한쪽이라도 쓸 사진이 없으면 사진을 읽지 않고 noUsableFrame을 돌려준다.
     흐린 사진을 빼고 한쪽이 비어도 noUsableFrame이다.
     load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
-    occlusion이 있으면 사진마다 가린 칸을 빼고, 범위를 많이 가린 사진은 통째로 빼며,
+    occlusion이 있으면 사진마다 가린 칸을 빼고, 관문 범위를 많이 가린 사진은 통째로 빼며,
     직전이나 직후 어느 한쪽에서라도 모든 사진에 가려진 칸(모름 칸)은 보지 않는다.
     """
     before_rows = usable_rows(result, step_start_ms - BEFORE_WINDOW_MS, step_start_ms, [brow])
@@ -96,18 +103,31 @@ def find_brow_area(
     before_rows, after_rows = drop_blurry(before_rows, after_rows, load_photo, occlusion)
     if not before_rows or not after_rows:
         return BrowArea(mask=None, reason="noUsableFrame")
-    zone = brow_range(brow)
+    zone = found_range(brow)
     before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
     after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)
     unknown = before_unknown | after_unknown
     return check_brow_area(brow_darkening(before, after, unknown), brow, unknown)
 
 
-def brow_range(brow: RegionName) -> np.ndarray:
-    """눈썹 점 테두리를 MARGIN_CELLS만큼 넓힌 살펴볼 범위. 지도 크기 표다.
+def found_range(brow: RegionName) -> np.ndarray:
+    """그렸는지 볼 관문 범위. 눈썹 점 테두리를 FOUND_MARGIN_CELLS만큼 넓힌 지도 크기 표다.
 
-    넓힐수록 조명 때문에 어두워진 이마·눈두덩까지 잡혀서,
-    테두리를 살짝 벗어난 윗가장자리만 들어오게 조금만 넓힌다.
+    그린 칸을 고르는 범위(brow_range)보다 좁게 따로 둔다. 넓힌 범위로 가운데 값을 내면
+    피부 칸이 섞여 값이 내려가, 진하게 그린 눈썹도 관문을 못 넘는다.
+    사진 묶음의 대표 지도를 만들 때 많이 가린 사진을 뺄지도 이 범위로 본다.
+    """
+    return polygon_mask(
+        map_points(REGION_POINTS[brow]), MAP_SIZE, MAP_SIZE, band=FOUND_MARGIN_CELLS
+    )
+
+
+def brow_range(brow: RegionName) -> np.ndarray:
+    """그린 칸을 고르는 범위. 눈썹 점 테두리를 MARGIN_CELLS만큼 넓힌 지도 크기 표다.
+
+    원래 눈썹 밖으로 그린 갈매기 산·일자 아랫선·긴 꼬리가 들어오게 넓힌다.
+    관문 범위 밖 띠에서는 안쪽만큼 진한 칸만 넣어(check_brow_area), 흐림으로 번지거나
+    조명·머리카락으로 옅게 어두워진 이마·눈두덩은 넓혀도 잡히지 않게 한다.
     """
     return polygon_mask(map_points(REGION_POINTS[brow]), MAP_SIZE, MAP_SIZE, band=MARGIN_CELLS)
 
@@ -131,19 +151,30 @@ def check_brow_area(
 ) -> BrowArea:
     """어두워진 양 지도에서 눈썹 하나의 그린 곳을 고르고, 가이드로 써도 되는지 본다.
 
-    범위 안 가운데 값이 FOUND_MEDIAN_MIN보다 작으면 거의 바뀌지 않은 것이라 browColorNotFound다.
-    아니면 DARKENING_MIN보다 많이 어두워진 칸을 brow_shape로 눈썹 모양으로 다듬어 돌려주고,
-    다듬은 뒤 남은 칸이 없어도 browColorNotFound다.
-    unknown(모름 칸)은 범위에서 빼고 보고, 범위의 절반 넘게 모름 칸이면 noUsableFrame이다
+    관문 범위(found_range) 안 가운데 값이 FOUND_MEDIAN_MIN보다 작으면 거의 바뀌지 않은 것이라
+    browColorNotFound다. 이미 그린 눈썹을 같은 색으로 덧그린 단계도 바뀐 양이 바르지 않은 시간의
+    흔들림보다 작아 여기서 못 찾음이 된다.
+    아니면 관문 범위에서 DARKENING_MIN보다 많이 어두워진 칸과, 그 밖 brow_range 띠에서 관문 범위의
+    OUTER_PERCENTILE 백분위 값의 OUTER_RATIO배보다도 많이 어두워진 칸을 골라
+    brow_shape로 눈썹 모양으로 다듬는다. 띠에서 기준을 높이는 것은,
+    원래 눈썹 밖까지 펜슬로 그린 칸은 안쪽만큼 진하지만 흐림으로 번진 칸과 조명이 덜 빠진 칸은
+    옅기 때문이다.
+    BRIGHTENED_MIN보다 많이 밝아진 칸(컨실러로 테두리를 정리한 칸)을 뺀 뒤 가장 큰 덩어리를
+    돌려준다. 남은 칸이 없어도 browColorNotFound다.
+    unknown(모름 칸)은 범위에서 빼고 보고, 관문 범위의 절반 넘게 모름 칸이면 noUsableFrame이다
     (mostly_unknown).
     """
-    if mostly_unknown(brow_range(brow), unknown):
+    gate = found_range(brow)
+    if mostly_unknown(gate, unknown):
         return BrowArea(mask=None, reason="noUsableFrame")
-    cells = known_cells(brow_range(brow), unknown)
-    median = float(np.median(darkening[cells]))
+    inner = known_cells(gate, unknown)
+    median = float(np.median(darkening[inner]))
     if median < FOUND_MEDIAN_MIN:
         return BrowArea(mask=None, darkening=median, reason="browColorNotFound")
-    shape = brow_shape((darkening > DARKENING_MIN) & cells)
+    outer_min = max(DARKENING_MIN, OUTER_RATIO * np.percentile(darkening[inner], OUTER_PERCENTILE))
+    outer = known_cells(brow_range(brow), unknown) & ~gate
+    drawn = ((darkening > DARKENING_MIN) & inner) | ((darkening > outer_min) & outer)
+    shape = largest_piece(brow_shape(drawn) & ~(darkening < -BRIGHTENED_MIN))
     if not shape.any():
         return BrowArea(mask=None, darkening=median, reason="browColorNotFound")
     return BrowArea(mask=shape, darkening=median)

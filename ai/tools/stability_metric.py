@@ -51,7 +51,13 @@ from tools.metric_settings import (
     write_result,
 )
 from tools.occlusion_tables import USAGE, output_dir, split_occlusion, table_finder
-from tools.output_area import Area, found_side, not_found_reason, output_area
+from tools.output_area import (
+    Area,
+    found_side,
+    not_found_reason,
+    output_area,
+    reused_previous,
+)
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = "stability.json"
@@ -229,24 +235,28 @@ def measure_part_step(
 
     find는 (시작 ms, 끝 ms, 쪽)으로 찾기 결과를 낸다. 조합마다 두 쪽을 한 번씩만 찾고,
     그 결과를 쪽별 숫자와 나가는 영역(output) 숫자에 함께 쓴다.
-    drawn은 앞 아이라인 단계들에서 안내한 칸이다.
-    (쪽 순서대로 줄, 서비스 창 결과까지 더한 안내한 칸)을 낸다.
+    drawn은 앞 아이라인 단계들에서 안내한 칸이나 앞 눈썹 단계들에서 보낸 마스크다(output_area).
+    서비스 창에서 앞 눈썹 단계 영역을 그대로 보내면 나가는 영역 줄에 reusedArea를 참으로 적는다.
+    (쪽 순서대로 줄, 서비스 창 결과까지 더한 넘길 칸)을 낸다.
     """
     side_results: dict[RegionName, list[ComboResult]] = {side: [] for side in part.sides}
     output_results: dict[RegionName, list[ComboResult]] = {side: [] for side in part.sides}
     guided = drawn
+    reused = False
     for before, after in shift_combos(part.before_shift):
         areas = {side: find(start_ms - before, end_ms + after, side) for side in part.sides}
         masks, sub_step, next_drawn = output_area(part.makeup, areas, drawn)
         if before == 0 and after == 0:
             guided = next_drawn
+            reused = reused_previous(part.makeup, areas, drawn)
         for side in part.sides:
             side_results[side].append((before, after, areas[side].mask, areas[side].reason))
             out = found_side(masks, side)
             reason = None if out is not None else (not_found_reason(sub_step) or "sideNotDrawn")
             output_results[side].append((before, after, out, reason))
     rows = [
-        summarize_combos(side_results[side]) | {"output": summarize_combos(output_results[side])}
+        summarize_combos(side_results[side])
+        | {"output": summarize_combos(output_results[side]) | {"reusedArea": reused}}
         for side in part.sides
     ]
     return rows, guided

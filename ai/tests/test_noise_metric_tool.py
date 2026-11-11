@@ -532,7 +532,7 @@ def test_parts_build_maps_over_the_service_ranges(parts):
     범위를 많이 가린 사진을 서비스와 똑같이 뺀다.
     """
     service = {
-        "brow": brow_area.brow_range,
+        "brow": brow_area.found_range,
         "eyeshadow": eyeshadow_area.eyeshadow_range,
         "eyeliner": eyeliner_area.eyeliner_range,
         "blush": blush_area.cheek_range,

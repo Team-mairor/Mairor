@@ -247,7 +247,7 @@ def measure_brow(
     brow: RegionName,
     unknown: np.ndarray | None = None,
 ) -> Measure | None:
-    cells = known_cells(brow_area.brow_range(brow), unknown)
+    cells = known_cells(brow_area.found_range(brow), unknown)
     if not cells.any():
         return None
     darkening = brow_area.brow_darkening(before, after, unknown)
@@ -351,7 +351,7 @@ PARTS = (
         brow_area.FOUND_MEDIAN_MIN,
         lambda side: [side],
         measure_brow,
-        brow_area.brow_range,
+        brow_area.found_range,
     ),
     Part(
         "eyeshadow",

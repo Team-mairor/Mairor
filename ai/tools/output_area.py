@@ -1,7 +1,8 @@
 """서비스가 FE로 내보내는 영역(나가는 영역)을 지표 도구가 잴 수 있게 지도 표로 되돌린다(개발용).
 
 지표 도구는 부위 찾기 함수를 쪽마다 불러 쪽별 결과를 얻는다. 서비스는 그 뒤에 좌우를 맞추고
-(symmetric_*), 아이라인은 앞 아이라인 단계에서 안내한 칸을 빼고, 찾은 칸의 테두리를 점으로 줄여
+(symmetric_*), 아이라인은 앞 아이라인 단계에서 안내한 칸을 빼고, 눈썹은 못 찾으면 앞 눈썹 단계
+영역을 그대로 쓰고, 찾은 칸의 테두리를 점으로 줄여
 얼굴 주소로 보낸다. output_sub_step은 쪽별 결과를 guide_area_builder의 같은 함수에 넘겨 서비스가
 보낼 하위 단계를 그대로 만들고, output_masks는 그 하위 단계의 테두리를 FE처럼 곡선으로 이어
 다시 지도에 칠해 나가는 영역을 낸다.
@@ -34,11 +35,12 @@ from app.tasks.area.common.face_map import (
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.guide_area_builder import (
+    brow_sub_step,
     eyeliner_sub_step,
     lip_sub_step,
     pair_sub_step,
 )
-from app.tasks.area.parts import blush_area, brow_area, eyeshadow_area
+from app.tasks.area.parts import blush_area, eyeshadow_area
 from app.tasks.area.parts.area_preparation import step_bounds, within_step
 from app.tasks.area.parts.blush_area import BlushArea, paired_blush
 from app.tasks.area.parts.brow_area import BrowArea, symmetric_brows
@@ -52,6 +54,7 @@ from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, symmetric_eyeshad
 from app.tasks.area.parts.lip_area import LipArea
 
 Area = BrowArea | EyeshadowArea | EyelinerArea | BlushArea | LipArea
+Drawn = np.ndarray | Mapping[RegionName, np.ndarray]
 SUB_STEP_ID = "output-1"
 MISSING_REASON = "noUsableFrame"
 CURVE_STEPS = 8
@@ -63,7 +66,6 @@ AREA_TYPES: dict[str, type] = {
     "lip": LipArea,
 }
 PAIR_RULES: dict[str, tuple[Callable, str, bool, float]] = {
-    "brow": (symmetric_brows, "browColorNotFound", False, brow_area.OUTLINE_SMOOTH_CELLS),
     "eyeshadow": (
         symmetric_eyeshadow,
         "eyeshadowColorNotFound",
@@ -80,17 +82,19 @@ def missing_area(makeup: str, reason: str = MISSING_REASON) -> Area:
 
 
 def output_sub_step(
-    makeup: str, areas: Mapping[RegionName, Area], drawn: np.ndarray | None = None
-) -> tuple[AreaSubStep, np.ndarray | None]:
-    """쪽별 찾기 결과로 서비스가 보낼 하위 단계와, 다음 아이라인 단계에 넘길 안내한 칸을 낸다.
+    makeup: str, areas: Mapping[RegionName, Area], drawn: Drawn | None = None
+) -> tuple[AreaSubStep, Drawn | None]:
+    """쪽별 찾기 결과로 서비스가 보낼 하위 단계와, 다음 같은 부위 단계에 넘길 칸을 낸다.
 
     areas는 서비스 빌더처럼 부위의 쪽 순서(BROWS·EYES·CHEEKS)대로 담는다.
     짝 부위는 pair_sub_step, 아이라인은 symmetric_eyeliner와 eyeliner_sub_step,
-    립은 lip_sub_step을 그대로 부른다.
+    눈썹은 brow_sub_step, 립은 lip_sub_step을 그대로 부른다.
     아이섀도 기본 가이드의 바른 자리별 키(단계 글로 고름)는 고르지 않는다.
     기본 가이드는 나가는 영역이 없어 재는 값은 같다.
-    drawn은 앞 아이라인 단계들에서 안내한 칸이고 아이라인에만 쓴다.
-    돌려주는 안내한 칸은 아이라인이 extracted면 이번 칸을 더한 것이고, 아니면 drawn 그대로다.
+    drawn은 아이라인이면 앞 아이라인 단계들에서 안내한 칸(양쪽 눈 합),
+    눈썹이면 앞 눈썹 단계들에서 보낸 눈썹마다의 마스크이고, 다른 부위에는 쓰지 않는다.
+    돌려주는 칸은 아이라인이 extracted면 이번 칸을 더한 것이고, 아니면 drawn 그대로다.
+    눈썹은 brow_sub_step이 넘기는 마스크다.
     """
     if makeup == "eyeliner":
         masks = symmetric_eyeliner(dict(areas), drawn)
@@ -101,6 +105,9 @@ def output_sub_step(
         return sub_step, guided if drawn is None else drawn | guided
     if makeup == "lip":
         return lip_sub_step(SUB_STEP_ID, areas["lipsOuter"]), drawn
+    if makeup == "brow":
+        sub_step, masks, _ = brow_sub_step(SUB_STEP_ID, areas, drawn)
+        return sub_step, masks
     symmetric, not_found, exclude_self, smooth_cells = PAIR_RULES[makeup]
     sub_step = pair_sub_step(
         SUB_STEP_ID, makeup, areas, symmetric(dict(areas)), not_found, exclude_self, smooth_cells
@@ -181,21 +188,27 @@ def output_masks(sub_step: AreaSubStep) -> dict[RegionName, np.ndarray]:
 
 
 def output_area(
-    makeup: str, areas: Mapping[RegionName, Area], drawn: np.ndarray | None = None
-) -> tuple[dict[RegionName, np.ndarray], AreaSubStep, np.ndarray | None]:
-    """쪽별 찾기 결과로 (쪽마다 나가는 영역, 하위 단계, 다음 아이라인 단계의 안내한 칸)을 낸다."""
+    makeup: str, areas: Mapping[RegionName, Area], drawn: Drawn | None = None
+) -> tuple[dict[RegionName, np.ndarray], AreaSubStep, Drawn | None]:
+    """쪽별 찾기 결과로 (쪽마다 나가는 영역, 하위 단계, 다음 같은 부위 단계에 넘길 칸)을 낸다."""
     sub_step, guided = output_sub_step(makeup, areas, drawn)
     return output_masks(sub_step), sub_step, guided
 
 
+def reused_previous(makeup: str, areas: Mapping[RegionName, Area], drawn: Drawn | None) -> bool:
+    """서비스가 이 단계를 못 찾아 앞 눈썹 단계 영역을 그대로 보내는지. 눈썹만 그렇다."""
+    return makeup == "brow" and drawn is not None and brow_sub_step(SUB_STEP_ID, areas, drawn)[2]
+
+
 def outlined_masks(
-    makeup: str, areas: Mapping[RegionName, Area], drawn: np.ndarray | None = None
+    makeup: str, areas: Mapping[RegionName, Area], drawn: Drawn | None = None
 ) -> dict[RegionName, np.ndarray]:
     """서비스가 테두리를 따기 바로 전의 칸 표를 쪽마다 낸다.
 
     테두리로 바꾸며 넓이가 얼마나 변했는지 견줄 때 쓴다.
     짝 부위는 좌우를 맞춘 마스크(symmetric_*), 아이라인은 앞 단계 안내 칸을 뺀 마스크를
     빌더처럼 OUTLINE_GROW_CELLS칸 굵힌 것, 립은 찾은 마스크다.
+    눈썹은 못 찾았으면 drawn(앞 눈썹 단계들에서 보낸 마스크)이다.
     서비스가 영역을 내지 않는 쪽은 빠진다.
     """
     if makeup == "eyeliner":
@@ -211,6 +224,11 @@ def outlined_masks(
     if makeup == "lip":
         mask = areas["lipsOuter"].mask
         return {} if mask is None else {"lipsOuter": mask}
+    if makeup == "brow":
+        masks = symmetric_brows(dict(areas))
+        if masks is None:
+            return {} if drawn is None else dict(drawn)
+        return dict(masks)
     symmetric = PAIR_RULES[makeup][0]
     masks = symmetric(dict(areas))
     return {} if masks is None else dict(masks)

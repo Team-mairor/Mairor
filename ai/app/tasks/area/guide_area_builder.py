@@ -1,7 +1,8 @@
 """단계마다 부위 분석을 불러 영상 하나의 가이드 영역(GuideArea)을 만든다.
 
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
-아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 해서, 단계 순서대로 따로 부른다.
+아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 하고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을
+써야 해서, 두 부위(ORDERED_MAKEUPS)는 단계 순서대로 따로 부른다.
 가림 찾기 함수를 받으면 모든 부위 분석에 그대로 넘겨 사진마다 가린 칸을 빼고 보게 한다.
 단계마다 area_step 기록(이름 뒤에 단계 ID)을 남기고, 부위 분석에서 빠진 사진 번호를 이유별로 적는다.
 """
@@ -9,6 +10,7 @@
 import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -74,6 +76,8 @@ EYE_ZONE_TEMPLATES: dict[EyeZone, TemplateId] = {
     "both": "eyeshadow",
 }
 
+ORDERED_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow")
+
 AreaFinder = Callable[
     [LandmarksResult, int, int, PhotoLoader, str, OcclusionFinder | None], AreaSubStep
 ]
@@ -94,6 +98,8 @@ def build_guide_area(
     result는 check_frames를 거친 얼굴 점 결과, load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
     other는 notApplicable, AREA_FINDERS에 분석이 있으면 그 결과다.
     아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
+    눈썹은 _brow_step이 단계 순서대로 앞 눈썹 단계들에서 보낸 눈썹 영역을 넘겨받는다.
+    못 찾아 앞 단계 영역을 쓰면 area_step 기록에 reusedAreaFrom(그 영역을 보낸 단계 ID)을 남긴다.
     나머지(베이스·마스카라처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로
     기본 가이드(template)를 쓴다.
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
@@ -111,8 +117,10 @@ def build_guide_area(
     if bounds is None:
         bounds = step_bounds(ordered)
     drawn: np.ndarray | None = None
+    drawn_brow: DrawnBrow | None = None
     area_steps = []
     for step in ordered:
+        reused_from = None
         with (
             traced(
                 f"area_step {step.step_id}", {"makeup": step.makeup}, step_id=step.step_id
@@ -122,16 +130,20 @@ def build_guide_area(
         ):
             if step.makeup == "eyeliner":
                 sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
+            elif step.makeup == "brow":
+                sub_step, drawn_brow, reused_from = _brow_step(
+                    step, result, load_photo, drawn_brow, occlusion
+                )
             else:
                 sub_step = _sub_step(step, result, load_photo, occlusion)
-            set_output(
-                span,
-                {
-                    "status": sub_step.status,
-                    "reasons": sub_step.reasons,
-                    "droppedPhotos": {reason: sorted(ids) for reason, ids in dropped.items()},
-                },
-            )
+            record = {
+                "status": sub_step.status,
+                "reasons": sub_step.reasons,
+                "droppedPhotos": {reason: sorted(ids) for reason, ids in dropped.items()},
+            }
+            if reused_from is not None:
+                record["reusedAreaFrom"] = reused_from
+            set_output(span, record)
         area_steps.append(
             AreaStep(
                 step_id=step.step_id,
@@ -334,14 +346,15 @@ def eyeliner_sub_step(
 
 
 def _fixed_sub_step(makeup: Makeup, sub_step_id: str) -> AreaSubStep | None:
-    """분석과 상관없이 정해지는 하위 단계. 분석하는 부위(AREA_FINDERS와 아이라인)면 None이다.
+    """분석과 상관없이 정해지는 하위 단계.
 
+    분석하는 부위(AREA_FINDERS와 단계 순서대로 따로 부르는 ORDERED_MAKEUPS)면 None이다.
     other는 notApplicable이다.
     베이스·마스카라처럼 분석하지 않는 부위는 notAnalyzed 이유로 기본 가이드(template)다.
     """
     if makeup in NO_AREA_MAKEUPS:
         return _not_applicable(sub_step_id)
-    if makeup == "eyeliner" or makeup in AREA_FINDERS:
+    if makeup in ORDERED_MAKEUPS or makeup in AREA_FINDERS:
         return None
     return template_sub_step(sub_step_id, makeup, [NOT_ANALYZED])
 
@@ -475,26 +488,96 @@ def _blush_sub_step(
     )
 
 
-def _brow_sub_step(
+@dataclass(frozen=True)
+class DrawnBrow:
+    """앞 눈썹 단계들에서 영역으로 보낸 눈썹. masks는 눈썹마다 지도 크기 표이고,
+    step_id는 마지막으로 영역을 보낸 단계다."""
+
+    step_id: str
+    masks: Mapping[RegionName, np.ndarray]
+
+
+def _brow_step(
+    step: Step | GuideInputStep,
     result: LandmarksResult,
-    step_start_ms: int,
-    step_end_ms: int,
     load_photo: PhotoLoader,
-    sub_step_id: str,
+    drawn: DrawnBrow | None,
     occlusion: OcclusionFinder | None,
-) -> AreaSubStep:
-    """눈썹을 눈썹마다 찾아 symmetric_brows로 좌우 같은 모양을 만들고, 눈썹마다 영역을 적는다."""
-    areas = {
-        brow: find_brow_area(
-            result, step_start_ms, step_end_ms, load_photo, brow, occlusion=occlusion
+) -> tuple[AreaSubStep, DrawnBrow | None, str | None]:
+    """눈썹 단계의 (하위 단계, 다음 눈썹 단계에 넘길 눈썹, 앞 단계 영역을 썼으면 그 단계 ID).
+
+    눈썹마다 찾아 symmetric_brows로 좌우 같은 모양을 만들고, 눈썹마다 영역을 적는다.
+    못 찾았고 drawn(앞 눈썹 단계들에서 보낸 눈썹)이 있으면 그 영역을 extracted로 그대로 쓴다.
+    이미 그린 눈썹을 같은 색으로 덧그리는 단계는 색 변화가 바르지 않은 시간의 흔들림보다 작아
+    찾을 수 없어서, 덧그리는 눈썹 자리인 앞 단계 영역을 안내한다.
+    형식상 extracted의 reasons는 비워야 해서, 못 찾은 이유는 로그에 남기고
+    빌더가 area_step 기록에 그 단계 ID를 남긴다. drawn도 없으면 기본 눈썹 가이드(template)다.
+    이 단계가 영역을 보내면 그 마스크를 drawn에 더해 다음 단계로 넘긴다.
+    분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
+    """
+    sub_step_id = f"{step.step_id}-1"
+    try:
+        areas = {
+            brow: find_brow_area(
+                result,
+                round(step.start_seconds * 1000),
+                round(step.end_seconds * 1000),
+                load_photo,
+                brow,
+                occlusion=occlusion,
+            )
+            for brow in BROWS
+        }
+        sub_step, masks, reused = brow_sub_step(
+            sub_step_id, areas, None if drawn is None else drawn.masks
         )
-        for brow in BROWS
-    }
+    except Exception:
+        logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
+        return _failed(sub_step_id), drawn, None
+    if reused and drawn is not None:
+        reasons = ",".join(dict.fromkeys(area.reason for area in areas.values() if area.reason))
+        logger.info("%s 눈썹을 못 찾아(%s) %s 단계 영역을 씀", step.step_id, reasons, drawn.step_id)
+        return sub_step, drawn, drawn.step_id
+    if masks is None:
+        return sub_step, None, None
+    return sub_step, DrawnBrow(step.step_id, masks), None
+
+
+def brow_sub_step(
+    sub_step_id: str,
+    areas: Mapping[RegionName, BrowArea],
+    drawn: Mapping[RegionName, np.ndarray] | None = None,
+) -> tuple[AreaSubStep, dict[RegionName, np.ndarray] | None, bool]:
+    """눈썹마다 찾은 결과로 (하위 단계, 다음 눈썹 단계에 넘길 마스크, 앞 단계 영역을 썼는지)를 낸다.
+
+    symmetric_brows로 좌우를 맞춰 눈썹마다 영역 하나씩 적는다(pair_sub_step).
+    영역을 보내면 그 마스크를 drawn(앞 눈썹 단계들에서 보낸 마스크)에 더해 넘긴다.
+    못 찾았고 drawn이 있으면 drawn을 extracted로 그대로 적고 drawn을 넘긴다.
+    둘 다 아니면 기본 눈썹 가이드(template)이고 넘길 마스크는 None이다.
+    지표 도구(tools/output_area.py)도 이 함수로 서비스가 보낼 하위 단계를 만든다.
+    """
+    masks = symmetric_brows(areas)
+    sub_step = _brow_pair(sub_step_id, areas, masks)
+    if sub_step.status == "extracted" and masks is not None:
+        if drawn is None:
+            return sub_step, dict(masks), False
+        return sub_step, {brow: drawn[brow] | masks[brow] for brow in BROWS}, False
+    if drawn is None:
+        return sub_step, None, False
+    previous = {brow: BrowArea(mask=drawn[brow]) for brow in BROWS}
+    return _brow_pair(sub_step_id, previous, drawn), dict(drawn), True
+
+
+def _brow_pair(
+    sub_step_id: str,
+    areas: Mapping[RegionName, BrowArea],
+    masks: Mapping[RegionName, np.ndarray] | None,
+) -> AreaSubStep:
     return pair_sub_step(
         sub_step_id,
         "brow",
         areas,
-        symmetric_brows(areas),
+        masks,
         "browColorNotFound",
         False,
         brow_area.OUTLINE_SMOOTH_CELLS,
@@ -583,6 +666,5 @@ def pair_sub_step(
 AREA_FINDERS: dict[Makeup, AreaFinder] = {
     "lip": _lip_sub_step,
     "blush": _blush_sub_step,
-    "brow": _brow_sub_step,
     "eyeshadow": _eyeshadow_sub_step,
 }

@@ -187,6 +187,7 @@ def test_output_sub_step_is_what_build_guide_area_sends(fixed_finders):
 
     부위 찾기를 고정하고 build_guide_area 결과와 도구 결과를 견준다. 섀도는 한쪽만 찾은 경우,
     아이라인은 두 단계 연속이라 둘째 단계가 앞 단계 안내 칸을 빼는 경우까지 넣었다.
+    도구처럼 앞 단계에서 넘길 칸은 부위마다 따로 둔다.
     빌더가 쪽별 결과를 하위 단계로 바꾸는 방식을 바꾸면 이 테스트가 깨져 도구도 같이 고치게 된다.
     """
     makeups = ["brow", "eyeshadow", "blush", "lip", "eyeliner", "eyeliner"]
@@ -197,12 +198,45 @@ def test_output_sub_step_is_what_build_guide_area_sends(fixed_finders):
 
     built = build_guide_area("test_01", steps, RESULT, never)
 
-    drawn = None
+    drawn = {}
     for step, area_step in zip(steps, built.steps, strict=True):
         areas = {side: FIXED_AREAS[step.makeup](side) for side in SIDES[step.makeup]}
-        sub_step, drawn = output_area.output_sub_step(step.makeup, areas, drawn)
+        sub_step, drawn[step.makeup] = output_area.output_sub_step(
+            step.makeup, areas, drawn.get(step.makeup)
+        )
         expected = area_step.sub_steps[0]
         assert sub_step.model_dump(exclude={"sub_step_id"}) == expected.model_dump(
             exclude={"sub_step_id"}
         )
     assert built.steps[-1].sub_steps[0].status == "template"
+
+
+def test_brow_not_found_after_an_earlier_brow_step_sends_that_area_like_the_service(monkeypatch):
+    """두 번째 눈썹 단계를 못 찾으면 도구도 서비스처럼 첫 단계 영역을 내보내고(reused_previous),
+    outlined_masks도 그 마스크를 낸다."""
+
+    def first_only(result, step_start_ms, step_end_ms, load_photo, brow, occlusion=None):
+        if step_start_ms == 1000:
+            return BrowArea(mask=brow_range(brow), darkening=3.0)
+        return BrowArea(mask=None, darkening=0.5, reason="browColorNotFound")
+
+    monkeypatch.setattr(guide_area_builder, "find_brow_area", first_only)
+    steps = [
+        Step(step_id=f"s{i}", order=i, start_seconds=i * 2 - 1, end_seconds=i * 2, makeup="brow")
+        for i in (1, 2)
+    ]
+    built = build_guide_area("test_01", steps, RESULT, never)
+
+    drawn = None
+    reused = []
+    for step, area_step in zip(steps, built.steps, strict=True):
+        start = round(step.start_seconds * 1000)
+        areas = {brow: first_only(None, start, 0, None, brow) for brow in ("leftBrow", "rightBrow")}
+        reused.append(output_area.reused_previous("brow", areas, drawn))
+        outlined = output_area.outlined_masks("brow", areas, drawn)
+        sub_step, drawn = output_area.output_sub_step("brow", areas, drawn)
+        assert sub_step.model_dump(exclude={"sub_step_id"}) == area_step.sub_steps[0].model_dump(
+            exclude={"sub_step_id"}
+        )
+    assert reused == [False, True]
+    assert np.array_equal(outlined["leftBrow"], brow_range("leftBrow"))

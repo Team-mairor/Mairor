@@ -18,12 +18,13 @@ from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.guide_area_builder import (
     ANALYSIS_ERROR,
     NOT_ANALYZED,
+    brow_sub_step,
     build_guide_area,
     failed_guide_area,
 )
 from app.tasks.area.parts.area_preparation import usable_rows
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
-from app.tasks.area.parts.brow_area import BrowArea, brow_range
+from app.tasks.area.parts.brow_area import BROWS, BrowArea, brow_range, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import EyelinerArea
 from app.tasks.area.parts.eyeshadow_area import EyeshadowArea, eyeshadow_range
 from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_maps
@@ -275,6 +276,86 @@ def test_brow_step_gets_one_area_on_each_brow_without_exclude(monkeypatch):
         ("leftBrow", []),
         ("rightBrow", []),
     ]
+
+
+def brow_steps(*starts: int) -> list[Step]:
+    return [
+        Step(step_id=f"s{i}", order=i, start_seconds=start, end_seconds=start + 1, makeup="brow")
+        for i, start in enumerate(starts, 1)
+    ]
+
+
+def found_from(*found_starts: int, broken: int | None = None):
+    """found_starts초에 시작하는 단계만 눈썹 점 테두리 범위를 찾고, 나머지는 못 찾는 찾기 함수.
+
+    broken초에 시작하는 단계는 오류를 낸다.
+    """
+
+    def finder(result, step_start_ms, step_end_ms, load_photo, brow, occlusion=None):
+        if step_start_ms == broken:
+            raise OSError("사진 파일이 깨짐")
+        if step_start_ms in found_starts:
+            return BrowArea(mask=brow_range(brow), darkening=3.0)
+        return BrowArea(mask=None, darkening=0.5, reason="browColorNotFound")
+
+    return finder
+
+
+def test_brow_not_found_after_an_earlier_brow_step_reuses_that_area(monkeypatch, caplog):
+    """덧그린 단계처럼 못 찾은 눈썹 단계는 앞 눈썹 단계 영역을 extracted로 그대로 보낸다.
+
+    형식상 extracted의 reasons는 비우므로, 못 찾은 이유와 쓴 단계는 로그와 area_step 기록에 남긴다.
+    """
+    records = []
+    monkeypatch.setattr(guide_area_builder, "find_brow_area", found_from(1000))
+    monkeypatch.setattr(guide_area_builder, "set_output", lambda span, out: records.append(out))
+    with caplog.at_level(logging.INFO):
+        area = build_guide_area("test_01", brow_steps(1, 3), RESULT, never)
+    first, second = (step.sub_steps[0] for step in area.steps)
+    assert (first.status, second.status, second.reasons) == ("extracted", "extracted", [])
+    assert second.guide_sets == first.guide_sets
+    assert [record.get("reusedAreaFrom") for record in records] == [None, "s1"]
+    assert "s2" in caplog.text and "browColorNotFound" in caplog.text
+    jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
+
+
+def test_brow_not_found_without_an_earlier_brow_area_uses_default_guide(monkeypatch):
+    """앞 눈썹 단계가 없거나 앞 단계도 못 찾았으면 지금처럼 기본 눈썹 가이드다."""
+    monkeypatch.setattr(guide_area_builder, "find_brow_area", found_from(5000))
+    area = build_guide_area("test_01", brow_steps(1, 3, 5, 7), RESULT, never)
+    statuses = [step.sub_steps[0].status for step in area.steps]
+    assert statuses == ["template", "template", "extracted", "extracted"]
+    assert area.steps[3].sub_steps[0].guide_sets == area.steps[2].sub_steps[0].guide_sets
+
+
+def test_error_in_one_brow_step_keeps_the_earlier_brow_area_for_the_next(monkeypatch):
+    monkeypatch.setattr(guide_area_builder, "find_brow_area", found_from(1000, broken=3000))
+    area = build_guide_area("test_01", brow_steps(1, 3, 5), RESULT, never)
+    first, broken, last = (step.sub_steps[0] for step in area.steps)
+    assert (broken.status, broken.reasons) == ("failed", [ANALYSIS_ERROR])
+    assert last.status == "extracted"
+    assert last.guide_sets == first.guide_sets
+
+
+def test_brow_sub_step_adds_found_brows_to_what_earlier_steps_sent():
+    """찾은 눈썹 단계는 자기 마스크를 앞 단계들에서 보낸 마스크에 더해 다음 단계로 넘긴다."""
+    upper, lower = {}, {}
+    for brow in BROWS:
+        rows = np.nonzero(brow_range(brow).any(axis=1))[0]
+        middle = (rows[0] + rows[-1]) // 2
+        upper[brow] = brow_range(brow).copy()
+        upper[brow][middle:] = False
+        lower[brow] = brow_range(brow) & ~upper[brow]
+    areas = {brow: BrowArea(mask=lower[brow], darkening=3.0) for brow in BROWS}
+    sub_step, masks, reused = brow_sub_step("s2-1", areas, upper)
+    assert (sub_step.status, reused) == ("extracted", False)
+    mirrored = symmetric_brows(areas)
+    for brow in BROWS:
+        assert np.array_equal(masks[brow], upper[brow] | mirrored[brow])
+    missing = {brow: BrowArea(mask=None, reason="browColorNotFound") for brow in BROWS}
+    sub_step, masks, reused = brow_sub_step("s3-1", missing, upper)
+    assert (sub_step.status, reused) == ("extracted", True)
+    assert all(np.array_equal(masks[brow], upper[brow]) for brow in BROWS)
 
 
 def test_eyeshadow_step_leaves_out_each_eye_from_its_own_area(monkeypatch):

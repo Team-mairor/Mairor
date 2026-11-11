@@ -2,6 +2,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 from PIL import Image
 
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
@@ -9,7 +10,7 @@ from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import largest_piece, polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.parts import brow_area
-from app.tasks.area.parts.area_preparation import RememberedPhotos, rgb_to_lab
+from app.tasks.area.parts.area_preparation import RememberedPhotos, remove_lighting, rgb_to_lab
 from app.tasks.area.parts.brow_area import (
     BROWS,
     FOUND_MEDIAN_MIN,
@@ -19,16 +20,32 @@ from app.tasks.area.parts.brow_area import (
     brow_shape,
     check_brow_area,
     find_brow_area,
+    found_range,
     symmetric_brows,
 )
 from tests.test_area_preparation import DARK_SKIN, make_row, sized
 from tests.test_lip_area import iou
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
-MIN_IOU_ON_SAMPLE = 0.74
-MIN_IOU_DROP_WITH_WIDE_RANGE = 0.05
-WIDE_RANGE_CELLS = 15
+RULER_BLUR_SIGMA = 4
+RULER_LIGHT_GAP_CELLS = 30
+STRONG_PERCENTILE = 90
+STRONG_LEVEL = 0.5
+RING_GAP_CELLS = 8
+RING_WIDTH_CELLS = 15
+FAR_FROM_POINTS_CELLS = 10
+MIN_STRONG_SHARE_ON_SAMPLE = 0.6
+MAX_OUTSIDE_RATIO_ON_SAMPLE = 0.2
+MAX_FAR_SHARE_ON_SAMPLE = 0.01
+MIN_SAME_AREA_AFTER_LIGHTING_ON_SAMPLE = 0.85
+LIGHTS = ((1.02, 1.0, 1.0), (1.1, 1.1, 1.1), (0.9, 0.9, 0.9))
+MIN_ARCH_CAUGHT = 0.75
+MIN_STRAIGHT_CAUGHT = 0.7
+MIN_TAIL_CAUGHT = 0.35
+MAX_FAINT_RING_SHARE = 0.02
+CONCEALER_BRIGHTENING = 1
 SKIN = (232, 192, 172)
+FAINT = (220, 180, 160)
 BROW = (150, 115, 100)
 START_MS, END_MS = 10000, 20000
 
@@ -129,6 +146,104 @@ def test_brow_hidden_in_every_photo_gives_no_usable_frame():
     assert found.reason == "noUsableFrame"
 
 
+def brow_edges(brow: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, bool]:
+    """눈썹 점 테두리의 세로 줄마다 (줄 번호, 위 끝, 아래 끝)과 앞머리가 앞쪽 줄인지.
+
+    앞머리는 얼굴 가운데(지도 가로 가운데)에 가까운 끝이다.
+    """
+    rows, cols = np.nonzero(brow_points(brow))
+    xs = np.arange(cols.min(), cols.max() + 1)
+    tops = np.array([rows[cols == x].min() for x in xs], dtype=float)
+    bottoms = np.array([rows[cols == x].max() for x in xs], dtype=float)
+    return xs, tops, bottoms, abs(xs[0] - MAP_SIZE / 2) < abs(xs[-1] - MAP_SIZE / 2)
+
+
+def band(xs: np.ndarray, tops: np.ndarray, bottoms: np.ndarray) -> np.ndarray:
+    outline = [*zip(xs, tops, strict=True), *zip(xs[::-1], bottoms[::-1], strict=True)]
+    return polygon_mask(outline, MAP_SIZE, MAP_SIZE)
+
+
+def arched(brow: str, lift: float) -> np.ndarray:
+    """눈썹 산(앞머리에서 60% 자리)을 lift칸 올려 그린 갈매기 눈썹. 아랫선은 그대로다."""
+    xs, tops, bottoms, inner_first = brow_edges(brow)
+    t = np.linspace(0, 1, xs.size) if inner_first else np.linspace(1, 0, xs.size)
+    return band(xs, tops - lift * np.clip(1 - np.abs(t - 0.6) / 0.6, 0, 1), bottoms)
+
+
+def straight(brow: str) -> np.ndarray:
+    """앞머리 높이에서 꼬리 끝까지 윗선·아랫선을 곧게 그린 일자 눈썹."""
+    xs, tops, bottoms, inner_first = brow_edges(brow)
+    head = slice(0, 8) if inner_first else slice(-8, None)
+    return band(xs, np.minimum(tops, tops[head].mean()), np.maximum(bottoms, bottoms[head].mean()))
+
+
+def long_tail(brow: str, length: int) -> np.ndarray:
+    """꼬리 끝을 같은 기울기로 length칸 늘려 그린 눈썹. 끝으로 갈수록 30%까지 가늘어진다."""
+    xs, tops, bottoms, inner_first = brow_edges(brow)
+    if not inner_first:
+        xs, tops, bottoms = MAP_SIZE - 1 - xs[::-1], tops[::-1], bottoms[::-1]
+    slope = ((tops[-1] - tops[-6]) + (bottoms[-1] - bottoms[-6])) / 10
+    k = np.arange(1, length + 1)
+    middle = (tops[-1] + bottoms[-1]) / 2 + slope * k
+    half = (bottoms[-12] - tops[-12]) / 2 * (1 - 0.7 * k / length)
+    shape = band(
+        np.concatenate([xs, xs[-1] + k]),
+        np.concatenate([tops, middle - half]),
+        np.concatenate([bottoms, middle + half]),
+    )
+    return shape if inner_first else shape[:, ::-1]
+
+
+def caught_outside_points(brow: str, shape: np.ndarray) -> float:
+    """맨피부에 shape를 그렸을 때 찾은 영역이 그 모양의 점 테두리 밖 칸을 덮은 비율."""
+    found = check_brow_area(brow_darkening(skin_map(), paint(shape)), brow)
+    outside = shape & ~brow_points(brow)
+    return 0.0 if found.mask is None else float((found.mask & outside).sum() / outside.sum())
+
+
+def paint(shape: np.ndarray) -> np.ndarray:
+    out = skin_map()
+    out[shape] = BROW
+    return out
+
+
+@pytest.mark.parametrize(
+    ("name", "make", "least"),
+    [
+        ("갈매기 10칸", lambda brow: arched(brow, 10), MIN_ARCH_CAUGHT),
+        ("일자", straight, MIN_STRAIGHT_CAUGHT),
+        ("긴 꼬리 30칸", lambda brow: long_tail(brow, 30), MIN_TAIL_CAUGHT),
+    ],
+)
+def test_brow_drawn_beyond_its_points_is_caught(name, make, least):
+    """원래 눈썹 점 테두리 밖으로 그린 모양(갈매기 산·일자 아랫선·긴 꼬리)의 바깥 칸을
+    least 이상 잡는다. 점 테두리 + 3칸만 보던 옛 범위는 각각 0.50·0.24·0.13만 잡았다."""
+    for brow in BROWS:
+        assert caught_outside_points(brow, make(brow)) >= least, name
+
+
+def test_faint_change_around_the_brow_is_left_out_of_the_wider_band():
+    """눈썹 안은 진하게, 점 테두리 밖 둘레는 옅게(DARKENING_MIN은 넘게) 어두워져도
+    둘레가 없을 때보다 영역에 든 둘레 칸이 둘레의 MAX_FAINT_RING_SHARE 넘게 늘지 않는다.
+
+    흐림으로 번진 칸과 조명이 덜 빠진 칸이 이렇다. 넓힌 띠에서는 안쪽만큼 진한 칸만 넣는다.
+    둘레가 없어도 곡선으로 다듬은 끝이 둘레에 몇 칸 들어가므로 그만큼은 빼고 본다.
+    """
+    brow = "leftBrow"
+    ring = brow_range(brow) & ~found_range(brow)
+    caught = []
+    for faint in (False, True):
+        after = skin_map()
+        if faint:
+            after[ring] = FAINT
+        after[brow_points(brow)] = BROW
+        found = check_brow_area(brow_darkening(skin_map(), after), brow)
+        assert found.mask is not None
+        caught.append(int((found.mask & ring).sum()))
+    assert ring.any()
+    assert caught[1] - caught[0] <= MAX_FAINT_RING_SHARE * ring.sum()
+
+
 def test_brow_shape_makes_one_smooth_piece():
     brow = brow_points("leftBrow")
     rows, cols = np.nonzero(brow)
@@ -182,19 +297,93 @@ def load_map(part: str, name: str) -> np.ndarray:
     return np.asarray(Image.open(GOLDEN / part / f"{name}.png").convert("RGB"))
 
 
-def load_answer() -> np.ndarray:
-    """눈썹 단계(s8)에서 사람이 얼굴 지도에 칠한 눈썹 그린 곳."""
-    return np.asarray(Image.open(GOLDEN / "brow" / "answer_s8.png").convert("L")) > 127
+def region(name: str) -> np.ndarray:
+    return polygon_mask(map_points(REGION_POINTS[name]), MAP_SIZE, MAP_SIZE)
 
 
-def brows_on_sample() -> np.ndarray:
-    darkening = brow_darkening(load_map("brow", "before_s8"), load_map("brow", "after_s8"))
-    masks = symmetric_brows({brow: check_brow_area(darkening, brow) for brow in BROWS})
+def with_light(face_map: np.ndarray, gains: tuple[float, float, float]) -> np.ndarray:
+    """지도 전체의 R·G·B에 gains를 곱한 지도. 조명이나 카메라 색이 바뀐 것과 같다."""
+    return np.clip(face_map * np.array(gains), 0, 255).astype(np.uint8)
+
+
+def brows_on_sample(
+    after: np.ndarray | None = None,
+) -> tuple[dict[str, BrowArea], dict[str, np.ndarray] | None]:
+    """시험 사진 쌍에서 눈썹마다 찾은 결과와, symmetric_brows로 만든 양쪽 가이드 영역."""
+    after = load_map("brow", "after_s8") if after is None else after
+    darkening = brow_darkening(load_map("brow", "before_s8"), after)
+    areas = {brow: check_brow_area(darkening, brow) for brow in BROWS}
+    return areas, symmetric_brows(areas)
+
+
+def both_brows(masks: dict[str, np.ndarray]) -> np.ndarray:
     return masks["leftBrow"] | masks["rightBrow"]
 
 
-def test_matches_painted_answer_on_sample_video():
-    assert iou(brows_on_sample(), load_answer()) >= MIN_IOU_ON_SAMPLE
+def darkening_on_sample() -> np.ndarray:
+    """시험 사진 쌍의 어두워진 양 지도. 잣대라 눈썹 코드와 따로 정한 값으로 만든다.
+
+    밝기(L)가 낮아진 양에서 두 눈썹 둘레 RULER_LIGHT_GAP_CELLS칸·눈 구멍·얼굴 바깥을 뺀 피부의
+    변화로 조명을 빼고 RULER_BLUR_SIGMA로 흐린다. 사람이 칠한 정답 대신 이 지도로
+    찾은 곳이 그린 색을 따라가는지 잰다.
+    """
+    before, after = load_map("brow", "before_s8"), load_map("brow", "after_s8")
+    change = rgb_to_lab(before)[..., 0] - rgb_to_lab(after)[..., 0]
+    brows = [
+        polygon_mask(map_points(REGION_POINTS[b]), MAP_SIZE, MAP_SIZE, band=RULER_LIGHT_GAP_CELLS)
+        for b in BROWS
+    ]
+    exclude = np.any([*brows, region("leftEye"), region("rightEye")], axis=0) | ~region("faceOval")
+    corrected = remove_lighting(change, exclude)
+    return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), RULER_BLUR_SIGMA)
+
+
+def strong_share(change: np.ndarray, mask: np.ndarray) -> float:
+    """영역 칸 중 영역 안 STRONG_PERCENTILE 백분위 값의 STRONG_LEVEL배 이상 바뀐 칸의 비율.
+
+    판정 도구(tools/timing_metric.py)의 진한 칸 비율과 같은 기준이다.
+    """
+    values = change[mask]
+    peak = float(np.percentile(values, STRONG_PERCENTILE))
+    return float((values >= peak * STRONG_LEVEL).mean())
+
+
+def outside_band(mask: np.ndarray) -> np.ndarray:
+    """영역 테두리에서 RING_GAP_CELLS칸 띄우고 RING_WIDTH_CELLS칸 두께로 둘러싼 띠.
+
+    눈 구멍·입 안·얼굴 윤곽 바깥은 뺀다. 판정 도구의 바깥 비가 쓰는 띠와 같다.
+    """
+    holes = np.any([region("leftEye"), region("rightEye"), region("lipsInner")], axis=0)
+    distance = cv2.distanceTransform((~mask).astype(np.uint8), cv2.DIST_L2, 5)
+    band = (distance > RING_GAP_CELLS) & (distance <= RING_GAP_CELLS + RING_WIDTH_CELLS)
+    return band & region("faceOval") & ~holes
+
+
+def test_found_brows_are_mostly_strong_change_on_sample_video():
+    """두 눈썹 모두 찾고, 찾은 칸의 MIN_STRONG_SHARE_ON_SAMPLE 이상이 진하게 어두워진 칸이다.
+
+    낮으면 거의 안 바뀐 옅은 칸까지 넓게 잡은 것이다. 기준은 판정 도구의 합격선이다.
+    """
+    change = darkening_on_sample()
+    areas, _ = brows_on_sample()
+    for brow in BROWS:
+        mask = areas[brow].mask
+        assert mask is not None
+        assert strong_share(change, mask) >= MIN_STRONG_SHARE_ON_SAMPLE
+
+
+def test_found_brows_leave_little_change_outside_on_sample_video():
+    """찾은 영역 바깥 띠의 어두워진 양이 안쪽의 MAX_OUTSIDE_RATIO_ON_SAMPLE배 이하다.
+
+    높으면 그린 곳을 덜 잡은 것이다. 기준은 판정 도구의 합격선이다.
+    """
+    change = darkening_on_sample()
+    areas, _ = brows_on_sample()
+    for brow in BROWS:
+        mask = areas[brow].mask
+        assert mask is not None
+        inside, outside = change[mask].mean(), change[outside_band(mask)].mean()
+        assert outside <= MAX_OUTSIDE_RATIO_ON_SAMPLE * inside
 
 
 def test_unchanged_brows_are_not_found_on_sample_video():
@@ -211,12 +400,46 @@ def test_lighting_correction_keeps_unchanged_brow_from_being_found_on_sample_vid
     change = rgb_to_lab(before)[..., 0] - rgb_to_lab(after)[..., 0]
     plain = cv2.GaussianBlur(change.astype(np.float32), (0, 0), brow_area.BLUR_SIGMA)
     corrected = brow_darkening(before, after)
-    cells = brow_range("leftBrow")
+    cells = found_range("leftBrow")
     assert np.median(plain[cells]) >= FOUND_MEDIAN_MIN > np.median(corrected[cells])
 
 
-def test_wide_range_catches_skin_around_brows_on_sample_video(monkeypatch):
-    chosen = iou(brows_on_sample(), load_answer())
-    monkeypatch.setattr(brow_area, "MARGIN_CELLS", WIDE_RANGE_CELLS)
-    wide = iou(brows_on_sample(), load_answer())
-    assert chosen - wide >= MIN_IOU_DROP_WITH_WIDE_RANGE
+def test_guide_stays_near_brow_points_on_sample_video():
+    """가이드 영역 중 눈썹 점 테두리에서 FAR_FROM_POINTS_CELLS칸 넘게 떨어진 칸이
+    MAX_FAR_SHARE_ON_SAMPLE 이하이고, 눈 구멍과 겹치는 칸은 없다.
+
+    이 사진 쌍에서 그린 색은 점 테두리에서 8칸 안에 있어, 그보다 멀리 잡힌 칸은
+    조명·머리카락으로 어두워진 피부다. 살펴볼 범위를 너무 넓히면 이것을 잡는다.
+    """
+    _, masks = brows_on_sample()
+    guide = both_brows(masks)
+    points = region("leftBrow") | region("rightBrow")
+    distance = cv2.distanceTransform((~points).astype(np.uint8), cv2.DIST_L2, 5)
+    far = guide & (distance > FAR_FROM_POINTS_CELLS)
+    assert far.sum() <= MAX_FAR_SHARE_ON_SAMPLE * guide.sum()
+    assert not (guide & (region("leftEye") | region("rightEye"))).any()
+
+
+def test_cells_brightened_by_concealer_are_left_out_on_sample_video():
+    """그린 뒤 사진(after_s8)은 컨실러로 눈썹 테두리를 밝게 정리한 뒤라, 찾은 영역에
+    CONCEALER_BRIGHTENING보다 많이 밝아진 칸이 하나도 없어야 한다.
+
+    빼지 않으면 곡선으로 다듬을 때 왼쪽 눈썹에 1칸 섞인다.
+    넓힌 띠를 기준 없이 쓰면 여유 12칸에서 31칸이었다.
+    """
+    before, after = load_map("brow", "before_s8"), load_map("brow", "after_s8")
+    darkening = brow_darkening(before, after)
+    for brow in BROWS:
+        mask = check_brow_area(darkening, brow).mask
+        assert mask is not None
+        assert not (mask & (darkening < -CONCEALER_BRIGHTENING)).any()
+
+
+def test_lighting_change_after_brow_keeps_the_same_area_on_sample_video():
+    """그린 뒤 사진만 조명·카메라 색이 바뀌어도 가이드 영역이 바뀌기 전과
+    MIN_SAME_AREA_AFTER_LIGHTING_ON_SAMPLE 이상 겹친다."""
+    _, plain = brows_on_sample()
+    for gains in LIGHTS:
+        _, lit = brows_on_sample(with_light(load_map("brow", "after_s8"), gains))
+        assert lit is not None
+        assert iou(both_brows(lit), both_brows(plain)) >= MIN_SAME_AREA_AFTER_LIGHTING_ON_SAMPLE
