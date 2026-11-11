@@ -18,7 +18,13 @@ import type { Lab } from "@/lib/color";
 import { matchLock } from "./match-lock";
 import { deltaE, grow, mean, meanLab, sampleRegion, sd, type Px } from "./region-color";
 
-type Target = { key: string; label: string; region: RegionName; band: number; hole?: RegionName };
+type Target = {
+  key: string;
+  label: string;
+  region: RegionName;
+  band: number;
+  hole?: RegionName;
+};
 
 /** 둘레 띠 배율은 띠가 다른 부위에 걸리지 않을 만큼만 키운다 */
 const TARGETS: Target[] = [
@@ -181,9 +187,11 @@ export default function ColorMeasurePage() {
     const now = frame.timestamp;
     const rec = recording.current;
     const next: { [key: string]: Live | null } = {};
+    const face = outline(frame, "faceOval");
     for (const t of TARGETS) {
       const hole = t.hole ? outline(frame, t.hole) : null;
-      const s = sampleRegion(image, outline(frame, t.region), t.band, hole);
+      // 둘레 띠가 얼굴 밖 머리카락·배경에 걸리면 고개를 조금만 움직여도 값이 크게 흔들려 윤곽 안으로 자른다
+      const s = sampleRegion(image, outline(frame, t.region), t.band, hole, face);
       const list = (history.current[t.key] ??= []);
       if (s) {
         const point = { t: now, inner: s.inner, band: s.band, contrast: deltaE(s.inner, s.band) };

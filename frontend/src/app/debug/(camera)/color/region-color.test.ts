@@ -47,4 +47,19 @@ describe("region-color", () => {
     const s = sampleRegion(img, square(20, 5), 1.6, square(20, 1));
     expect(s!.inner.l).toBeCloseTo(rgbToLab(100, 100, 100).l, 5);
   });
+
+  it("clip 밖 픽셀은 둘레 띠에서 뺀다", () => {
+    // 오른쪽 절반은 머리카락처럼 어둡다
+    const img = image(40, [200, 80, 90], [220, 180, 160], [15, 25]);
+    for (let y = 0; y < 40; y++)
+      for (let x = 24; x < 40; x++) img.data.set([30, 25, 20, 255], (y * 40 + x) * 4);
+    const clip = [
+      { x: 0, y: 0 },
+      { x: 24, y: 0 },
+      { x: 24, y: 40 },
+      { x: 0, y: 40 },
+    ];
+    const s = sampleRegion(img, square(20, 5), 1.6, null, clip);
+    expect(deltaE(s!.band, rgbToLab(220, 180, 160))).toBeLessThan(0.01);
+  });
 });

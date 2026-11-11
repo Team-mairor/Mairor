@@ -32,13 +32,14 @@ export type RegionSample = { inner: Lab; band: Lab; innerCount: number; bandCoun
 
 /**
  * 영역 안 평균 색과 영역을 band배 키운 둘레 띠의 평균 색.
- * hole(입 안 등)은 양쪽 모두에서 뺀다. 좌표는 영상 픽셀 기준
+ * hole(입 안 등)은 양쪽 모두에서 빼고, clip(얼굴 윤곽 등)이 있으면 그 밖도 뺀다. 좌표는 영상 픽셀 기준
  */
 export function sampleRegion(
   image: { data: Uint8ClampedArray; width: number; height: number },
   outline: readonly Px[],
   band: number,
   hole: readonly Px[] | null = null,
+  clip: readonly Px[] | null = null,
 ): RegionSample | null {
   const outer = grow(outline, band);
   const xs = outer.map((p) => p.x);
@@ -52,7 +53,7 @@ export function sampleRegion(
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const p = { x: x + 0.5, y: y + 0.5 };
-      if (!inside(p, outer) || (hole && inside(p, hole))) continue;
+      if (!inside(p, outer) || (hole && inside(p, hole)) || (clip && !inside(p, clip))) continue;
       const i = (y * image.width + x) * 4;
       const r = image.data[i];
       const g = image.data[i + 1];
