@@ -29,8 +29,9 @@ const bundle = await build({
 const html = `<!doctype html><meta charset="utf-8"><canvas id="output"></canvas><pre id="result"></pre>
 <script>${bundle.outputFiles[0].text.replaceAll("</script", "<\\/script")}</script>
 <script>
+void (async () => {
 try {
-  const { BASIC_PHOTO_FRAME: frame, renderPhotoFrame } = PhotoBooth;
+  const { BASIC_PHOTO_FRAME: frame, renderPhotoFrame, createPhotoJpegBlob, createPhotoJpegFilename } = PhotoBooth;
   const makeImage = (left, right = left) => {
     const image = document.createElement('canvas');
     image.width = image.height = 200;
@@ -68,12 +69,37 @@ try {
   overlayCtx.fillStyle = '#00ffff'; overlayCtx.fillRect(80, 80, 100, 100);
   renderPhotoFrame(canvas, { ...frame, overlaySrc: '/frames/check.png' }, photos, overlay);
   if (pixel(100, 100) !== '0,255,255,255') throw new Error('overlay must be above photos');
+
+  const jpeg = await createPhotoJpegBlob(canvas);
+  if (jpeg.type !== 'image/jpeg' || jpeg.size <= 0) throw new Error('invalid JPEG Blob');
+  const decoded = await createImageBitmap(jpeg);
+  if (decoded.width !== frame.output.width || decoded.height !== frame.output.height) {
+    throw new Error('JPEG dimensions do not match the frame output');
+  }
+  const jpegWidth = decoded.width;
+  const jpegHeight = decoded.height;
+  decoded.close();
+  const filename = createPhotoJpegFilename(new Date(2026, 0, 2, 3, 4, 5));
+  if (filename !== 'mairor-4cut-20260102-030405.jpg') throw new Error('unexpected JPEG filename: ' + filename);
+  const jpegDataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('failed to read JPEG'));
+    reader.onerror = () => reject(reader.error ?? new Error('failed to read JPEG'));
+    reader.readAsDataURL(jpeg);
+  });
   document.getElementById('result').textContent = JSON.stringify({
-    passed: true, checks: checks.length + 1, png: canvas.toDataURL('image/png'),
+    passed: true,
+    checks: checks.length + 1,
+    width: jpegWidth,
+    height: jpegHeight,
+    filename,
+    jpegDataUrl,
+    png: canvas.toDataURL('image/png'),
   });
 } catch (error) {
   document.getElementById('result').textContent = JSON.stringify({ passed: false, message: String(error) });
 }
+})();
 </script>`;
 const input = path.join(directory, "check.html");
 writeFileSync(input, html);
@@ -83,6 +109,7 @@ const dom = execFileSync(
     "--headless=new",
     "--disable-gpu",
     "--no-first-run",
+    "--virtual-time-budget=5000",
     `--user-data-dir=${path.join(directory, "browser-profile")}`,
     "--dump-dom",
     pathToFileURL(input).href,
@@ -102,4 +129,20 @@ if (!result.passed) throw new Error(result.message);
 const output = path.join(directory, "composite.png");
 writeFileSync(output, Buffer.from(result.png.split(",")[1], "base64"));
 if (!readFileSync(output).length) throw new Error("합성 이미지가 비어 있습니다.");
-console.log(`PASS: ${result.checks} browser pixel checks. Image: ${output}`);
+if (
+  result.width !== 1200 ||
+  result.height !== 1800 ||
+  result.filename !== "mairor-4cut-20260102-030405.jpg" ||
+  !result.jpegDataUrl.startsWith("data:image/jpeg;base64,")
+) {
+  throw new Error(`JPEG output contract mismatch: ${JSON.stringify(result)}`);
+}
+const jpegOutput = path.join(directory, result.filename);
+const jpegBytes = Buffer.from(result.jpegDataUrl.split(",")[1], "base64");
+if (!jpegBytes.length || jpegBytes.readUInt16BE(0) !== 0xffd8) {
+  throw new Error("JPEG file is empty or missing the SOI marker.");
+}
+writeFileSync(jpegOutput, jpegBytes);
+console.log(
+  `PASS: ${result.checks} browser pixel checks; JPEG ${result.width}×${result.height}, ${jpegBytes.length} bytes. Image: ${jpegOutput}`,
+);

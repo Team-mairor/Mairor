@@ -92,6 +92,7 @@ describe("네컷 프레임 규격", () => {
       assertPhotoFrame({
         ...BASIC_PHOTO_FRAME,
         output: { ...BASIC_PHOTO_FRAME.output, width: 1140, height: 1620 },
+        brand: undefined,
       }),
     ).not.toThrow();
   });

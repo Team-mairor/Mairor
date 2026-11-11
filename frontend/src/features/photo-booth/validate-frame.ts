@@ -21,6 +21,17 @@ export function assertPhotoFrame(frame: PhotoFrameTemplate): void {
   if (frame.overlaySrc !== undefined && !/^\/(?!\/)[^\\\s?#]+$/.test(frame.overlaySrc)) {
     throw new RangeError("프레임 이미지는 같은 사이트의 절대 경로여야 합니다.");
   }
+  if (
+    frame.brand &&
+    (!frame.brand.text.trim() ||
+      !positiveInteger(frame.brand.fontSize) ||
+      !frame.brand.fontFamily.trim() ||
+      !coordinate(frame.brand.y) ||
+      frame.brand.y > frame.output.height ||
+      !/^#[0-9a-f]{6}$/i.test(frame.brand.color))
+  ) {
+    throw new RangeError("브랜드 워드마크의 텍스트, 위치, 글자 크기, 색상을 확인해야 합니다.");
+  }
   if (frame.slots.length !== 4) {
     throw new RangeError("프레임에는 사진 영역이 정확히 네 개 있어야 합니다.");
   }

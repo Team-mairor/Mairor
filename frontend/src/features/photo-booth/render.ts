@@ -78,4 +78,16 @@ export function renderPhotoFrame(
     }
   }
   if (overlay) ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height);
+  if (frame.brand) {
+    ctx.save();
+    try {
+      ctx.fillStyle = frame.brand.color;
+      ctx.font = `italic ${frame.brand.fontSize}px ${frame.brand.fontFamily}`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(frame.brand.text, canvas.width / 2, frame.brand.y);
+    } finally {
+      ctx.restore();
+    }
+  }
 }

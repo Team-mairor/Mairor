@@ -6,13 +6,18 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CameraError, openCamera } from "@/features/face/camera";
-import { BASIC_PHOTO_FRAME, type PhotoSlotId } from "@/features/photo-booth";
+import {
+  BASIC_PHOTO_FRAME,
+  calculatePhotoCaptureCrop,
+  type PhotoSlotId,
+} from "@/features/photo-booth";
 import { PhotoEditPreview } from "@/features/photo-booth/photo-edit-preview";
 
 type CameraStatus = "starting" | "ready" | "error";
 type CapturedPhotos = Partial<Record<PhotoSlotId, Blob>>;
 
 const SLOT_IDS = BASIC_PHOTO_FRAME.slots.map((slot) => slot.id);
+const PHOTO_SLOT = BASIC_PHOTO_FRAME.slots[0];
 
 function cameraErrorText(error: CameraError) {
   switch (error.kind) {
@@ -40,12 +45,26 @@ function captureJpeg(video: HTMLVideoElement): Promise<Blob> {
     return Promise.reject(new Error("카메라 영상이 아직 준비되지 않았어요."));
   }
 
+  const crop = calculatePhotoCaptureCrop(
+    { width: video.videoWidth, height: video.videoHeight },
+    PHOTO_SLOT,
+  );
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = crop.width;
+  canvas.height = crop.height;
   const context = canvas.getContext("2d");
   if (!context) return Promise.reject(new Error("사진을 만들지 못했어요."));
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  context.drawImage(
+    video,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  );
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -85,7 +104,7 @@ export default function PhotoCapturePage() {
 
     const startCamera = async () => {
       try {
-        stream = await openCamera(undefined, 1280, 720);
+        stream = await openCamera(undefined, 1920, 1080);
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -219,47 +238,54 @@ export default function PhotoCapturePage() {
         </span>
       </header>
 
-      <section className="mx-auto flex w-full max-w-[680px] flex-1 flex-col gap-4">
-        <div className="relative flex min-h-[240px] flex-1 items-center justify-center overflow-hidden rounded-3xl bg-ink">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            onLoadedMetadata={() => setCameraStatus("ready")}
-            className="h-full max-h-[min(58dvh,720px)] w-full -scale-x-100 object-contain"
-            aria-label="네 컷 사진 카메라 미리보기"
-          />
-          {cameraStatus === "starting" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink text-white">
-              <Camera className="size-10" aria-hidden />
-              <p>카메라를 준비하고 있어요</p>
-            </div>
-          )}
-          {cameraStatus === "error" && (
-            <div
-              role="alert"
-              className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-ink px-8 text-center text-white"
-            >
-              <CameraOff className="size-10" aria-hidden />
-              <p>{cameraError ? cameraErrorText(cameraError) : "카메라를 시작하지 못했어요."}</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setCameraError(null);
-                  setCameraStatus("starting");
-                  setRetryKey((key) => key + 1);
-                }}
-                className="flex h-12 items-center gap-2 rounded-full bg-white px-5 font-semibold text-ink"
+      <section className="mx-auto flex min-h-0 w-full max-w-[680px] flex-1 flex-col gap-4">
+        <div className="relative flex min-h-[360px] flex-1 items-center justify-center overflow-hidden">
+          <div
+            className="relative w-[min(100%,56dvh,640px)] overflow-hidden rounded-2xl bg-black md:w-[min(100%,60dvh,640px)]"
+            style={{
+              aspectRatio: `${PHOTO_SLOT.width}/${PHOTO_SLOT.height}`,
+            }}
+          >
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              onLoadedMetadata={() => setCameraStatus("ready")}
+              className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
+              aria-label="네 컷 사진 카메라 미리보기"
+            />
+            {cameraStatus === "starting" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-ink text-white">
+                <Camera className="size-10" aria-hidden />
+                <p>카메라를 준비하고 있어요</p>
+              </div>
+            )}
+            {cameraStatus === "error" && (
+              <div
+                role="alert"
+                className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-ink px-8 text-center text-white"
               >
-                <RotateCcw className="size-4" aria-hidden />
-                다시 시도
-              </button>
-            </div>
-          )}
+                <CameraOff className="size-10" aria-hidden />
+                <p>{cameraError ? cameraErrorText(cameraError) : "카메라를 시작하지 못했어요."}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCameraError(null);
+                    setCameraStatus("starting");
+                    setRetryKey((key) => key + 1);
+                  }}
+                  className="flex h-12 items-center gap-2 rounded-full bg-white px-5 font-semibold text-ink"
+                >
+                  <RotateCcw className="size-4" aria-hidden />
+                  다시 시도
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2" aria-label="촬영할 사진 칸 선택">
+        <div className="mt-auto grid grid-cols-4 gap-2" aria-label="촬영할 사진 칸 선택">
           {SLOT_IDS.map((id, index) => {
             const isCaptured = Boolean(photos[id]);
             const isSelected = targetSlot === id;

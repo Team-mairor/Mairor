@@ -22,6 +22,14 @@ export interface PhotoFrameTemplate {
   };
   /** slot-1~slot-4 순서로 정의한다. 영역은 출력 범위 내에서 겹치지 않아야 한다. */
   readonly slots: readonly [PhotoSlot, PhotoSlot, PhotoSlot, PhotoSlot];
+  /** JPEG 하단 여백에 출력할 브랜드 워드마크. */
+  readonly brand?: {
+    readonly text: string;
+    readonly y: number;
+    readonly fontSize: number;
+    readonly fontFamily: string;
+    readonly color: string;
+  };
   /**
    * 디자이너가 제공할 선택적 투명 프레임 이미지의 same-origin 경로.
    * 출력 크기 전체에 배치한다. 배경 → 사진 네 장 → overlay 순으로 합성한다.
@@ -33,7 +41,7 @@ export interface PhotoFrameTemplate {
 /**
  * 촬영·합성 개발용 2×2 프레임. 최종 디자인은 최주연 담당이다.
  * 1200×1800은 개발 기준값이며 사진/프레임 규격을 확정한 뒤 교체할 수 있다.
- * 장식·문구·브랜드 요소는 이 기본 데이터에 포함하지 않는다.
+ * 기본 브랜드 워드마크는 하단 여백에 배치하며 최종 디자인에서 교체할 수 있다.
  */
 export const BASIC_PHOTO_FRAME = {
   id: "basic-grid",
@@ -45,4 +53,11 @@ export const BASIC_PHOTO_FRAME = {
     { id: "slot-3", x: 60, y: 860, width: 520, height: 760 },
     { id: "slot-4", x: 620, y: 860, width: 520, height: 760 },
   ],
+  brand: {
+    text: "mairor",
+    y: 1728,
+    fontSize: 52,
+    fontFamily: 'Georgia, "Times New Roman", serif',
+    color: "#1b2d63",
+  },
 } as const satisfies PhotoFrameTemplate;

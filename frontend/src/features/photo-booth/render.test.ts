@@ -4,11 +4,21 @@ import { BASIC_PHOTO_FRAME } from "./frame";
 import { renderPhotoFrame, type FramePhotos } from "./render";
 
 function fixture() {
+  let fillStyle = "";
+  const stateStack: string[] = [];
   const ctx = {
-    fillStyle: "",
+    get fillStyle() {
+      return fillStyle;
+    },
+    set fillStyle(value: string) {
+      fillStyle = value;
+    },
     fillRect: vi.fn(),
-    save: vi.fn(),
-    restore: vi.fn(),
+    fillText: vi.fn(),
+    save: vi.fn(() => stateStack.push(fillStyle)),
+    restore: vi.fn(() => {
+      fillStyle = stateStack.pop() ?? "";
+    }),
     translate: vi.fn(),
     scale: vi.fn(),
     drawImage: vi.fn(),
@@ -35,6 +45,7 @@ describe("네컷 Canvas 합성", () => {
     expect([canvas.width, canvas.height]).toEqual([1200, 1800]);
     expect(ctx.fillStyle).toBe("#ffffff");
     expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 1200, 1800);
+    expect(ctx.restore).toHaveBeenCalledTimes(5);
     expect(ctx.drawImage).toHaveBeenCalledTimes(4);
     expect(ctx.drawImage.mock.calls[0][0]).toBe(image);
     expect(ctx.translate.mock.calls).toEqual([
@@ -54,7 +65,14 @@ describe("네컷 Canvas 합성", () => {
     });
     expect(ctx.translate.mock.calls[0]).toEqual([580, 60]);
     expect(ctx.scale).toHaveBeenCalledExactlyOnceWith(-1, 1);
-    expect(ctx.restore).toHaveBeenCalledTimes(4);
+    expect(ctx.restore).toHaveBeenCalledTimes(5);
+  });
+
+  it("브랜드 워드마크를 결과 이미지 하단 중앙에 그린다", () => {
+    const { ctx, canvas, photos } = fixture();
+    renderPhotoFrame(canvas, BASIC_PHOTO_FRAME, photos);
+    expect(ctx.fillText).toHaveBeenCalledExactlyOnceWith("mairor", 600, 1728);
+    expect(ctx.fillStyle).toBe("#ffffff");
   });
 
   it("프레임 장식은 사진을 그린 다음 마지막에 그린다", () => {
