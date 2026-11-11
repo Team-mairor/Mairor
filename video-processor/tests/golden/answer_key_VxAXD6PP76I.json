@@ -1,0 +1,411 @@
+{
+  "videoId": "VxAXD6PP76I",
+  "method": "자막으로 제품 순서를 잡고, 단계마다 시작·끝 앞뒤를 1초(필요하면 0.5초) 간격 장면으로 직접 보고 정했다. 제품명은 화면 왼쪽 위 제품 글자를 읽었다.",
+  "rules": "단계 = 같은 화장품을 쓰는 동안. 컨실러만 바른 자리로 makeup이 달라지면 나눈다. firstTouch/lastTouch = 제품이 얼굴에 처음/마지막으로 닿은 장면 시각(초). 블렌딩·손가락으로 펴기도 바르기다. 제품 보여 주기·말하며 가리키기·손등 발색은 바르기가 아니다. 장면 간격 때문에 실제 시각은 ±1초(0.5초 간격으로 본 곳은 ±0.5초) 안이다. 렌즈 끼기(19:44~19:51)는 화장이 아니라 단계에 넣지 않았다.",
+  "steps": [
+    {
+      "n": 1,
+      "product": "URIAGE 제모스 스틱레브르 무향",
+      "kind": "skincare",
+      "makeup": "other",
+      "area": "입술",
+      "firstTouch": 41,
+      "lastTouch": 42,
+      "check": "립밤은 스킨케어라 other"
+    },
+    {
+      "n": 2,
+      "product": "beplain 녹두 쿨링 수분선크림",
+      "kind": "sunscreen",
+      "makeup": "foundation",
+      "area": "얼굴 전체",
+      "firstTouch": 173,
+      "lastTouch": 197,
+      "check": "선크림은 얼굴 전체에 바르므로 베이스(사용자 확정). 03:20~06:05는 말하며 손짓만 함"
+    },
+    {
+      "n": 3,
+      "product": "VDL 커버스테인 퍼펙팅 쿠션 A01",
+      "kind": "base",
+      "makeup": "foundation",
+      "area": "얼굴 전체, 눈두덩, 눈 밑",
+      "firstTouch": 373,
+      "lastTouch": 436,
+      "check": ""
+    },
+    {
+      "n": 4,
+      "product": "THE SAEM 커버 퍼펙션 컨실러 펜슬 0.5 아이스 베이지",
+      "kind": "concealer",
+      "makeup": "foundation",
+      "area": "눈 앞머리(눈과 콧대 사이)",
+      "firstTouch": 449,
+      "lastTouch": 451.5,
+      "check": "잡티 가리기. 어떤 그림이 맞는지는 AI 쪽에서 정해 알려 주기로 함. 그때까지 베이스·콧대(highlight) 모두 맞게 침",
+      "makeupAlso": [
+        "highlight"
+      ]
+    },
+    {
+      "n": 5,
+      "product": "THE SAEM 커버 퍼펙션 컨실러 펜슬 0.5 아이스 베이지",
+      "kind": "concealer",
+      "makeup": "foundation",
+      "area": "코 옆(잡티 흔적)",
+      "firstTouch": 452.5,
+      "lastTouch": 455,
+      "check": ""
+    },
+    {
+      "n": 6,
+      "product": "espoir 더브로우 밸런스 펜슬 06 라이트 토프",
+      "kind": "brow",
+      "makeup": "brow",
+      "area": "눈썹",
+      "firstTouch": 464,
+      "lastTouch": 510,
+      "check": ""
+    },
+    {
+      "n": 7,
+      "product": "THE SAEM 커버 퍼펙션 컨실러 펜슬 0.5 아이스 베이지",
+      "kind": "concealer",
+      "makeup": "foundation",
+      "area": "눈썹 밑 라인",
+      "firstTouch": 513,
+      "lastTouch": 546,
+      "check": "펜슬로 긋고 브러시로 폄. 컨실러는 분석하는 종류로 보내지 않음"
+    },
+    {
+      "n": 8,
+      "product": "too cool for school 듀얼 컨투어 스틱 02 쿨 듀오",
+      "kind": "contour",
+      "makeup": "contour",
+      "area": "코 옆, 콧대",
+      "firstTouch": 560,
+      "lastTouch": 630,
+      "check": "시작은 2초 간격으로 봄(±2초). 10:13~10:30은 브러시 블렌딩"
+    },
+    {
+      "n": 9,
+      "product": "hince 싱글 아이섀도우 06 포멜 로즈",
+      "kind": "eyeshadow",
+      "makeup": "eyeshadow",
+      "eyeZone": "both",
+      "area": "윗눈두덩, 눈 밑",
+      "firstTouch": 645,
+      "lastTouch": 690,
+      "check": "11:21~11:30 눈 밑(1080p 확인), 11:29~11:30 붓이 눈가에 있음"
+    },
+    {
+      "n": 10,
+      "product": "hince 싱글 아이섀도우 21 모카 프레소",
+      "kind": "eyeshadow",
+      "makeup": "eyeshadow",
+      "eyeZone": "under",
+      "area": "애교살 라인",
+      "firstTouch": 714,
+      "lastTouch": 722,
+      "check": ""
+    },
+    {
+      "n": 11,
+      "product": "hince 싱글 아이섀도우 22 얼루어 로즈",
+      "kind": "eyeshadow",
+      "makeup": "eyeshadow",
+      "eyeZone": "both",
+      "area": "애교살 위 그라데이션, 쌍꺼풀 라인",
+      "firstTouch": 739,
+      "lastTouch": 780,
+      "check": "12:44~12:52 말만 함, 12:54~13:00 쌍꺼풀 라인"
+    },
+    {
+      "n": 12,
+      "product": "NAMING 퍼펙테일 아이 디자이닝 펜슬 슬림 라이너 브라우니 핑크",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "upper",
+      "area": "윗라인, 눈꼬리",
+      "firstTouch": 783,
+      "lastTouch": 814.5,
+      "check": "13:35~13:41은 손가락으로 가리키며 설명만"
+    },
+    {
+      "n": 13,
+      "product": "BBIA 누디 슬림 아이라이너 05 누 로즈",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "both",
+      "area": "앞트임, 아랫라인, 뒤트임",
+      "firstTouch": 831,
+      "lastTouch": 858,
+      "check": ""
+    },
+    {
+      "n": 14,
+      "product": "SHISEIDO 부분뷰러 215",
+      "kind": "tool",
+      "makeup": "other",
+      "area": "아랫속눈썹",
+      "firstTouch": 905,
+      "lastTouch": 908,
+      "check": ""
+    },
+    {
+      "n": 15,
+      "product": "Heart Percent 도트 온 무드 젤 아이라이너 펜슬 11 마일드 살몬",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "under",
+      "area": "아랫속눈썹 뿌리",
+      "firstTouch": 916,
+      "lastTouch": 931,
+      "check": "15:09~15:12 손등 발색은 제외, 15:29~15:31 손톱으로 펴기 포함"
+    },
+    {
+      "n": 16,
+      "product": "뷰러",
+      "kind": "tool",
+      "makeup": "other",
+      "area": "윗속눈썹",
+      "firstTouch": 984,
+      "lastTouch": 986,
+      "check": ""
+    },
+    {
+      "n": 17,
+      "product": "TEMU 인조속눈썹",
+      "kind": "tool",
+      "makeup": "other",
+      "area": "윗속눈썹 밑(부착)",
+      "firstTouch": 988,
+      "lastTouch": 1062,
+      "check": "2초 간격으로 봄(±2초). 17:40~17:42 손가락으로 누름"
+    },
+    {
+      "n": 18,
+      "product": "TEMU 인조속눈썹",
+      "kind": "tool",
+      "makeup": "other",
+      "area": "아랫속눈썹 중앙(부착)",
+      "firstTouch": 1066,
+      "lastTouch": 1074,
+      "check": "2초 간격(±2초)"
+    },
+    {
+      "n": 19,
+      "product": "ETUDE 컬 픽스 스키니 마스카라 01 블랙",
+      "kind": "mascara",
+      "makeup": "mascara",
+      "area": "윗속눈썹, 아랫속눈썹",
+      "firstTouch": 1078,
+      "lastTouch": 1108,
+      "check": "2초 간격(±2초)"
+    },
+    {
+      "n": 20,
+      "product": "Heart Percent 도트 온 무드 젤 아이라이너 펜슬 11 마일드 살몬",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "under",
+      "area": "아랫속눈썹 뿌리(인조속눈썹 부분)",
+      "firstTouch": 1118,
+      "lastTouch": 1122,
+      "check": "18:33~18:37 손가락으로 눈 밑을 가리키며 설명(펜슬 안 닿음, 1080p 1초 간격 확인), 18:38 첫 닿음"
+    },
+    {
+      "n": 21,
+      "product": "3CE 마이링 아이라이너 핑크브라운",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "waterline",
+      "area": "윗점막",
+      "firstTouch": 1132,
+      "lastTouch": 1141,
+      "check": "18:48~18:50 손등 발색 제외. 장면 확인: 위쪽 점막"
+    },
+    {
+      "n": 22,
+      "product": "Love Liner 리퀴드 아이라이너 04 밀크 브라운",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "under",
+      "area": "아래 눈꼬리(페이크 래쉬)",
+      "firstTouch": 1149,
+      "lastTouch": 1151,
+      "check": ""
+    },
+    {
+      "n": 23,
+      "product": "Heart Percent 도트 온 무드 젤 아이라이너 펜슬 10 라이트 살몬",
+      "kind": "eyeliner",
+      "makeup": "eyeliner",
+      "eyeZone": "under",
+      "area": "애교살",
+      "firstTouch": 1170,
+      "lastTouch": 1180,
+      "check": "19:18~19:28 손등 발색 제외, 19:37~19:40 브러시 블렌딩 포함"
+    },
+    {
+      "n": 24,
+      "product": "hince 싱글 아이섀도우 21 모카 프레소",
+      "kind": "eyeshadow",
+      "makeup": "eyeshadow",
+      "eyeZone": "upper",
+      "area": "아이라인 뒤쪽 연장, 쌍꺼풀 라인 연장",
+      "firstTouch": 1194,
+      "lastTouch": 1201,
+      "check": ""
+    },
+    {
+      "n": 25,
+      "product": "MALU WILZ 케머플라지 크림 컨실러 1호",
+      "kind": "concealer",
+      "makeup": "highlight",
+      "area": "미간",
+      "firstTouch": 1226,
+      "lastTouch": 1243,
+      "check": "20:27~20:28 잠깐 멈춤"
+    },
+    {
+      "n": 26,
+      "product": "MALU WILZ 케머플라지 크림 컨실러 1호",
+      "kind": "concealer",
+      "makeup": "foundation",
+      "area": "코 옆 붉은기, 볼의 꺼진 부분",
+      "firstTouch": 1245,
+      "lastTouch": 1282,
+      "check": "20:56~21:01 말만 함. 21:20~21:22 '꺼진 부분'을 볼로 봄"
+    },
+    {
+      "n": 27,
+      "product": "MALU WILZ 케머플라지 크림 컨실러 1호",
+      "kind": "concealer",
+      "makeup": "foundation",
+      "area": "눈 밑 다크서클, 눈 앞머리, 윗눈두덩",
+      "firstTouch": 1298,
+      "lastTouch": 1325.5,
+      "check": "21:31~21:37 손가락으로 가리키며 말함, 22:05.5 눈두덩 마지막 닿음·22:06 끝(1080p 0.5초 간격 확인)"
+    },
+    {
+      "n": 39,
+      "product": "MALU WILZ 케머플라지 크림 컨실러 1호",
+      "kind": "concealer",
+      "makeup": "foundation",
+      "area": "코 옆(양감)",
+      "firstTouch": 1328,
+      "lastTouch": 1338,
+      "check": "22:09~22:17 다른 브러시로 코 옆, 컨실러는 자리로 나눔(코 옆 = foundation), 1080p 확인"
+    },
+    {
+      "n": 28,
+      "product": "VDL 커버스테인 하이커버 쿠션 A00",
+      "kind": "base",
+      "makeup": "foundation",
+      "area": "얼굴 전체, 눈 밑",
+      "firstTouch": 1353,
+      "lastTouch": 1377,
+      "check": "작은 장면으로 봄(±2초)"
+    },
+    {
+      "n": 29,
+      "product": "numbuzin 1번 판토텐산 스킨케어100 블러파우더",
+      "kind": "base",
+      "makeup": "foundation",
+      "area": "얼굴 전체",
+      "firstTouch": 1387,
+      "lastTouch": 1399,
+      "check": ""
+    },
+    {
+      "n": 30,
+      "product": "Dear.A 플러피 블러쉬 02 퍼스트 크러쉬",
+      "kind": "blush",
+      "makeup": "blush",
+      "area": "눈 밑, 볼, 코 끝·콧등",
+      "firstTouch": 1406,
+      "lastTouch": 1462.5,
+      "check": "23:23~23:25 제품 소개만, 24:19.5~24:20 콧등·24:22~24:22.5 다시 브러시, 24:23부터 손가락으로 가리키기만(1080p 0.5초 간격 확인)"
+    },
+    {
+      "n": 31,
+      "product": "espoir 더브로우 밸런스 펜슬 06 라이트 토프",
+      "kind": "brow",
+      "makeup": "brow",
+      "area": "눈썹",
+      "firstTouch": 1480,
+      "lastTouch": 1490,
+      "check": "24:33~24:40 펜슬 들고 말함·손짓(1080p 0.5초 간격 확인, 첫 닿음 24:40.6), 24:53~25:02 손짓"
+    },
+    {
+      "n": 32,
+      "product": "OFRA 미니 하이라이터 데이드림",
+      "kind": "highlight",
+      "makeup": "highlight",
+      "area": "코끝 옆, 눈 앞머리, 눈 밑, 눈썹뼈, 광대, 이마",
+      "firstTouch": 1512,
+      "lastTouch": 1628,
+      "check": ""
+    },
+    {
+      "n": 33,
+      "product": "rom&nd 슬라이드 인 싱글 M01 웜 볼류머",
+      "kind": "highlight",
+      "makeup": "highlight",
+      "area": "미간, 콧볼 옆, 볼 패인 부분 위",
+      "firstTouch": 1636,
+      "lastTouch": 1686,
+      "check": "음성은 '무펄 하이라이터'. 하이라이터(사용자 확정)"
+    },
+    {
+      "n": 34,
+      "product": "colorgram 누디 블러 립펜슬 05 딸기멜로",
+      "kind": "lip",
+      "makeup": "lip",
+      "area": "입술(오버립)",
+      "firstTouch": 1694,
+      "lastTouch": 1726,
+      "check": "28:45~28:46 손가락 블렌딩 포함"
+    },
+    {
+      "n": 35,
+      "product": "colorgram 음영 창조 라이너 08 70% 로즈브라운",
+      "kind": "lip",
+      "makeup": "lip",
+      "area": "입꼬리",
+      "firstTouch": 1733,
+      "lastTouch": 1735,
+      "check": ""
+    },
+    {
+      "n": 36,
+      "product": "Heart Percent 도트 온 무드 립펜슬 10 클린베이지",
+      "kind": "lip",
+      "makeup": "lip",
+      "area": "입술 착색 커버",
+      "firstTouch": 1747,
+      "lastTouch": 1754,
+      "check": "29:03~29:04 손가락으로 가리킴"
+    },
+    {
+      "n": 37,
+      "product": "benefit 립 앤 치크 틴트 차차틴트",
+      "kind": "lip",
+      "makeup": "lip",
+      "area": "입술",
+      "firstTouch": 1761,
+      "lastTouch": 1767,
+      "check": ""
+    },
+    {
+      "n": 38,
+      "product": "BBIA 오버 글레이즈 01 피치당",
+      "kind": "lip",
+      "makeup": "lip",
+      "area": "입술",
+      "firstTouch": 1774,
+      "lastTouch": 1778,
+      "check": "끝 ±1초"
+    }
+  ]
+}
