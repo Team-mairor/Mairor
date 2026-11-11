@@ -6,4 +6,12 @@ export {
   pickedCount,
   SHOW_STEP_PHOTOS,
 } from "./guide-report";
+export {
+  deleteReport,
+  fromRecord,
+  fromSummary,
+  REPORT_PAGE_SIZE,
+  useReport,
+  useReports,
+} from "./report-api";
 export { guideReportRows, type ReportRow } from "./report-rows";

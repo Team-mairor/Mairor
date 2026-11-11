@@ -447,3 +447,60 @@ export interface ExecutionAbandonment {
   status: "ABANDONED";
   cleanupPending: boolean;
 }
+
+/** 사진 메타 (PhotoResponse). url은 세션 쿠키로 읽으므로 <img src>에 그대로 쓴다 */
+export interface PhotoMeta {
+  photoId: string;
+  kind: string;
+  contentType: string;
+  byteSize: number;
+  width: number;
+  height: number;
+  url: string;
+  createdAt: string;
+}
+
+/** 리포트 목록 한 줄 (ReportSummary). completedPhoto는 마지막 단계 사진이 없으면 null */
+export interface ReportSummaryDto {
+  recordId: string;
+  guideId: string;
+  videoId: string;
+  youtubeVideoId: string;
+  videoTitle: string;
+  channelTitle: string;
+  thumbnailUrl: string | null;
+  completedAt: string;
+  completedPhoto: PhotoMeta | null;
+  stepCount: number;
+  substituteCount: number;
+}
+
+/** 리포트 상세의 단계 (ReportStep) 중 FE가 쓰는 칸 */
+export interface ReportStepDto {
+  stepId: string;
+  part: string;
+  partLabel: string | null;
+  summary: string | null;
+  actions: { text: string }[];
+  referenceProduct: { name: string | null; shadeName: string | null } | null;
+  matchingResult: "SAME" | "SUBSTITUTE" | "NONE";
+  selectedProduct: { brand: string; name: string; shadeName: string | null } | null;
+  skipped: boolean;
+  photo: PhotoMeta | null;
+}
+
+/** 리포트 상세 (ReportRecord). 완료 때 저장한 스냅샷이다. youtubeVideoId · thumbnailUrl은 목록에만 있다 */
+export interface ReportRecordDto {
+  recordId: string;
+  executionId: string;
+  videoId: string;
+  videoTitle: string;
+  channelTitle: string;
+  guideId: string;
+  guideVersion: number;
+  completedAt: string;
+  completedPhoto: PhotoMeta | null;
+  stepCount: number;
+  substituteCount: number;
+  steps: ReportStepDto[];
+}

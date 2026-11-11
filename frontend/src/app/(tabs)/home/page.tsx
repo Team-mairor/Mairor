@@ -12,6 +12,7 @@ import { PillButton } from "@/components/ui/pill-button";
 import { useLogout } from "@/features/auth";
 import { toPendingGuide, useLatestAnalysis } from "@/features/loading";
 import { PouchBoard, usePouchSync } from "@/features/pouch";
+import { fromSummary, useReports } from "@/features/report";
 import { displayName, isGuideId, runHref, useSession } from "@/features/session";
 import { videoThumb } from "@/features/video";
 import { useQuery } from "@/lib/hooks/use-query";
@@ -45,7 +46,29 @@ export default function HomePage() {
   const query = useQuery();
   // ?empty=1: 리포트·파우치 빈 상태 확인용 (데이터는 지우지 않는다)
   const empty = query?.get("empty") === "1";
-  const reports = empty ? [] : state.reports;
+  // 로그인했으면 서버 기록, 아니면 기기에 저장한 샘플 기록
+  const myReports = useReports(sessionChecked && state.loggedIn ? state.email : null);
+  const reports = empty
+    ? []
+    : state.loggedIn
+      ? myReports.load.status === "ready"
+        ? myReports.load.data.items.map(fromSummary)
+        : []
+      : state.reports;
+  // 서버 기록을 받는 중 · 받지 못했으면 빈 상태 대신 그대로 알린다
+  const reportsWaiting =
+    !empty && state.loggedIn && (!sessionChecked || myReports.load.status === "loading");
+  const reportsError = !empty && state.loggedIn && myReports.load.status === "error";
+  const reportNote = reportsError ? (
+    <span className="flex items-center gap-3 text-[17px] leading-[1.5] text-mute">
+      리포트를 불러오지 못했어요
+      <button type="button" onClick={myReports.retry} className="font-bold text-navy">
+        다시 시도
+      </button>
+    </span>
+  ) : (
+    <span className="text-[17px] leading-[1.5] text-mute">리포트를 불러오고 있어요</span>
+  );
   // 로그인했으면 서버 목록을 받기 전·받지 못했을 때 저장된(지난) 파우치를 보여 주지 않는다 (내 파우치와 같다)
   const waiting = sync.status === "loading" || (state.loggedIn && !sessionChecked);
   const hidden = waiting || sync.status === "error";
@@ -207,6 +230,10 @@ export default function HomePage() {
                 </div>
               </div>
             </div>
+          ) : reportsWaiting || reportsError ? (
+            <div className="flex min-w-0 flex-col justify-center rounded-3xl border border-line bg-white p-6">
+              {reportNote}
+            </div>
           ) : (
             <Link
               href="/select"
@@ -312,7 +339,11 @@ export default function HomePage() {
               전체 보기
             </Link>
           </div>
-          {reports.length === 0 ? (
+          {reportsWaiting || reportsError ? (
+            <div className="rounded-[22px] border border-line bg-white px-6 py-[22px]">
+              {reportNote}
+            </div>
+          ) : reports.length === 0 ? (
             <div className="flex items-center justify-between gap-4 rounded-[22px] border border-line bg-white px-6 py-[22px]">
               <span className="text-[17px] leading-[1.5] text-pretty text-mute">
                 아직 완료한 메이크업이 없어요. 영상을 골라 따라 해 보세요.
@@ -330,12 +361,20 @@ export default function HomePage() {
                   className="flex min-w-0 flex-col gap-2.5 rounded-[22px] border border-line bg-white px-2.5 pt-2.5 pb-3.5 hover:border-navy"
                 >
                   <span className="relative h-[110px] w-full shrink-0 overflow-hidden rounded-[14px]">
-                    <img
-                      src="/images/login-editorial.png"
-                      alt=""
-                      className="absolute inset-0 h-full w-full scale-[1.6] object-cover"
-                      style={{ objectPosition: ["50% 40%", "45% 60%", "55% 30%"][i] }}
-                    />
+                    {r.photoUrl ? (
+                      <img
+                        src={r.photoUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <img
+                        src="/images/login-editorial.png"
+                        alt=""
+                        className="absolute inset-0 h-full w-full scale-[1.6] object-cover"
+                        style={{ objectPosition: ["50% 40%", "45% 60%", "55% 30%"][i] }}
+                      />
+                    )}
                   </span>
                   <span className="flex min-w-0 flex-col gap-1 px-1.5">
                     <span className="truncate font-display text-[20px] leading-[1.3] text-ink">

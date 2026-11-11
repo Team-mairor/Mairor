@@ -4,6 +4,8 @@ import type {
   ExecutionCompletion,
   ExecutionSummary,
   FaceRegistration,
+  ReportRecordDto,
+  ReportSummaryDto,
   ApiErrorBody,
   CodeSent,
   EmailAvailability,
@@ -69,6 +71,52 @@ const MOCK_VIDEO: VideoSearchItem = {
 const NO_GUIDE = { guideId: null, guideAvailable: false } as const;
 const MOCK_FACE_ID = "f0000000-0000-4000-8000-000000000001";
 const MOCK_EXECUTION_ID = "e0000000-0000-4000-8000-000000000001";
+
+// 리포트 모의 기록. 2단계 중 하나는 대체 제품, 하나는 생략
+const MOCK_REPORT_SUMMARY: ReportSummaryDto = {
+  recordId: "d0000000-0000-4000-8000-000000000001",
+  guideId: MOCK_VIDEO.guideId ?? "",
+  videoId: "b0000000-0000-4000-8000-000000000001",
+  youtubeVideoId: MOCK_VIDEO.youtubeVideoId,
+  videoTitle: MOCK_VIDEO.title,
+  channelTitle: MOCK_VIDEO.channelTitle,
+  thumbnailUrl: MOCK_VIDEO.thumbnailUrl,
+  completedAt: "2026-11-11T09:00:00Z",
+  completedPhoto: null,
+  stepCount: 2,
+  substituteCount: 1,
+};
+const MOCK_REPORT_RECORD: ReportRecordDto = {
+  ...MOCK_REPORT_SUMMARY,
+  executionId: "e0000000-0000-4000-8000-000000000001",
+  guideVersion: 1,
+  steps: [
+    {
+      stepId: "s5",
+      part: "blush",
+      partLabel: "크림 블러셔",
+      summary: "볼 중앙에 퍼프로 두드려 바른다",
+      actions: [],
+      referenceProduct: { name: "하밍 젤리 에어 치크", shadeName: "02 베리피치" },
+      matchingResult: "SUBSTITUTE",
+      selectedProduct: { brand: "클리오", name: "프로 싱글 블러셔", shadeName: null },
+      skipped: false,
+      photo: null,
+    },
+    {
+      stepId: "s7",
+      part: "lip",
+      partLabel: null,
+      summary: null,
+      actions: [{ text: "입술 안쪽부터 틴트를 바른다" }],
+      referenceProduct: null,
+      matchingResult: "NONE",
+      selectedProduct: null,
+      skipped: true,
+      photo: null,
+    },
+  ],
+};
 
 const NOT_FOUND = () =>
   error(404, { code: "NOT_FOUND", message: "요청한 리소스를 찾을 수 없습니다." });
@@ -431,6 +479,39 @@ const ROUTES: MockRoute[] = [
       } satisfies ExecutionAbandonment,
     }),
     error: () => NOT_FOUND(),
+  },
+  {
+    // 리포트 목록
+    method: "GET",
+    path: /^\/v1\/users\/me\/history-records$/,
+    success: () => ({
+      status: 200,
+      body: {
+        items: [MOCK_REPORT_SUMMARY],
+        page: 0,
+        size: 50,
+        hasNext: false,
+      } satisfies Page<ReportSummaryDto>,
+    }),
+    error: () => error(401, { code: "UNAUTHORIZED", message: "로그인이 필요합니다." }),
+  },
+  {
+    // 리포트 상세. ID와 상관없이 같은 기록
+    method: "GET",
+    path: /^\/v1\/users\/me\/history-records\/[^/]+$/,
+    success: () => ({ status: 200, body: MOCK_REPORT_RECORD }),
+    error: () => NOT_FOUND(),
+  },
+  {
+    // 리포트 삭제
+    method: "DELETE",
+    path: /^\/v1\/users\/me\/history-records\/[^/]+$/,
+    success: () => ({ status: 204 }),
+    error: () =>
+      error(503, {
+        code: "REPORT_DELETE_FAILED",
+        message: "리포트 사진을 모두 지우지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      }),
   },
 ];
 

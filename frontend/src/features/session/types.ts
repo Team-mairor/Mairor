@@ -73,6 +73,8 @@ export interface ReportSummary {
   noPhoto?: boolean;
   /** 마지막 단계 사진이 있어 최종 사진으로 쓸 수 있음. 샘플은 없으면 있음으로 본다 */
   finalPhoto?: boolean;
+  /** 서버 기록의 완성 사진 주소. 있으면 실제 이미지를 보여 준다 */
+  photoUrl?: string | null;
   /** 사진을 저장한 단계 번호. 샘플은 없으면 전부 있음으로 본다 */
   captures?: number[];
   /** 출처 영상 id (VideoItem.id) */
@@ -101,4 +103,6 @@ export interface GuideReportStep {
   used: { brand: string; name: string; shade: string | null } | null;
   /** 단계 사진을 남겼는지 */
   photo: boolean;
+  /** 서버 기록의 단계 사진 주소. 있으면 실제 이미지를 보여 준다 */
+  photoUrl?: string | null;
 }

@@ -5,7 +5,15 @@ import { useEffect, useState, type ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
-import { guideReportRows, PhotoSlot, SHOW_STEP_PHOTOS, type ReportRow } from "@/features/report";
+import {
+  deleteReport,
+  fromRecord,
+  guideReportRows,
+  PhotoSlot,
+  SHOW_STEP_PHOTOS,
+  useReport,
+  type ReportRow,
+} from "@/features/report";
 import {
   matchFor,
   useSession,
@@ -14,6 +22,7 @@ import {
   type ReportSummary,
   type SessionState,
 } from "@/features/session";
+import { ApiError, errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { useTimeout } from "@/lib/hooks/use-timeout";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
@@ -27,8 +36,16 @@ const snapOf = (m: MatchResult): ReportStep => ({
   used: m.p ? { brand: m.p.brand, name: m.p.name } : null,
 });
 
-/** 단계 사진 자리. 값마다 한 가지 모양 */
-function StepPhoto({ photo }: { photo: ReportRow["photo"] }): ReactElement {
+/** 단계 사진 자리. 사진 주소가 있으면 실제 이미지 */
+function StepPhoto({
+  photo,
+  url,
+}: {
+  photo: ReportRow["photo"];
+  url?: string | null;
+}): ReactElement {
+  if (photo === "slot" && url)
+    return <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />;
   switch (photo) {
     case "none":
       return (
@@ -91,19 +108,31 @@ function sampleRows(
   });
 }
 
-/** 리포트 상세·삭제. ?id=<리포트 id> */
+/** 리포트 상세·삭제. ?id=<리포트 id>. 로그인했으면 서버 기록, 아니면 기기에 저장한 샘플 기록 */
 export default function ReportPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, storageLoaded, update } = useSession();
+  const { state, storageLoaded, sessionChecked, update } = useSession();
   const [expanded, setExpanded] = useState(true);
   const [del, setDel] = useState<DelState>(null);
   const timer = useTimeout();
 
-  // 정확한 id로만 찾는다. 저장값을 읽기 전에는 판단을 미룬다
-  const id = query?.get("id");
-  const rep = storageLoaded && id ? state.reports.find((r) => r.id === id) : undefined;
-  const missing = storageLoaded && !!query && !rep;
+  // 정확한 id로만 찾는다. 저장값 · 로그인 확인 전에는 판단을 미룬다
+  const id = query?.get("id") ?? null;
+  const account = sessionChecked && state.loggedIn ? state.email : null;
+  const remote = useReport(account, id);
+  const remoteError = remote.load.status === "error" ? remote.load.error : null;
+  const rep = state.loggedIn
+    ? remote.load.status === "ready"
+      ? fromRecord(remote.load.data)
+      : undefined
+    : storageLoaded && id
+      ? state.reports.find((r) => r.id === id)
+      : undefined;
+  // 없는 기록(404)은 목록으로 보낸다
+  const missing = state.loggedIn
+    ? (!!query && !id) || (remoteError instanceof ApiError && remoteError.status === 404)
+    : storageLoaded && !!query && !rep;
   useEffect(() => {
     if (missing) router.replace("/my/reports");
   }, [missing, router]);
@@ -114,11 +143,36 @@ export default function ReportPage() {
   // 단계 사진 목록. 실제 가이드 기록은 보여 줄지를 따로 정한다
   const showSteps = !rep?.guide || SHOW_STEP_PHOTOS;
 
+  if (remoteError && !missing)
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-10 text-center">
+        <span className="text-[18px] text-mute">
+          리포트를 불러오지 못했어요. {errorMessage(remoteError)}
+        </span>
+        <button type="button" onClick={remote.retry} className="text-[18px] font-bold text-navy">
+          다시 시도
+        </button>
+      </main>
+    );
   if (!rep) return null;
 
-  const remove = () => {
+  const remove = async () => {
     if (del === "busy") return;
     setDel("busy");
+    if (account) {
+      // 이미 지운 기록(404)도 지운 것으로 본다
+      try {
+        await deleteReport(rep.id);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 404)) {
+          setDel("fail");
+          return;
+        }
+      }
+      update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
+      router.replace("/my/reports");
+      return;
+    }
     timer.set(() => {
       update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
       router.replace("/my/reports");
@@ -161,6 +215,12 @@ export default function ReportPage() {
                 {rep.noPhoto ? "사진 없이 완료한 메이크업이에요" : "마지막 단계 사진이 없어요"}
               </span>
             </div>
+          ) : rep.photoUrl ? (
+            <img
+              src={rep.photoUrl}
+              alt="완성 사진"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : rep.guide ? (
             <PhotoSlot label="마지막 단계 사진" />
           ) : (
@@ -199,7 +259,7 @@ export default function ReportPage() {
                 {steps.map((c) => (
                   <div key={c.no} className="flex flex-col gap-1.5">
                     <div className="relative aspect-square overflow-hidden rounded-[14px] border border-line">
-                      <StepPhoto photo={c.photo} />
+                      <StepPhoto photo={c.photo} url={c.photoUrl} />
                       <span className="absolute top-2 left-2 rounded-full bg-white px-2 py-[3px] font-serif text-[18px] text-ink">
                         {c.no}
                       </span>
@@ -270,7 +330,7 @@ export default function ReportPage() {
           </button>
           <button
             type="button"
-            onClick={remove}
+            onClick={() => void remove()}
             disabled={del === "busy"}
             className="flex h-[68px] flex-1 items-center justify-center rounded-full bg-error text-[19px] font-bold text-white disabled:opacity-70"
           >

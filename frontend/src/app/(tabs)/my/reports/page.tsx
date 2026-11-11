@@ -5,8 +5,15 @@ import Link from "next/link";
 
 import { PillButton } from "@/components/ui/pill-button";
 import { MyHeader } from "@/features/my";
-import { PhotoSlot, pickedCount } from "@/features/report";
+import {
+  fromSummary,
+  PhotoSlot,
+  pickedCount,
+  REPORT_PAGE_SIZE,
+  useReports,
+} from "@/features/report";
 import { useSession } from "@/features/session";
+import { errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 
 const PHOTO_POS = [
@@ -19,17 +26,47 @@ const ROT = [-1.6, 1.4, 1.2, -1.2];
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
 
-/** 마이페이지 · 리포트 목록 */
+/** 마이페이지 · 리포트 목록. 로그인했으면 서버 기록만, 아니면 기기에 저장한 샘플 기록(같은 기록이 두 번 보이지 않게 섞지 않는다) */
 export default function MyReportsPage() {
-  const { state } = useSession();
+  const { state, sessionChecked } = useSession();
   const query = useQuery();
-  const [top, ...rest] = query?.get("empty") === "1" ? [] : state.reports;
+  const account = sessionChecked && state.loggedIn ? state.email : null;
+  const server = useReports(account);
+  const waiting = state.loggedIn && (!sessionChecked || server.load.status === "loading");
+  const loadError = server.load.status === "error" ? server.load.error : null;
+  const more = server.load.status === "ready" && server.load.data.hasNext;
+  const reports =
+    query?.get("empty") === "1"
+      ? []
+      : account
+        ? server.load.status === "ready"
+          ? server.load.data.items.map(fromSummary)
+          : []
+        : state.reports;
+  const [top, ...rest] = reports;
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
       <MyHeader tab="reports" />
       <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-10 pt-1 pb-10">
-        {!top ? (
+        {waiting ? (
+          <span className="px-1 py-14 text-center text-[18px] text-mute">
+            리포트를 불러오고 있어요
+          </span>
+        ) : loadError ? (
+          <div className="flex items-center justify-between gap-4 rounded-[20px] border border-line px-6 py-7">
+            <span className="text-[17px] leading-[1.5] text-mute">
+              리포트를 불러오지 못했어요. {errorMessage(loadError)}
+            </span>
+            <button
+              type="button"
+              onClick={server.retry}
+              className="shrink-0 text-[17px] font-bold text-navy"
+            >
+              다시 시도
+            </button>
+          </div>
+        ) : !top ? (
           <div className="flex flex-col items-center gap-3.5 rounded-3xl border-[1.5px] border-dashed border-line-2 px-8 py-14 text-center">
             <span className="font-serif text-[34px] leading-none text-navy italic">
               No looks yet
@@ -49,7 +86,13 @@ export default function MyReportsPage() {
               className="relative shrink-0 overflow-hidden rounded-[28px] bg-night transition-transform active:scale-[.99]"
             >
               <div className="relative h-[420px] overflow-hidden">
-                {top.noPhoto || top.finalPhoto === false ? (
+                {top.photoUrl ? (
+                  <img
+                    src={top.photoUrl}
+                    alt="완성 사진"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : top.noPhoto || top.finalPhoto === false ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-cream font-display text-[26px] text-ink">
                     미촬영
                   </div>
@@ -98,7 +141,9 @@ export default function MyReportsPage() {
                 <span className="font-serif text-[26px] leading-none text-ink italic">
                   Past looks
                 </span>
-                <span className="text-[16px] text-mute">지난 룩 · {rest.length}개</span>
+                <span className="text-[16px] text-mute">
+                  지난 룩 · {rest.length}개{more ? ` (최근 ${REPORT_PAGE_SIZE}개까지)` : ""}
+                </span>
               </div>
               <div className="grid grid-cols-2 gap-x-5 gap-y-7 px-1.5 pt-1">
                 {rest.map((r, i) => (
@@ -109,7 +154,13 @@ export default function MyReportsPage() {
                     style={{ transform: `rotate(${ROT[i % 4]}deg)` }}
                   >
                     <div className="relative aspect-[4/5] overflow-hidden rounded bg-cream">
-                      {r.noPhoto || r.finalPhoto === false ? (
+                      {r.photoUrl ? (
+                        <img
+                          src={r.photoUrl}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      ) : r.noPhoto || r.finalPhoto === false ? (
                         <div className="absolute inset-0 flex items-center justify-center text-[16px] font-bold text-mute">
                           미촬영
                         </div>

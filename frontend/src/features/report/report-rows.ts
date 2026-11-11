@@ -10,6 +10,8 @@ export interface ReportRow {
   used: string;
   /** slot은 사진을 남겼지만 아직 보여 줄 이미지가 없는 자리 */
   photo: "none" | "sample" | "bare" | "slot";
+  /** 서버 기록의 단계 사진 주소. 있으면 slot 대신 실제 이미지 */
+  photoUrl?: string | null;
 }
 
 const PICK_LABEL = {
@@ -30,6 +32,7 @@ export function guideReportRows(report: GuideReport): ReportRow[] {
       usedKind: PICK_LABEL[s.pick].kind,
       used: used || PICK_LABEL[s.pick].empty,
       photo: s.photo ? "slot" : "none",
+      photoUrl: s.photoUrl ?? null,
     };
   });
 }
