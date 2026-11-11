@@ -53,7 +53,8 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
 
   /**
    * 노트북을 너무 오래 기다린 작업: {@code before} 전에 만들어졌는데 아무도 가져가지 않은 PENDING, 또는 임대가 {@code before} 전에 끝났는데
-   * 아무도 다시 가져가지 않은 RUNNING. S15P31A306-358.
+   * 아무도 다시 가져가지 않은 RUNNING. S15P31A306-358. 노트북이 일하는 중인지는 {@link #existsTouchedByProcessorSince}로
+   * 따로 본다.
    */
   @Query(
       value =
@@ -62,6 +63,18 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
               + " or (status = 'RUNNING' and processor_lease_until < :before)",
       nativeQuery = true)
   List<UUID> findIdsWaitingForProcessorSince(@Param("before") Instant before);
+
+  /**
+   * 노트북이 {@code since} 뒤로 만진(가져감 · 진행 알림 · 완료) 작업이 있는가. 노트북은 한 번에 하나씩 처리하므로, 일하는 동안 줄 선 작업은 차례를
+   * 기다리는 것이지 노트북이 꺼진 것이 아니다(S15P31A306-408). 완료 뒤 AI 진행 알림도 {@code updated_at}을 바꾸므로 노트북이 꺼진 것은 그만큼
+   * 늦게 알아챈다.
+   */
+  @Query(
+      value =
+          "select exists(select 1 from analysis_jobs"
+              + " where processor_claims > 0 and updated_at >= :since)",
+      nativeQuery = true)
+  boolean existsTouchedByProcessorSince(@Param("since") Instant since);
 
   /** 행을 잠그고 찾는다. 노트북 알림(완료 · 실패 · 진행)이 임대 다시 내주기와 겹치지 않게 한다. */
   @Lock(LockModeType.PESSIMISTIC_WRITE)

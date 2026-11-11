@@ -241,12 +241,71 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
     mockMvc
         .perform(post(JOBS + "/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
         .andExpect(status().isOk());
+    // 임대가 끝난 지 31분: 마지막으로 만진 것은 임대를 받은 때(46분 전)다
     jdbc.update(
-        "update analysis_jobs set processor_lease_until = now() - interval '31 minutes' where id = ?",
+        "update analysis_jobs set processor_lease_until = now() - interval '31 minutes',"
+            + " updated_at = now() - interval '46 minutes' where id = ?",
         fresh);
     assertThat(processorJobs.expireWaiting()).isEqualTo(1);
     AnalysisJob stalled = jobs.findById(fresh).orElseThrow();
     assertThat(stalled.getFailureCode()).isEqualTo("PROCESSOR_TIMEOUT");
     assertThat(stalled.getProgressStage().name()).isEqualTo("LOADING_VIDEO");
+  }
+
+  /** 노트북은 한 번에 하나씩 처리한다. 앞 작업을 하는 동안 줄 선 작업은 기다리는 것이지 노트북이 꺼진 것이 아니다(S15P31A306-408). */
+  @Test
+  void waitingJobsDoNotTimeOutWhileTheNotebookIsWorking() throws Exception {
+    // 노트북이 지금 처리 중인 작업
+    UUID working =
+        service
+            .register(
+                new AnalysisJobRequest(
+                    "procWork001", "videos/procWork001/source.mp4", "제목", "채널", 600))
+            .jobId();
+    mockMvc
+        .perform(post(JOBS + "/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
+        .andExpect(status().isOk());
+    // 예전에 가져갔다가 임대가 31분 전에 끝난 작업(마지막으로 만진 것은 46분 전)
+    UUID stalled =
+        service
+            .register(
+                new AnalysisJobRequest(
+                    "procStall01", "videos/procStall01/source.mp4", "제목", "채널", 600))
+            .jobId();
+    String claimed =
+        mockMvc
+            .perform(post(JOBS + "/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(claimed).contains(stalled.toString());
+    jdbc.update(
+        "update analysis_jobs set processor_lease_until = now() - interval '31 minutes',"
+            + " updated_at = now() - interval '46 minutes' where id = ?",
+        stalled);
+    UUID queued =
+        service
+            .register(
+                new AnalysisJobRequest(
+                    "procQueue01", "videos/procQueue01/source.mp4", "제목", "채널", 600))
+            .jobId();
+    jdbc.update(
+        "update analysis_jobs set created_at = now() - interval '40 minutes' where id = ?", queued);
+
+    // 노트북이 방금 작업을 가져갔으므로 줄 선 작업 · 임대가 지난 작업 모두 그대로 둔다
+    assertThat(processorJobs.expireWaiting()).isZero();
+    assertThat(jobs.findById(queued).orElseThrow().getStatus().name()).isEqualTo("PENDING");
+    assertThat(jobs.findById(stalled).orElseThrow().getStatus().name()).isEqualTo("RUNNING");
+
+    // 노트북이 31분 동안 아무 작업도 만지지 않으면 꺼진 것으로 본다. 임대가 남은 작업은 그대로다
+    jdbc.update(
+        "update analysis_jobs set updated_at = now() - interval '31 minutes' where id = ?",
+        working);
+    assertThat(processorJobs.expireWaiting()).isEqualTo(2);
+    assertThat(jobs.findById(queued).orElseThrow().getFailureCode()).isEqualTo("PROCESSOR_TIMEOUT");
+    assertThat(jobs.findById(stalled).orElseThrow().getFailureCode())
+        .isEqualTo("PROCESSOR_TIMEOUT");
+    assertThat(jobs.findById(working).orElseThrow().getStatus().name()).isEqualTo("RUNNING");
   }
 }

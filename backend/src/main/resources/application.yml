@@ -218,12 +218,13 @@ app:
       upload-concurrency: 8
     processor:
       # 영상 전처리 노트북 연결(S15P31A306-357). 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않는다.
-      # 노트북 결과로 AI 에 맡기는 처리(S15P31A306-358)가 붙기 전에는 끈다
+      # 노트북이 연결 모드(--serve)로 돌 때 켠다. 켜기 전에 PROCESSOR_API_TOKEN 을 넣는다(S15P31A306-408)
       enabled: ${ANALYSIS_PROCESSOR_ENABLED:false}
       # 노트북 임대 시간, 같은 작업을 내주는 최대 횟수(넘으면 PROCESSOR_TIMEOUT 실패)
       lease: ${ANALYSIS_PROCESSOR_LEASE:900s}
       max-claims: 2
-      # 노트북을 기다리는 최대 시간(아무도 안 가져감 · 처리 중 멈춤 → PROCESSOR_TIMEOUT), 노트북 결과를 AI 에 맡기는 확인 간격(worker, S15P31A306-358)
+      # 노트북을 기다리는 최대 시간(아무도 안 가져감 · 처리 중 멈춤 → PROCESSOR_TIMEOUT, 노트북이 이 시간 동안 아무 작업도 만지지 않았을 때만),
+      # 노트북 결과를 AI 에 맡기는 확인 간격(worker, S15P31A306-358)
       wait-timeout: ${ANALYSIS_PROCESSOR_WAIT_TIMEOUT:30m}
       submit-interval: 5s
     request:

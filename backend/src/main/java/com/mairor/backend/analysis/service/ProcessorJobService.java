@@ -219,6 +219,9 @@ public class ProcessorJobService {
    * 노트북을 너무 오래 기다린 작업을 {@code PROCESSOR_TIMEOUT}(재시도 가능)으로 끝낸다: 아무도 가져가지 않은 대기 작업, 임대가 지나고 아무도 다시
    * 가져가지 않은 작업. 연결 모드가 꺼져 있으면 하지 않는다(worker 가 대기 작업을 처리한다). S15P31A306-358.
    *
+   * <p>노트북이 그동안 어떤 작업이든 만졌으면(가져감 · 진행 알림 · 완료) 아무것도 끝내지 않는다. 노트북은 한 번에 하나씩 처리해서 앞 작업이 길면 줄 선 작업이 만든
+   * 지 기다림 시간을 넘길 수 있는데, 이것은 노트북이 꺼진 것이 아니다(S15P31A306-408).
+   *
    * @return 끝낸 작업 수
    */
   @Transactional
@@ -228,6 +231,9 @@ public class ProcessorJobService {
     }
     Instant now = clock.instant();
     Instant before = now.minus(properties.waitTimeout());
+    if (jobs.existsTouchedByProcessorSince(before)) {
+      return 0;
+    }
     int expired = 0;
     for (UUID id : jobs.findIdsWaitingForProcessorSince(before)) {
       AnalysisJob job = jobs.lockById(id).orElse(null);
