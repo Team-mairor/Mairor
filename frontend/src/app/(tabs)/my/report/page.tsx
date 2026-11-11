@@ -136,6 +136,8 @@ export default function ReportPage() {
   useEffect(() => {
     if (missing) router.replace("/my/reports");
   }, [missing, router]);
+  const waiting =
+    state.loggedIn && !missing && (!sessionChecked || remote.load.status === "loading");
 
   const steps = rep?.guide ? guideReportRows(rep.guide) : sampleRows(rep, state);
   // 최종 사진: 샘플 기록은 있음으로 본다
@@ -152,6 +154,12 @@ export default function ReportPage() {
         <button type="button" onClick={remote.retry} className="text-[18px] font-bold text-navy">
           다시 시도
         </button>
+      </main>
+    );
+  if (waiting)
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center px-10 text-center">
+        <span className="text-[18px] text-mute">리포트를 불러오고 있어요</span>
       </main>
     );
   if (!rep) return null;
