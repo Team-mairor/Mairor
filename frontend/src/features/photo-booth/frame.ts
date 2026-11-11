@@ -17,10 +17,10 @@ export interface PhotoFrameTemplate {
   readonly output: {
     readonly width: number;
     readonly height: number;
-    /** JPEG의 투명 영역을 방지하는 불투명 배경색. */
+    /** JPEG의 투명 영역을 방지하는 불투명 #RRGGBB 배경색. */
     readonly background: string;
   };
-  /** 배열 순서가 촬영·표시 순서이며 영역은 정확히 네 개다. */
+  /** slot-1~slot-4 순서로 정의한다. 영역은 출력 범위 내에서 겹치지 않아야 한다. */
   readonly slots: readonly [PhotoSlot, PhotoSlot, PhotoSlot, PhotoSlot];
   /**
    * 디자이너가 제공할 선택적 투명 프레임 이미지의 same-origin 경로.
