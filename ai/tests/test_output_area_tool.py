@@ -48,21 +48,51 @@ def test_lip_mask_comes_back_almost_the_same_through_the_service_outline():
     assert iou(masks["lipsOuter"], without_inside) >= 0.95
 
 
-def test_one_cheek_found_is_drawn_on_both_cheeks():
-    """서비스는 한쪽만 찾으면 그쪽을 뒤집어 양쪽에 쓰므로, 나가는 영역은 못 찾은 쪽에도 있어야 한다.
+def test_one_brow_found_is_drawn_on_both_brows():
+    """서비스는 한쪽 눈썹만 찾으면 그쪽을 뒤집어 양쪽에 쓰므로, 못 찾은 쪽에도 나가는 영역이 있다.
 
     쪽마다 재면 못 찾음인 쪽이 화면에서는 그려지는 차이를 이 도구가 잡아야 해서 고른 경우다.
     """
     areas = {
-        "leftCheek": BlushArea(mask=cheek_range("leftCheek")),
+        "leftBrow": BrowArea(mask=brow_range("leftBrow"), darkening=3.0),
+        "rightBrow": BrowArea(mask=None, reason="browColorNotFound"),
+    }
+
+    masks, sub_step, _ = output_area.output_area("brow", areas)
+
+    assert sub_step.status == "extracted"
+    assert output_area.found_side(masks, "rightBrow") is not None
+    assert iou(masks["rightBrow"], brow_range("leftBrow")[:, ::-1]) >= 0.8
+
+
+def test_one_cheek_found_draws_no_blush():
+    """블러셔는 두 볼 모두 찾아야 그리므로(paired_blush), 한쪽만 찾으면 나가는 영역이 없다."""
+    areas = {
+        "leftCheek": BlushArea(mask=np.array(cheek_range("leftCheek")), peak=5.0),
         "rightCheek": BlushArea(mask=None, reason="blushColorNotFound"),
     }
 
     masks, sub_step, _ = output_area.output_area("blush", areas)
 
-    assert sub_step.status == "extracted"
-    assert output_area.found_side(masks, "rightCheek") is not None
-    assert iou(masks["rightCheek"], cheek_range("leftCheek")[:, ::-1]) >= 0.95
+    assert (sub_step.status, sub_step.reasons) == ("template", ["blushColorNotFound"])
+    assert masks == {}
+
+
+def test_each_cheek_keeps_its_own_shape_in_the_output():
+    """두 볼 모두 찾으면 볼마다 찾은 모양을 그대로 그린다. 한쪽을 뒤집어 쓰지 않는다."""
+    left = np.array(cheek_range("leftCheek"))
+    right = np.array(cheek_range("rightCheek"))
+    right[: np.nonzero(right.any(axis=1))[0].mean().astype(int)] = False
+    areas = {
+        "leftCheek": BlushArea(mask=left, peak=5.0),
+        "rightCheek": BlushArea(mask=right, peak=4.0),
+    }
+
+    masks, _, _ = output_area.output_area("blush", areas)
+
+    assert iou(masks["leftCheek"], left) >= 0.95
+    assert iou(masks["rightCheek"], right) >= 0.95
+    assert iou(masks["rightCheek"], left[:, ::-1]) < 0.8
 
 
 def test_eyeshadow_output_leaves_out_the_eye_hole():

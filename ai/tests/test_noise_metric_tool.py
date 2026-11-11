@@ -108,16 +108,16 @@ def test_same_photo_before_and_after_gives_no_noise_and_no_false_find(measure, s
         assert np.abs(m.values).max() < 1e-3
 
 
-def test_blush_reddening_matches_the_service_before_the_threshold():
+def test_blush_measure_finds_what_the_service_finds():
     before = skin_map()
     after = with_red(before, blush_area.cheek_range("leftCheek"), 12)
 
-    tool_area = blush_area.cheek_range("leftCheek") & (
-        noise_metric.blush_reddening(before, after) > blush_area.REDDENING_MIN
-    )
+    m = noise_metric.measure_blush(before, after, "leftCheek")
+    service = blush_area.blush_area_on_maps(before, after, "leftCheek")
 
-    assert tool_area.any()
-    assert np.array_equal(tool_area, blush_area.blush_area_on_maps(before, after, "leftCheek"))
+    assert m.found
+    assert np.array_equal(m.area.mask, service.mask)
+    assert m.gate == service.peak
 
 
 def test_lip_measure_finds_what_the_service_finds():
@@ -148,21 +148,20 @@ def test_pair_whose_range_is_hidden_in_every_photo_is_skipped(measure, side):
     assert measure(skin_map(), skin_map(), side, hidden) is None
 
 
-def test_blush_reddening_with_hidden_cells_matches_the_service():
+def test_blush_measure_with_hidden_cells_matches_the_service():
     cheek = blush_area.cheek_range("leftCheek")
     before = skin_map()
     after = with_red(before, cheek, 12)
     hidden = np.zeros_like(cheek)
-    hidden[: int(np.nonzero(cheek.any(axis=1))[0].mean())] = True
+    rows = np.nonzero(cheek.any(axis=1))[0]
+    hidden[: rows[0] + (rows[-1] - rows[0]) * 3 // 10] = True
 
-    tool_area = (cheek & ~hidden) & (
-        noise_metric.blush_reddening(before, after, hidden) > blush_area.REDDENING_MIN
-    )
+    m = noise_metric.measure_blush(before, after, "leftCheek", hidden)
+    service = blush_area.blush_area_on_maps(before, after, "leftCheek", hidden)
 
-    assert tool_area.any()
-    assert np.array_equal(
-        tool_area, blush_area.blush_area_on_maps(before, after, "leftCheek", hidden)
-    )
+    assert m.found
+    assert not (m.area.mask & hidden).any()
+    assert np.array_equal(m.area.mask, service.mask)
 
 
 def test_lip_measure_with_hidden_cells_matches_the_service():
@@ -184,7 +183,7 @@ def test_parts_use_each_service_threshold():
     assert by_name["brow"].threshold == brow_area.DARKENING_MIN
     assert by_name["eyeshadow"].threshold == eyeshadow_area.REDDENING_MIN
     assert by_name["eyeliner"].threshold == eyeliner_area.REDDENING_MIN
-    assert by_name["blush"].threshold == blush_area.REDDENING_MIN
+    assert by_name["blush"].threshold == blush_area.PEAK_MIN
     assert by_name["lip"].threshold == lip_area.CHANGE_MIN
 
 
@@ -210,35 +209,65 @@ def test_eye_parts_leave_out_brow_steps():
         assert not any(noise_metric.overlaps(start, end, spans) for start, end in brow_steps)
 
 
-def test_a_false_find_on_one_cheek_counts_on_both_cheeks_as_output(monkeypatch):
-    """서비스는 한쪽 볼만 찾아도 뒤집어 양쪽에 그리므로, 나가는 영역 헛것은 두 볼 모두에 센다.
+def one_side_found_tallies(monkeypatch, name, sides, found_area):
+    """첫 쪽만 늘 찾고 다른 쪽은 늘 못 찾는 가짜 재기로 measure_part를 돌린 (모은 결과, 기록).
 
-    쪽마다 재면 헛것이 없는 볼도 화면에서는 헛것이 보이는 차이를 잡는지 보려고 고른 경우다.
+    found_area는 쪽을 받아 찾은 결과를 낸다. 못 찾은 쪽은 같은 결과 종류에 noUsableFrame이다.
     """
     monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
     monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
+    area_type = type(found_area(sides[0]))
 
-    def measure(before, after, cheek, unknown=None):
-        if cheek == "leftCheek":
-            area = blush_area.BlushArea(mask=blush_area.cheek_range(cheek))
+    def measure(before, after, side, unknown=None):
+        if side == sides[0]:
+            area = found_area(side)
         else:
-            area = blush_area.BlushArea(mask=None, reason="blushColorNotFound")
+            area = area_type(mask=None, reason="noUsableFrame")
         return noise_metric.Measure(None, 0.0, None, area.mask is not None, area)
 
-    part = noise_metric.Part(
-        "blush", blush_area.CHEEKS, 1000, 1000, 0.5, None, lambda side: [side], measure
-    )
+    part = noise_metric.Part(name, sides, 1000, 1000, 0.5, None, lambda side: [side], measure)
     empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
-
-    tallies, records = noise_metric.measure_part(
+    return noise_metric.measure_part(
         part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty), keep_sharp=keep_all
+    )
+
+
+def test_a_false_find_on_one_brow_counts_on_both_brows_as_output(monkeypatch):
+    """서비스는 한쪽 눈썹만 찾아도 뒤집어 양쪽에 그리므로, 나가는 영역 헛것은 두 눈썹 모두에 센다.
+
+    쪽마다 재면 헛것이 없는 쪽도 화면에서는 헛것이 보이는 차이를 잡는지 보려고 고른 경우다.
+    """
+    tallies, records = one_side_found_tallies(
+        monkeypatch,
+        "brow",
+        brow_area.BROWS,
+        lambda side: brow_area.BrowArea(mask=np.array(brow_area.brow_range(side)), darkening=3.0),
+    )
+
+    first, second = (tallies[(side, 1)] for side in brow_area.BROWS)
+    assert first.pairs == second.pairs > 0
+    assert (first.found, second.found) == (first.pairs, 0)
+    assert first.output_found == second.output_found == first.pairs
+    assert all(r["outputFound"] for r in records)
+
+
+def test_a_false_find_on_one_cheek_is_not_output(monkeypatch):
+    """블러셔는 두 볼 모두 찾아야 그리므로(paired_blush), 한쪽 볼 헛것은 나가는 영역 헛것이 아니다.
+
+    쪽별 헛것과 나가는 영역 헛것이 갈리는 블러셔만의 경우라 골랐다.
+    """
+    tallies, records = one_side_found_tallies(
+        monkeypatch,
+        "blush",
+        blush_area.CHEEKS,
+        lambda side: blush_area.BlushArea(mask=np.array(blush_area.cheek_range(side)), peak=5.0),
     )
 
     left, right = tallies[("leftCheek", 1)], tallies[("rightCheek", 1)]
     assert left.pairs == right.pairs > 0
     assert (left.found, right.found) == (left.pairs, 0)
-    assert left.output_found == right.output_found == left.pairs
-    assert all(r["outputFound"] for r in records)
+    assert left.output_found == right.output_found == 0
+    assert not any(r["outputFound"] for r in records)
 
 
 @pytest.mark.parametrize(

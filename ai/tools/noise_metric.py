@@ -39,7 +39,6 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import cv2
 import numpy as np
 
 AI_ROOT = Path(__file__).resolve().parents[1]
@@ -58,8 +57,6 @@ from app.tasks.area.parts.area_preparation import (
     known_cells,
     known_median_map,
     match_sizes,
-    remove_lighting,
-    rgb_to_lab,
     usable_rows,
 )
 from tools.face_map_store import STORE_USAGE, split_store, stored_known_map, tool_photos
@@ -296,32 +293,27 @@ def measure_eyeliner(
     return Measure(None, float(changed[cells].mean()), None, area.mask is not None, area)
 
 
-def blush_reddening(
-    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
-) -> np.ndarray:
-    """blush_area_on_maps와 같은 계산으로, 기준값과 견주기 전의 붉어진 양 지도를 낸다."""
-    change = rgb_to_lab(after)[..., 1] - rgb_to_lab(before)[..., 1]
-    corrected = remove_lighting(change, blush_area.light_exclude(), unknown)
-    return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), blush_area.BLUR_SIGMA)
-
-
 def measure_blush(
     before: np.ndarray | None,
     after: np.ndarray,
     cheek: RegionName,
     unknown: np.ndarray | None = None,
 ) -> Measure | None:
+    """블러셔 볼 하나의 잡음. gate는 볼 범위에서 가장 많이 붉어진 값(서비스의 peak)이다.
+
+    블러셔는 두 볼 모두 찾아야 나가는 영역이 생기므로(paired_blush),
+    쪽별 헛것(found)보다 나가는 영역 헛것이 적다.
+    """
     cells = known_cells(blush_area.cheek_range(cheek), unknown)
     if not cells.any():
         return None
-    reddening = blush_reddening(before, after, unknown)
+    reddening = blush_area.blush_reddening(before, after, unknown)
     values = reddening[cells]
-    area = cells & (reddening > blush_area.REDDENING_MIN)
-    found = blush_area.check_blush_area(area, cheek, unknown)
+    found = blush_area.check_blush_area(reddening, cheek, unknown)
     return Measure(
         values,
-        float((values > blush_area.REDDENING_MIN).mean()),
-        blush_area.found_ratio(area, cheek, unknown),
+        float((values >= blush_area.PEAK_MIN).mean()),
+        float(values.max()),
         found.mask is not None,
         found,
     )
@@ -388,8 +380,8 @@ PARTS = (
         blush_area.CHEEKS,
         blush_area.BEFORE_WINDOW_MS,
         blush_area.AFTER_WINDOW_MS,
-        blush_area.REDDENING_MIN,
-        blush_area.MIN_FOUND_RATIO,
+        blush_area.PEAK_MIN,
+        blush_area.PEAK_MIN,
         lambda side: [side],
         measure_blush,
         blush_area.cheek_range,

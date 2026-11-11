@@ -51,8 +51,10 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
 | `eyeshadow` | 아이섀도 위아래 모두 (바른 자리를 모를 때) |
 | `eyeshadowUpper` | 아이섀도 윗눈두덩 |
 | `eyeshadowUnder` | 아이섀도 눈 밑(애교살) |
+| `blushNose` | 블러셔 코(코끝 · 콧등 · 콧대) |
 
 아이섀도 키는 가이드 입력의 `eyeZone`(`upper` · `under` · `both`)으로 고르고, 없으면 `partLabel` · `facts.area` 글로 고른다([ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md)).
+`blushNose`는 블러셔 단계의 `partLabel` · `facts.area` 글이 코에만 바른다고 할 때 쓴다(이유 `notAnalyzed`). 코는 색으로 찾지 않는다.
 
 ## 형식을 바꿀 때
 

@@ -37,7 +37,7 @@ from app.tasks.area.parts.area_preparation import (
     step_bounds,
     within_step,
 )
-from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, symmetric_blush
+from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, paired_blush
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import (
     EyelinerArea,
@@ -65,6 +65,9 @@ EYE_EXCLUSION_PATTERN = re.compile(
     rf"(?:{'|'.join(EYE_WORDS)})(?:에는|은|는|을|를|에)?"
     rf"(?:{'|'.join(EYE_EXCLUSION_WORDS)})"
 )
+NOSE_WORDS = ("코끝", "콧등", "콧대", "콧볼", "콧방울", "코볼", "코블러셔")
+NOSE_PATTERN = re.compile("|".join(NOSE_WORDS))
+CHEEK_WORDS = ("볼", "광대", "뺨", "애플존")
 EYE_ZONE_TEMPLATES: dict[EyeZone, TemplateId] = {
     "upper": "eyeshadowUpper",
     "under": "eyeshadowUnder",
@@ -169,11 +172,16 @@ def _sub_step(
     """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
 
     아이섀도를 못 찾아 기본 가이드로 보낼 때는 단계 글로 바른 자리별 키를 고른다.
+    단계 글이 코에만 바른 블러셔이면(_nose_blush) 색으로 찾지 않고 notAnalyzed 이유로
+    코 블러셔 기본 가이드(blushNose)를 쓴다. 코는 고개를 조금만 돌려도 그림자·반사가 크게 바뀌어
+    바르지 않은 시간의 변화와 블러셔를 가를 수 없었고, 볼을 찾으면 코 단계가 볼에 그려진다.
     """
     sub_step_id = f"{step.step_id}-1"
     fixed = _fixed_sub_step(step.makeup, sub_step_id)
     if fixed is not None:
         return fixed
+    if step.makeup == "blush" and _nose_blush(step):
+        return template_sub_step(sub_step_id, "blushNose", [NOT_ANALYZED])
     finder = AREA_FINDERS[step.makeup]
     try:
         sub_step = finder(
@@ -222,6 +230,22 @@ def _eyeshadow_template_id(step: Step | GuideInputStep) -> TemplateId:
     if under and not upper:
         return "eyeshadowUnder"
     return "eyeshadow"
+
+
+def _nose_blush(step: Step | GuideInputStep) -> bool:
+    """블러셔 단계 글(partLabel·facts.area)이 코에만 바른다고 하는지.
+
+    띄어쓰기를 지운 글에 코 낱말(NOSE_WORDS)이 있고, 코 낱말을 지운 글에 볼 낱말(CHEEK_WORDS)이
+    없으면 코에만 바른 단계다. 「콧볼」의 「볼」을 볼로 보지 않으려고 코 낱말을 먼저 지운다.
+    볼과 코를 같이 바르면 볼은 색으로 찾을 수 있어 코 단계로 보지 않는다.
+    글이 없는 매니페스트 단계는 코 단계가 아니다.
+    """
+    if not isinstance(step, GuideInputStep):
+        return False
+    texts = ["".join(text.split()) for text in (step.part_label, step.facts.area.value)]
+    nose = any(NOSE_PATTERN.search(text) for text in texts)
+    cheek = any(word in NOSE_PATTERN.sub("", text) for text in texts for word in CHEEK_WORDS)
+    return nose and not cheek
 
 
 def _eyeliner_step(
@@ -430,7 +454,10 @@ def _blush_sub_step(
     sub_step_id: str,
     occlusion: OcclusionFinder | None,
 ) -> AreaSubStep:
-    """블러셔를 볼마다 찾아 symmetric_blush로 좌우 같은 모양을 만들고, 볼마다 영역 하나씩 적는다."""
+    """블러셔를 볼마다 찾아, 두 볼 모두 찾았으면 볼마다 찾은 모양으로 영역 하나씩 적는다.
+
+    좌우는 paired_blush로 정한다.
+    """
     areas = {
         cheek: find_blush_area(
             result, step_start_ms, step_end_ms, load_photo, cheek, occlusion=occlusion
@@ -441,7 +468,7 @@ def _blush_sub_step(
         sub_step_id,
         "blush",
         areas,
-        symmetric_blush(areas),
+        paired_blush(areas),
         "blushColorNotFound",
         False,
         blush_area.OUTLINE_SMOOTH_CELLS,
@@ -515,17 +542,18 @@ def pair_sub_step(
 ) -> AreaSubStep:
     """좌우 짝 부위(볼·눈썹·눈)의 결과를 하위 단계 하나로 적는다.
 
-    areas는 부위마다 찾은 결과, masks는 대칭으로 만든 양쪽 마스크다(못 찾았으면 None).
-    두 쪽 모두 못 찾으면 쪽마다의 이유를 겹치지 않게 모아
-    그 화장 종류의 기본 가이드(template)를 쓴다.
+    areas는 부위마다 찾은 결과, masks는 좌우를 맞춘 양쪽 마스크다(못 정했으면 None).
+    masks가 None이면 못 찾은 쪽마다의 이유를 겹치지 않게 모아
+    그 화장 종류의 기본 가이드(template)를 쓴다. 블러셔처럼 한쪽만 찾아도 None이 되는 부위는
+    찾은 쪽의 이유가 없으므로 못 찾은 쪽 이유만 모인다.
     한쪽만 못 찾으면 형식상 extracted의 reasons는 비워야 하므로, 그쪽과 이유를 로그에 남긴다.
     테두리는 부위의 세기(smooth_cells)로 펴서 보내고(outline_anchors),
     나오지 않으면 not_found 이유로 기본 가이드를 쓴다.
     exclude_self가 참이면 묶음마다 자기 부위를 exclude에 넣는다(섀도의 눈 구멍).
     """
     if masks is None:
-        reasons = list(dict.fromkeys(area.reason for area in areas.values()))
-        return template_sub_step(sub_step_id, makeup, reasons)
+        reasons = list(dict.fromkeys(area.reason for area in areas.values() if area.reason))
+        return template_sub_step(sub_step_id, makeup, reasons or [not_found])
     for side, area in areas.items():
         if area.mask is None:
             logger.info(

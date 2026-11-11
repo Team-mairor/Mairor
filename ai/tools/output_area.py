@@ -40,7 +40,7 @@ from app.tasks.area.guide_area_builder import (
 )
 from app.tasks.area.parts import blush_area, brow_area, eyeshadow_area
 from app.tasks.area.parts.area_preparation import step_bounds, within_step
-from app.tasks.area.parts.blush_area import BlushArea, symmetric_blush
+from app.tasks.area.parts.blush_area import BlushArea, paired_blush
 from app.tasks.area.parts.brow_area import BrowArea, symmetric_brows
 from app.tasks.area.parts.eyeliner_area import (
     EYES,
@@ -70,7 +70,7 @@ PAIR_RULES: dict[str, tuple[Callable, str, bool, float]] = {
         True,
         eyeshadow_area.OUTLINE_SMOOTH_CELLS,
     ),
-    "blush": (symmetric_blush, "blushColorNotFound", False, blush_area.OUTLINE_SMOOTH_CELLS),
+    "blush": (paired_blush, "blushColorNotFound", False, blush_area.OUTLINE_SMOOTH_CELLS),
 }
 
 

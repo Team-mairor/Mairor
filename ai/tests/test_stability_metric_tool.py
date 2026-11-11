@@ -1,6 +1,7 @@
 import numpy as np
 
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
+from app.tasks.area.parts.brow_area import BrowArea, brow_range
 from tools import stability_metric
 
 
@@ -103,7 +104,7 @@ def test_parts_cover_the_five_analysed_makeups():
 
 
 def test_measure_part_step_measures_the_drawn_area_on_a_side_that_found_nothing():
-    """한쪽 볼만 찾으면 서비스는 양쪽에 그리므로, 못 찾은 쪽도 나가는 영역은 찾음이어야 한다.
+    """한쪽 눈썹만 찾으면 서비스는 양쪽에 그리므로, 못 찾은 쪽도 나가는 영역은 찾음이어야 한다.
 
     쪽마다 찾음 수와 나가는 영역 찾음 수가 갈리는 대표 경우라 골랐다. 조합마다 쪽을 한 번씩만
     찾는지(찾기를 두 번 돌리지 않는지)도 함께 본다.
@@ -112,11 +113,11 @@ def test_measure_part_step_measures_the_drawn_area_on_a_side_that_found_nothing(
 
     def find(start_ms, end_ms, side):
         calls.append((start_ms, end_ms, side))
-        if side == "leftCheek":
-            return BlushArea(mask=cheek_range(side))
-        return BlushArea(mask=None, reason="blushColorNotFound")
+        if side == "leftBrow":
+            return BrowArea(mask=brow_range(side), darkening=3.0)
+        return BrowArea(mask=None, reason="browColorNotFound")
 
-    part = next(p for p in stability_metric.PARTS if p.name == "blush")
+    part = next(p for p in stability_metric.PARTS if p.name == "brow")
     (left, right), _ = stability_metric.measure_part_step(part, find, 10000, 20000)
 
     assert len(calls) == 9 * 2
@@ -124,6 +125,21 @@ def test_measure_part_step_measures_the_drawn_area_on_a_side_that_found_nothing(
     assert left["output"]["found"] == right["output"]["found"] == 9
     assert right["output"]["baseFound"] is True and right["baseFound"] is False
     assert right["output"]["meanIoU"] == 1.0
+
+
+def test_one_cheek_found_draws_nothing_for_blush():
+    """블러셔는 두 볼 모두 찾아야 그리므로(paired_blush), 한쪽만 찾으면 나가는 영역이 없다."""
+
+    def find(start_ms, end_ms, side):
+        if side == "leftCheek":
+            return BlushArea(mask=cheek_range(side), peak=5.0)
+        return BlushArea(mask=None, reason="blushColorNotFound")
+
+    part = next(p for p in stability_metric.PARTS if p.name == "blush")
+    (left, right), _ = stability_metric.measure_part_step(part, find, 10000, 20000)
+
+    assert (left["found"], right["found"]) == (9, 0)
+    assert left["output"]["found"] == right["output"]["found"] == 0
 
 
 def test_face_map_keep_covers_every_photo_one_step_uses():

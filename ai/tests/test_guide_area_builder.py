@@ -240,19 +240,19 @@ def test_blush_not_found_on_both_cheeks_uses_default_blush_guide_with_reasons(mo
     assert same.reasons == ["noUsableFrame"]
 
 
-def test_blush_found_on_one_cheek_logs_the_other_cheek_and_its_reason(monkeypatch, caplog):
+def test_blush_found_on_one_cheek_falls_back_to_the_template_with_the_other_reason(monkeypatch):
+    """블러셔는 두 볼 모두 찾아야 영역을 보낸다(paired_blush). 한쪽만 찾으면 못 찾은 쪽 이유로
+    기본 가이드를 쓰고, 찾은 쪽은 이유가 없어 reasons에 None이 섞이지 않는다."""
+
     def right_only(*args, **_):
         cheek = args[-1]
         if cheek == "rightCheek":
-            return BlushArea(mask=cheek_range(cheek))
+            return BlushArea(mask=np.array(cheek_range(cheek)), peak=5.0)
         return BlushArea(mask=None, reason="noUsableFrame")
 
-    with caplog.at_level(logging.INFO, logger=guide_area_builder.__name__):
-        sub_step = build_blush(monkeypatch, right_only)
-    assert (sub_step.status, sub_step.reasons) == ("extracted", [])
-    assert "s4-1" in caplog.text
-    assert "leftCheek" in caplog.text
-    assert "noUsableFrame" in caplog.text
+    sub_step = build_blush(monkeypatch, right_only)
+    assert (sub_step.status, sub_step.template_id) == ("template", "blush")
+    assert sub_step.reasons == ["noUsableFrame"]
 
 
 def build_one(monkeypatch, name, finder, makeup):
@@ -327,6 +327,55 @@ def input_step(
         summary=part_label,
         facts=StepFacts(area=Fact(value=area, source="voice")),
     )
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area"),
+    [
+        ("코 블러셔", "코끝과 콧등"),
+        ("블러셔", "콧대 위 눈 앞머리 사이"),
+        ("블러셔", "콧볼 위"),
+    ],
+)
+def test_blush_only_on_the_nose_uses_the_nose_template_without_finding(
+    monkeypatch, part_label, area
+):
+    """시험 영상 코 블러셔 두 단계(s22b·s22c)의 BE 글과 「콧볼」처럼 볼 글자가 든 코 낱말."""
+
+    def never_find(*_, **__):
+        raise AssertionError("코에만 바른 단계는 색으로 찾지 않아야 합니다")
+
+    monkeypatch.setattr(guide_area_builder, "find_blush_area", never_find)
+    step = input_step("blush", part_label, area)
+    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id, sub_step.reasons) == (
+        "template",
+        "blushNose",
+        ["notAnalyzed"],
+    )
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area"),
+    [
+        ("블러셔", "눈 밑 볼"),
+        ("블러셔", "볼과 코끝"),
+        ("광대 블러셔", "광대 위"),
+    ],
+)
+def test_blush_on_the_cheeks_is_still_found_by_color(monkeypatch, part_label, area):
+    """볼에 바르거나 볼과 코를 같이 바르면 볼은 색으로 찾는다."""
+    seen = []
+
+    def found(*args, **_):
+        seen.append(args[-1])
+        return BlushArea(mask=np.array(cheek_range(args[-1])), peak=5.0)
+
+    monkeypatch.setattr(guide_area_builder, "find_blush_area", found)
+    step = input_step("blush", part_label, area)
+    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+    assert seen == ["leftCheek", "rightCheek"]
+    assert sub_step.status == "extracted"
 
 
 def eyeshadow_not_found(*_, **__) -> EyeshadowArea:

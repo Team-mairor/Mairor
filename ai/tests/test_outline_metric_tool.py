@@ -7,6 +7,7 @@ from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.parts import lip_area
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
+from app.tasks.area.parts.brow_area import BrowArea, brow_range
 from app.tasks.area.parts.lip_area import LipArea
 from tools import outline_metric, output_area
 
@@ -181,14 +182,26 @@ def test_lip_outline_is_measured_from_what_the_service_sends():
     assert abs(rows[0]["areaChange"]) < 0.05
 
 
-def test_cheek_not_found_is_still_measured_because_the_service_draws_it():
-    """서비스는 한쪽 볼만 찾아도 뒤집어 양쪽에 그리므로, 못 찾은 볼도 테두리 값이 있어야 한다."""
+def test_brow_not_found_is_still_measured_because_the_service_draws_it():
+    """서비스는 한쪽 눈썹만 찾아도 뒤집어 양쪽에 그리므로, 못 찾은 눈썹도 테두리 값이 있다."""
     areas = {
-        "leftCheek": BlushArea(mask=cheek_range("leftCheek")),
+        "leftBrow": BrowArea(mask=brow_range("leftBrow"), darkening=3.0),
+        "rightBrow": BrowArea(mask=None, reason="browColorNotFound"),
+    }
+
+    rows, _, _ = outline_metric.measure_step("brow", ("leftBrow", "rightBrow"), areas, None)
+
+    assert [row["polygons"] for row in rows] == [1, 1]
+    assert all(row["areaChange"] is not None for row in rows)
+
+
+def test_one_cheek_found_draws_no_blush_outline():
+    """블러셔는 두 볼 모두 찾아야 그리므로(paired_blush), 한쪽만 찾으면 두 볼 모두 테두리가 없다."""
+    areas = {
+        "leftCheek": BlushArea(mask=cheek_range("leftCheek"), peak=5.0),
         "rightCheek": BlushArea(mask=None, reason="blushColorNotFound"),
     }
 
     rows, _, _ = outline_metric.measure_step("blush", ("leftCheek", "rightCheek"), areas, None)
 
-    assert [row["polygons"] for row in rows] == [1, 1]
-    assert all(row["areaChange"] is not None for row in rows)
+    assert [row["polygons"] for row in rows] == [0, 0]
