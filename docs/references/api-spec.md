@@ -705,6 +705,7 @@ GET /api/v1/users/me/analysis-jobs
   - 내가 신규 요청하거나 합류한 작업 중 분석이 COMPLETED인 것만. 홈 진입 시 조회해 카드 갱신, 알림(푸시·알림함) 없음
   - PENDING → 'IN REVIEW · 검수 중', APPROVED → 'READY · 따라 하기'(guideId로 바로 따라 하기 준비), REJECTED → 기본 제외(카드 제거)
   - APPROVED 카드의 노출 종료 시점(첫 실행 시작 후 제외 등)은 미정
+  - 구현 메모(S15P31A306-405): requestedAt은 그 회원이 요청·합류한 시각(같은 작업이라도 회원마다 다름)이고 같은 시각이면 요청 기록 순서로 고정한다. guideId는 APPROVED일 때만 준다(API-VIDEO-003과 같음). reviewStatus는 PENDING·APPROVED·REJECTED만 받고 그 밖은 400 VALIDATION\_FAILED. 운영자가 내부 API로 만든 작업은 요청 기록이 없어 나오지 않는다
 
 ### API-VIDEO-008 · 분석 상태 실시간 (SSE) (번호 임시)
 

@@ -2,38 +2,49 @@ package com.mairor.backend.analysis.controller;
 
 import com.mairor.backend.analysis.dto.request.RequestAnalysisJobRequest;
 import com.mairor.backend.analysis.dto.response.AnalysisJobStatusResponse;
+import com.mairor.backend.analysis.dto.response.AnalysisJobSummaryResponse;
 import com.mairor.backend.analysis.dto.response.AnalysisRequestReceiptResponse;
+import com.mairor.backend.analysis.service.AnalysisJobListService;
 import com.mairor.backend.analysis.service.AnalysisJobStatusService;
 import com.mairor.backend.analysis.service.AnalysisRequestReceipt;
 import com.mairor.backend.analysis.service.AnalysisRequestService;
 import com.mairor.backend.analysis.service.ReceiptType;
 import com.mairor.backend.common.error.ErrorResponse;
 import com.mairor.backend.common.web.OpenApiConfig;
+import com.mairor.backend.common.web.PageQuery;
+import com.mairor.backend.common.web.PageResponse;
+import com.mairor.backend.guides.entity.ReviewStatus;
 import com.mairor.backend.users.controller.AuthApiDocs;
 import com.mairor.backend.users.support.AuthenticatedUser;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 회원의 분석 요청(API-VIDEO-002)과 작업 상태(API-VIDEO-003). 로그인이 필요하고 요청했거나 합류한 작업만 본다({@code
- * AnalysisJobAccess}). 진행 화면은 분석 상태 SSE 로 바뀔 때마다 받고, 상태 조회는 새로고침·홈 재확인과 SSE 를 못 쓸 때 쓴다.
+ * 회원의 분석 요청(API-VIDEO-002), 작업 상태(API-VIDEO-003), 내 분석 목록(API-VIDEO-007). 로그인이 필요하고 요청했거나 합류한 작업만
+ * 본다({@code AnalysisJobAccess}). 진행 화면은 분석 상태 SSE 로 바뀔 때마다 받고, 상태 조회는 새로고침·홈 재확인과 SSE 를 못 쓸 때 쓴다.
  */
 @Tag(name = "분석 작업", description = "영상 분석 요청과 내 분석 작업의 진행 상태.")
 @RestController
@@ -42,11 +53,53 @@ public class AnalysisJobController {
 
   private final AnalysisJobStatusService statusService;
   private final AnalysisRequestService requestService;
+  private final AnalysisJobListService listService;
 
   public AnalysisJobController(
-      AnalysisJobStatusService statusService, AnalysisRequestService requestService) {
+      AnalysisJobStatusService statusService,
+      AnalysisRequestService requestService,
+      AnalysisJobListService listService) {
     this.statusService = statusService;
     this.requestService = requestService;
+    this.listService = listService;
+  }
+
+  @Operation(
+      summary = "내 분석 목록",
+      description =
+          """
+          내가 요청하거나 합류한 분석 작업 중 분석이 끝난 것을 요청 · 합류한 시각의 최신순으로 준다.
+          - reviewStatus 로 가이드 검수 상태를 고른다(여러 값). 없으면 PENDING · APPROVED 이고, REJECTED 는 고를 때만 나온다.
+          - guideId 는 검수 승인일 때만 있고, 그 값으로 바로 따라 하기를 시작한다.
+          - 진행 중이거나 실패한 작업은 나오지 않는다(상태 조회 · 분석 상태 SSE 로 본다).
+          """,
+      security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE))
+  @ApiResponse(
+      responseCode = "200",
+      description = "내 분석 목록 한 페이지",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              examples = @ExampleObject(name = "검수 중 · 승인", value = AnalysisApiDocs.LIST)))
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "reviewStatus 가 PENDING · APPROVED · REJECTED 가 아니거나 page · size 가 유효하지 않다. (VALIDATION_FAILED)",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ErrorResponse.class)))
+  @AuthApiDocs.Unauthorized
+  @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<PageResponse<AnalysisJobSummaryResponse>> list(
+      @AuthenticationPrincipal AuthenticatedUser principal,
+      @Parameter(description = "고를 가이드 검수 상태. 없으면 PENDING · APPROVED", example = "PENDING")
+          @RequestParam(name = "reviewStatus", required = false)
+          List<ReviewStatus> reviewStatus,
+      @Valid @ParameterObject @ModelAttribute PageQuery page) {
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(listService.list(principal.userId(), reviewStatus, page));
   }
 
   @Operation(
