@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Home, PlaySquare, ShoppingBag } from "lucide-react";
+import { BarChart3, Camera, Home, PlaySquare, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/home", label: "홈", Icon: Home, match: (p: string) => p === "/home" },
+  { href: "/photo", label: "촬영", Icon: Camera, match: (p: string) => p.startsWith("/photo") },
   { href: "/select", label: "튜토리얼", Icon: PlaySquare, match: () => false },
   {
     href: "/my/pouch",
@@ -23,14 +24,14 @@ const TABS = [
   },
 ] as const;
 
-/** 하단 탭 4개. 홈·마이페이지·리포트 상세에서만 보인다 */
+/** 하단 탭 5개. 홈·촬영·마이페이지·리포트 상세에서만 보인다 */
 export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
   const pathname = usePathname();
   if (hidden) return null;
   return (
     <nav
       aria-label="주요 메뉴"
-      className="grid h-32 shrink-0 grid-cols-4 gap-2 border-t border-line-2 bg-white px-8 pt-3 pb-5 shadow-[0_-8px_24px_color-mix(in_srgb,var(--color-night)_6%,transparent)]"
+      className="grid h-32 shrink-0 grid-cols-5 gap-1 border-t border-line-2 bg-white px-4 pt-3 pb-5 shadow-[0_-8px_24px_color-mix(in_srgb,var(--color-night)_6%,transparent)]"
     >
       {TABS.map(({ href, label, Icon, match }) => {
         const on = match(pathname);
@@ -43,7 +44,7 @@ export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
           >
             <span
               className={cn(
-                "flex h-12 w-[84px] items-center justify-center rounded-full transition-colors",
+                "flex h-12 w-14 items-center justify-center rounded-full transition-colors",
                 on ? "bg-navy text-white" : "text-mute-2",
               )}
             >
@@ -51,7 +52,7 @@ export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
             </span>
             <span
               className={cn(
-                "text-[20px] tracking-[-.01em]",
+                "text-[16px] tracking-[-.01em]",
                 on ? "font-bold text-navy" : "font-semibold text-mute-2",
               )}
             >
