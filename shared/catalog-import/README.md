@@ -54,12 +54,12 @@
 
 | 항목 | 규칙 |
 | --- | --- |
-| 위치 | ai·api·worker 컨테이너가 같이 마운트한 공유 볼륨 `/data/catalog-runs/`. 수집기가 쓰고 BE 는 읽기만 한다 |
+| 위치 | 수집기가 로컬 폴더에 쓰고 S3 `catalog-runs/<이름>` 에 올린다(평평한 이름). 다 올린 뒤 `<이름 앞부분>.manifest.json` 을 올린다. BE 는 S3 에서 받아 읽기만 한다(`catalog.import.source=storage`, 로컬 개발은 폴더에서 바로 읽는다) |
 | 이름 | `<시작시각>-<실행 이름>.jsonl`. 적재 시작 API 에 **상대 이름**으로 넘긴다 |
 | 첫 줄 | header `{runId, startedAt, seed, collectorVersion}` |
 | 이후 한 줄 | 상품 하나 `{itemKey, collected, evidence[], raw}` |
 | `evidence[]` | 칸마다 `{evidenceKey, imageUrl, imageHash, imageKind, bbox, method, methodVersion, whiteBalance, scores}` |
-| 보관 | 30일 후 삭제 |
+| 보관 | 지우지 않는다. 근거 조회·재처리가 이 파일을 읽는다 |
 
 ## 샘플
 

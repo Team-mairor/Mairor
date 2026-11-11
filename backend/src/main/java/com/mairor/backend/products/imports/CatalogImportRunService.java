@@ -71,7 +71,7 @@ public class CatalogImportRunService {
    * @param runId 수집기가 실행 결과 파일 header 에 쓴 {@code runId}
    * @param seed header 의 {@code seed}
    * @param collectorStartedAt header 의 {@code startedAt}
-   * @param resultFile 공유 볼륨의 실행 결과 파일 상대 이름
+   * @param resultFile 실행 결과 파일 이름(저장소 catalog-runs/ 아래 상대 이름)
    */
   public record StartCommand(
       String runId,

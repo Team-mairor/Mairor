@@ -21,6 +21,12 @@ springdoc:
   swagger-ui:
     enabled: false
 
+# 수집기는 BE 와 다른 서버에서 돌아 결과 파일을 S3 catalog-runs/ 에 올린다. BE 는 거기서 받아 캐시 폴더에 두고 읽는다
+catalog:
+  import:
+    source: storage
+    result-dir: ${CATALOG_IMPORT_RESULT_DIR:/tmp/mairor-catalog-runs}
+
 # 운영 저장소는 S3 비공개 버킷(-203). 자격 증명은 EC2 역할이라 키를 두지 않는다
 app:
   storage:

@@ -21,8 +21,8 @@ import org.hibernate.annotations.UpdateTimestamp;
  * 카탈로그 적재 실행. 수집기가 한 번 돌린 실행 하나가 한 행이다. {@code runId}는 수집기가 실행 결과 파일 header 에 쓴 값이고 유니크라, 끊긴 실행을
  * 이어서 보내도 같은 행을 쓴다.
  *
- * <p>이미지 URL·영역·방법 같은 근거는 DB 에 두지 않고 {@code resultFile}(공유 볼륨의 상대 이름)에 둔다. 진행 중({@link
- * ImportRunStatus#RUNNING})에는 {@code finishedAt}이 없고, 끝나면 반드시 있다.
+ * <p>이미지 URL·영역·방법 같은 근거는 DB 에 두지 않고 {@code resultFile}(저장소 catalog-runs/ 아래 상대 이름)에 둔다. 진행
+ * 중({@link ImportRunStatus#RUNNING})에는 {@code finishedAt}이 없고, 끝나면 반드시 있다.
  */
 @Entity
 @Table(

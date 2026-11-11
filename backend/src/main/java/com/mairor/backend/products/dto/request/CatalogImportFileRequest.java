@@ -11,7 +11,7 @@ import java.util.UUID;
 /** 실행 결과 파일을 읽어 적재하는 요청. */
 public record CatalogImportFileRequest(
     @Schema(
-            description = "공유 볼륨(/data/catalog-runs)의 실행 결과 파일 상대 이름. 경로 구분자는 쓸 수 없다",
+            description = "실행 결과 파일 이름(객체 저장소 catalog-runs/ 아래 상대 이름). 경로 구분자는 쓸 수 없다",
             example = "20261108-213000-etude.jsonl")
         @NotBlank
         @Size(max = 200)

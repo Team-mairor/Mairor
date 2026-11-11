@@ -30,7 +30,7 @@ public record CatalogImportStartRequest(
             nullable = true)
         OffsetDateTime startedAt,
     @Schema(
-            description = "공유 볼륨(/data/catalog-runs)의 실행 결과 파일 상대 이름. 경로 구분자는 쓸 수 없다",
+            description = "실행 결과 파일 이름(객체 저장소 catalog-runs/ 아래 상대 이름). 경로 구분자는 쓸 수 없다",
             example = "20261108-213000-etude.jsonl",
             nullable = true)
         @Size(max = CatalogImportRun.RESULT_FILE_MAX_LENGTH)

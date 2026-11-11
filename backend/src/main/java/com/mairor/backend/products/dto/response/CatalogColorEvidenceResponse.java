@@ -5,8 +5,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import tools.jackson.databind.JsonNode;
 
 /**
- * 색 칸의 현재 값이 어떤 근거에서 나왔는지. 근거(이미지 URL, 영역, 방법, 품질 점수)는 DB 가 아니라 실행 결과 파일에 있어서, 파일이 보관 기간(30일)이 지나
- * 없으면 {@code fileAvailable=false}이고 {@code evidence}는 비어 있다.
+ * 색 칸의 현재 값이 어떤 근거에서 나왔는지. 근거(이미지 URL, 영역, 방법, 품질 점수)는 DB 가 아니라 실행 결과 파일에 있어서, 파일을 저장소에서 찾지 못하면
+ * {@code fileAvailable=false}이고 {@code evidence}는 비어 있다.
  */
 public record CatalogColorEvidenceResponse(
     @Schema(description = "색 칸의 ID(colorId)") String colorId,
@@ -19,7 +19,7 @@ public record CatalogColorEvidenceResponse(
             nullable = true,
             example = "20261108-213000-etude.jsonl")
         String resultFile,
-    @Schema(description = "실행 결과 파일을 열 수 있었는가. 보관 기간이 지나 지워졌으면 false") boolean fileAvailable,
+    @Schema(description = "실행 결과 파일을 열 수 있었는가. 저장소에 없으면 false") boolean fileAvailable,
     @Schema(
             description =
                 "그 칸의 근거 기록(imageUrl, imageHash, imageKind, bbox, method, scores 등). 없으면 null",

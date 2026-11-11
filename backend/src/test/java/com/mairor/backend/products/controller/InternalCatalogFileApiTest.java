@@ -44,7 +44,8 @@ import tools.jackson.databind.node.ObjectNode;
 class InternalCatalogFileApiTest {
 
   static final String TOKEN = "test-internal-token";
-  private static final String FROM_FILE = "/v1/internal/catalog/import-runs/from-file";
+  private static final String RUNS = "/v1/internal/catalog/import-runs";
+  private static final String FROM_FILE = RUNS + "/from-file";
   private static final Path SAMPLE =
       Path.of("..", "shared", "catalog-import", "samples", "etude_option_image.json");
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -125,7 +126,11 @@ class InternalCatalogFileApiTest {
   }
 
   private MockHttpServletRequestBuilder fromFile(String json) {
-    return post(FROM_FILE)
+    return authorized(FROM_FILE, json);
+  }
+
+  private static MockHttpServletRequestBuilder authorized(String path, String json) {
+    return post(path)
         .header(InternalTokenFilter.HEADER, TOKEN)
         .contentType(MediaType.APPLICATION_JSON)
         .content(json);
@@ -170,6 +175,33 @@ class InternalCatalogFileApiTest {
         .andExpect(jsonPath("$.resultFile").value("api.jsonl"))
         .andExpect(jsonPath("$.fileAvailable").value(true))
         .andExpect(jsonPath("$.evidence.method").value("pixel_median_lab"));
+  }
+
+  @Test
+  void aRunThatAlreadyFailedIsNotContinuedFromTheFile() throws Exception {
+    writeFile("api.jsonl");
+    String start =
+        "{\"runId\":\"api-run\",\"seed\":\"OFFICIAL:etude.com\",\"collectorVersion\":\"0.1.0\","
+            + "\"startedAt\":\"2026-11-08T21:30:00+09:00\",\"resultFile\":\"api.jsonl\"}";
+    String id =
+        MAPPER
+            .readTree(
+                mockMvc
+                    .perform(authorized(RUNS, start))
+                    .andExpect(status().isCreated())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString())
+            .path("id")
+            .asString();
+    mockMvc
+        .perform(authorized(RUNS + "/" + id + "/finish", "{\"status\":\"FAILED\"}"))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(fromFile("{\"resultFile\":\"api.jsonl\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("IMPORT_RUN_CLOSED"));
   }
 
   @Test

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mairor.backend.common.error.BusinessException;
+import com.mairor.backend.common.storage.LocalObjectStorage;
 import com.mairor.backend.products.imports.CatalogRunFileReader.Header;
 import com.mairor.backend.products.imports.CatalogRunFileReader.Line;
 import java.io.IOException;
@@ -29,7 +30,9 @@ class CatalogRunFileReaderTest {
   void setUp() {
     reader =
         new CatalogRunFileReader(
-            new CatalogImportProperties(Duration.ofMinutes(10), directory), new ObjectMapper());
+            CatalogImportProperties.local(Duration.ofMinutes(10), directory),
+            new ObjectMapper(),
+            new LocalObjectStorage(directory.resolve("unused")));
   }
 
   private Path write(String name, String content) throws IOException {

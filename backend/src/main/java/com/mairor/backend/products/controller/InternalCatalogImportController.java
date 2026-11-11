@@ -288,11 +288,11 @@ public class InternalCatalogImportController {
       summary = "실행 결과 파일 적재",
       description =
           """
-          수집기가 공유 볼륨에 쓴 실행 결과 파일(JSONL)을 읽어 건마다 카탈로그에 반영한다. 초기 데이터 운영 적재와 틀린 건 재처리가 쓴다.
+          수집기가 만든 실행 결과 파일(JSONL)을 읽어 건마다 카탈로그에 반영한다. 초기 데이터 운영 적재와 틀린 건 재처리가 쓴다.
 
           - 한 번에 새로 처리하는 건은 limit 까지다. finished 가 false 면 같은 요청을 다시 보낸다. 이미 처리한 건은 건너뛰고 이어서 처리한다.
           - retryOf 에 이전 실행의 id 를 주면 그 실행에서 FAILED·INVALID 로 끝난 건만 같은 파일에서 다시 읽어 새 실행으로 처리한다. 이전 실행의 기록은 그대로 남는다.
-          - 파일 이름은 폴더 안의 상대 이름만 받는다. 보관 기간이 지난 파일은 404 이다.
+          - 파일 이름은 상대 이름만 받는다. 운영은 객체 저장소의 catalog-runs/ 에서 받아 읽는다. 없는 파일은 404 이다.
           """,
       security = @SecurityRequirement(name = OpenApiConfig.INTERNAL_TOKEN))
   @ApiResponse(
@@ -309,10 +309,13 @@ public class InternalCatalogImportController {
   @ApiResponse(responseCode = "401", description = "공유 토큰이 없거나 다름. (UNAUTHORIZED)")
   @ApiResponse(
       responseCode = "404",
-      description = "파일이 없거나(보관 기간 경과) 재처리할 실행이 없다. (RESULT_FILE_NOT_FOUND, IMPORT_RUN_NOT_FOUND)")
+      description = "파일이 저장소에 없거나 재처리할 실행이 없다. (RESULT_FILE_NOT_FOUND, IMPORT_RUN_NOT_FOUND)")
   @ApiResponse(
       responseCode = "409",
       description = "같은 runId 의 실행이 실패하거나 하트비트가 끊겨 끝났다. 새 실행으로 다시 시작한다. (IMPORT_RUN_CLOSED)")
+  @ApiResponse(
+      responseCode = "503",
+      description = "저장소에서 결과 파일을 받지 못했다. 잠시 후 다시 보낸다. (SERVICE_UNAVAILABLE)")
   @PostMapping("/from-file")
   public CatalogImportFileResponse importFile(
       @Valid @RequestBody CatalogImportFileRequest request) {

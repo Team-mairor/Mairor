@@ -183,6 +183,34 @@ class CatalogImportFileServiceTest {
         .isEqualTo("a.jsonl");
   }
 
+  /**
+   * 수집기는 일부 상품이 실패한 실행도 올린다. 적재가 끝난 뒤 실패한 상품을 다시 수집하면 새 파일·새 runId 로 만든다(collect --retry-of). 같은
+   * runId 에 상품을 더한 파일은 끝난 실행으로 보고 읽지 않으므로, 다시 수집한 상품은 새 실행으로 들어가야 한다.
+   */
+  @Test
+  void productsCollectedAgainAfterAPartialRunArriveAsANewRun() throws Exception {
+    file("20261111-070000-etude.jsonl", "run-1", line("000001", product("p-1", n -> {})));
+    files.importFile("20261111-070000-etude.jsonl", null, null);
+
+    file(
+        "20261111-070000-etude.jsonl",
+        "run-1",
+        line("000001", product("p-1", n -> {})),
+        line("000002", product("p-2", n -> {})));
+    FileImportResult sameRun = files.importFile("20261111-070000-etude.jsonl", null, null);
+    file("20261111-080000-retry.jsonl", "run-2", line("000001", product("p-2", n -> {})));
+    FileImportResult newRun = files.importFile("20261111-080000-retry.jsonl", null, null);
+
+    assertThat(sameRun.processed()).isZero();
+    assertThat(newRun.processed()).isEqualTo(1);
+    assertThat(newRun.stats().created()).isEqualTo(1);
+    assertThat(
+            jdbc.queryForList(
+                "select source_product_id from products order by source_product_id", String.class))
+        .containsExactly("p-1", "p-2");
+    assertThat(count("catalog_import_runs")).isEqualTo(2);
+  }
+
   @Test
   void aBigFileIsImportedInPartsAndEachCallContinuesWhereTheLastStopped() throws Exception {
     file(

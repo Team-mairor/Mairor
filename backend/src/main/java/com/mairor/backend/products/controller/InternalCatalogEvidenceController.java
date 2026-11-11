@@ -36,7 +36,8 @@ public class InternalCatalogEvidenceController {
           """
           색 칸의 현재 값을 만든 적재 건을 따라가 실행 결과 파일에서 그 칸의 근거(이미지 URL, 영역, 방법, 품질 점수)를 돌려준다.
 
-          - 근거는 DB 가 아니라 파일에 있다. 보관 기간이 지나 파일이 없으면 fileAvailable 이 false 이고 evidence 는 비어 있다.
+          - 근거는 DB 가 아니라 파일에 있다. 파일이 저장소에 없으면 fileAvailable 이 false 이고 evidence 는 비어 있다.
+          - 저장소에 닿지 못하면 파일이 없는 것과 구분해 503 이다.
           - 직접 넣은 칸처럼 적재가 만들지 않은 칸은 찾아갈 키가 없어 404 이다.
           """,
       security = @SecurityRequirement(name = OpenApiConfig.INTERNAL_TOKEN))
@@ -51,6 +52,9 @@ public class InternalCatalogEvidenceController {
   @ApiResponse(
       responseCode = "404",
       description = "칸이 없거나 근거를 찾아갈 키가 없다. (COLOR_NOT_FOUND, COLOR_EVIDENCE_NOT_RECORDED)")
+  @ApiResponse(
+      responseCode = "503",
+      description = "저장소에서 결과 파일을 받지 못했다. 잠시 후 다시 조회한다. (SERVICE_UNAVAILABLE)")
   @GetMapping("/{colorId}/evidence")
   public CatalogColorEvidenceResponse evidence(@PathVariable UUID colorId) {
     return CatalogColorEvidenceResponse.from(evidenceService.find(colorId));

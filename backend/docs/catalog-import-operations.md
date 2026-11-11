@@ -7,14 +7,14 @@
 | 항목 | 내용 |
 | --- | --- |
 | DB | `backend/src/main/resources/db/upgrade/295-catalog-import-runs.sql` 을 운영 DB 에 먼저 적용한다. 서버가 `ddl-auto=validate` 라 표가 없으면 기동하지 못한다. |
-| 공유 볼륨 | 수집기가 쓰는 폴더와 서버가 읽는 폴더가 같아야 한다. 서버는 `catalog.import.result-dir`(기본 `/data/catalog-runs`)에서 읽기만 한다. **현재 배포용 compose 파일에는 이 볼륨 마운트가 없다.** 마운트를 추가하기 전에는 `from-file` 이 `RESULT_FILE_NOT_FOUND` 로 끝난다. |
+| 결과 파일 전달(S3) | 수집기와 서버는 다른 서버라 폴더를 같이 쓰지 않는다. 수집기가 `CATALOG_RUNS_STORE=s3` 로 결과 파일을 `s3://mairor-prod-media/catalog-runs/<파일>.jsonl` 에 올리고, 운영 서버(`catalog.import.source=storage`)는 그 키를 받아 캐시 폴더(`catalog.import.result-dir`, 운영 `/tmp/mairor-catalog-runs`)에서 읽는다. 받은 파일은 `catalog.import.storage-cache-ttl`(기본 5분) 동안 다시 받지 않고, 지난 파일은 다음에 받을 때 지운다. 서버 역할 `mairor-ec2-app` 은 `catalog-runs/*` 의 `GetObject`, 수집기 쪽 역할은 `GetObject`·`PutObject` 가 필요하다(올리기 전에 이미 올린 파일인지 읽어 본다). 로컬 개발(`source=local`)은 폴더에서 바로 읽는다. |
 | 색 임계값 | `catalog.color.min-quality.<출처>`(`SWATCH_CHIP`, `PRODUCT_PHOTO`, `WEB_PHOTO`). 기본값은 아무 색도 통과시키지 않는다. 사람이 라벨링한 실제 사진 기준 세트 리포트로 정한 뒤 채운다. 비어 있으면 사진에서 뽑은 색이 모두 `BELOW_THRESHOLD`(서비스에는 null)가 된다. |
 | 선택 설정 | `catalog.color.label-in-image-enabled`(판독 일치율 95% 이상일 때만), `catalog.color.llm-estimate-enabled`(기준 세트로 확인한 뒤에만), `catalog.color.source-value-sites`(옵션과 색값 연결을 확인한 사이트만). |
 | 사이트 허용 기록 | 사이트별 수집 허용 근거는 317 에서 사이트마다 남긴다. 약관 확인은 사용자가 한다. |
 
 ## 2. 적재
 
-1. 수집기가 `…/<파일>.jsonl` 을 다 쓴다. 첫 줄은 header(`runId`, `startedAt`, `seed`, `collectorVersion`), 이후 한 줄이 상품 하나다.
+1. 수집기가 `<파일>.jsonl` 을 다 쓰고 S3 `catalog-runs/` 에 올린다. 다 올린 뒤 `<파일 앞부분>.manifest.json`(runId·건수·실패 수·sha256)을 올린다. 첫 줄은 header(`runId`, `startedAt`, `seed`, `collectorVersion`), 이후 한 줄이 상품 하나다.
 2. 서버에 요청한다.
 
 ```
@@ -28,6 +28,16 @@ POST /v1/internal/catalog/import-runs/from-file
 
 `limit` 은 1~2000(기본 500)이다. 요청 하나가 너무 오래 걸리지 않게 하려는 값이다.
 
+저장소에 닿지 못하면 `503 SERVICE_UNAVAILABLE` 이다. 잠시 뒤 같은 요청을 다시 보낸다.
+
+### 실패한 상품을 다시 수집했을 때
+
+**올린 결과 파일은 바꾸지 않는다.** 서버는 실행을 `runId` 로 기억해서, 이미 `COMPLETED` 인 `runId` 의 파일은 상품이 늘어도 다시 읽지 않는다. 그래서 수집기는 이미 올린 실행을 `--resume` 으로 이어 쓰지 않고, 같은 이름에 다른 내용을 올리지도 않는다(같은 내용은 다시 올려도 된다).
+
+1. 수집 요약이나 manifest 의 `failed` 로 실패한 상품이 있는지 본다.
+2. 수집기에서 `collect … --retry-of <처음 파일>` 로 실패한 상품만 **새 파일·새 runId** 로 다시 수집한다. 끝나면 새 파일이 S3 에 올라간다.
+3. 새 파일 이름으로 `from-file` 을 보낸다. 처음 파일의 적재 기록은 그대로 남는다.
+
 ## 3. 품질 확인
 
 - `GET /v1/internal/catalog/import-runs/{id}/stats` : 이번 실행의 결과 분포(신규·갱신·모호·미분류·형식 오류·실패)와 문제 건 목록.
@@ -36,7 +46,7 @@ POST /v1/internal/catalog/import-runs/from-file
 
 ## 4. 틀린 건 재처리
 
-서버 쪽 일시 오류로 `FAILED` 가 된 건은 같은 파일에서 다시 처리한다.
+서버 쪽 일시 오류로 `FAILED` 가 된 건은 같은 파일에서 다시 처리한다. (수집기에서 실패한 상품은 위의 "실패한 상품을 다시 수집했을 때"로 새 파일을 만든다.)
 
 ```
 POST /v1/internal/catalog/import-runs/from-file
@@ -65,7 +75,7 @@ GET /v1/internal/catalog/shade-colors/{colorId}/evidence
 
 색 칸이 어떤 이미지·영역·방법·품질 점수에서 나왔는지 실행 결과 파일에서 찾아 준다. DB 에는 근거를 두지 않고 찾아갈 키(적재 건, 근거 키)만 둔다.
 
-- 파일은 **30일** 보관한다. 지나서 지워졌으면 `fileAvailable=false` 이고 `evidence` 는 비어 있다. 그때는 같은 값을 다시 수집해서 판단한다.
+- 결과 파일은 S3 `catalog-runs/` 에 남겨 두고 지우지 않는다. 그래도 파일이 없으면 `fileAvailable=false` 이고 `evidence` 는 비어 있다. 그때는 같은 값을 다시 수집해서 판단한다.
 - 직접 넣은 칸처럼 적재가 만들지 않은 칸은 `404 COLOR_EVIDENCE_NOT_RECORDED` 다.
 
 ## 7. 오류 코드
@@ -73,7 +83,8 @@ GET /v1/internal/catalog/shade-colors/{colorId}/evidence
 | 코드 | 상태 | 뜻 |
 | --- | --- | --- |
 | `INVALID_RESULT_FILE` | 400 | 파일 이름 규칙 위반, 폴더 밖, header 에 runId 없음 |
-| `RESULT_FILE_NOT_FOUND` | 404 | 파일 없음(마운트 누락 또는 보관 기간 경과) |
+| `RESULT_FILE_NOT_FOUND` | 404 | 파일 없음(S3 에 올리지 않았거나 이름이 틀림) |
+| `SERVICE_UNAVAILABLE` | 503 | 저장소(S3)에 닿지 못함. 잠시 뒤 다시 보낸다 |
 | `VALIDATION_FAILED` | 400 | `limit` 범위 밖 등 |
 | `RETRY_FILE_MISMATCH` | 400 | 재처리 대상 실행과 다른 파일 |
 | `IMPORT_RUN_CLOSED` | 409 | 실패하거나 끊겨 끝난 실행에 건을 더 보냄 |

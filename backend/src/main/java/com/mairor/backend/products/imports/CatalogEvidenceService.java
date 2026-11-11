@@ -15,8 +15,8 @@ import tools.jackson.databind.JsonNode;
  * 색 칸의 현재 값이 어떤 근거(이미지 URL, 영역, 방법, 품질 점수)에서 나왔는지 실행 결과 파일에서 찾아 준다. DB 에는 근거를 두지 않고 찾아가는 키(적재 건과 근거
  * 키)만 있으므로, 이 조회가 키를 따라 파일을 연다.
  *
- * <p>파일은 보관 기간(30일)이 지나면 지워진다. 파일이 없으면 오류가 아니라 {@code fileAvailable=false}로 알린다. 근거가 필요한 판단(임계값
- * 재검토, 잘못된 색 정정)은 파일이 있을 때 하고, 지난 뒤에는 같은 값을 다시 수집해서 한다.
+ * <p>결과 파일은 저장소에 남겨 두고 지우지 않는다. 그래도 파일이 없으면 오류가 아니라 {@code fileAvailable=false}로 알린다. 그때는 같은 값을 다시
+ * 수집해서 판단한다. 저장소에 닿지 못한 것은 파일이 없는 것과 달라 503 으로 올린다.
  */
 @Service
 public class CatalogEvidenceService {
@@ -51,7 +51,8 @@ public class CatalogEvidenceService {
    * 색 칸의 현재 값의 근거를 찾는다.
    *
    * @throws BusinessException 404 {@code COLOR_NOT_FOUND}: 칸이 없으면. 404 {@code
-   *     COLOR_EVIDENCE_NOT_RECORDED}: 적재가 만든 칸이 아니라(직접 넣은 칸) 근거를 찾아갈 키가 없으면
+   *     COLOR_EVIDENCE_NOT_RECORDED}: 적재가 만든 칸이 아니라(직접 넣은 칸) 근거를 찾아갈 키가 없으면. 503 {@code
+   *     SERVICE_UNAVAILABLE}: 저장소에서 결과 파일을 받지 못하면
    */
   @Transactional(readOnly = true)
   public Evidence find(UUID colorId) {
@@ -84,7 +85,7 @@ public class CatalogEvidenceService {
     try {
       path = reader.resolve(file);
     } catch (BusinessException e) {
-      return null;
+      return absent(e, null);
     }
     JsonNode line = reader.findItem(path, itemKey);
     if (line == null) {
@@ -106,7 +107,17 @@ public class CatalogEvidenceService {
       reader.resolve(file);
       return true;
     } catch (BusinessException e) {
-      return false;
+      return absent(e, false);
     }
+  }
+
+  /** 파일이 없거나 이름이 틀린 것만 "파일 없음"으로 본다. 저장소 장애(503)는 그대로 올려 운영자가 잠시 뒤 다시 보게 한다. */
+  private static <T> T absent(BusinessException e, T value) {
+    String code = e.code();
+    if (CatalogRunFileReader.FILE_NOT_FOUND.equals(code)
+        || CatalogRunFileReader.INVALID_FILE.equals(code)) {
+      return value;
+    }
+    throw e;
   }
 }

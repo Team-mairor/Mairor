@@ -13,6 +13,11 @@
     uv run python tools/collect_catalog.py discover --brand 새브랜드 --alias NewBrand
     uv run python tools/collect_catalog.py collect --brand 롬앤 --products p.jsonl --name romand
     uv run python tools/collect_catalog.py product --brand 롬앤 --url https://... --render
+    uv run python tools/collect_catalog.py upload catalog-runs/20261111-070448-romand.jsonl
+
+CATALOG_RUNS_STORE=s3이면 collect가 끝난 뒤 결과 파일과 manifest를 S3에 올린다.
+올리지 못해도 로컬 파일은 남고, upload로 다시 올린다.
+올린 실행은 이어 쓰지 않는다. 실패한 상품은 --retry-of <처음 파일>로 새 실행을 만든다.
 """
 
 import argparse
@@ -55,12 +60,13 @@ from app.tasks.catalog.find.finder import FindStatus, find_product, resolve_plat
 from app.tasks.catalog.find.urls import Candidate, is_supported  # noqa: E402
 from app.tasks.catalog.http import HttpConfig, HttpFailure, PoliteClient  # noqa: E402
 from app.tasks.catalog.render.browser import PlaywrightRenderer, Renderer  # noqa: E402
-from app.tasks.catalog.runfile import RunFileError, RunFileWriter  # noqa: E402
+from app.tasks.catalog.runfile import RunFileError, RunFileWriter, read_run_file  # noqa: E402
 from app.tasks.catalog.runner import (  # noqa: E402
     collect_candidates,
     new_header,
     read_candidates,
 )
+from app.tasks.catalog.upload import RunUploader, UploadError, build_uploader  # noqa: E402
 
 EXIT_OK = 0
 EXIT_NOT_FOUND = 1
@@ -120,7 +126,14 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--products", type=Path, required=True, help="list 명령이 만든 JSONL")
     collect.add_argument("--name", help="실행 이름(파일 이름에 들어간다)")
     collect.add_argument("--out-dir", type=Path, help="기본은 설정의 실행 결과 폴더")
-    collect.add_argument("--resume", type=Path, help="끊긴 실행 결과 파일을 이어서")
+    collect.add_argument(
+        "--resume", type=Path, help="끊긴 실행 결과 파일을 이어서(S3에 올리기 전까지만)"
+    )
+    collect.add_argument(
+        "--retry-of",
+        type=Path,
+        help="그 실행에서 실패한 상품만 새 실행(새 파일·runId)으로 다시 수집",
+    )
     collect.add_argument("--retry-failed", action="store_true")
     collect.add_argument("--limit", type=int, help="이번에 처리할 최대 상품 수")
     collect.add_argument("--render", action="store_true")
@@ -133,6 +146,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="목록에 type_hint가 없는 상품은 모델이 종류를 고른다(모델 호출 발생)",
     )
     collect.add_argument("--allow-disabled", action="store_true")
+
+    upload = commands.add_parser("upload", help="실행 결과 파일을 S3에 다시 올리기")
+    upload.add_argument("files", type=Path, nargs="+", help="실행 결과 파일(.jsonl)")
 
     listing = commands.add_parser("list", help="브랜드의 카테고리를 돌며 상품 목록 모으기")
     listing.add_argument("--brand", required=True)
@@ -318,15 +334,72 @@ async def run_product(
     return EXIT_OK
 
 
+async def upload_run(uploader: RunUploader, path: Path) -> bool:
+    try:
+        uploaded = await uploader.upload(path)
+    except UploadError as error:
+        print(
+            f"S3에 올리지 못했다: {error}. 로컬 파일은 남아 있다. 다시 올리려면 upload {path}",
+            file=sys.stderr,
+        )
+        return False
+    manifest = uploaded.manifest
+    print(f"S3에 올렸다: {uploaded.key} ({manifest['items']}건, 실패 {manifest['failed']}건)")
+    return True
+
+
+async def run_upload(uploader: RunUploader | None, files: list[Path]) -> int:
+    if uploader is None:
+        print("CATALOG_RUNS_STORE=s3와 CATALOG_RUNS_S3_BUCKET이 필요하다", file=sys.stderr)
+        return EXIT_USAGE
+    results = [await upload_run(uploader, path) for path in files]
+    return EXIT_OK if all(results) else EXIT_STOPPED
+
+
+def failed_urls(run_file: Path) -> list[str]:
+    """실행 결과 파일 옆 체크포인트에 실패로 남은 상품 주소."""
+    header, items = read_run_file(run_file)
+    for _ in items:
+        pass
+    return Checkpoint.load_or_create(checkpoint_path_for(run_file), header.run_id).failed_keys()
+
+
 async def run_collect(
     client: PoliteClient,
     site: BrandSite,
     args: argparse.Namespace,
     renderer: Renderer | None,
     llm: Llm | None,
+    uploader: RunUploader | None = None,
 ) -> int:
+    if args.resume and args.retry_of:
+        print("--resume과 --retry-of는 함께 쓸 수 없다", file=sys.stderr)
+        return EXIT_USAGE
     platform = await resolve_platform(client, site)
     candidates = read_candidates(args.products)
+    if args.retry_of:
+        try:
+            failed = set(failed_urls(args.retry_of))
+        except (RunFileError, CheckpointError, OSError) as error:
+            print(f"다시 수집할 실행을 읽지 못했다: {error}", file=sys.stderr)
+            return EXIT_USAGE
+        candidates = [candidate for candidate in candidates if candidate.url in failed]
+        if not candidates:
+            print(f"{args.retry_of.name}에 다시 수집할 실패 상품이 없다", file=sys.stderr)
+            return EXIT_USAGE
+    if args.resume and uploader is not None:
+        try:
+            published = await uploader.is_published(args.resume)
+        except UploadError as error:
+            print(f"S3를 확인하지 못했다: {error}", file=sys.stderr)
+            return EXIT_STOPPED
+        if published:
+            print(
+                f"{args.resume.name}은 이미 S3에 올렸다. 올린 실행은 이어 쓰지 않는다. "
+                f"실패한 상품은 --retry-of {args.resume}로 새 실행을 만든다",
+                file=sys.stderr,
+            )
+            return EXIT_USAGE
     try:
         if args.resume:
             writer = RunFileWriter.resume(args.resume)
@@ -362,6 +435,8 @@ async def run_collect(
             return EXIT_STOPPED
     print(f"{stats.written}건을 썼다, 실패 {len(stats.failed)}건, 건너뜀 {stats.skipped}건")
     print(f"실행 결과 파일: {writer.path}")
+    if uploader is not None and not await upload_run(uploader, writer.path):
+        return EXIT_STOPPED
     return EXIT_OK if not stats.failed else EXIT_NOT_FOUND
 
 
@@ -426,7 +501,10 @@ async def _run(
     llm: Llm | None,
     search: WebSearch | None,
     store: SiteStore | None,
+    uploader: RunUploader | None,
 ) -> int:
+    if args.command == "upload":
+        return await run_upload(uploader, args.files)
     if args.command == "discover":
         try:
             return await run_discover(
@@ -465,7 +543,7 @@ async def _run(
         if args.command == "collect":
             needs_model = args.vision or args.estimate or args.classify
             model = (llm or get_catalog_llm()) if needs_model else None
-            return await run_collect(client, site, args, renderer, model)
+            return await run_collect(client, site, args, renderer, model, uploader)
         if args.command == "product":
             needs_model = args.vision or args.estimate or args.classify
             model = (llm or get_catalog_llm()) if needs_model else None
@@ -505,6 +583,7 @@ def main(
     llm: Llm | None = None,
     search: WebSearch | None = None,
     store: SiteStore | None = None,
+    uploader: RunUploader | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -514,6 +593,12 @@ def main(
         return EXIT_USAGE
     if args.command == "sites":
         return print_sites(loaded)
+    if uploader is None and args.command in ("collect", "upload"):
+        try:
+            uploader = build_uploader(get_settings())
+        except UploadError as error:
+            print(f"결과 파일 업로드 설정 오류: {error}", file=sys.stderr)
+            return EXIT_USAGE
 
     async def go() -> int:
         owned = client or PoliteClient(http_config(loaded))
@@ -521,7 +606,7 @@ def main(
         if browser is None and getattr(args, "render", False):
             browser = PlaywrightRenderer(owned)
         try:
-            return await _run(args, loaded, owned, browser, llm, search, store)
+            return await _run(args, loaded, owned, browser, llm, search, store, uploader)
         finally:
             if browser is not None and renderer is None:
                 await browser.close()

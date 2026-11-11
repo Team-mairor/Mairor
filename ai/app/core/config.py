@@ -49,6 +49,10 @@ class Settings(BaseSettings):
 
     catalog_run_dir: Path = DEFAULT_CATALOG_RUN_DIR
     catalog_run_keep_days: int = Field(default=30, gt=0)
+    catalog_runs_store: Literal["local", "s3"] = "local"
+    catalog_runs_s3_bucket: str | None = None
+    catalog_runs_s3_prefix: str = "catalog-runs/"
+    catalog_runs_s3_region: str = "ap-northeast-2"
     catalog_contact: str | None = None
     catalog_min_interval_seconds: float = Field(default=1.5, ge=0)
     catalog_request_timeout_seconds: float = Field(default=30, gt=0)
