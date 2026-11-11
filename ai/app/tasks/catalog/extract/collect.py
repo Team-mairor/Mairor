@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from app.clients.llm import Llm
+from app.tasks.catalog.classify import add_type
 from app.tasks.catalog.color.apply import add_colors
 from app.tasks.catalog.color.estimate import add_estimates
 from app.tasks.catalog.contract import CollectedProduct
@@ -50,8 +51,13 @@ async def collect_product(
     colors: bool = False,
     llm: Llm | None = None,
     estimate: bool = False,
+    type_hint: str | None = None,
+    classify: bool = False,
 ) -> tuple[CollectedProduct, dict[str, Any]]:
-    """페이지를 받아 상품을 만든다. 차단·robots 거부는 그대로 올린다."""
+    """페이지를 받아 상품을 만든다. 차단·robots 거부는 그대로 올린다.
+
+    종류는 type_hint가 있으면 그것을, 없고 classify와 llm이 있으면 모델 분류를 쓴다.
+    """
     source_id = product_id(platform, url, site.url_rules)
     if source_id is None:
         raise ExtractError("NOT_PRODUCT_URL", f"상품 상세 주소가 아니다: {url}")
@@ -88,4 +94,5 @@ async def collect_product(
         product, raw = await add_colors(client, product, raw, llm=llm)
     if estimate and llm is not None and product.shades:
         product, raw = await add_estimates(llm, product, raw)
+    product, raw = await add_type(product, raw, given=type_hint, llm=llm if classify else None)
     return product, raw

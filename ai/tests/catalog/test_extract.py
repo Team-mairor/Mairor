@@ -216,6 +216,61 @@ def test_the_product_name_falls_back_to_h1_then_title() -> None:
     assert read_meta(titled).title == "제목 | 샵"
 
 
+def amuse_site() -> BrandSite:
+    return BrandSite(
+        brand="어뮤즈",
+        domain="amusemakeup.com",
+        language="ko",
+        platform=Platform.CAFE24,
+        technical=Technical.OK,
+    )
+
+
+def test_a_brand_name_before_the_product_in_the_title_is_skipped() -> None:
+    html = fixtures.page(
+        '<h1 class="logo">AMUSE</h1>',
+        "<title>AMUSE | 젤핏 글로스 - 비건 &amp; 클린 뷰티</title>",
+    )
+
+    product, _ = build_product(
+        amuse_site(),
+        Platform.CAFE24,
+        "https://amusemakeup.com/product/gloss/896/",
+        html,
+        item_key="000001",
+        now=NOW,
+    )
+
+    assert product.name == "젤핏 글로스"
+
+
+def test_a_name_that_is_only_the_brand_or_alias_is_not_the_product_name() -> None:
+    site = site_of(Platform.CAFE24).model_copy(update={"aliases": ("Test Brand",)})
+    html = fixtures.page("<h1>TEST BRAND</h1>", "<title>테스트 – 수분 크림</title>")
+
+    product, _ = build_product(
+        site, Platform.CAFE24, f"{BASE}/product/a/1/", html, item_key="000001", now=NOW
+    )
+
+    assert product.name == "수분 크림"
+
+
+def test_a_page_named_only_after_the_site_has_no_product_name() -> None:
+    html = fixtures.page("<h1>AMUSE</h1>", "<title>AMUSE</title>")
+
+    with pytest.raises(ExtractError) as error:
+        build_product(
+            amuse_site(),
+            Platform.CAFE24,
+            "https://amusemakeup.com/product/gloss/896/",
+            html,
+            item_key="000001",
+            now=NOW,
+        )
+
+    assert error.value.code == "NO_PRODUCT_NAME"
+
+
 def test_unusable_pages_raise_with_a_reason_code() -> None:
     with pytest.raises(ExtractError) as no_id:
         build(Platform.CAFE24, f"{BASE}/product/search.html?keyword=a", fixtures.CAFE24_CHIPS)

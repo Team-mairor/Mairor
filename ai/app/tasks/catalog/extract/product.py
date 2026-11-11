@@ -114,22 +114,39 @@ def _hints(shade: RawShade) -> VariantHints | None:
     )
 
 
-def _title_head(title: str | None) -> str | None:
-    """<title>의 사이트 이름 꼬리("제품 – 사이트", "제품 | 사이트")를 떼고 앞부분만 쓴다."""
+def _letters(text: str) -> str:
+    return "".join(ch for ch in text.casefold() if ch.isalnum())
+
+
+def _is_site_name(text: str, site: BrandSite) -> bool:
+    """브랜드·다른 이름과 같거나 도메인 이름에 들어 있는 글(예: amusemakeup.com의 AMUSE)."""
+    key = _letters(text)
+    if not key:
+        return True
+    names = {_letters(name) for name in (site.brand, *site.aliases)}
+    label = _letters(site.domain.split(".")[0]) if site.domain else ""
+    return key in names or (len(key) >= 3 and key in label)
+
+
+def _title_parts(title: str | None) -> list[str]:
+    """<title>을 구분자("제품 – 사이트", "사이트 | 제품")로 나눈 조각."""
     if not title:
-        return None
-    return re.split(r"\s[–—|-]\s", title, maxsplit=1)[0].strip() or None
+        return []
+    return [part.strip() for part in re.split(r"\s[–—|-]\s", title) if part.strip()]
 
 
-def _name_of(chosen: Extraction, attempts: list[Extraction], meta: PageMeta) -> str | None:
+def _name_of(
+    chosen: Extraction, attempts: list[Extraction], meta: PageMeta, site: BrandSite
+) -> str | None:
+    """상품 이름. 사이트 이름(로고 h1, 앞이나 뒤에 붙은 몰 이름)만인 후보는 건너뛴다."""
     for candidate in (
         chosen.name,
         *(a.name for a in attempts),
         meta.h1,
-        _title_head(meta.title),
+        *_title_parts(meta.title),
         meta.og_title,
     ):
-        if candidate:
+        if candidate and not _is_site_name(candidate, site):
             return candidate
     return None
 
@@ -150,7 +167,7 @@ def build_product(
         raise ExtractError("NOT_PRODUCT_URL", f"상품 상세 주소가 아니다: {url}")
     meta = read_meta(html)
     chosen, attempts = extract_shades(platform, html, product_json)
-    name = _name_of(chosen, attempts, meta)
+    name = _name_of(chosen, attempts, meta, site)
     if name is None:
         raise ExtractError("NO_PRODUCT_NAME", "상품 이름을 찾지 못했다")
     warnings = [w for a in attempts for w in a.warnings]

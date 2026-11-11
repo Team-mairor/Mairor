@@ -39,6 +39,7 @@ class Candidate:
     url: str
     title: str
     product_id: str
+    type_hint: str | None = None
 
 
 def is_supported(platform: Platform) -> bool:

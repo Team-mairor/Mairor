@@ -43,14 +43,22 @@ def new_header(site: BrandSite) -> RunHeader:
 
 
 def read_candidates(path: Path) -> list[Candidate]:
-    """list 명령이 쓴 JSONL(상품 후보)을 읽는다. 같은 상품 번호는 한 번만 둔다."""
+    """list 명령이 쓴 JSONL(상품 후보)을 읽는다. 같은 상품 번호는 한 번만 둔다.
+
+    type_hint(종류 코드)는 선택이다. 적어 두면 모델 분류 없이 그 종류로 보낸다.
+    """
     seen: set[str] = set()
     found: list[Candidate] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         data = json.loads(line)
-        candidate = Candidate(url=data["url"], title=data["title"], product_id=data["product_id"])
+        candidate = Candidate(
+            url=data["url"],
+            title=data["title"],
+            product_id=data["product_id"],
+            type_hint=data.get("type_hint"),
+        )
         if candidate.product_id not in seen:
             seen.add(candidate.product_id)
             found.append(candidate)
@@ -69,6 +77,7 @@ async def collect_candidates(
     colors: bool = False,
     llm: Llm | None = None,
     estimate: bool = False,
+    classify: bool = False,
     retry_failed: bool = False,
     limit: int | None = None,
 ) -> RunStats:
@@ -89,6 +98,8 @@ async def collect_candidates(
                 colors=colors,
                 llm=llm,
                 estimate=estimate,
+                type_hint=by_url[url].type_hint,
+                classify=classify,
             )
         except BlockedError:
             raise

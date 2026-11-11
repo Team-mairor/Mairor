@@ -2,6 +2,7 @@
 
 --colors는 호수 사진에서 색(HEX)을 계산하고, --vision은 모델이 사진 종류와 칸 위치를 찾게 하며,
 --estimate는 색을 못 구한 호수의 이름 기반 추정 색(LLM_ESTIMATE, 기본 꺼짐)을 더한다.
+--classify는 목록에 type_hint가 없는 상품의 종류를 모델이 고른다(종류가 없으면 적재되지 않는다).
 운영 수집은 목록에서 켜진(enabled) 사이트에만 한다.
 켜지지 않은 사이트는 구조를 확인하는 소량 요청에 한해 --allow-disabled 로만 접근한다.
 
@@ -103,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="색을 못 구한 호수는 이름으로 모델이 추정(LLM_ESTIMATE, 백엔드가 켠 경우에만 쓰임)",
     )
     product.add_argument(
+        "--classify", action="store_true", help="모델이 상품 종류를 고른다(모델 호출 발생)"
+    )
+    product.add_argument(
+        "--type", help="상품 종류 코드(예: LIP_TINT). 주면 모델 분류를 하지 않는다"
+    )
+    product.add_argument(
         "--allow-disabled", action="store_true", help="켜지지 않은 사이트도 소량 확인"
     )
 
@@ -120,6 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--colors", action="store_true")
     collect.add_argument("--vision", action="store_true")
     collect.add_argument("--estimate", action="store_true")
+    collect.add_argument(
+        "--classify",
+        action="store_true",
+        help="목록에 type_hint가 없는 상품은 모델이 종류를 고른다(모델 호출 발생)",
+    )
     collect.add_argument("--allow-disabled", action="store_true")
 
     listing = commands.add_parser("list", help="브랜드의 카테고리를 돌며 상품 목록 모으기")
@@ -276,6 +288,9 @@ async def run_product(
     colors: bool = False,
     llm: Llm | None = None,
     estimate: bool = False,
+    *,
+    type_hint: str | None = None,
+    classify: bool = False,
 ) -> int:
     platform = await resolve_platform(client, site)
     try:
@@ -289,6 +304,8 @@ async def run_product(
             colors=colors,
             llm=llm,
             estimate=estimate,
+            type_hint=type_hint,
+            classify=classify,
         )
     except ExtractError as error:
         print(f"{error.code}: {error}", file=sys.stderr)
@@ -336,6 +353,7 @@ async def run_collect(
                 colors=args.colors,
                 llm=llm,
                 estimate=args.estimate,
+                classify=args.classify,
                 retry_failed=args.retry_failed,
                 limit=args.limit,
             )
@@ -445,14 +463,22 @@ async def _run(
         if args.command == "find":
             return await run_find(client, site, args.name)
         if args.command == "collect":
-            needs_model = args.vision or args.estimate
+            needs_model = args.vision or args.estimate or args.classify
             model = (llm or get_catalog_llm()) if needs_model else None
             return await run_collect(client, site, args, renderer, model)
         if args.command == "product":
-            needs_model = args.vision or args.estimate
+            needs_model = args.vision or args.estimate or args.classify
             model = (llm or get_catalog_llm()) if needs_model else None
             return await run_product(
-                client, site, args.url, renderer, args.colors, model, args.estimate
+                client,
+                site,
+                args.url,
+                renderer,
+                args.colors,
+                model,
+                args.estimate,
+                type_hint=args.type,
+                classify=args.classify,
             )
         return await run_list(
             client,
