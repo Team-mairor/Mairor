@@ -32,3 +32,4 @@
 | [Google 로그인 시작 오류도 로그인 화면으로 보내기](2026-11-10-seoyun-seoyeon-google-start-error-redirect.md) | 2026-11-10 | 한서윤 → 김서연 | 요청 |
 | [운영 단계 추출에서 어긋난 종류·나누기·경계 고치기](2026-11-10-hyeonsoo-hyeongjun-step-extraction-misses.md) | 2026-11-10 | 김현수 → 박형준 | 요청 |
 | [노트북 연결 모드(--serve) 구현 가이드](2026-11-11-jungyoon-hyeongjun-processor-serve-guide.md) | 2026-11-11 | 김정윤 → 박형준 | 요청 |
+| [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md) | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 요청 대기 |
