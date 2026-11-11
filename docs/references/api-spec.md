@@ -483,7 +483,8 @@ API-GUIDE-003 · PATCH /api/v1/users/me/executions/\{executionId\}/photo-consent
 
 - 회원·CSRF 필요. Path executionId:string, Body enabled:boolean 필수. 200 PhotoConsent. 404 NOT\_FOUND, 종료 상태 409 GUIDE\_EXECUTION\_NOT\_ACTIVE.
 - 실행 생성 시 photoConsent=null은 저장 안 함. 매 실행 안내 후 enabled 전달, 안내 다시 보기만으로 호출하지 않는다. 서버는 고정 안내 v1과 동의 시각 기록.
-- 실행 중 true→false 철회 시 기존 임시 단계 사진을 삭제하는 정책은 초안이며 확인 후 구현. 얼굴 등록 이미지는 단계 사진 동의와 분리되고 자동 삭제 대상이 아니다.
+- 단계 사진 동의는 필수다. 동의 카드는 '돌아가기' / '동의하고 시작'만 있고, FE는 동의할 때만 enabled=true로 호출한 뒤 튜토리얼을 시작한다. enabled=false는 계약에 남기며 서버는 받으면 기록만 한다.
+- 실행 중 true→false 철회는 서버 계약에만 남고 FE에는 철회 경로가 없다(동의 필수). 철회가 들어오면 기존 임시 단계 사진을 삭제하는 정책은 초안이며 확인 후 구현. 얼굴 등록 이미지는 단계 사진 동의와 분리되고 자동 삭제 대상이 아니다.
 </toggle>
 
 <toggle>
@@ -492,8 +493,9 @@ API-GUIDE-005 · PUT /api/v1/users/me/executions/\{executionId\}/steps/\{stepId\
 관련 기능: GUIDE-008 단계 촬영
 
 - 회원·CSRF 필요. Path executionId:string·stepId:string 필수. multipart image:file 필수(API-CAMERA-001과 동일 필드명), JPEG/PNG 최대5MiB. 200 Photo(새 사진·교체 동일).
-- 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE, 409 GUIDE\_PHOTO\_CONSENT\_REQUIRED(동의 아님), 409 GUIDE\_STEP\_PHOTO\_NOT\_ALLOWED(skipped), 413 PAYLOAD\_TOO\_LARGE, 415 UNSUPPORTED\_MEDIA\_TYPE.
-- 오버레이·UI 없는 캡처만 업로드. 이미지 디코딩·형식·크기 검증. 단계당 현재 사진1개, 새 파일 저장·연결 성공 후 이전 파일 정리. 실패 시 기존 참조 유지. UI는 성공 확인/다시 찍기/다음, 실패 재시도/사진 없이 진행을 구분.
+- 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE, 409 GUIDE\_PHOTO\_CONSENT\_REQUIRED(동의 아님), 413 PAYLOAD\_TOO\_LARGE, 415 UNSUPPORTED\_MEDIA\_TYPE.
+- 제품 없이 건너뛴(skipped) 단계도 사진을 받는다. 모든 단계를 촬영한다.
+- 오버레이·UI 없는 캡처만 업로드. 이미지 디코딩·형식·크기 검증. 단계당 현재 사진1개, 새 파일 저장·연결 성공 후 이전 파일 정리. 실패 시 기존 참조 유지. UI는 성공이면 바로 다음, 실패면 다시 찍기만 둔다(사진 없이 진행 없음).
 </toggle>
 
 <toggle>
@@ -503,7 +505,7 @@ API-GUIDE-006 · POST /api/v1/users/me/executions/\{executionId\}/completion
 
 - 회원·CSRF 필요. Path executionId:string 필수, Body 없음. 최초 201 ExecutionCompletion, 같은 실행 완료 재요청 200 동일 recordId.
 - 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE(ABANDONED). 원자적으로 완료 상태·리포트 1개 생성·사진 연결·얼굴 등록 RETAINED 전환. 저장 실패 시 진행 상태와 임시 데이터를 유지해 재시도.
-- 단계 사진·제품 없어도 완료 가능. 마지막 GUIDE 단계 사진만 completedPhoto, 없으면 null. 얼굴 등록 이미지를 완성 사진으로 대신 사용하지 않는다. 진하기 측정값 미저장.
+- 단계 사진·제품 없어도 완료 가능. FE는 모든 단계 사진이 저장된 뒤에만 완료를 부르고(업로드가 계속 실패하면 '나가기' → API-GUIDE-007), 서버는 사진 수를 완료 조건으로 다시 검사하지 않는다. 마지막 GUIDE 단계 사진만 completedPhoto, 없으면 null. 얼굴 등록 이미지를 완성 사진으로 대신 사용하지 않는다. 진하기 측정값 미저장.
 - 저장 중 FE는 리포트 보기 비활성, 성공 후 조회. 리포트 보기 클릭으로 재생성 금지.
 </toggle>
 
@@ -773,8 +775,8 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 6 미리보기 | API-ANALYSIS-001 → previewable 단계(아이섀도·아이라이너·블러셔·하이라이터·립)만 클라이언트 오버레이, 'N / 전체' 안내. 카메라 오류·인식 알림은 클라이언트 |
 | 7 제품 체크 ↔ 입혀보며 고르기 | API-RECOMMEND-001(생성) / 002(조회). 바꾸기 패널 = candidates(추천 1·2·3) + API-POUCH-003?category=같은 카테고리. 두 보기의 선택값은 클라이언트 상태로 공유 |
 | 7-3 시작 확인 | API-GUIDE-001(guideId·matchId·faceRegistrationId·selections·acceptMissingProducts) → 실행 스냅샷. 409 GUIDE\_MATCH\_STALE → API-RECOMMEND-001 재생성 + 토스트, 자동 시작 안 함 |
-| 8 튜토리얼 안내·사진 동의 | 안내 슬라이드 노출은 기기 저장. 동의 카드 → API-GUIDE-003(enabled true/false) |
-| 9 튜토리얼 | 가이드라인·게이지·환경 알림은 클라이언트. '다음 스텝'/'완성하기': 동의 시 API-GUIDE-005(실패 → 다시 찍기/사진 없이 진행), 미동의·제품 없는 단계는 촬영 없음. '나가기' → API-GUIDE-007 → 홈 |
+| 8 튜토리얼 안내·사진 동의 | 안내 슬라이드 노출은 기기 저장. 동의 카드('돌아가기' / '동의하고 시작') → 동의 시 API-GUIDE-003(enabled=true) 후 시작 |
+| 9 튜토리얼 | 가이드라인·게이지·환경 알림은 클라이언트. '다음 스텝'/'완성하기': 모든 단계 API-GUIDE-005(실패 → 다시 찍기). '나가기' → API-GUIDE-007 → 홈 |
 | 10 완성 | API-GUIDE-006 → recordId. 실패 시 같은 실행으로 재요청(중복 기록 없음). '리포트 보기' → API-REPORT-002 |
 | 11 내 파우치 | API-POUCH-003/005 조회, 등록 API-POUCH-008 → 001 → 002 → 004(컬러 조회 실패 → 재시도/직접 입력), 수정 006, 삭제 007 |
 | 12 리포트 | 목록 API-REPORT-001 · 상세 API-REPORT-002 · 사진 API-GUIDE-008 · 삭제 API-REPORT-003 |
