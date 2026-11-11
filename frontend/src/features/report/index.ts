@@ -14,4 +14,5 @@ export {
   useReport,
   useReports,
 } from "./report-api";
-export { guideReportRows, type ReportRow } from "./report-rows";
+export { guideReportRows, type ReportRow, type ReportRowPhoto } from "./report-rows";
+export { StepPhotoImg } from "./step-photo-img";

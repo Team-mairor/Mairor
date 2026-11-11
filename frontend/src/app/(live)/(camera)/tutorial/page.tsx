@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
 import { pickOf } from "@/features/check";
@@ -26,6 +26,8 @@ import { LiveNote, parseAlert, RoundBack, useLiveState } from "@/features/live";
 import {
   matchFor,
   runHref,
+  saveStepPhoto,
+  stepPhoto,
   useSession,
   type GuideAction,
   type RefProduct,
@@ -38,10 +40,11 @@ import {
   PrepCard,
   ProductChip,
   templateOf,
+  reachableStep,
   TutorialTopBar,
+  useStepShot,
   type StepProduct,
 } from "@/features/tutorial";
-import { useTimeout } from "@/lib/hooks/use-timeout";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
@@ -196,7 +199,7 @@ function GuideTutorial() {
 }
 
 /**
- * 사진 저장에 동의했으면 단계를 넘길 때 확인 창 없이 사진을 남긴다 (동의는 튜토리얼 안내에서 받는다).
+ * 단계를 넘길 때마다 확인 창 없이 사진을 남긴다. 사진 저장 동의는 필수이고 튜토리얼 안내에서 받는다.
  * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. 진하기 측정이 생기면 gauge를 측정값으로 바꾼다.
  */
 function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea | null }) {
@@ -214,15 +217,27 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // false면 단계 준비 카드(제품·할 일·끝내는 기준)를 띄운다. 앞으로 갈 때만 띄우고, 이전 단계로 돌아갈 때는 띄우지 않는다
   const [ready, setReady] = useState(false);
   const [gauge, setGauge] = useState(10);
-  const [busy, setBusy] = useState(false);
   const [exitAsk, setExitAsk] = useState(false);
-  const timer = useTimeout();
 
+  // 나가기로 실행을 끝낸 뒤에는 동의 카드로 보내지 않는다 (홈으로 가는 중)
+  const leaving = useRef(false);
+  // 동의 없이 들어오면(샘플 실행을 주소로 바로 연 경우 등) 사진을 찍지 않도록 동의 카드로 보낸다
   useEffect(() => {
+    if (run.id && !run.photoOk && !leaving.current)
+      router.replace(runHref("/tutorial/guide", run.guideId));
+  }, [run.id, run.photoOk, run.guideId, router]);
+
+  // 기본 가이드를 못 불러오면 영역 없는 단계는 찍을 부위를 몰라 촬영이 실패한다. 다시 찍기에서 다시 불러온다
+  const [defaultsFailed, setDefaultsFailed] = useState(false);
+  const loadDefaults = useCallback(() => {
     loadDefaultGuideSet()
       .then(setDefaults)
-      .catch((e) => console.warn("기본 가이드를 불러오지 못했습니다", e));
+      .catch((e) => {
+        console.warn("기본 가이드를 불러오지 못했습니다", e);
+        setDefaultsFailed(true);
+      });
   }, []);
+  useEffect(loadDefaults, [loadDefaults]);
 
   // 카메라는 추적에만 쓰고 영상은 보여 주지 않는다. 얼굴 자리에는 가이드만 뜬다
   useHiddenVideo();
@@ -249,6 +264,20 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     () => resolveStep(info.stepId, subs, defaults),
     [info.stepId, subs, defaults],
   );
+  // 단계 사진을 기다리고 확대할 부위. 영역을 찾지 못한 단계도 화장 종류의 기본 가이드 부위를 써,
+  // 립 단계에서 입이 보일 때 입술을 찍는다. 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
+  const photoRegions = useMemo(
+    () =>
+      guideStep?.regions.length
+        ? guideStep.regions
+        : (resolveStep(info.stepId, [templateOf(info)], defaults)?.regions ?? []),
+    [guideStep, info, defaults],
+  );
+  // 촬영 기록이 아니라 실제로 남은 사진으로 상단 단계 바의 이동 범위를 정한다
+  const reachable = reachableStep(
+    steps.map((s) => s.stepId),
+    (id) => !!stepPhoto(run.id, id),
+  );
   // 가이드가 있는 단계는 지금 단계 부위의 판정(놓침·고개 돌림·잘림·너무 멂)으로 안내하고 측정을 멈춘다
   const { crop } = useTutorialCrop();
   const guideIssue = useGuideTrackingIssue(guideStep, crop);
@@ -262,8 +291,23 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const paused = run.mode === "guide" && (load.status !== "ready" || load.checking || !!load.error);
   const blocked = !canMeasure || paused;
 
+  // 찍으면 사진과 촬영 기록을 같이 남기고 다음 단계로 간다. 같은 단계를 다시 찍으면 덮어쓴다
+  const shot = useStepShot(photoRegions, (photo) => {
+    if (!isCurrentRun(run.id)) return;
+    saveStepPhoto(run.id, info.stepId, photo);
+    updateRun(
+      (r) => (r.captures.includes(info.stepId) ? {} : { captures: [...r.captures, info.stepId] }),
+      run.id,
+    );
+    if (last) {
+      completeRun(run.id);
+      router.push(runHref("/done", run.guideId));
+    } else goStep(step + 1);
+  });
+  const { cancel: cancelShot } = shot;
+
   useEffect(() => {
-    if (!ready || blocked || busy || exitAsk || target === null) return;
+    if (!ready || blocked || exitAsk || target === null) return;
     const t = setInterval(() => {
       setGauge((g) => {
         if (g >= target) return g;
@@ -274,7 +318,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       });
     }, 160);
     return () => clearInterval(t);
-  }, [ready, blocked, busy, exitAsk, target]);
+  }, [ready, blocked, exitAsk, target]);
 
   const gv = Math.round(gauge);
   // 변수 이름을 그대로 적어야 Tailwind가 테마 변수를 CSS에 넣는다
@@ -292,53 +336,35 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 화면에 띄우고 읽어 줄 동작. 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
   const shownActs = paced ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
 
-  // 가이드를 다시 확인하는 동안 예약한 촬영을 취소한다
+  // 가이드를 다시 확인하는 동안 촬영 대기를 접는다
   useEffect(() => {
-    if (!paused) return;
-    timer.clear();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 재검증 중 예약 촬영을 취소한다
-    setBusy(false);
-  }, [paused, timer]);
+    if (paused) cancelShot();
+  }, [paused, cancelShot]);
 
-  // 진행바·이전 버튼으로 옮기면 촬영 대기 타이머는 버린다. 예전 step으로 advance가 실행되지 않게
-  const cancelTimer = () => {
-    timer.clear();
-    setBusy(false);
-  };
-  const goStep = (i: number, prep = true) => {
-    cancelTimer();
+  // 진행바·이전 버튼으로 옮기면 촬영 대기를 접는다. 예전 단계 사진으로 넘어가지 않게
+  function goStep(i: number, prep = true) {
+    cancelShot();
     setStep(i);
     setAct(0);
     setReady(!prep);
     setGauge(10);
-  };
-  // 사진 저장에 동의했고 제품을 쓰는 단계면 넘길 때 사진을 남긴다. 실제 가이드는 건너뛴 단계만 뺀다
-  const usesProduct = pick ? pick.kind !== "skipped" : hasProduct;
-  const photo = run.photoOk && usesProduct && !run.captures.includes(info.stepId);
-  const advance = () => {
-    if (!isCurrentRun(run.id)) return;
-    if (photo) updateRun({ captures: [...run.captures, info.stepId] }, run.id);
-    if (last) {
-      completeRun(run.id);
-      router.push(runHref("/done", run.guideId));
-    } else goStep(step + 1);
-  };
+  }
+  // 모든 단계(제품 없는 단계·생략한 단계 포함)를 넘길 때 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
   const next = () => {
-    if (busy || paused) return;
+    if (shot.shooting || paused) return;
     if (!lastAct) {
       setAct((a) => a + 1);
       return;
     }
-    // 남길 사진이 없으면 '저장 중…' 없이 바로 넘긴다
-    if (!photo) return advance();
-    setBusy(true);
-    timer.set(() => {
-      setBusy(false);
-      advance();
-    }, 600);
+    if (photoRegions.length === 0 && defaultsFailed) {
+      setDefaultsFailed(false);
+      return loadDefaults();
+    }
+    shot.start();
   };
   const quit = () => {
-    timer.clear();
+    leaving.current = true;
+    cancelShot();
     // 실제 가이드는 서버 실행을 중도 종료한다. 실패해도 서버가 세션 종료 때 정리하므로 기다리지 않는다
     if (run.mode === "guide" && run.executionId)
       abandonExecution(run.executionId).catch((e: unknown) => console.warn("중도 종료 실패", e));
@@ -346,15 +372,22 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     router.push("/home");
   };
 
-  const nextLabel = busy
-    ? "저장 중…"
-    : !lastAct
-      ? "했어요 · 다음 할 일"
-      : last
-        ? "완성하기"
-        : paced
-          ? "다음 스텝"
-          : "건너뛰기";
+  const nextLabel =
+    shot.state === "outOfView"
+      ? "화면에 보이면 찍어요"
+      : shot.state === "waiting"
+        ? "잠시 멈춰 주세요…"
+        : lastAct && defaultsFailed && photoRegions.length === 0
+          ? "다시 불러오기"
+          : shot.state === "failed"
+            ? "다시 찍기"
+            : !lastAct
+              ? "했어요 · 다음 할 일"
+              : last
+                ? "완성하기"
+                : paced
+                  ? "다음 스텝"
+                  : "건너뛰기";
 
   return (
     <main className="relative flex flex-1 flex-col">
@@ -365,11 +398,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         steps={steps}
         step={step}
         onExit={() => {
-          // 저장 대기 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 버린다
-          cancelTimer();
+          // 촬영을 기다리는 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 접는다
+          cancelShot();
           setExitAsk(true);
         }}
-        onGoStep={(i) => goStep(i, i > step)}
+        reachable={reachable}
+        onGoStep={(i) => i <= reachable && goStep(i, i > step)}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
       {/* 영상 제품 정보가 없어도 고른 제품이 있으면 보여 준다 */}
@@ -423,24 +457,49 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
         {target !== null && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
 
+        {shot.state === "outOfView" && (
+          <p
+            role="status"
+            className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-ink"
+          >
+            이 단계 부위가 화면에 다 보이게 조금 뒤로 가 주세요. 촬영을 그만두려면 왼쪽 버튼을 눌러
+            주세요.
+          </p>
+        )}
+        {defaultsFailed && photoRegions.length === 0 && (
+          <p
+            role="alert"
+            className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
+          >
+            촬영할 부위 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 불러와 주세요.
+          </p>
+        )}
+        {shot.state === "failed" && !(defaultsFailed && photoRegions.length === 0) && (
+          <p
+            role="alert"
+            className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
+          >
+            사진을 저장하지 못했어요. 카메라가 켜져 있고 얼굴이 화면에 보이는지 확인한 뒤 다시 찍어
+            주세요.
+          </p>
+        )}
+
         <div className="flex items-center gap-3">
           <RoundBack
             onClick={() => {
-              // 저장 중에는 막는다. 대기 중인 advance가 바뀐 화면 위에서 이전 단계를 넘기지 않게
-              if (busy) return;
-              if (act > 0) return setAct((a) => a - 1);
+              // 촬영을 기다리는 중이면(부위가 계속 화면 밖 등) 대기만 접고 지금 단계에 머문다
+              if (shot.shooting) return cancelShot();
+              if (act > 0) {
+                // 마지막 할 일에서 촬영에 실패한 채 돌아가면 실패 안내·다시 찍기 라벨을 지운다
+                cancelShot();
+                return setAct((a) => a - 1);
+              }
               if (step > 0) goStep(step - 1, false);
             }}
-            label={act > 0 ? "이전 할 일" : "이전 단계"}
-            disabled={busy || (step === 0 && act === 0)}
+            label={shot.shooting ? "촬영 취소" : act > 0 ? "이전 할 일" : "이전 단계"}
+            disabled={!shot.shooting && step === 0 && act === 0}
           />
-          <PillButton
-            size="cta"
-            trailing
-            onClick={next}
-            disabled={busy}
-            className="min-w-0 flex-1 disabled:opacity-60"
-          >
+          <PillButton size="cta" trailing onClick={next} className="min-w-0 flex-1">
             {nextLabel}
           </PillButton>
         </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GuideReportStep } from "@/features/session";
+import { deleteStepPhotos, saveStepPhoto } from "@/features/session";
 
 import { guideReportRows } from "./report-rows";
 
@@ -62,5 +63,20 @@ describe("guideReportRows", () => {
   it("남긴 사진은 사진 자리, 아니면 미촬영이다", () => {
     const rows = guideReportRows(report([step("s1", { photo: true }), step("s2")]));
     expect(rows.map((r) => r.photo)).toEqual(["slot", "none"]);
+  });
+
+  it("단계 사진은 순번이 아니라 stepId로 그 실행의 사진을 붙인다", () => {
+    const photo = { url: "data:image/jpeg;base64,s9", box: null };
+    saveStepPhoto("run1", "s9", photo);
+    const rows = guideReportRows(
+      report([step("s1", { photo: true }), step("s9", { photo: true }), step("s3")]),
+      "run1",
+    );
+    expect(rows.map((r) => [r.photo, "shot" in r ? r.shot : undefined])).toEqual([
+      ["slot", undefined],
+      ["shot", photo],
+      ["none", undefined],
+    ]);
+    deleteStepPhotos("run1");
   });
 });

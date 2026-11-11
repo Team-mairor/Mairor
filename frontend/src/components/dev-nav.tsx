@@ -159,14 +159,8 @@ const ITEMS: Item[] = [
     prep: run({ photoOk: true }),
   },
   {
-    label: "튜토리얼 · 사진 없이",
-    sub: "동의 안 함 → 사진 없이 진행",
-    href: "/tutorial?photo=0",
-    prep: run({ photoOk: false, captures: [] }),
-  },
-  {
     label: "완성",
-    sub: "기록 저장 · 최종 사진",
+    sub: "기록 저장 · 최종 사진은 튜토리얼에서 찍었을 때만",
     href: "/done",
     prep: run({ photoOk: true, captures: ALL }),
   },
@@ -184,7 +178,7 @@ const ITEMS: Item[] = [
   },
   {
     label: "완성 · 사진 없음",
-    sub: "미동의 → 미촬영 표시",
+    sub: "사진 없는 기록 → 미촬영 표시",
     href: "/done?photo=0",
     prep: run({ photoOk: false, captures: [] }),
   },

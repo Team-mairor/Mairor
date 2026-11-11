@@ -204,7 +204,7 @@ describe("루트 실행·가이드 연동", () => {
     await navigate(`/tutorial/guide?guideId=${A}`);
     expect(document.body.textContent).toContain("최대 13장");
     const button = [...document.querySelectorAll("button")].find(
-      (b) => b.textContent === "사진 저장하고 시작",
+      (b) => b.textContent === "동의하고 시작",
     )!;
     expect(button).toBeTruthy();
     await act(async () => {
@@ -216,6 +216,23 @@ describe("루트 실행·가이드 연동", () => {
     });
     expect(session.state.run).toMatchObject({ id, phase: "tutorial", photoOk: true });
     expect(nav.router.push).toHaveBeenCalledWith(`/tutorial?guideId=${A}`);
+  });
+  it("동의 카드의 돌아가기는 같은 가이드의 제품 체크로 간다", async () => {
+    await navigate(`/loading?guideId=${A}`);
+    await registerFace();
+    await act(async () => {
+      session.update({ tutSeen: true });
+    });
+    realConsent = true;
+    await navigate(`/tutorial/guide?guideId=${A}`);
+    const back = [...document.querySelectorAll("button")].find(
+      (b) => b.textContent === "돌아가기",
+    )!;
+    await act(async () => {
+      back.click();
+    });
+    expect(nav.router.push).toHaveBeenCalledWith(`/check?guideId=${A}`);
+    expect(session.state.run).toMatchObject({ phase: "preparing", photoOk: false });
   });
   it("같은 안내 경로의 review 쿼리 변경을 읽고 돌아갈 때 동의·진행을 유지한다", async () => {
     await navigate(`/loading?guideId=${A}`);
@@ -255,7 +272,7 @@ describe("루트 실행·가이드 연동", () => {
         }),
     );
     const save = [...document.querySelectorAll("button")].find(
-      (b) => b.textContent === "사진 저장하고 시작",
+      (b) => b.textContent === "동의하고 시작",
     )!;
     await act(async () => {
       save.click();

@@ -28,6 +28,7 @@ export {
   MIN_DISTANCE_RATIO,
   NO_CHECK,
   saveFacePhoto,
+  snapMirrored,
   useFaceCheck,
   type CheckName,
   type DistanceHint,
@@ -56,7 +57,14 @@ export {
   MIN_IN_FRAME_RATIO,
   RECOVER_IN_FRAME_MARGIN,
 } from "./visibility";
-export { REGION_NAMES, regionNamesError, REGIONS } from "./regions";
+export {
+  landmarkMotion,
+  mirroredRegionBox,
+  REGION_NAMES,
+  regionNamesError,
+  REGIONS,
+  type PhotoBox,
+} from "./regions";
 export { FRAME_STALE_MS, KEY_REGIONS } from "./tracking-rules";
 export { DEFAULT_PREDICTION, FacePredictor, type PredictionOptions } from "./prediction";
 export {

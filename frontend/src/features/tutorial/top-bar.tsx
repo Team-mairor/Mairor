@@ -9,11 +9,14 @@ import { cn } from "@/lib/utils";
 export function TutorialTopBar({
   steps,
   step,
+  reachable,
   onExit,
   onGoStep,
 }: {
   steps: Pick<GuideStepInfo, "stepId" | "short">[];
   step: number;
+  /** 눌러서 갈 수 있는 마지막 단계. 앞 단계 사진이 모두 있어야 그 뒤로 갈 수 있다 */
+  reachable: number;
   onExit: () => void;
   onGoStep: (i: number) => void;
 }) {
@@ -39,6 +42,7 @@ export function TutorialTopBar({
               key={s.stepId}
               type="button"
               onClick={() => onGoStep(i)}
+              disabled={i > reachable}
               aria-label={`${i + 1}단계 ${s.short}`}
               className={cn(
                 "h-1.5 flex-1 rounded-full transition-colors",

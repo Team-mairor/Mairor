@@ -4,8 +4,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { useRunQuery as useQuery } from "@/features/guide";
-import { DoneView, GuideDone, useDoneSave } from "@/features/report";
-import { snapshotSteps, useSession, type ReportSummary } from "@/features/session";
+import { DoneView, GuideDone, StepPhotoImg, useDoneSave } from "@/features/report";
+import {
+  keepStepPhotos,
+  snapshotSteps,
+  stepPhoto,
+  useSession,
+  type ReportSummary,
+} from "@/features/session";
 import { GUIDE_STEPS, VIDEOS, REF_PRODUCTS } from "@/mocks/mock-data";
 
 /**
@@ -28,10 +34,9 @@ function SampleDone() {
   const run = state.run;
   const picked = run.picked ?? VIDEOS[0];
   const n = GUIDE_STEPS.length;
-  const captures = sampleCaptures(run.captures);
-  // 최종 사진은 마지막 단계를 찍었을 때만. 중간 단계 사진은 따로 센다
-  const hasFinal = run.photoOk && captures.includes(n - 1);
-  const hasPhoto = run.photoOk && captures.length > 0;
+  // 촬영 기록이 아니라 실제로 남은 사진으로 판단한다. 최종 사진은 마지막 단계 사진
+  const finalShot = stepPhoto(run.id, GUIDE_STEPS[n - 1].stepId);
+  const hasPhoto = GUIDE_STEPS.some((s) => stepPhoto(run.id, s.stepId));
   // 기록 id = 실행 id. 다시 시도해도 같은 기록을 덮어써 중복이 생기지 않는다.
   // 실행 id가 없는 예전 세션은 화면에 머무는 동안 한 번 만든 id를 쓴다
   const [fallbackId] = useState(() => `rp${Date.now()}`);
@@ -63,12 +68,14 @@ function SampleDone() {
         noPhoto: !r.photoOk,
         finalPhoto: shots.includes(n - 1),
         captures: shots,
+        ...(r.id && { runId: r.id }),
         videoId: video.id,
         items,
       };
       const rest = prev.reports.filter((x) => x.id !== id).map((r) => ({ ...r, isNew: false }));
       return { reports: [report, ...rest] };
     });
+    if (run.id) keepStepPhotos(run.id);
     return true;
   };
   const { save, retry } = useDoneSave(!!query, query?.get("fail") === "1", commit);
@@ -78,17 +85,9 @@ function SampleDone() {
       total={n}
       title={picked.title}
       channel={picked.ch}
-      hasFinal={hasFinal}
+      hasFinal={!!finalShot}
       hasPhoto={hasPhoto}
-      finalPhoto={
-        // eslint-disable-next-line @next/next/no-img-element -- 샘플
-        <img
-          src="/images/sample-face.png"
-          alt="완성 사진"
-          className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
-          style={{ marginTop: "-92.7%" }}
-        />
-      }
+      finalPhoto={finalShot && <StepPhotoImg photo={finalShot} alt="완성 사진" />}
       save={save}
       onRetry={retry}
       onHome={() => {

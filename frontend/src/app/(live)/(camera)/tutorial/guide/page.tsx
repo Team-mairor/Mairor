@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { GUIDE_STEPS } from "@/mocks/mock-data";
 
 /**
- * 09 튜토리얼 안내 · 사진 저장 동의.
+ * 09 튜토리얼 안내 · 사진 저장 동의. 리포트에 단계 사진이 꼭 남도록 동의해야 시작할 수 있다.
  * 안내 3장은 이 기기에서 처음 시작할 때만. ?review=1 이면 슬라이드만 보고 튜토리얼로 돌아간다. ?force=1 은 확인용.
  */
 export default function TutorialGuidePage() {
@@ -46,7 +46,8 @@ export default function TutorialGuidePage() {
   const consenting = useRef(false);
   /** 동의를 서버에 저장하지 못한 이유. 버튼을 다시 누를 수 있다 */
   const [consentError, setConsentError] = useState<string | null>(null);
-  const consent = async (ok: boolean) => {
+  // 사진 저장에 동의해야 시작할 수 있어 늘 동의로 저장한다
+  const consent = async () => {
     if (consenting.current) return;
     consenting.current = true;
     setConsentError(null);
@@ -58,10 +59,10 @@ export default function TutorialGuidePage() {
           setConsentError("실행 정보가 없어요. 제품 확인에서 다시 시작해 주세요.");
           return;
         }
-        await setPhotoConsent(run.executionId, ok);
+        await setPhotoConsent(run.executionId, true);
       }
       if (!isCurrentRun(run.id)) return;
-      enterTutorial(run.id, ok);
+      enterTutorial(run.id, true);
       router.push(href("/tutorial"));
     } catch (e) {
       setConsentError(errorMessage(e));
@@ -138,10 +139,12 @@ export default function TutorialGuidePage() {
               BEFORE YOU START
             </span>
             <div className="flex flex-col gap-3">
-              <h1 className="font-display text-[34px] leading-[1.25]">단계 사진을 저장할까요?</h1>
+              <h1 className="font-display text-[34px] leading-[1.25]">
+                단계 사진 저장에 동의해 주세요
+              </h1>
               <p className="text-[19px] leading-[1.55] text-pretty text-mute">
-                저장하면 스텝을 마칠 때마다 얼굴을 찍어 리포트에 과정을 남겨요. 저장하지 않아도
-                튜토리얼은 똑같이 진행돼요.
+                스텝을 마칠 때마다 얼굴을 찍어 리포트에 과정을 남겨요. 사진 저장에 동의해야
+                튜토리얼을 시작할 수 있어요.
               </p>
             </div>
             <div className="flex flex-col rounded-[22px] border border-line">
@@ -171,13 +174,13 @@ export default function TutorialGuidePage() {
               <PillButton
                 variant="line"
                 size="cta"
-                onClick={() => consent(false)}
+                onClick={() => router.push(href("/check"))}
                 className="flex-1"
               >
-                사진 없이 시작
+                돌아가기
               </PillButton>
-              <PillButton size="cta" onClick={() => consent(true)} className="flex-1">
-                사진 저장하고 시작
+              <PillButton size="cta" onClick={consent} className="flex-1">
+                동의하고 시작
               </PillButton>
             </div>
           </div>

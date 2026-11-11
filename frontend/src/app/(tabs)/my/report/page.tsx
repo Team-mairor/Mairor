@@ -11,11 +11,15 @@ import {
   guideReportRows,
   PhotoSlot,
   SHOW_STEP_PHOTOS,
+  StepPhotoImg,
   useReport,
   type ReportRow,
+  type ReportRowPhoto,
 } from "@/features/report";
 import {
+  deleteStepPhotos,
   matchFor,
+  stepPhoto,
   useSession,
   type MatchResult,
   type ReportStep,
@@ -36,17 +40,12 @@ const snapOf = (m: MatchResult): ReportStep => ({
   used: m.p ? { brand: m.p.brand, name: m.p.name } : null,
 });
 
-/** 단계 사진 자리. 사진 주소가 있으면 실제 이미지 */
-function StepPhoto({
-  photo,
-  url,
-}: {
-  photo: ReportRow["photo"];
-  url?: string | null;
-}): ReactElement {
-  if (photo === "slot" && url)
+/** 단계 사진 자리. 이 기기에서 찍은 사진, 없으면 서버 기록의 사진 주소, 둘 다 없으면 값마다 한 가지 모양 */
+function StepPhoto({ row, url }: { row: ReportRowPhoto; url?: string | null }): ReactElement {
+  if (row.photo === "shot") return <StepPhotoImg photo={row.shot} crop />;
+  if (row.photo === "slot" && url)
     return <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />;
-  switch (photo) {
+  switch (row.photo) {
     case "none":
       return (
         <div className="absolute inset-0 z-[1] flex items-center justify-center bg-cream text-[16px] font-bold text-mute">
@@ -56,7 +55,7 @@ function StepPhoto({
     case "slot":
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-cream-2 text-[16px] font-bold text-navy">
-          촬영함
+          사진 없음
         </div>
       );
     case "bare":
@@ -91,6 +90,8 @@ function sampleRows(
     const r = REF_PRODUCTS[i];
     // 단계 사진: captures가 없는 샘플 기록은 전부 있음으로 본다
     const noPhoto = !!rep?.noPhoto || (rep?.captures ? !rep.captures.includes(i) : false);
+    // 실행으로 만든 기록은 그 실행의 사진을 단계 id로 찾는다
+    const shot = !noPhoto && rep?.runId ? stepPhoto(rep.runId, x.stepId) : null;
     return {
       no: i + 1,
       title: x.title,
@@ -103,7 +104,17 @@ function sampleRows(
             ? "내가 쓴 제품 · 대체"
             : "내가 쓴 제품",
       used: !used ? "없음 · 설명만" : `${used.brand} ${used.name}`,
-      photo: noPhoto ? "none" : x.makeup === "foundation" ? "bare" : "sample",
+      ...(shot
+        ? { photo: "shot" as const, shot }
+        : {
+            photo: noPhoto
+              ? "none"
+              : rep?.runId
+                ? "slot"
+                : x.makeup === "foundation"
+                  ? "bare"
+                  : "sample",
+          }),
     };
   });
 }
@@ -139,9 +150,11 @@ export default function ReportPage() {
   const waiting =
     state.loggedIn && !missing && (!sessionChecked || remote.load.status === "loading");
 
-  const steps = rep?.guide ? guideReportRows(rep.guide) : sampleRows(rep, state);
-  // 최종 사진: 샘플 기록은 있음으로 본다
+  const steps = rep?.guide ? guideReportRows(rep.guide, rep.runId) : sampleRows(rep, state);
+  // 최종 사진: 샘플 기록은 있음으로 본다. 실행으로 만든 기록은 마지막 단계 사진
   const hasFinal = !!rep && !rep.noPhoto && (rep.finalPhoto ?? true);
+  const last = steps.at(-1);
+  const finalShot = last?.photo === "shot" ? last.shot : null;
   // 단계 사진 목록. 실제 가이드 기록은 보여 줄지를 따로 정한다
   const showSteps = !rep?.guide || SHOW_STEP_PHOTOS;
 
@@ -183,6 +196,7 @@ export default function ReportPage() {
     }
     timer.set(() => {
       update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
+      if (rep.runId) deleteStepPhotos(rep.runId);
       router.replace("/my/reports");
     }, 700);
   };
@@ -223,12 +237,16 @@ export default function ReportPage() {
                 {rep.noPhoto ? "사진 없이 완료한 메이크업이에요" : "마지막 단계 사진이 없어요"}
               </span>
             </div>
+          ) : finalShot ? (
+            <StepPhotoImg photo={finalShot} alt="완성 사진" />
           ) : rep.photoUrl ? (
             <img
               src={rep.photoUrl}
               alt="완성 사진"
               className="absolute inset-0 h-full w-full object-cover"
             />
+          ) : rep.runId ? (
+            <PhotoSlot label="사진을 불러오지 못했어요" />
           ) : rep.guide ? (
             <PhotoSlot label="마지막 단계 사진" />
           ) : (
@@ -267,7 +285,7 @@ export default function ReportPage() {
                 {steps.map((c) => (
                   <div key={c.no} className="flex flex-col gap-1.5">
                     <div className="relative aspect-square overflow-hidden rounded-[14px] border border-line">
-                      <StepPhoto photo={c.photo} url={c.photoUrl} />
+                      <StepPhoto row={c} url={c.photoUrl} />
                       <span className="absolute top-2 left-2 rounded-full bg-white px-2 py-[3px] font-serif text-[18px] text-ink">
                         {c.no}
                       </span>

@@ -182,6 +182,19 @@ export function captureFace(video: HTMLVideoElement): Promise<Blob> {
 
 export { clearFacePhoto, facePhoto, saveFacePhoto } from "./registered-photo";
 
+/** 지금 프레임을 화면·거울에서 보던 방향(좌우 반전)으로 찍은 JPEG data URL. 영상이 아직 없으면 null */
+export function snapMirrored(video: HTMLVideoElement | null): string | null {
+  if (!video?.videoWidth) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, -canvas.width, 0);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
 interface Box {
   minX: number;
   minY: number;

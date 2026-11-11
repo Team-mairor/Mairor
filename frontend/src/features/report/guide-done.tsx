@@ -4,10 +4,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { completeExecution, useGuide, useRunQuery } from "@/features/guide";
-import { useSession } from "@/features/session";
+import { keepStepPhotos, stepPhoto, useSession } from "@/features/session";
 
-import { DoneView, PhotoSlot, type Save } from "./done-view";
+import { DoneView, type Save } from "./done-view";
 import { guideReportSummary } from "./guide-report";
+import { StepPhotoImg } from "./step-photo-img";
 
 /** 실제 가이드 완료. 서버 실행을 완료하고 받은 recordId로 기기 리포트를 남긴다. 실패하면 같은 실행으로 다시 보낸다 */
 export function GuideDone() {
@@ -39,6 +40,8 @@ export function GuideDone() {
         .map((x) => ({ ...x, isNew: false }));
       return { reports: [report, ...rest] };
     });
+    // 기록을 남긴 실행의 사진은 실행이 끝나도 리포트에서 보여 준다
+    keepStepPhotos(run.id);
     return true;
   };
 
@@ -66,9 +69,10 @@ export function GuideDone() {
   }, [ready]);
   if (!guide) return null;
 
+  // 촬영 기록이 아니라 실제로 남은 사진으로 판단한다
   const last = guide.steps.at(-1)?.stepId;
-  const hasPhoto = run.photoOk && run.captures.length > 0;
-  const hasFinal = run.photoOk && !!last && run.captures.includes(last);
+  const finalShot = last ? stepPhoto(run.id, last) : null;
+  const hasPhoto = guide.steps.some((s) => stepPhoto(run.id, s.stepId));
 
   // 이동만 한다. 실행은 실행 화면을 벗어날 때 끝난다
   return (
@@ -76,9 +80,9 @@ export function GuideDone() {
       total={guide.steps.length}
       title={guide.title}
       channel={guide.channelTitle}
-      hasFinal={hasFinal}
+      hasFinal={!!finalShot}
       hasPhoto={hasPhoto}
-      finalPhoto={<PhotoSlot label="마지막 단계 사진을 남겼어요" />}
+      finalPhoto={finalShot && <StepPhotoImg photo={finalShot} alt="완성 사진" />}
       save={save}
       onRetry={() => void persist(false)}
       onHome={() => router.push("/home")}

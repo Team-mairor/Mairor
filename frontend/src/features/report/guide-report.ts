@@ -6,7 +6,7 @@ import type { GuideReport, ReportSummary, RunState } from "@/features/session";
 /** 남긴 단계 사진을 리포트에 보여 줄지. 촬영·기록과는 따로 끈다 */
 export const SHOW_STEP_PHOTOS = true;
 
-type RunSnapshot = Pick<RunState, "choice" | "captures" | "photoOk">;
+type RunSnapshot = Pick<RunState, "choice" | "captures" | "photoOk"> & { id?: string };
 
 /** 완료 시점의 단계·선택·촬영을 복사한다. 이후 파우치·가이드가 바뀌어도 그대로다 */
 export function buildGuideReport(
@@ -55,6 +55,7 @@ export function guideReportSummary(
     isNew: true,
     noPhoto: !run.photoOk,
     finalPhoto: report.steps.at(-1)?.photo ?? false,
+    ...(run.id && { runId: run.id }),
     videoId: guide.videoId,
     guide: report,
   };

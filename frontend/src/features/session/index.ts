@@ -19,6 +19,13 @@ export {
   type ReportStep,
 } from "./matching";
 export {
+  deleteStepPhotos,
+  keepStepPhotos,
+  saveStepPhoto,
+  stepPhoto,
+  type StepPhoto,
+} from "./step-photos";
+export {
   REF_STATE_LABEL,
   type GuideAction,
   type GuideReport,

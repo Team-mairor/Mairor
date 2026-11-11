@@ -25,6 +25,7 @@ import {
   type RunState,
   type StartRunInput,
 } from "./run-state";
+import { discardUnsavedStepPhotos, resetStepPhotos } from "./step-photos";
 import type { ReportSummary } from "./types";
 export { EMPTY_RUN, type Choice, type RunState } from "./run-state";
 
@@ -116,6 +117,9 @@ export function SessionProvider({
   const previousRunId = useRef("");
   useLayoutEffect(() => {
     if (previousRunId.current !== state.run.id) clearFacePhoto(previousRunId.current);
+    // 끝내기·새 실행·로그아웃·무효화는 모두 여기를 지난다. 완료 기록을 남긴 실행의 사진만 남긴다
+    if (previousRunId.current !== state.run.id || state.run.phase === "invalidated")
+      discardUnsavedStepPhotos();
     previousRunId.current = state.run.id;
     activeRunId.current = state.run.phase === "invalidated" ? "" : state.run.id;
   }, [state.run.id, state.run.phase]);
@@ -266,6 +270,8 @@ export function SessionProvider({
     });
   }, []);
   const enterTutorial = useCallback((expectedRunId: string, photoOk: boolean) => {
+    // captures를 비우므로 남은 사진도 함께 비운다. 상단 바·리포트가 같은 기준을 보게
+    resetStepPhotos(expectedRunId);
     setState((prev) =>
       prev.run.id !== expectedRunId || prev.run.phase === "invalidated"
         ? prev

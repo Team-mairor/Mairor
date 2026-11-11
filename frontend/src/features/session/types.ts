@@ -77,6 +77,8 @@ export interface ReportSummary {
   photoUrl?: string | null;
   /** 사진을 저장한 단계 번호. 샘플은 없으면 전부 있음으로 본다 */
   captures?: number[];
+  /** 만든 실행 id. 단계 사진을 이 id로 찾는다. 샘플 기록은 없고 샘플 사진을 보여 준다 */
+  runId?: string;
   /** 출처 영상 id (VideoItem.id) */
   videoId?: string;
   /** 저장 당시 단계별 확정 제품. 샘플은 없으면 현재 파우치로 매칭한다 */

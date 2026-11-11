@@ -7,6 +7,7 @@ import type { GuideModel, GuideStepModel } from "@/features/guide";
 import { RunGuideContext } from "@/features/guide/use-guide";
 import type { PouchItem } from "@/features/pouch";
 import { SessionProvider, useSession } from "@/features/session/session-provider";
+import { saveStepPhoto, stepPhoto } from "@/features/session/step-photos";
 import { api } from "@/lib/api";
 
 import { GuideDone } from "./guide-done";
@@ -61,7 +62,10 @@ const button = (label: string) => {
   return found;
 };
 
-async function mount(search = "") {
+const shot = (stepId: string) => ({ url: `data:image/jpeg;base64,${stepId}`, box: null });
+
+/** shots: 실제로 남은 단계 사진. 촬영 기록(captures)은 늘 s2·s8 */
+async function mount(search = "", shots = ["s2", "s8"]) {
   element = document.createElement("div");
   document.body.append(element);
   root = createRoot(element);
@@ -106,6 +110,7 @@ async function mount(search = "") {
     session.enterTutorial(id, true);
   });
   await act(async () => {
+    for (const s of shots) saveStepPhoto(id, s, shot(s));
     session.updateRun({ captures: ["s2", "s8"] }, id);
     session.completeRun(id);
   });
@@ -147,12 +152,47 @@ afterEach(async () => {
 });
 
 describe("실제 가이드 완료", () => {
-  it("가이드 단계 수와 제목으로 완료를 보여 주고 샘플 사진을 쓰지 않는다", async () => {
+  it("가이드 단계 수와 제목으로 완료를 보여 주고 마지막 단계의 실제 사진을 띄운다", async () => {
     await mount();
     expect(text()).toContain("LOOK COMPLETE · 3 / 3");
     expect(text()).toContain("실제 가이드 · 완성했어요");
-    expect(text()).toContain("마지막 단계 사진을 남겼어요");
+    expect(text()).toContain("FINAL · 마지막 단계 사진");
+    expect(element.querySelector("img")?.getAttribute("src")).toBe(shot("s8").url);
+  });
+
+  it("촬영 기록이 있어도 사진이 남아 있지 않으면 미촬영으로 보여 준다", async () => {
+    await mount("", ["s2"]);
+    expect(text()).toContain("미촬영");
+    expect(text()).toContain("마지막 단계 사진이 없어요");
     expect(element.querySelector("img")).toBeNull();
+  });
+
+  it("동의 화면에서 다시 시작하면 촬영 기록과 함께 남은 사진도 비운다", async () => {
+    // 완료 기록을 남긴 실행의 사진은 지우지 않으므로, 완료 응답이 오기 전 상태로 본다
+    post.mockReturnValue(new Promise(() => {}));
+    await mount();
+    const id = session.state.run.id;
+    await act(async () => session.enterTutorial(id, true));
+    expect(session.state.run.captures).toEqual([]);
+    expect(stepPhoto(id, "s2")).toBeNull();
+    expect(stepPhoto(id, "s8")).toBeNull();
+  });
+
+  it("기록을 남긴 실행의 사진은 실행이 끝나도 남고, 남기기 전에 끝난 실행의 사진은 지운다", async () => {
+    await mount();
+    const id = session.state.run.id;
+    await flush();
+    await act(async () => session.endRun(id));
+    expect(stepPhoto(id, "s8")).not.toBeNull();
+
+    await act(async () => root.unmount());
+    element.remove();
+    // 완료 응답이 오기 전에 실행이 끝나면 기록이 남지 않아 사진도 지운다
+    post.mockReturnValue(new Promise(() => {}));
+    await mount();
+    const next = session.state.run.id;
+    await act(async () => session.endRun(next));
+    expect(stepPhoto(next, "s8")).toBeNull();
   });
 
   it("서버 실행을 완료하고 받은 recordId로 단계 스냅샷 기록을 남긴다", async () => {
