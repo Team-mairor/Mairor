@@ -23,6 +23,7 @@ from tests.catalog.helpers import (
     fetch,
     make,
     page,
+    public_resolver,
     robots,
     run,
 )
@@ -264,6 +265,7 @@ def test_timeouts_and_connection_failures_are_retried_then_fail() -> None:
         transport=httpx2.MockTransport(handler),
         sleep=clock.sleep,
         monotonic=clock.monotonic,
+        resolver=public_resolver,
     )
 
     with pytest.raises(HttpError):

@@ -72,7 +72,15 @@ def robots(body: str, host: str = HOST) -> dict[str, Callable[[], httpx2.Respons
     }
 
 
-def make(site: Site, **config) -> tuple[PoliteClient, FakeClock]:
+PUBLIC_IP = "93.184.216.34"
+
+
+async def public_resolver(host: str, port: int) -> list[str]:
+    """테스트의 가짜 호스트를 모두 공용 주소로 본다(실제 DNS를 쓰지 않는다)."""
+    return [PUBLIC_IP]
+
+
+def make(site: Site, *, resolver=public_resolver, **config) -> tuple[PoliteClient, FakeClock]:
     clock = FakeClock()
     defaults = {"user_agent": build_user_agent("team@example.com")}
     client = PoliteClient(
@@ -80,6 +88,7 @@ def make(site: Site, **config) -> tuple[PoliteClient, FakeClock]:
         transport=httpx2.MockTransport(site),
         sleep=clock.sleep,
         monotonic=clock.monotonic,
+        resolver=resolver,
     )
     return client, clock
 

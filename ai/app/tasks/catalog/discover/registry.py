@@ -2,6 +2,8 @@
 
 사이트 상태는 세 가지를 따로 둔다. 기술적으로 수집할 수 있는가(technical),
 수집해도 되는지 확인했는가(policy), 운영 수집에 쓰는가(enabled).
+policy는 UNCONFIRMED, ROBOTS_CHECKED(robots.txt만 기계로 확인), TERMS_CHECKED(사람이 약관 확인),
+PERMISSION(사이트 주인의 허락) 순으로 확인이 단단하다.
 enabled는 정책 확인이 끝난 사이트만 켤 수 있고, 목록을 읽을 때 이 규칙을 지킨다.
 robots 예외(robots_exempt)는 사이트 주인의 허락 기록이 있는 사이트(PERMISSION)만 쓸 수 있다.
 """
@@ -42,11 +44,12 @@ class Technical(StrEnum):
 
 class Policy(StrEnum):
     UNCONFIRMED = "UNCONFIRMED"
+    ROBOTS_CHECKED = "ROBOTS_CHECKED"
     TERMS_CHECKED = "TERMS_CHECKED"
     PERMISSION = "PERMISSION"
 
 
-CONFIRMED_POLICIES = frozenset({Policy.TERMS_CHECKED, Policy.PERMISSION})
+CONFIRMED_POLICIES = frozenset({Policy.ROBOTS_CHECKED, Policy.TERMS_CHECKED, Policy.PERMISSION})
 COLLECTABLE = frozenset({Technical.OK, Technical.PARTIAL})
 
 

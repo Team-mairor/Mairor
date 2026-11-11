@@ -1,32 +1,43 @@
 # 처음 넣을 사이트 목록(정책 문서 2-5 조사표). 표에 없는 브랜드도 공식 홈을 찾아 수집할 수 있다.
 # platform: CAFE24 SHOPIFY WOOCOMMERCE MAKESHOP GODOMALL YOUNGCART SITECORE CUSTOM UNKNOWN
 # technical: 구조를 확인했는가. OK PARTIAL(렌더링·간격 조절 필요) UNKNOWN NO(공식 홈 없음·봇 차단)
-# policy: 수집해도 되는지 확인했는가. UNCONFIRMED(기본) TERMS_CHECKED PERMISSION(허락 기록 있음)
-# enabled: 운영 수집에 쓰는가. policy 가 TERMS_CHECKED 또는 PERMISSION 이고 technical 이 OK 또는 PARTIAL 일 때만 true.
+# policy: 수집해도 되는지 확인했는가. UNCONFIRMED(기본)
+#   ROBOTS_CHECKED(robots.txt만 기계로 확인, 약관은 미확인) TERMS_CHECKED(사람이 약관 확인) PERMISSION(허락 기록 있음)
+# enabled: 운영 수집에 쓰는가. policy 가 ROBOTS_CHECKED, TERMS_CHECKED, PERMISSION 중 하나이고
+#   technical 이 OK 또는 PARTIAL 일 때만 true.
 # robots_exempt: robots.txt 예외. policy 가 PERMISSION 일 때만 true. 수집 도구가 읽어 이 도메인의 robots 검사를
 #   건너뛴다(설정 CATALOG_ROBOTS_EXEMPT_HOSTS 와 합쳐진다).
 # search_path: 사이트 검색 경로 템플릿({query}). 비우면 플랫폼 기본 경로를 쓰고, 기본이 없으면 검색을 건너뛴다.
 # product_pattern: 상품 상세 주소의 경로 정규식(캡처 그룹 하나 = 상품 번호). 플랫폼 기본과 다른 사이트만 적는다.
 # category_pattern: 카테고리 목록 주소의 경로 정규식. 플랫폼 기본과 다른 사이트만 적는다.
-# 지금 모든 사이트는 policy UNCONFIRMED, enabled false 다.
+# 허락이 확인된 사이트 중 수집 경로가 확인된 항목을 활성화한다.
+# 이 파일에 없는 브랜드는 웹 검색으로 찾은 사이트를 이 파일이 아니라 사이트 기록 저장소(설정 CATALOG_SITES_STORE)에
+# 둔다. robots 를 통과한 사이트는 ROBOTS_CHECKED 로 켜진다. 이 파일의 항목이 항상 먼저고 기록이 덮어쓰지 못한다.
+# 기록의 사이트를 사람이 약관까지 확인했다면 `discover` 가 출력하는 항목에 policy 를 TERMS_CHECKED 로 고쳐 여기에 옮긴다.
 - brand: 롬앤
   aliases: [romand, 롬앤]
   domain: romand.co.kr
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 투쿨포스쿨
   aliases: [too cool for school, toocoolforschool, 투쿨포스쿨]
   domain: toocoolforschool.com
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 에뛰드
   aliases: [etude, etude house, 에뛰드하우스, 에뛰드]
   domain: www.etude.com
   language: ko
   platform: WOOCOMMERCE
   technical: OK
+  policy: PERMISSION
+  enabled: true
   product_pattern: '^/shop/category/[^/]+/([^/]+)/?$'
   category_pattern: '^/product/category/.+'
 - brand: 힌스
@@ -35,135 +46,173 @@
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 네이밍
   aliases: [naming, 네이밍]
   domain: naming.co.kr
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 하트퍼센트
   aliases: [heart percent, heartpercent, 하트퍼센트]
   domain: heartpercent.co.kr
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 넘버즈인
   aliases: [numbuzin, 넘버즈인]
   domain: numbuzin.com
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 디어에이
   aliases: [dear.a, deara, 디어에이]
   domain: deara.co.kr
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 페리페라
   aliases: [peripera, 페리페라]
   domain: clubclio.co.kr
   language: ko
   platform: CUSTOM
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 클리오
   aliases: [clio, 클리오]
   domain: clubclio.co.kr
   language: ko
   platform: CUSTOM
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 바닐라코
   aliases: [banila co, banilaco, 바닐라코]
   domain: banila.com
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 퓌
   aliases: [fwee, 퓌]
   domain: fwee.kr
   language: ko
   platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 디어달리아
   aliases: [dear dahlia, deardahlia, 디어달리아]
   domain: deardahlia.com
   language: en
   platform: SHOPIFY
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 에스쁘아
   aliases: [espoir, 에스쁘아]
   domain: espoir.com
   language: ko
   platform: CUSTOM
   technical: PARTIAL
+  policy: PERMISSION
+  enabled: true
 - brand: 3CE
   aliases: [3ce, 3ce cosmetics]
   domain: 3cecosmetics.com
   language: ko
   platform: SITECORE
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 더샘
   aliases: [the saem, thesaem, 더샘]
-  domain: thesaemcosmetic.com
+  domain: thesaem.com
   language: ko
-  platform: YOUNGCART
+  platform: CAFE24
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 정샘물
   aliases: [jung saem mool, jungsaemmool, jsm, 정샘물]
   domain: jsmbeauty.com
   language: ko
   platform: MAKESHOP
   technical: OK
+  policy: PERMISSION
+  enabled: true
 - brand: 오프라
   aliases: [ofra, ofra cosmetics, 오프라]
   domain: ofracosmetics.com
   language: en
   platform: SHOPIFY
   technical: PARTIAL
+  policy: PERMISSION
+  enabled: true
 - brand: VDL
   aliases: [vdl]
   domain: vdlcosmetics.com
   language: ko
   platform: UNKNOWN
   technical: UNKNOWN
+  policy: PERMISSION
 - brand: 삐아
   aliases: [bbia, 삐아]
   domain: bbia.co.kr
   language: ko
   platform: GODOMALL
   technical: UNKNOWN
+  policy: PERMISSION
 - brand: 데이지크
   aliases: [dasique, 데이지크]
   domain: dasique.co.kr
   language: ko
   platform: CAFE24
   technical: UNKNOWN
+  policy: PERMISSION
 - brand: 러브라이너
   aliases: [loveliner, 러브라이너]
   domain: loveliner.jp
   language: ja
   platform: UNKNOWN
   technical: UNKNOWN
+  policy: PERMISSION
 - brand: 말루윌즈
   aliases: [maluwilz, 말루윌즈]
   domain: maluwilz.de
   language: de
   platform: UNKNOWN
   technical: UNKNOWN
+  policy: PERMISSION
 - brand: 베네피트
   aliases: [benefit, benefit cosmetics, 베네피트]
   domain: benefitcosmetics.com
   language: en
   platform: UNKNOWN
   technical: "NO"
+  policy: PERMISSION
 - brand: 컬러그램
   aliases: [colourgram, colorgram, 컬러그램]
   domain: null
   language: ko
   platform: UNKNOWN
   technical: "NO"
+  policy: PERMISSION
 - brand: 웨이크메이크
   aliases: [wakemake, 웨이크메이크]
   domain: null
   language: ko
   platform: UNKNOWN
   technical: "NO"
+  policy: PERMISSION

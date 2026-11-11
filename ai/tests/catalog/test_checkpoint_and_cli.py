@@ -117,25 +117,21 @@ def test_sites_command_lists_every_site_with_its_state(capsys: pytest.CaptureFix
     assert code == 0
     assert out[0].startswith("brand\tdomain")
     assert len(out) == 27
-    assert any(line.startswith("롬앤\tromand.co.kr\tCAFE24\tOK\tUNCONFIRMED\toff") for line in out)
+    assert any(line.startswith("롬앤\tromand.co.kr\tCAFE24\tOK\tPERMISSION\ton") for line in out)
 
 
 def test_a_site_that_is_not_enabled_is_refused_without_the_flag(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    code = cli.main(["find", "--brand", "롬앤", "--name", "쥬시 틴트"])
+    code = cli.main(["find", "--brand", "VDL", "--name", "립 틴트"])
 
     assert code == cli.EXIT_USAGE
     assert "--allow-disabled" in capsys.readouterr().err
 
 
-def test_unknown_brands_and_brands_without_a_home_are_refused(
+def test_brands_without_a_home_are_refused(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    assert (
-        cli.main(["find", "--brand", "없는브랜드", "--name", "x", "--allow-disabled"])
-        == cli.EXIT_USAGE
-    )
     assert (
         cli.main(["find", "--brand", "컬러그램", "--name", "x", "--allow-disabled"])
         == cli.EXIT_USAGE

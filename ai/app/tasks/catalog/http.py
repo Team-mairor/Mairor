@@ -8,10 +8,17 @@
 - 5xx·시간 초과·연결 실패와 429는 지수 백오프로 다시 시도하고, 끝내 안 되면 HttpError다.
   401·407은 다시 시도하지 않고 바로 HttpError로 올린다. 그 밖의 4xx(404 등)는 그대로 돌려준다.
 - User-Agent에 서비스 이름과 팀 연락처를 넣는다.
+- 공용 인터넷 주소에만 요청한다. 요청마다(리다이렉트 한 단계마다) 호스트의 주소를 확인해
+  내부망·자기 자신·클라우드 메타데이터 같은 주소이거나, http·https와 기본 포트(80·443)가
+  아니면 보내지 않는다(UNSAFE_ADDRESS). 검색 결과나 사이트가 준 주소는 외부 입력이라 운영 서버
+  안쪽을 건드리지 않게 하려는 것이다. 확인과 실제 연결 사이에 DNS 응답이 바뀌는 경우까지는
+  막지 못하므로 네트워크 쪽 차단과 함께 쓴다.
 """
 
 import asyncio
+import ipaddress
 import logging
+import socket
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -75,6 +82,12 @@ class RobotsDisallowedError(HttpFailure):
         self.url = url
 
 
+class UnsafeAddressError(HttpFailure):
+    """공용 인터넷 주소가 아니라서 요청하지 않았다."""
+
+    code = "UNSAFE_ADDRESS"
+
+
 class HttpError(HttpFailure):
     """다시 시도해도 실패했다(5xx·429·시간 초과·연결 실패)."""
 
@@ -120,6 +133,7 @@ class HttpConfig:
     retry_base_delay_seconds: float = 1.0
     max_interval_seconds: float = 30.0
     robots_exempt_hosts: frozenset[str] = frozenset()
+    allow_private_networks: bool = False
 
     @classmethod
     def from_settings(cls, settings: Settings) -> Self:
@@ -145,6 +159,26 @@ class _HostState:
 
 Sleep = Callable[[float], Awaitable[None]]
 Clock = Callable[[], float]
+Resolver = Callable[[str, int], Awaitable[list[str]]]
+
+PUBLIC_PORTS = {"http": 80, "https": 443}
+
+
+async def resolve_addresses(host: str, port: int) -> list[str]:
+    """호스트의 IP 주소들. 찾지 못하면 OSError다."""
+    infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    return [str(info[4][0]) for info in infos]
+
+
+def is_public_address(address: str) -> bool:
+    """공용 인터넷 주소인가. 사설·루프백·링크 로컬(메타데이터)·예약·멀티캐스트 주소는 아니다."""
+    try:
+        ip = ipaddress.ip_address(address.split("%", 1)[0])
+    except ValueError:
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return ip.is_global and not ip.is_multicast
 
 
 class PoliteClient:
@@ -157,8 +191,10 @@ class PoliteClient:
         transport: httpx2.AsyncBaseTransport | None = None,
         sleep: Sleep = asyncio.sleep,
         monotonic: Clock = time.monotonic,
+        resolver: Resolver = resolve_addresses,
     ) -> None:
         self._config = config
+        self._resolver = resolver
         self._sleep = sleep
         self._monotonic = monotonic
         self._hosts: dict[str, _HostState] = {}
@@ -182,6 +218,32 @@ class PoliteClient:
 
     def interval_of(self, host: str) -> float:
         return self._state(host).interval
+
+    async def is_allowed(self, url: str) -> bool:
+        """robots.txt가 이 주소를 허용하는가. 주소 자체는 요청하지 않는다.
+
+        차단된 호스트는 BlockedError다.
+        """
+        host = _host_of(url)
+        state = self._state(host)
+        async with state.lock:
+            if state.blocked:
+                raise BlockedError(host, state.blocked)
+            if host in self._config.robots_exempt_hosts:
+                return True
+            await self._ensure_robots(url, host, state)
+            return state.robots is None or state.robots.can_fetch(ROBOTS_AGENT_NAME, url)
+
+    async def is_public_url(self, url: str) -> bool:
+        """이 주소로 요청해도 되는가(공용 인터넷의 http·https 기본 포트). 주소를 못 찾아도 False다.
+
+        PoliteClient를 거치지 않는 요청(브라우저의 하위 요청)을 같은 기준으로 거를 때 쓴다.
+        """
+        try:
+            await self._ensure_public(url, _host_of(url))
+        except HttpFailure:
+            return False
+        return True
 
     async def get(self, url: str, *, headers: Mapping[str, str] | None = None) -> httpx2.Response:
         """주소를 가져온다.
@@ -215,6 +277,7 @@ class PoliteClient:
                 await self._ensure_robots(url, host, state)
                 if state.robots is not None and not state.robots.can_fetch(ROBOTS_AGENT_NAME, url):
                     raise RobotsDisallowedError(host, url)
+            await self._ensure_public(url, host)
             await self._pace(state)
             try:
                 response = await fetch()
@@ -283,6 +346,7 @@ class PoliteClient:
     async def _send(
         self, url: str, host: str, state: _HostState, headers: Mapping[str, str] | None
     ) -> httpx2.Response:
+        await self._ensure_public(url, host)
         attempt = 0
         while True:
             await self._pace(state)
@@ -317,6 +381,30 @@ class PoliteClient:
             if status in (401, 407):
                 raise HttpError(host, f"인증이 필요하다({status})", status)
             return response
+
+    async def _ensure_public(self, url: str, host: str) -> None:
+        """공용 인터넷의 http·https 기본 포트가 아니면 UnsafeAddressError.
+
+        주소는 요청마다 다시 확인한다.
+        """
+        if self._config.allow_private_networks:
+            return
+        parts = urlsplit(url)
+        default_port = PUBLIC_PORTS.get(parts.scheme)
+        if default_port is None:
+            raise UnsafeAddressError(host, f"http·https가 아닌 주소다: {parts.scheme or '-'}")
+        try:
+            port = parts.port or default_port
+        except ValueError as error:
+            raise UnsafeAddressError(host, "포트를 읽을 수 없다") from error
+        if port != default_port or not parts.hostname:
+            raise UnsafeAddressError(host, f"기본 포트가 아니다: {port}")
+        try:
+            addresses = await self._resolver(parts.hostname, port)
+        except OSError as error:
+            raise HttpError(host, f"주소를 찾지 못했다({type(error).__name__})") from error
+        if not addresses or not all(is_public_address(a) for a in addresses):
+            raise UnsafeAddressError(host, "공용 인터넷 주소가 아니다")
 
     async def _pace(self, state: _HostState) -> None:
         if state.last_finished is None:

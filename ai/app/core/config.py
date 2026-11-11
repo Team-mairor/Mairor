@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.core.paths import AI_DIR, DEFAULT_CATALOG_RUN_DIR
+from app.core.paths import AI_DIR, DEFAULT_CATALOG_RUN_DIR, DEFAULT_CATALOG_SITES_DIR
 
 ENV_FILE = AI_DIR / ".env"
 
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=60, gt=0)
     llm_max_retries: int = Field(default=2, ge=0)
     llm_max_concurrency: int = Field(default=50, gt=0)
+
+    gemini_base_url: str = "https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com"
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_timeout_seconds: float = Field(default=60, gt=0)
+    gemini_max_retries: int = Field(default=2, ge=0)
 
     callback_timeout_seconds: float = Field(default=10, gt=0)
     callback_max_retries: int = Field(default=3, ge=0)
@@ -51,6 +56,13 @@ class Settings(BaseSettings):
     catalog_retry_base_delay_seconds: float = Field(default=1, ge=0)
     catalog_max_interval_seconds: float = Field(default=30, gt=0)
     catalog_robots_exempt_hosts: frozenset[str] = frozenset()
+    catalog_sites_store: Literal["local", "s3"] = "local"
+    catalog_sites_dir: Path = DEFAULT_CATALOG_SITES_DIR
+    catalog_sites_s3_bucket: str | None = None
+    catalog_sites_s3_prefix: str = "catalog-sites/"
+    catalog_sites_s3_region: str = "ap-northeast-2"
+    catalog_site_ttl_days: int = Field(default=30, gt=0)
+    catalog_site_negative_ttl_days: int = Field(default=7, gt=0)
     catalog_llm_model: str = "claude-sonnet-4-6"
     catalog_llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
 

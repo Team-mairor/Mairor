@@ -1,17 +1,20 @@
 """목록에 없는 브랜드의 공식 홈을 찾는다.
 
-모델이 후보 도메인을 제안하고, 코드가 그 홈 화면을 실제로 받아 확인한다.
-모델이 기억으로 만든 주소가 틀릴 수 있으므로 제안만으로는 아무것도 정하지 않는다.
+웹 검색이 되면 검색이 가져온 출처와 모델의 답에서, 안 되면 모델이 기억으로 제안한 도메인에서
+후보를 얻는다. 어느 쪽이든 틀릴 수 있으므로 후보만으로는 아무것도 정하지 않고,
+코드가 그 홈 화면을 실제로 받아 확인한다.
 
 1. 도메인 모양이 아니거나 마켓·SNS·위키 같은 곳이면 버린다.
 2. 홈 화면을 받아(robots.txt·간격 규칙을 지킨다) 제목·본문·저작권 문구에 브랜드 이름이 있는지 본다.
 3. 이름이 보이는 홈만 모델에게 공식 사이트인지 묻고, 근거가 분명(high)할 때만 받아들인다.
 
-받아들인 사이트가 둘 이상이면 고르지 않고 AMBIGUOUS로 둔다. 찾아도 사이트는 켜지지 않는다.
-정책은 UNCONFIRMED, enabled는 false로 만든다. 홈 화면 글은 외부 입력이라 모델에게는 자료로만 준다.
+받아들인 사이트가 둘 이상이면 한국어 사이트가 하나로 가려질 때만 그것을 고르고,
+아니면 AMBIGUOUS로 둔다. 찾은 사이트는 정책 UNCONFIRMED, enabled는 false로 만든다.
+켤지는 admit.py가 따로 정한다. 홈 화면 글은 외부 입력이라 모델에게는 자료로만 준다.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
@@ -20,10 +23,11 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel
 
 from app.clients.llm import Llm
+from app.clients.web_search import SearchError, SearchHit, WebSearch
 from app.tasks.catalog.discover.platform import detect_platform
 from app.tasks.catalog.discover.registry import BrandSite
 from app.tasks.catalog.html import decode_html, visible_text
-from app.tasks.catalog.http import BlockedError, HttpFailure, PoliteClient
+from app.tasks.catalog.http import HttpFailure, PoliteClient
 from app.tasks.catalog.text import compact_key
 
 MAX_CANDIDATES = 5
@@ -31,6 +35,9 @@ EVIDENCE_TEXT_CHARS = 1500
 MENTION_TEXT_CHARS = 6000
 REASON_CHARS = 300
 HOST = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$")
+DOMAIN_IN_TEXT = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}", re.IGNORECASE
+)
 COPYRIGHT = re.compile(r"(?:©|\(c\)|copyright)[^|]{0,120}", re.IGNORECASE)
 LANG_ATTR = re.compile(r"<html[^>]*\blang=[\"']?([a-zA-Z]{2,3}(?:-[A-Za-z0-9]{2,8})?)", re.I)
 NOT_BRAND_SITES = (
@@ -91,6 +98,12 @@ class DiscoverStatus(StrEnum):
     AMBIGUOUS = "AMBIGUOUS"
 
 
+class DiscoverMethod(StrEnum):
+    SEARCH = "SEARCH"
+    MODEL = "MODEL"
+    SEARCH_THEN_MODEL = "SEARCH_THEN_MODEL"
+
+
 @dataclass(frozen=True)
 class Accepted:
     host: str
@@ -104,6 +117,10 @@ class DiscoverResult:
     site: BrandSite | None = None
     accepted: tuple[Accepted, ...] = ()
     rejected: tuple[tuple[str, str], ...] = ()
+    method: DiscoverMethod = DiscoverMethod.MODEL
+    search_queries: tuple[str, ...] = ()
+    search_error: str | None = None
+    tie_break: str | None = None
 
 
 def clean_host(value: str) -> str | None:
@@ -117,13 +134,45 @@ def clean_host(value: str) -> str | None:
     return host
 
 
-def _hosts(proposal: Proposal) -> list[str]:
+def _hosts(values: Sequence[str]) -> list[str]:
     hosts: list[str] = []
-    for value in proposal.domains:
+    for value in values:
         host = clean_host(value)
         if host and host.removeprefix("www.") not in {h.removeprefix("www.") for h in hosts}:
             hosts.append(host)
     return hosts[:MAX_CANDIDATES]
+
+
+def _korean_rank(item: Accepted) -> tuple[bool, bool]:
+    return (item.site.language == "ko", item.host.endswith(".kr"))
+
+
+def prefer_korean(accepted: Sequence[Accepted]) -> Accepted | None:
+    """공식으로 보이는 사이트가 여럿일 때 한국어 사이트가 하나로 가려지면 그것을 고른다.
+
+    언어가 ko인 쪽이 먼저고, 같으면 도메인이 .kr인 쪽이다.
+    한국어 사이트가 없거나 같은 순위가 둘이면 None이다.
+    """
+    ranked = sorted(accepted, key=_korean_rank, reverse=True)
+    best = _korean_rank(ranked[0])
+    if best == (False, False):
+        return None
+    if len(ranked) > 1 and _korean_rank(ranked[1]) == best:
+        return None
+    return ranked[0]
+
+
+def _answer_hosts(answer: str) -> list[str]:
+    return [found.group(0) for found in DOMAIN_IN_TEXT.finditer(answer)]
+
+
+def _question(brand: str, aliases: tuple[str, ...], hint: str | None) -> str:
+    names = ", ".join([brand, *aliases])
+    asked = (
+        f"화장품 브랜드 '{names}'의 공식 온라인 쇼핑몰(자사몰) 웹사이트 주소를 검색해서 알려 줘. "
+        "도메인만 한 줄로 답하고, 마켓·SNS는 제외해."
+    )
+    return f"{asked}\n참고: {hint}" if hint else asked
 
 
 def _mentions(names: list[str], *texts: str) -> bool:
@@ -145,6 +194,16 @@ def _language(html: str) -> str:
     return found.group(1).split("-")[0].lower() if found else "und"
 
 
+async def _propose(llm: Llm, brand: str, aliases: tuple[str, ...], hint: str | None) -> list[str]:
+    asked = f"브랜드: {brand}" + (f"\n다른 이름: {', '.join(aliases)}" if aliases else "")
+    if hint:
+        asked += f"\n참고: {hint}"
+    proposal = (
+        await llm.generate(system=PROPOSE_SYSTEM, text=asked, images=[], output=Proposal)
+    ).output
+    return _hosts(proposal.domains)
+
+
 async def discover_site(
     client: PoliteClient,
     llm: Llm,
@@ -152,30 +211,77 @@ async def discover_site(
     *,
     aliases: tuple[str, ...] = (),
     hint: str | None = None,
+    search: WebSearch | None = None,
 ) -> DiscoverResult:
-    """브랜드의 공식 홈을 찾는다. 차단(BLOCKED)은 우회하지 않고 그대로 올린다."""
+    """브랜드의 공식 홈을 찾는다.
+
+    봇 차단을 만난 후보는 그 후보만 BLOCKED로 빼고(우회하지 않는다) 다른 후보를 계속 확인한다.
+    검색 결과에는 마켓·판매처처럼 차단을 거는 곳이 섞이기 쉬워서, 한 곳 때문에 브랜드 전체를
+    못 찾은 것으로 남기지 않으려는 것이다.
+
+    search가 있으면 먼저 웹 검색으로 후보를 얻는다(모델의 답에 적힌 도메인, 검색 출처의 도메인 순).
+    검색이 실패하거나 쓸 만한 후보가 없으면 모델이 기억으로 제안한 도메인으로 넘어간다.
+    검색 후보가 모두 탈락했을 때도 모델 제안을 한 번 더 시도한다(이미 확인한 도메인은 건너뛴다).
+    """
     names = [brand, *aliases]
-    asked = f"브랜드: {brand}" + (f"\n다른 이름: {', '.join(aliases)}" if aliases else "")
-    if hint:
-        asked += f"\n참고: {hint}"
-    proposal = (
-        await llm.generate(system=PROPOSE_SYSTEM, text=asked, images=[], output=Proposal)
-    ).output
+    hosts: list[str] = []
+    method = DiscoverMethod.MODEL
+    queries: tuple[str, ...] = ()
+    search_error: str | None = None
+    if search is not None:
+        hit: SearchHit | None = None
+        try:
+            hit = await search.search(_question(brand, aliases, hint))
+        except SearchError as error:
+            search_error = f"{error.kind}: {error}"
+        if hit is not None:
+            queries = hit.queries
+            hosts = _hosts([*_answer_hosts(hit.answer), *hit.source_hosts])
+            if hosts:
+                method = DiscoverMethod.SEARCH
+    if not hosts:
+        hosts = await _propose(llm, brand, aliases, hint)
     accepted: list[Accepted] = []
     rejected: list[tuple[str, str]] = []
     seen: set[str] = set()
-    for candidate in _hosts(proposal):
-        outcome = await _check(client, llm, brand, names, candidate, seen)
-        if isinstance(outcome, str):
-            rejected.append((candidate, outcome))
-        else:
-            seen.add(outcome.host)
-            accepted.append(outcome)
+    tried: set[str] = set()
+
+    async def check_all(candidates: Sequence[str]) -> None:
+        for candidate in candidates:
+            tried.add(candidate.removeprefix("www."))
+            outcome = await _check(client, llm, brand, names, candidate, seen)
+            if isinstance(outcome, str):
+                rejected.append((candidate, outcome))
+            else:
+                seen.add(outcome.host)
+                accepted.append(outcome)
+
+    await check_all(hosts)
+    if not accepted and method is DiscoverMethod.SEARCH:
+        extra = [
+            host
+            for host in await _propose(llm, brand, aliases, hint)
+            if host.removeprefix("www.") not in tried
+        ]
+        await check_all(extra)
+        if accepted:
+            method = DiscoverMethod.SEARCH_THEN_MODEL
+    meta = {"method": method, "search_queries": queries, "search_error": search_error}
     if len(accepted) == 1:
         only = accepted[0]
-        return DiscoverResult(DiscoverStatus.FOUND, only.site, (only,), tuple(rejected))
+        return DiscoverResult(DiscoverStatus.FOUND, only.site, (only,), tuple(rejected), **meta)
+    chosen = prefer_korean(accepted) if accepted else None
+    if chosen is not None:
+        return DiscoverResult(
+            DiscoverStatus.FOUND,
+            chosen.site,
+            tuple(accepted),
+            tuple(rejected),
+            tie_break="KOREAN_SITE",
+            **meta,
+        )
     status = DiscoverStatus.AMBIGUOUS if accepted else DiscoverStatus.NOT_FOUND
-    return DiscoverResult(status, None, tuple(accepted), tuple(rejected))
+    return DiscoverResult(status, None, tuple(accepted), tuple(rejected), **meta)
 
 
 async def _check(
@@ -183,8 +289,6 @@ async def _check(
 ) -> Accepted | str:
     try:
         response = await client.get(f"https://{candidate}/")
-    except BlockedError:
-        raise
     except HttpFailure as error:
         return error.code
     if response.status_code != 200:

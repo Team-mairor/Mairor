@@ -24,8 +24,9 @@ ai/
 │  │  │  ├─ landmarks/     얼굴 점 찾기 · 사진 판정 · 사진 읽기 · 가림 찾기
 │  │  │  ├─ parts/         부위마다 한 파일 (립 · 블러셔 · 눈썹 · 아이섀도 · 아이라인)
 │  │  │  └─ common/        부위 분석이 함께 쓰는 계산 (얼굴 지도 · 마스크 · 점 번호)
-│  │  └─ template_guide/   LLM 없이 문장 틀로 만드는 가이드. 입구 guide_builder.py (개발 도구에서만 씀)
-│  ├─ clients/             외부 호출: Claude(GMS), BE 콜백·진행 알림, 레퍼런스 사진 받기, 네이버 검색
+│  │  ├─ template_guide/   LLM 없이 문장 틀로 만드는 가이드. 입구 guide_builder.py (개발 도구에서만 씀)
+│  │  └─ catalog/          화장품 카탈로그 수집기. 명령줄 도구(tools/collect_catalog.py)가 쓰고 서버 API는 아니다
+│  ├─ clients/             외부 호출: Claude(GMS), Gemini 구글 검색(GMS), S3 객체, BE 콜백·진행 알림, 레퍼런스 사진 받기
 │  ├─ schemas/             요청·응답 모델
 │  │  └─ common.py         CamelModel, ErrorResponse
 │  ├─ prompts/             LLM 지시문 (txt)
@@ -123,7 +124,7 @@ uvicorn :8000
 FastAPI
    ├─ 1. 경로로 라우터 함수 찾기        api/
    ├─ 2. 본문을 모델로 검증·변환        schemas/   camelCase → snake_case
-   ├─ 3. 업무 흐름 실행                 services/ → tasks/ → clients/ → Claude(GMS) · 네이버
+   ├─ 3. 업무 흐름 실행                 services/ → tasks/ → clients/ → Claude(GMS)
    └─ 4. 반환값을 JSON으로              schemas/   snake_case → camelCase
 
    어디서든 예외 → core/errors.py → {code, message, details}
@@ -146,6 +147,16 @@ GET /api/v1/guide-jobs/{jobId}
   api/v1/guide_jobs.py         get_guide_job(jobId) → 상태 · 진행 숫자 · 결과
 ```
 
+화장품 카탈로그 수집 (서버 API가 아니다. 명령줄 도구)
+
+```
+tools/collect_catalog.py      list · collect · find · product · discover
+  tasks/catalog/discover/     사이트 정하기: 목록 → 저장 기록(clients/object_store, S3) → 웹 검색(clients/web_search, Gemini)
+  tasks/catalog/find·extract  상품 찾기 → 호수·이미지
+  tasks/catalog/color·detail  색 계산. 사진 종류·칸 위치·차트 판독은 clients/llm(Claude)
+  tasks/catalog/http.py       공식몰 요청: robots · 간격 · 차단 감지 · 공용 주소 제한
+```
+
 ## 의존 방향
 
 ```
@@ -159,6 +170,9 @@ api ──► services ──► tasks ──► clients
 - `tasks`는 같은 묶음 안에서 아래로만 부르고, `clients`를 부른다. 다른 묶음(`explanation` · `area` · `template_guide`)과 `services` · `api`는 부르지 않는다.
   - `tasks/area` 안의 순서: 입구(`area_work` · `reference_area` · `guide_area_builder`) → `parts` → `landmarks` → `common`. 같은 칸끼리는 부를 수 있다.
 - `clients`는 `schemas` · `core`만 부른다. 외부 API 호출은 `clients`에만 둔다. 테스트에서 가짜로 바꾸기 쉽다.
+  - 예외: 카탈로그 수집기가 공식몰에 보내는 요청은 `tasks/catalog/http.py`(`PoliteClient`)에 둔다.
+    robots · 요청 간격 · 차단 감지 · 공용 주소 제한 같은 수집 규칙과 한 몸이고 수집기만 쓰기 때문이다.
+    테스트는 transport와 주소 확인 함수를 바꿔 끼운다. 웹 검색 · S3 · 모델 같은 다른 외부 호출은 `clients`에 둔다.
 - `schemas`, `core`는 `api` · `services` · `tasks` · `clients`를 import 하지 않는다.
 - 순환 import는 금지한다.
 - `tests/test_layers.py`가 위 규칙을 검사한다. 어기면 pytest가 실패한다.

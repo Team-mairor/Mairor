@@ -265,7 +265,11 @@ def local_site():
 
 
 def test_a_real_browser_runs_the_page_scripts(local_site: str) -> None:
-    config = HttpConfig(user_agent="MairorCatalogCollector/1.0 (+test)", min_interval_seconds=0)
+    config = HttpConfig(
+        user_agent="MairorCatalogCollector/1.0 (+test)",
+        min_interval_seconds=0,
+        allow_private_networks=True,
+    )
 
     async def go() -> httpx2.Response:
         async with PoliteClient(config) as client, PlaywrightRenderer(client) as renderer:

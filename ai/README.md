@@ -139,9 +139,11 @@ uv run python tools/collect_catalog.py collect --brand 롬앤 --products p.jsonl
 uv run python tools/report_catalog_colors.py run <실행 결과 파일>   # 실행 요약
 ```
 
-- 실제 사이트에 요청하려면 `CATALOG_CONTACT`가 필요합니다. 운영 수집은 사이트 목록(`app/resources/brand_sites.yaml`)에서 켜진(`enabled`) 사이트에만 하고, 켜지지 않은 사이트는 구조를 확인하는 소량 요청에 한해 `--allow-disabled`로 접근합니다.
+- 실제 사이트에 요청하려면 `CATALOG_CONTACT`가 필요합니다. 운영 수집은 켜진(`enabled`) 사이트에만 합니다. 켜진 사이트는 사이트 목록(`app/resources/brand_sites.yaml`)에서 사람이 켠 것과, 목록에 없는 브랜드를 찾아 `ROBOTS_CHECKED`로 자동 허용한 것(아래) 두 가지입니다. 켜지지 않은 목록 사이트는 구조를 확인하는 소량 요청만 `--allow-disabled`로 할 수 있습니다.
+- 사이트 목록에 없는 브랜드도 `--brand`로 주면 됩니다. 저장된 사이트 기록이 없으면 웹 검색(GMS를 거친 Gemini의 구글 검색 연동)으로 공식 홈을 찾고, 홈 화면 확인과 robots.txt 확인을 통과하면 정책 `ROBOTS_CHECKED`로 켜서 수집하고 그 기록을 남깁니다(`CATALOG_SITES_STORE`). 찾기만 해 보려면 `discover --brand 새브랜드`입니다. 약관은 확인하지 않은 단계라, 사람이 확인한 사이트는 `brand_sites.yaml`에 `TERMS_CHECKED`로 옮깁니다.
 - `--colors`는 호수 사진에서 색(HEX)을 계산하고, `--vision`은 모델이 사진 종류와 칸 위치를 찾게 합니다(모델 호출 발생). 색 값은 모델이 아니라 픽셀에서 계산합니다. `--estimate`는 이름 기반 추정 색(`LLM_ESTIMATE`)을 더하며 기본 꺼짐입니다.
-- robots.txt를 따르고, 사이트마다 동시 요청 1건과 요청 간격을 지키며, 차단(403·확인 페이지)을 받으면 우회하지 않고 그 사이트 수집을 멈춥니다.
+- robots.txt를 따르고, 사이트마다 동시 요청 1건과 요청 간격을 지키며, 차단(403·확인 페이지)을 받으면 우회하지 않고 그 사이트 수집을 멈춥니다. 공용 인터넷 주소의 http·https 기본 포트에만 요청하고, 내부망·메타데이터 주소로 가는 요청과 리다이렉트는 보내지 않습니다(`UNSAFE_ADDRESS`). `--render`의 브라우저 하위 요청도 같은 기준으로 끊고, 브라우저 안의 리다이렉트는 받은 뒤 거쳐 온 주소를 확인해 결과를 버립니다.
+- **운영 서버에서 자동 탐색이나 `--render`를 켜기 전에 네트워크 쪽 차단이 먼저 있어야 합니다.** 코드는 주소를 확인한 뒤 연결하므로 그 사이에 DNS 응답이 바뀌는 경우를 막지 못하고, 브라우저 안의 리다이렉트와 하위 요청의 리다이렉트는 이미 나간 뒤에야 알 수 있습니다. 실행 환경에서 인스턴스 메타데이터를 IMDSv2·hop 한도 1로 두어 컨테이너에서 닿지 않게 하고, 나가는 트래픽 규칙으로 내부망(10.0.0.0/16)을 막습니다.
 - 모델 호출에는 `GMS_API_KEY`가 필요합니다. 네트워크와 모델을 쓰지 않는 리포트 도구는 `tools/report_catalog_colors.py`입니다.
 
 ## 환경변수
@@ -170,6 +172,13 @@ uv run python tools/report_catalog_colors.py run <실행 결과 파일>   # 실�
 | `CATALOG_CONTACT` | | 화장품 수집기가 요청마다 User-Agent에 싣는 연락처(이메일). 사이트 서버 로그에 남음. 실제 사이트에 요청할 때 필요 |
 | `CATALOG_RUN_DIR` | `ai/catalog-runs` | 수집 실행 결과 파일(JSONL)을 쓰는 폴더. BE가 같은 폴더(공유 볼륨)에서 읽음 |
 | `CATALOG_RUN_KEEP_DAYS` | `30` | 실행 결과 파일 보관 일수 |
+| `CATALOG_SITES_STORE` | `local` | 웹 검색으로 찾은 사이트 기록을 둘 곳. `local`은 `CATALOG_SITES_DIR`, `s3`는 아래 버킷 |
+| `CATALOG_SITES_S3_BUCKET` | | `s3`일 때 버킷. 자격 증명은 AWS 기본 공급자 체인(EC2 역할, 환경변수). 필요한 권한은 접두어 아래 `GetObject`·`PutObject` |
+| `CATALOG_SITES_DIR` | `ai/catalog-sites` | `local`일 때 사이트 기록 폴더. 실행 결과 파일 폴더(`CATALOG_RUN_DIR`)와 나눠서 보관 기간 정리에 묶이지 않게 한다 |
+| `CATALOG_SITES_S3_PREFIX` | `catalog-sites/` | 사이트 기록 객체의 접두어. 이름(브랜드·별칭)마다 JSON 하나. 실행 결과 파일(`catalog-runs/`)과 접두어를 나눠, S3 수명주기 규칙은 `catalog-runs/`에만 건다 |
+| `CATALOG_SITES_S3_REGION` | `ap-northeast-2` | S3 리전 |
+| `CATALOG_SITE_TTL_DAYS` | `30` | 허용된 사이트 기록을 다시 확인하기 전까지의 일수 |
+| `CATALOG_SITE_NEGATIVE_TTL_DAYS` | `7` | 거절·못 찾음·모호 기록을 다시 시도하기 전까지의 일수 |
 | `CATALOG_MIN_INTERVAL_SECONDS` | `1.5` | 같은 사이트에 요청 사이에 두는 최소 간격(초). 429를 받으면 그 사이트만 늘림 |
 | `CATALOG_REQUEST_TIMEOUT_SECONDS` | `30` | 요청 한 번의 제한 시간 |
 | `CATALOG_MAX_RETRIES` | `3` | 5xx·시간 초과·연결 실패일 때 다시 시도하는 횟수 |

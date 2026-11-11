@@ -104,5 +104,9 @@ application-local.yml
 ai/samples/*/frames/
 ai/samples/*/output/
 
+### 화장품 수집기 로컬 실행 결과·사이트 기록 ###
+ai/catalog-runs/
+ai/catalog-sites/
+
 ### 로컬 구현 계획서 (개인 열람용, git 제외) ###
 backend/docs/plans/

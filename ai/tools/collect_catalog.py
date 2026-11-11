@@ -25,18 +25,27 @@ AI_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(AI_DIR))
 
 from app.clients.llm import Llm, LlmError, get_catalog_llm  # noqa: E402
+from app.clients.web_search import GeminiSearch, WebSearch  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.tasks.catalog.checkpoint import (  # noqa: E402
     Checkpoint,
     CheckpointError,
     checkpoint_path_for,
 )
-from app.tasks.catalog.discover.official import DiscoverStatus, discover_site  # noqa: E402
 from app.tasks.catalog.discover.registry import (  # noqa: E402
     BrandSite,
     RegistryError,
     SiteRegistry,
     load_registry,
+)
+from app.tasks.catalog.discover.resolve import (  # noqa: E402
+    discover_and_admit,
+    resolve_site,
+)
+from app.tasks.catalog.discover.site_store import (  # noqa: E402
+    SiteStore,
+    StoreError,
+    build_store,
 )
 from app.tasks.catalog.extract.collect import collect_product  # noqa: E402
 from app.tasks.catalog.extract.product import ExtractError  # noqa: E402
@@ -133,11 +142,7 @@ def http_config(registry: SiteRegistry) -> HttpConfig:
     )
 
 
-def _site_for(registry: SiteRegistry, brand: str, allow_disabled: bool) -> BrandSite | None:
-    site = registry.find(brand)
-    if site is None:
-        print(f"목록에 없는 브랜드다: {brand}", file=sys.stderr)
-        return None
+def _usable(site: BrandSite, allow_disabled: bool) -> BrandSite | None:
     if site.domain is None:
         print(f"{site.brand}: 공식 홈이 없다", file=sys.stderr)
         return None
@@ -149,6 +154,44 @@ def _site_for(registry: SiteRegistry, brand: str, allow_disabled: bool) -> Brand
         )
         return None
     return site
+
+
+async def _resolve_site(
+    registry: SiteRegistry,
+    args: argparse.Namespace,
+    client: PoliteClient,
+    llm: Llm | None,
+    search: WebSearch | None,
+    store: SiteStore | None,
+) -> tuple[BrandSite | None, int]:
+    """브랜드로 수집할 사이트를 정한다. 못 정하면 (None, 종료 코드)."""
+    listed = registry.find(args.brand)
+    if listed is not None:
+        site = _usable(listed, args.allow_disabled)
+        return site, EXIT_OK if site else EXIT_USAGE
+    settings = get_settings()
+    resolution = await resolve_site(
+        registry=registry,
+        store=store or build_store(settings),
+        client=client,
+        llm=llm or get_catalog_llm(),
+        search=search or GeminiSearch(settings),
+        brand=args.brand,
+        ttl_days=settings.catalog_site_ttl_days,
+        negative_ttl_days=settings.catalog_site_negative_ttl_days,
+    )
+    for note in resolution.notes:
+        print(note, file=sys.stderr)
+    if resolution.site is None:
+        print(
+            f"{args.brand}: 수집할 공식 사이트를 정하지 못했다. {resolution.reason}",
+            file=sys.stderr,
+        )
+        return None, EXIT_NOT_FOUND
+    found = resolution.site
+    print(f"사이트: {found.domain} (출처 {resolution.origin}, 정책 {found.policy})")
+    site = _usable(found, args.allow_disabled)
+    return site, EXIT_OK if site else EXIT_USAGE
 
 
 def print_sites(registry: SiteRegistry) -> int:
@@ -173,28 +216,53 @@ async def run_find(client: PoliteClient, site: BrandSite, name: str) -> int:
 
 
 async def run_discover(
-    client: PoliteClient, llm: Llm, registry: SiteRegistry, args: argparse.Namespace
+    client: PoliteClient,
+    llm: Llm,
+    search: WebSearch,
+    store: SiteStore,
+    registry: SiteRegistry,
+    args: argparse.Namespace,
 ) -> int:
     known = registry.find(args.brand)
     if known is not None:
         print(f"이미 목록에 있다: {known.brand} {known.domain or '-'}")
         return EXIT_OK
-    result = await discover_site(client, llm, args.brand, aliases=tuple(args.alias), hint=args.hint)
-    print(f"status={result.status}")
+    found = await discover_and_admit(client, llm, search, args.brand, tuple(args.alias), args.hint)
+    try:
+        await store.save(found.record)
+    except StoreError as error:
+        print(f"찾은 사이트를 저장하지 못했다: {error}", file=sys.stderr)
+    result = found.result
+    print(f"status={result.status} method={result.method}")
+    if result.search_error:
+        print(f"검색 실패, 모델 제안으로 대신했다: {result.search_error}")
+    for query in result.search_queries:
+        print("검색어", query, sep="\t")
     for host, reason in result.rejected:
         print("제외", host, reason, sep="\t")
     for accepted in result.accepted:
         print("후보", accepted.host, accepted.site.platform, accepted.reason, sep="\t")
-    if result.status is not DiscoverStatus.FOUND or result.site is None:
+    for host, admission in found.admissions:
+        print(f"admission={admission.reason}", host, admission.detail, sep="\t")
+    record = found.record
+    if record.status != "ADMITTED" or record.site is None:
+        print(f"결과={record.status} {record.reason}")
         return EXIT_NOT_FOUND
-    site = result.site
+    site = record.site
+    if record.tie_break:
+        print(
+            f"수집할 수 있는 공식 사이트가 여럿이라 {record.tie_break} 규칙으로 골랐다: "
+            f"{site.domain}"
+        )
     lines = [
-        "brand_sites.yaml에 더할 항목(정책 확인 전이라 꺼 둔다):",
+        "brand_sites.yaml에 더할 항목(robots만 기계로 확인한 상태로 켠다):",
         f"- brand: {site.brand}",
         f"  domain: {site.domain}",
         f"  language: {site.language}",
         f"  platform: {site.platform}",
-        '  technical: "UNKNOWN"',
+        f'  technical: "{site.technical}"',
+        f'  policy: "{site.policy}"',
+        f"  enabled: {str(site.enabled).lower()}",
     ]
     print(*lines, sep=chr(10))
     return EXIT_OK
@@ -338,19 +406,41 @@ async def _run(
     client: PoliteClient,
     renderer: Renderer | None,
     llm: Llm | None,
+    search: WebSearch | None,
+    store: SiteStore | None,
 ) -> int:
     if args.command == "discover":
         try:
-            return await run_discover(client, llm or get_catalog_llm(), registry, args)
+            return await run_discover(
+                client,
+                llm or get_catalog_llm(),
+                search or GeminiSearch(get_settings()),
+                store or build_store(get_settings()),
+                registry,
+                args,
+            )
         except HttpFailure as error:
             print(f"{error.code}: {error}", file=sys.stderr)
             return EXIT_STOPPED
         except LlmError as error:
             print(f"모델 호출 실패({error.kind}): {error}", file=sys.stderr)
             return EXIT_STOPPED
-    site = _site_for(registry, args.brand, args.allow_disabled)
-    if site is None:
+        except StoreError as error:
+            print(f"사이트 기록 저장소 설정 오류: {error}", file=sys.stderr)
+            return EXIT_USAGE
+    try:
+        site, code = await _resolve_site(registry, args, client, llm, search, store)
+    except HttpFailure as error:
+        print(f"{error.code}: {error}", file=sys.stderr)
+        return EXIT_STOPPED
+    except LlmError as error:
+        print(f"모델 호출 실패({error.kind}): {error}", file=sys.stderr)
+        return EXIT_STOPPED
+    except StoreError as error:
+        print(f"사이트 기록 저장소 설정 오류: {error}", file=sys.stderr)
         return EXIT_USAGE
+    if site is None:
+        return code
     try:
         if args.command == "find":
             return await run_find(client, site, args.name)
@@ -387,6 +477,8 @@ def main(
     client: PoliteClient | None = None,
     renderer: Renderer | None = None,
     llm: Llm | None = None,
+    search: WebSearch | None = None,
+    store: SiteStore | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -403,7 +495,7 @@ def main(
         if browser is None and getattr(args, "render", False):
             browser = PlaywrightRenderer(owned)
         try:
-            return await _run(args, loaded, owned, browser, llm)
+            return await _run(args, loaded, owned, browser, llm, search, store)
         finally:
             if browser is not None and renderer is None:
                 await browser.close()

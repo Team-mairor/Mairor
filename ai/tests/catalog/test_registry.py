@@ -36,12 +36,13 @@ def test_bundled_list_loads_with_the_researched_brands() -> None:
     assert registry.find("러브라이너").language == "ja"
 
 
-def test_every_site_starts_unconfirmed_and_off() -> None:
+def test_permitted_sites_are_enabled_when_collectable() -> None:
     registry = load_registry()
 
-    assert all(s.policy is Policy.UNCONFIRMED for s in registry.sites)
-    assert all(not s.enabled for s in registry.sites)
-    assert registry.enabled_sites() == ()
+    assert all(s.policy is Policy.PERMISSION for s in registry.sites)
+    assert all(
+        s.enabled == (s.technical in (Technical.OK, Technical.PARTIAL)) for s in registry.sites
+    )
     assert all(not s.robots_exempt for s in registry.sites)
 
 
