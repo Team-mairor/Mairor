@@ -122,6 +122,8 @@ const MOCK_REPORT_RECORD: ReportRecordDto = {
 const NOT_FOUND = () =>
   error(404, { code: "NOT_FOUND", message: "요청한 리소스를 찾을 수 없습니다." });
 
+const RE_STEP_PHOTO = new RegExp("^/v1/users/me/executions/[^/]+/steps/[^/]+/photo$");
+
 const ROUTES: MockRoute[] = [
   {
     method: "GET",
@@ -484,6 +486,30 @@ const ROUTES: MockRoute[] = [
     path: /^\/v1\/users\/me\/executions\/[^/]+\/photo-consent$/,
     success: () => ({ status: 200, body: { photoConsent: true, consentPolicyVersion: "v1" } }),
     error: () => NOT_FOUND(),
+  },
+  {
+    // 단계 사진. 다시 찍어도 같은 모양으로 답한다
+    method: "PUT",
+    path: RE_STEP_PHOTO,
+    success: (path) => ({
+      status: 200,
+      body: {
+        photoId: "f0000000-0000-4000-8000-000000000001",
+        kind: "STEP",
+        contentType: "image/jpeg",
+        byteSize: 102400,
+        width: 1280,
+        height: 720,
+        url: "/api/v1/users/me/photos/f0000000-0000-4000-8000-000000000001",
+        createdAt: "2026-11-12T00:00:00Z",
+        stepId: decodeURIComponent(path.split("/").at(-2) ?? ""),
+      },
+    }),
+    error: () =>
+      error(409, {
+        code: "GUIDE_PHOTO_CONSENT_REQUIRED",
+        message: "단계 사진을 저장하려면 사진 저장에 동의해야 합니다.",
+      }),
   },
   {
     // 완료. 실행 ID와 상관없이 같은 기록

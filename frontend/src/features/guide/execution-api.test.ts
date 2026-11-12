@@ -9,6 +9,8 @@ import {
   faceRegistrationRequest,
   registerFace,
   startExecution,
+  STEP_PHOTO_TIMEOUT_MS,
+  uploadStepPhoto,
 } from "./execution-api";
 
 const VIDEO_ID = "b0000000-0000-4000-8000-000000000001";
@@ -49,6 +51,34 @@ describe("registerFace", () => {
     const metadata = form.get("metadata") as Blob;
     expect(metadata.type).toBe("application/json");
     expect(JSON.parse(await metadata.text())).toMatchObject({ videoId: VIDEO_ID, agreed: true });
+  });
+});
+
+describe("uploadStepPhoto", () => {
+  const image = new Blob(["jpeg"], { type: "image/jpeg" });
+
+  it("그 단계 주소에 image 파트로 PUT하고, 응답이 늦으면 끊도록 시간 제한 signal을 넘긴다", async () => {
+    const limit = new AbortController().signal;
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(limit);
+    const put = vi.spyOn(api, "put").mockResolvedValue({ photoId: "p1" });
+    await uploadStepPhoto(EXECUTION_ID, "s 1", image);
+    const [path, options] = put.mock.calls[0];
+    expect(path).toBe(`/v1/users/me/executions/${EXECUTION_ID}/steps/s%201/photo`);
+    expect((options?.body as FormData).get("image")).toBeInstanceOf(Blob);
+    expect(timeout).toHaveBeenCalledWith(STEP_PHOTO_TIMEOUT_MS);
+    expect(options?.signal).toBe(limit);
+  });
+
+  it("시간이 지나 끊기면 TIMEOUT 오류로 끝난다", async () => {
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(
+      AbortSignal.abort(new DOMException("시간 초과", "TimeoutError")),
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) =>
+      Promise.reject(init?.signal?.reason ?? new Error("signal 없음")),
+    );
+    await expect(uploadStepPhoto(EXECUTION_ID, "s1", image)).rejects.toMatchObject({
+      code: "TIMEOUT",
+    });
   });
 });
 

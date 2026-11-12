@@ -27,7 +27,7 @@ export const STILL_MAX_WAIT_MS = 2500;
 /** 프레임이 오지 않거나 추적이 끊겨도 기다림이 끝나도록 거는 대비 시간 */
 export const SHOT_FALLBACK_MS = STILL_MAX_WAIT_MS + 500;
 
-/** idle: 대기 없음 · waiting: 멈추기를 기다림 · outOfView: 부위가 화면 밖 · saving: 업로드 중 · failed: 저장 실패 */
+/** idle: 대기 없음 · waiting: 멈추기를 기다림 · outOfView: 부위가 화면 밖 · saving: 업로드 중 · failed: 못 찍음 또는 저장 실패 */
 export type ShotState = "idle" | "waiting" | "outOfView" | "saving" | "failed";
 
 // 얼굴 전체(faceOval)는 가까이 가면 늘 잘려 보지 않는다
@@ -55,6 +55,8 @@ export function useStepShot(
   const { videoRef } = useCamera();
   const timer = useTimeout();
   const [state, setState] = useState<ShotState>("idle");
+  // 저장(onShot)이 실패한 이유. 찍지 못한 실패면 null이라 화면이 카메라 안내를 띄운다
+  const [error, setError] = useState<unknown>(null);
   const frameRef = useRef<FaceFrame | null>(null);
   const stillSince = useRef<number | null>(null);
   // 기다리기 시작한 시각. 기다리는 중이 아니면 null
@@ -78,12 +80,14 @@ export function useStepShot(
       isFresh(frame, performance.now()) &&
       inView(frame, regions);
     const url = ok ? snapMirrored(videoRef.current) : null;
+    setError(null);
     if (!frame || !url) return setState("failed");
     setState("saving");
     try {
       await latest.current.onShot({ url, box: mirroredRegionBox(frame, regions) });
       setState("idle");
-    } catch {
+    } catch (e) {
+      setError(e);
       setState("failed");
     }
   };
@@ -112,6 +116,7 @@ export function useStepShot(
   const start = () => {
     if (state === "saving" || state === "waiting" || state === "outOfView") return;
     waitFrom.current = performance.now();
+    setError(null);
     setState("waiting");
     timer.set(shoot, SHOT_FALLBACK_MS);
   };
@@ -119,11 +124,14 @@ export function useStepShot(
     if (state === "saving") return;
     waitFrom.current = null;
     timer.clear();
+    setError(null);
     setState("idle");
   }, [state, timer]);
 
   return {
     state,
+    /** failed일 때 저장이 실패한 이유. 찍지 못한 실패면 null */
+    error,
     shooting: state === "waiting" || state === "outOfView",
     saving: state === "saving",
     start,

@@ -138,6 +138,23 @@ describe("useStepShot", () => {
     await act(async () => shot.start());
     await act(async () => vi.advanceTimersByTime(SHOT_FALLBACK_MS));
     expect(shot.state).toBe("failed");
+    expect(shot.error).toBeNull();
+  });
+
+  it("저장이 실패하면 실패로 두고 이유를 남기며, 다시 찍기를 시작하면 이유를 지운다", async () => {
+    const reason = new Error("업로드 실패");
+    onShot.mockRejectedValueOnce(reason);
+    await feed(frame());
+    await act(async () => shot.start());
+    await feed(frame(), 10);
+    await feed(frame(), STILL_MS);
+    expect(onShot).toHaveBeenCalledTimes(1);
+    expect(shot.state).toBe("failed");
+    expect(shot.error).toBe(reason);
+
+    await act(async () => shot.start());
+    expect(shot.state).toBe("waiting");
+    expect(shot.error).toBeNull();
   });
 });
 

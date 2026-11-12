@@ -135,13 +135,16 @@ export function setPhotoConsent(executionId: string, enabled: boolean) {
   });
 }
 
+/** 올리는 동안 튜토리얼 버튼을 막으므로, 응답이 이보다 늦으면 끊고(TIMEOUT) 다시 찍게 한다 */
+export const STEP_PHOTO_TIMEOUT_MS = 30_000;
+
 /** PUT /v1/users/me/executions/{id}/steps/{stepId}/photo. 실제 JPEG/PNG 바이트를 전송한다 */
 export function uploadStepPhoto(executionId: string, stepId: string, image: Blob) {
   const form = new FormData();
   form.append("image", image, "step.jpg");
   return api.put<PhotoMeta>(
     `${EXECUTIONS}/${encodeURIComponent(executionId)}/steps/${encodeURIComponent(stepId)}/photo`,
-    { body: form },
+    { body: form, signal: AbortSignal.timeout(STEP_PHOTO_TIMEOUT_MS) },
   );
 }
 

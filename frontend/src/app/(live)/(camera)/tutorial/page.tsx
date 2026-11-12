@@ -50,6 +50,7 @@ import {
   useStepShot,
   type StepProduct,
 } from "@/features/tutorial";
+import { ApiError, errorMessage } from "@/lib/api";
 import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
@@ -303,7 +304,18 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     if (run.mode === "guide") {
       if (!run.executionId) throw new Error("실행 정보가 없습니다.");
       const image = await fetch(photo.url).then((response) => response.blob());
-      await uploadStepPhoto(run.executionId, info.stepId, image);
+      try {
+        await uploadStepPhoto(run.executionId, info.stepId, image);
+      } catch (e) {
+        // 동의가 없거나 철회됐으면 동의 카드에서 다시 받는다
+        if (
+          e instanceof ApiError &&
+          e.code === "GUIDE_PHOTO_CONSENT_REQUIRED" &&
+          isCurrentRun(run.id)
+        )
+          updateRun({ photoOk: false }, run.id);
+        throw e;
+      }
     }
     if (!isCurrentRun(run.id)) return;
     saveStepPhoto(run.id, info.stepId, photo);
@@ -503,8 +515,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
             role="alert"
             className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
           >
-            사진을 저장하지 못했어요. 카메라가 켜져 있고 얼굴이 화면에 보이는지 확인한 뒤 다시 찍어
-            주세요.
+            {shot.error
+              ? `사진을 저장하지 못했어요. ${errorMessage(shot.error)} 다시 찍어 주세요.`
+              : "사진을 저장하지 못했어요. 카메라가 켜져 있고 얼굴이 화면에 보이는지 확인한 뒤 다시 찍어 주세요."}
           </p>
         )}
 
