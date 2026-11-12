@@ -253,7 +253,7 @@ API-VIDEO-004 · GET /api/v1/videos/search
 - 회원 GET. Query q:string 필수(공백 제거 후 1\~100자), pageToken:string 선택(검색어 변경 시 제거), size:integer 선택(기본20, 1\~50).
 - 200 VideoSearchPage. 결과 없음은 items=\[\]·nextPageToken=null. 검색 순서는 외부 관련도순, 필터 후 size 미만 가능.
 - 502 VIDEO\_PROVIDER\_ERROR, 504 VIDEO\_PROVIDER\_TIMEOUT, 503 VIDEO\_SEARCH\_UNAVAILABLE. API 키는 서버 관리. 검색 실패를 빈 결과로 위장하거나 구버전 검수 목록 API로 우회하지 않는다.
-- <b>구현 메모</b>: YouTube 검색을 `videoLicense=creativeCommon`으로 걸러 CC BY 영상만 준다. 분석할 수 없는 영상(연령 제한·라이브·예정)은 결과에서 뺀다("필터 후 size 미만 가능"). 그래서 목록에 '분석 불가' 표시용 칸은 없다(기능명세 VIDEO-001의 '분석 불가 표시'는 선택 API의 409로 처리). 할당량 초과·키 없음은 503 VIDEO\_SEARCH\_UNAVAILABLE. 같은 검색어·pageToken·size의 YouTube 결과는 서버가 잠시 다시 쓴다(가이드 상태는 매번 새로 붙인다).
+- <b>구현 메모</b>: YouTube 검색을 `videoLicense=creativeCommon`으로 걸러 CC BY 영상만 준다. 검색어에 "메이크업" · "makeup"(대소문자 · 띄어쓰기 · 하이픈 무시)이 없으면 앞에 "메이크업"을 붙여 YouTube에 보낸다(S15P31A306-409, 자동 공개로 메이크업이 아닌 영상이 덜 섞이게. 완전히 거르지는 않는다). 분석할 수 없는 영상(연령 제한·라이브·예정)은 결과에서 뺀다("필터 후 size 미만 가능"). 그래서 목록에 '분석 불가' 표시용 칸은 없다(기능명세 VIDEO-001의 '분석 불가 표시'는 선택 API의 409로 처리). 할당량 초과·키 없음은 503 VIDEO\_SEARCH\_UNAVAILABLE. 같은 검색어·pageToken·size의 YouTube 결과는 서버가 잠시 다시 쓴다(가이드 상태는 매번 새로 붙인다).
 </toggle>
 
 <toggle>

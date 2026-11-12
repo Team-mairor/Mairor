@@ -20,6 +20,7 @@ import com.mairor.backend.videos.repository.VideoRepository;
 import com.mairor.backend.videos.support.VideoErrors;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -30,6 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
  * 메이크업 영상 검색(API-VIDEO-004). YouTube 에서 CC BY 영상만 찾고, 분석할 수 없는 영상(비공개 · 연령 제한 · 라이브)을 뺀 뒤 우리 가이드
  * 상태를 붙인다.
  *
+ * <p>검색어에 "메이크업" · "makeup"이 없으면 앞에 "메이크업"을 붙여 찾는다(S15P31A306-409). 사람 검수 없이 공개하므로 메이크업이 아닌 영상이 결과에
+ * 덜 섞이게 하려는 것이고, 완전히 거르지는 않는다.
+ *
  * <p>YouTube 결과(가이드 상태 제외)는 같은 검색어 · 페이지 · 크기로 잠시 다시 쓴다. 가이드 상태는 매번 DB 에서 붙여 승인 직후에도 맞다.
  */
 @Service
@@ -38,6 +42,7 @@ public class VideoSearchService {
   public static final int DEFAULT_SIZE = 20;
   public static final int MAX_SIZE = 50;
   public static final int MAX_QUERY_LENGTH = 100;
+  static final String MAKEUP_WORD = "메이크업";
 
   private final YouTubeClient youTube;
   private final VideoRepository videos;
@@ -71,13 +76,23 @@ public class VideoSearchService {
     }
     String token = pageToken == null || pageToken.isBlank() ? null : pageToken;
 
-    SearchKey key = new SearchKey(query, token, pageSize);
+    String searchQuery = withMakeupWord(query);
+    SearchKey key = new SearchKey(searchQuery, token, pageSize);
     CachedPage page = cache.getIfPresent(key);
     if (page == null) {
-      page = fetch(query, token, pageSize);
+      page = fetch(searchQuery, token, pageSize);
       cache.put(key, page);
     }
     return new VideoSearchPage(withGuides(page.videos()), page.nextPageToken(), pageSize);
+  }
+
+  /** 검색어에 "메이크업" · "makeup"(대소문자 · 띄어쓰기 · 하이픈 무시)이 없으면 앞에 "메이크업"을 붙인다. */
+  static String withMakeupWord(String query) {
+    String compact = query.toLowerCase(Locale.ROOT).replaceAll("[\\s-]", "");
+    if (compact.contains(MAKEUP_WORD) || compact.contains("makeup")) {
+      return query;
+    }
+    return MAKEUP_WORD + " " + query;
   }
 
   private CachedPage fetch(String query, String pageToken, int size) {

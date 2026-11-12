@@ -145,7 +145,7 @@ class VideoApiTest {
   @Test
   void sameSearchIsCached() throws Exception {
     String query = "캐시 " + prefix;
-    when(youTube.search(eq(query), isNull(), eq(20)))
+    when(youTube.search(eq("메이크업 " + query), isNull(), eq(20)))
         .thenReturn(new YouTubeSearchResult(List.of(), null));
 
     for (int i = 0; i < 2; i++) {
@@ -155,7 +155,24 @@ class VideoApiTest {
           .andExpect(jsonPath("$.items.length()").value(0))
           .andExpect(jsonPath("$.nextPageToken").doesNotExist());
     }
-    verify(youTube, times(1)).search(eq(query), isNull(), eq(20));
+    verify(youTube, times(1)).search(eq("메이크업 " + query), isNull(), eq(20));
+  }
+
+  /** 메이크업이 아닌 영상이 덜 섞이게 검색어 앞에 "메이크업"을 붙인다(S15P31A306-409). 이미 있으면 그대로. */
+  @Test
+  void searchPutsTheMakeupWordInFrontOnlyWhenItIsMissing() throws Exception {
+    when(youTube.search(any(), any(), anyInt()))
+        .thenReturn(new YouTubeSearchResult(List.of(), null));
+
+    for (String q : List.of("브이로그 " + prefix, "Make-Up 데일리 " + prefix, "가을 메이크업 " + prefix)) {
+      mockMvc
+          .perform(get("/v1/videos/search").param("q", q).with(asMember(userId)))
+          .andExpect(status().isOk());
+    }
+
+    verify(youTube).search(eq("메이크업 브이로그 " + prefix), isNull(), eq(20));
+    verify(youTube).search(eq("Make-Up 데일리 " + prefix), isNull(), eq(20));
+    verify(youTube).search(eq("가을 메이크업 " + prefix), isNull(), eq(20));
   }
 
   @Test
@@ -185,9 +202,9 @@ class VideoApiTest {
 
   @Test
   void searchTimeoutAndProviderError() throws Exception {
-    when(youTube.search(eq("느림 " + prefix), any(), anyInt()))
+    when(youTube.search(eq("메이크업 느림 " + prefix), any(), anyInt()))
         .thenThrow(new YouTubeException(YouTubeException.Kind.TIMEOUT, "slow", null));
-    when(youTube.search(eq("오류 " + prefix), any(), anyInt()))
+    when(youTube.search(eq("메이크업 오류 " + prefix), any(), anyInt()))
         .thenThrow(new YouTubeException(YouTubeException.Kind.UNAVAILABLE, "down", null));
 
     mockMvc
