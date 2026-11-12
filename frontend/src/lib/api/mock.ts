@@ -1,4 +1,5 @@
 import type {
+  AnalysisJobStatus,
   AnalysisJobSummary,
   ExecutionAbandonment,
   ExecutionCompletion,
@@ -403,6 +404,40 @@ const ROUTES: MockRoute[] = [
       } satisfies Page<AnalysisJobSummary>,
     }),
     error: () => error(401, { code: "UNAUTHORIZED", message: "로그인이 필요합니다." }),
+  },
+  {
+    // 분석 재시도. 같은 작업이 대기열로 돌아간다
+    method: "POST",
+    path: /^\/v1\/users\/me\/analysis-jobs\/[^/]+\/retry$/,
+    success: (path) => ({
+      status: 202,
+      body: {
+        jobId: decodeURIComponent(path.split("/")[5] ?? ""),
+        videoId: "b0000000-0000-4000-8000-000000000001",
+        status: "PENDING",
+        progressStage: "QUEUED",
+        progressPercent: null,
+        estimatedRemainingSeconds: null,
+        stageProgress: null,
+        retryable: false,
+        reviewStatus: "NOT_READY",
+        guideAvailable: false,
+        guideId: null,
+        foundProducts: [],
+        foundProductCount: 0,
+        totalProductCount: null,
+        failureCode: null,
+        failureMessage: null,
+        pollAfterSeconds: 3,
+        createdAt: "2026-11-12T00:00:00Z",
+        completedAt: null,
+      } satisfies AnalysisJobStatus,
+    }),
+    error: () =>
+      error(409, {
+        code: "ANALYSIS_NOT_RETRYABLE",
+        message: "이 분석은 다시 시도할 수 없습니다. 다른 영상을 골라 주세요.",
+      }),
   },
   {
     // 가이드 실행: 얼굴 등록. 모의 응답은 사진 · metadata를 보지 않는다

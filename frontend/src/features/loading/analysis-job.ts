@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ANALYSIS_PHASES } from "@/features/video";
 import {
@@ -72,6 +72,37 @@ export function jobReview(job: AnalysisJobStatus) {
   return null;
 }
 
+/** 실패 코드별 제목. 없으면 기본 문구. failureMessage는 운영자용이라 보여 주지 않는다 */
+const FAILURE_TITLE: Record<string, string> = {
+  NO_VALID_STEPS: "따라 할 수 있는 단계를 찾지 못했어요",
+  VIDEO_DOWNLOAD_REJECTED: "이 영상은 받을 수 없어요",
+  SOURCE_NOT_FOUND: "이 영상은 받을 수 없어요",
+  SOURCE_UNREADABLE: "이 영상은 받을 수 없어요",
+  PROCESSOR_TIMEOUT: "분석이 너무 오래 걸려 멈췄어요",
+  ANALYSIS_TIMEOUT: "분석이 너무 오래 걸려 멈췄어요",
+};
+const TIMEOUTS = new Set(["PROCESSOR_TIMEOUT", "ANALYSIS_TIMEOUT"]);
+
+/** 실제 작업 실패 안내. retryable이면 다시 시도할 수 있다(재시도 불가 실패 · 시도 횟수를 다 쓴 작업은 false) */
+export function jobFailure(job: AnalysisJobStatus, phaseName: string) {
+  const code = job.failureCode ?? "";
+  return {
+    tag: TIMEOUTS.has(code) ? "STOPPED · TIMEOUT" : "STOPPED",
+    title: FAILURE_TITLE[code] ?? "분석을 마치지 못했어요",
+    sub: job.retryable
+      ? `${phaseName} 단계에서 멈췄어요. 잠깐의 문제일 수 있어요. 다시 시도해 보세요.`
+      : `${phaseName} 단계에서 멈췄어요. 다른 영상을 골라 주세요.`,
+    retry: job.retryable,
+  };
+}
+
+/** 분석 재시도. 받은 상태의 jobId가 다르면 같은 영상의 다른 진행 중 작업에 합류한 것이다 */
+export function retryAnalysisJob(jobId: string) {
+  return api.post<AnalysisJobStatus>(
+    `/v1/users/me/analysis-jobs/${encodeURIComponent(jobId)}/retry`,
+  );
+}
+
 const RETRY_MS = 5000;
 /** SSE 다시 붙기가 이만큼 연달아 실패하면 상태 조회로 바꾼다 */
 const SSE_MAX_FAILS = 3;
@@ -79,11 +110,20 @@ const SSE_MAX_FAILS = 3;
 /**
  * 분석 작업 상태를 SSE(API-VIDEO-008)로 받고, SSE가 안 되면 상태 조회(API-VIDEO-003)를 pollAfterSeconds마다 부른다.
  * error는 다시 해도 소용없는 4xx만 담는다(408·429는 다시 조회).
+ * restart는 같은 작업을 재시도한 뒤 받은 상태로 바꾸고 진행률을 되돌려 다시 받기 시작한다(진행률은 평소 줄지 않는다).
  */
 export function useAnalysisJob(jobId: string | null) {
   const [job, setJob] = useState<AnalysisJobStatus | null>(null);
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<ApiError | null>(null);
+  const [round, setRound] = useState(0);
+
+  const restart = useCallback((next: AnalysisJobStatus) => {
+    setJob(next);
+    setPct(jobPercent(next));
+    setError(null);
+    setRound((r) => r + 1);
+  }, []);
 
   useEffect(() => {
     if (!jobId) return;
@@ -146,7 +186,7 @@ export function useAnalysisJob(jobId: string | null) {
       ctrl.abort();
       clearTimeout(timer);
     };
-  }, [jobId]);
+  }, [jobId, round]);
 
-  return { job, pct, error };
+  return { job, pct, error, restart };
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { AnalysisJobStatus } from "@/lib/api";
 
-import { isJobSettled, jobPercent, jobReview, stageText } from "./analysis-job";
+import { isJobSettled, jobFailure, jobPercent, jobReview, stageText } from "./analysis-job";
 
 const job = (over: Partial<AnalysisJobStatus>): AnalysisJobStatus => ({
   jobId: "j",
@@ -83,5 +83,42 @@ describe("isJobSettled · jobReview", () => {
     expect(jobReview(job({ status: "COMPLETED", reviewStatus: "PENDING" }))).toBe("pending");
     expect(jobReview(job({ status: "COMPLETED", reviewStatus: "APPROVED" }))).toBeNull();
     expect(jobReview(job({ status: "COMPLETED", reviewStatus: "REJECTED" }))).toBe("rejected");
+  });
+});
+
+describe("jobFailure", () => {
+  it("재시도할 수 있는 실패는 다시 시도를 보이고, 시간 초과는 따로 표시한다", () => {
+    const n = jobFailure(
+      job({ status: "FAILED", failureCode: "PROCESSOR_TIMEOUT", retryable: true }),
+      "영상 불러오기",
+    );
+    expect(n.retry).toBe(true);
+    expect(n.tag).toBe("STOPPED · TIMEOUT");
+    expect(n.title).toBe("분석이 너무 오래 걸려 멈췄어요");
+    expect(n.sub).toContain("영상 불러오기 단계에서 멈췄어요");
+    expect(n.sub).toContain("다시 시도해 보세요");
+  });
+
+  it("재시도할 수 없거나 시도 횟수를 다 쓴 작업은 다른 영상만", () => {
+    const steps = jobFailure(
+      job({ status: "FAILED", failureCode: "NO_VALID_STEPS", retryable: false }),
+      "단계 추출",
+    );
+    expect(steps.retry).toBe(false);
+    expect(steps.title).toBe("따라 할 수 있는 단계를 찾지 못했어요");
+    expect(steps.sub).toContain("다른 영상을 골라 주세요");
+
+    const usedUp = jobFailure(
+      job({ status: "FAILED", failureCode: "ANALYSIS_TIMEOUT", retryable: false }),
+      "가이드 구성",
+    );
+    expect(usedUp.retry).toBe(false);
+    expect(usedUp.sub).toContain("다른 영상을 골라 주세요");
+  });
+
+  it("모르는 실패 코드는 기본 문구", () => {
+    const n = jobFailure(job({ status: "FAILED", failureCode: "SOMETHING_NEW" }), "대기");
+    expect(n.tag).toBe("STOPPED");
+    expect(n.title).toBe("분석을 마치지 못했어요");
   });
 });

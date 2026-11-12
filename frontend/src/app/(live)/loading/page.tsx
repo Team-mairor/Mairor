@@ -17,9 +17,11 @@ import {
   AnalysisProgress,
   FaceRegisterModal,
   FoundProducts,
+  jobFailure,
   jobReview,
   PouchCheckModal,
   ReadyStatus,
+  retryAnalysisJob,
   ScanPreview,
   stageText,
   useAnalysisJob,
@@ -27,7 +29,7 @@ import {
 import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
 import { faceReady, hasSame, isGuideId, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
-import { type AnalysisJobStatus, type ApiError } from "@/lib/api";
+import { ApiError, errorMessage, type AnalysisJobStatus } from "@/lib/api";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
 const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composing"];
@@ -60,7 +62,7 @@ export default function LoadingPage() {
 
 function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string | null }) {
   const router = useRouter();
-  const { state, update, updateRun } = useSession();
+  const { state, update, updateRun, startRun } = useSession();
   const camera = useCamera();
   const { load } = useGuide();
   const run = state.run;
@@ -83,6 +85,10 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const [pouchModal, setPouchModal] = useState(false);
   const [newIds, setNewIds] = useState<string[]>([]);
   const [form, setForm] = useState<ProductDraft | null>(null);
+  // 실제 작업 다시 시도: 요청 중 · 실패 문구 · 서버가 다시 시도할 수 없다고 한 작업
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [retryRefused, setRetryRefused] = useState(false);
 
   useEffect(() => {
     if (run.mode === "guide") return;
@@ -196,13 +202,14 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           sub: `${phaseName} 단계에서 메이크업 장면을 찾지 못했어요. 다른 영상을 골라 주세요.`,
           retry: false,
         },
-        // 다시 시도(API-VIDEO-006)는 BE 구현 전이라 다른 영상만 고를 수 있다
-        stopped: {
-          tag: "STOPPED",
-          title: "분석을 마치지 못했어요",
-          sub: `${phaseName} 단계에서 멈췄어요. 다른 영상을 골라 주세요.`,
-          retry: false,
-        },
+        stopped: job
+          ? jobFailure(retryRefused ? { ...job, retryable: false } : job, phaseName)
+          : {
+              tag: "STOPPED",
+              title: "분석을 마치지 못했어요",
+              sub: `${phaseName} 단계에서 멈췄어요. 다른 영상을 골라 주세요.`,
+              retry: false,
+            },
         missing: {
           tag: "NOT FOUND",
           title: "분석 작업을 찾을 수 없어요",
@@ -288,6 +295,36 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
       : "이전에 분석한 가이드를 그대로 써요"
     : "영상 분석은 그대로 진행 중이에요";
 
+  const retryJob = async () => {
+    if (!jobId || retrying) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const next = await retryAnalysisJob(jobId);
+      if (next.jobId === jobId) {
+        live.restart(next);
+        return;
+      }
+      // 같은 영상의 다른 진행 중 작업에 합류했다. 고른 영상을 이어 쓰도록 그 작업으로 실행을 시작한다
+      if (picked) startRun({ kind: "sample", picked, jobId: next.jobId });
+      router.replace(`/loading?jobId=${encodeURIComponent(next.jobId)}`);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === "UNAUTHORIZED") {
+        router.replace("/login?expired=basic");
+        return;
+      }
+      // 서버가 다시 시도할 수 없다고 하면 버튼을 거두고, 안내 문구가 이미 다른 영상을 권하므로 이유만 짧게
+      if (e instanceof ApiError && e.code === "ANALYSIS_NOT_RETRYABLE") {
+        setRetryRefused(true);
+        setRetryError("이 분석은 다시 시도할 수 없어요.");
+        return;
+      }
+      setRetryError(errorMessage(e));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   const closePouch = () => {
     setPouchModal(false);
     if (replay) router.push(href("/preview"));
@@ -355,6 +392,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
               {notice.title}
             </span>
             <span className="text-[18px] leading-[1.5] text-pretty text-mute">{notice.sub}</span>
+            {fail === "stopped" && retryError && (
+              <span role="alert" className="text-[17px] leading-[1.5] text-pretty text-error">
+                {retryError}
+              </span>
+            )}
           </div>
         ) : run.mode === "guide" && load.status === "ready" ? (
           <div className="rounded-3xl bg-cream px-7 py-6 text-[20px] text-ink">
@@ -387,12 +429,17 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
               <PillButton
                 size="hero"
                 onClick={() => {
+                  if (jobId) {
+                    void retryJob();
+                    return;
+                  }
                   setDemoFail(null);
                   router.replace("/loading");
                 }}
+                disabled={retrying}
                 className="flex-1"
               >
-                다시 시도
+                {retrying ? "다시 시도하는 중" : "다시 시도"}
               </PillButton>
             )}
             <PillButton

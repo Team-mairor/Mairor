@@ -1,4 +1,4 @@
-export { jobReview, stageText, useAnalysisJob } from "./analysis-job";
+export { jobFailure, jobReview, retryAnalysisJob, stageText, useAnalysisJob } from "./analysis-job";
 export { AnalysisProgress } from "./analysis-progress";
 export { FaceRegisterModal } from "./face-register-modal";
 export { FoundProducts } from "./found-products";
