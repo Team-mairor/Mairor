@@ -190,7 +190,8 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
     assertThat(
             jdbc.queryForObject(
                 "select review_status from guides where analysis_job_id = ?", String.class, jobId))
-        .isEqualTo("PENDING");
+        .as("AI 결과를 저장하면 검수 없이 바로 공개")
+        .isEqualTo("APPROVED");
   }
 
   @Test

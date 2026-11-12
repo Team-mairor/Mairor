@@ -10,7 +10,9 @@ import com.mairor.backend.common.error.ErrorCode;
 import com.mairor.backend.guides.entity.Guide;
 import com.mairor.backend.guides.event.ReferenceProductReconciliationRequested;
 import com.mairor.backend.guides.repository.GuideRepository;
+import com.mairor.backend.guides.service.GuideReviewService;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +28,8 @@ import tools.jackson.databind.ObjectMapper;
  * <ul>
  *   <li>COMPLETED: 맡긴 작업의 결과인지 먼저 본다({@link AiResultCheck}: 영상 · 단계 ID · 영역). 어긋나면 작업 FAILED {@code
  *       AI_RESULT_MISMATCH}(재시도 불가)로 끝내고 가이드는 저장하지 않는다. 맞으면 가이드에 쉬운 설명({@code guide})·영역({@code
- *       area})·{@code meshVersion}을 저장하고 검수 PENDING, 작업 COMPLETED · DONE
+ *       area})·{@code meshVersion}을 저장하고 운영자 검수 없이 바로 공개(APPROVED, S15P31A306-409), 작업 COMPLETED ·
+ *       DONE
  *   <li>FAILED: 작업 FAILED, {@code error.code}를 실패 코드로 바꿈(재시도 가능). {@code error.details}(단계별 이유)를 실패
  *       메시지에 붙이고, 자르지 않은 전체는 로그에 남긴다
  *   <li>이미 끝난 작업이면 아무것도 바꾸지 않는다(같은 콜백이 다시 올 수 있다)
@@ -47,6 +50,7 @@ public class AiResultService {
 
   private final AnalysisJobRepository jobs;
   private final GuideRepository guides;
+  private final GuideReviewService reviews;
   private final AnalysisJobNotifier notifier;
   private final ObjectMapper objectMapper;
   private final Clock clock;
@@ -55,12 +59,14 @@ public class AiResultService {
   AiResultService(
       AnalysisJobRepository jobs,
       GuideRepository guides,
+      GuideReviewService reviews,
       AnalysisJobNotifier notifier,
       ObjectMapper objectMapper,
       Clock clock,
       ApplicationEventPublisher events) {
     this.jobs = jobs;
     this.guides = guides;
+    this.reviews = reviews;
     this.notifier = notifier;
     this.objectMapper = objectMapper;
     this.clock = clock;
@@ -109,10 +115,12 @@ public class AiResultService {
       JsonNode area = present(result.area()) ? result.area() : null;
       guide.recordAiResult(
           result.guide().toString(), area == null ? null : area.toString(), meshVersion(area));
-      job.complete(clock.instant());
+      Instant now = clock.instant();
+      reviews.publish(guide, now);
+      job.complete(now);
       events.publishEvent(new ReferenceProductReconciliationRequested(guide.getId()));
       log.info(
-          "AI 가이드 저장 jobId={} aiJobId={} guideId={} steps={} area={}",
+          "AI 가이드 저장 · 공개 jobId={} aiJobId={} guideId={} steps={} area={}",
           job.getId(),
           result.jobId(),
           guide.getId(),

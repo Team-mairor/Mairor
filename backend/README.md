@@ -438,8 +438,8 @@ worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED �
         → EXTRACTING_STEPS(Gemini 에 유튜브 URL → 단계 목록 → 가이드 입력 v2 → guides.guide_input, llm_calls)
         → SEGMENTING(단계 구간을 따라 프레임 JPEG → 저장소, frames.json → guides.frames_manifest_key)
         → BUILDING_GUIDE(AI 서버에 가이드 생성 요청: 가이드 입력 + 프레임 사전 서명 URL → ai_job_id, 작업은 RUNNING 으로 대기)
-ai ── POST api:8080/api/v1/internal/ai/guide-jobs/callback ──▶ guides.explanation·area·mesh_version, 검수 PENDING, 작업 COMPLETED
-운영자 ── POST /api/v1/internal/guides/{guideId}/review {APPROVED} ──▶ 이 영상의 공개 가이드
+ai ── POST api:8080/api/v1/internal/ai/guide-jobs/callback ──▶ guides.explanation·area·mesh_version, 바로 공개(APPROVED), 작업 COMPLETED
+운영자 ── POST /api/v1/internal/guides/{guideId}/review {REJECTED} ──▶ 문제 가이드를 내림(선택)
       실패하면 멈춘 단계에서 FAILED + failureCode·retryable
 ```
 
@@ -493,7 +493,7 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 - `frames.json` 은 현수 요청 칸(`source{width,height,fps}`, `items[]{frameIndex, timestampMs, stepId, …, width, height}`)에 `url` 대신 저장소 `key` 를 둔다. AI 요청을 보낼 때(-311) `ObjectStorage.presignGet` 으로 URL 을 만든다. 운영 EC2 는 역할의 임시 자격 증명으로 서명하므로 URL 이 요청한 시간보다 일찍 끝날 수 있다(받는 쪽이 바로 내려받는다).
 - 레퍼런스(31분 · 1080p60) 로컬 실측: 7,765장 · 745 MB · ffmpeg 43초.
 
-**AI 가이드 생성 · 검수** (S15P31A306-311, 형식은 `docs/references/ai-api.md`)
+**AI 가이드 생성 · 공개** (S15P31A306-311, 자동 공개 S15P31A306-409, 형식은 `docs/references/ai-api.md`)
 
 - worker 가 `BUILDING_GUIDE` 에서 `POST {AI_BASE_URL}/api/v1/guide-jobs {callbackUrl, progressUrl, guideInput, frames}` 를 보내고(로컬 저장소면 `frames` 를 빼고 보낸다, `AI_SEND_FRAMES`) AI 작업 ID 와 맡긴 시각을 `analysis_jobs.ai_job_id`·`ai_requested_at` 에 적는다. 작업은 콜백이 올 때까지 `RUNNING` 이고, worker 를 다시 띄워도 대기열로 되돌리지 않는다.
 - 프레임 URL 은 저장소 키로 그때 사전 서명한다(24시간, 운영은 역할 자격 증명이라 더 일찍 끝날 수 있음).
@@ -510,20 +510,21 @@ curl -X POST "https://mairor.co.kr/api/v1/internal/guides/<guideId>/reference-li
 - 모르는 AI 작업의 콜백은 **503**(S15P31A306-311 추가 작업). AI 는 202 를 보낸 직후 작업을 시작해 BE 가 `ai_job_id` 를 커밋하기 전에 콜백이 올 수 있는데, 503 이면 AI 가 1·5·25초 뒤 다시 보내 반영된다. 정말 없는 작업이면 AI 가 네 번 보내고 멈춘다.
 - **진행 알림 `POST /api/v1/internal/ai/guide-jobs/progress`** (S15P31A306-296): AI 가 1초에 한 번까지 보내는 진행 숫자(설명·사진·얼굴 점·영역)를 `analysis_jobs.ai_progress` 에 저장한다. 콜백과 같은 경로 아래라 공유 토큰 없이 받고 nginx 가 막는다. 받을 수 없는 알림(모르는 작업·끝난 작업·형식·숫자 오류)은 저장하지 않고 204 로 답한다(AI 는 진행 알림을 다시 보내지 않는다). DB 장애 같은 서버 오류는 예외로 5xx 가 날 수 있다.
 - 콜백이 AI 에 맡긴 시각(`ai_requested_at`)부터 `AI_CALLBACK_TIMEOUT` 안에 오지 않으면 worker 가 1분마다 AI 에 상태를 묻는다: 끝났으면 콜백처럼 반영, AI 에 작업이 없으면(재시작·만료) 또는 두 배가 지나면 `ANALYSIS_TIMEOUT`. 진행 알림이 와도 이 기준은 밀리지 않는다(`updated_at` 이 아니라 맡긴 시각 기준).
-- 검수(운영자, 공유 토큰):
+- **공개는 자동이다**(S15P31A306-409, 11.12 팀 합의). 콜백 결과가 작업과 맞으면 같은 트랜잭션에서 가이드를 `APPROVED` 로 바꾸고 작업을 끝낸다. 같은 영상에 이전 공개 판이 있으면 먼저 `REJECTED` 로 내린다(영상당 공개 하나). 운영자 승인을 기다리지 않는다.
+- 내리기(운영자, 공유 토큰): 저작권 · 품질 문제가 보이면 반려해 공개에서 내린다. 승인은 자동 공개 전에 끝나 검수 대기(`PENDING`)로 남은 옛 가이드에만 쓴다. 그 밖의 상태면 409.
 
 ```bash
 # 작업 → guideId
 curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
 # 가이드 입력·쉬운 설명·영역 보기
 curl https://mairor.co.kr/api/v1/internal/guides/<guideId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
-# 승인(또는 REJECTED). 검수 대기(PENDING)만 되고, 승인하면 같은 영상의 이전 공개 판은 REJECTED 로 내려간다
-curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-Internal-Token: $INTERNAL_API_TOKEN"   -H "Content-Type: application/json" -d '{"decision":"APPROVED"}'
+# 내리기(공개 · 검수 대기 → REJECTED). 옛 검수 대기 가이드 승인은 {"decision":"APPROVED"}
+curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-Internal-Token: $INTERNAL_API_TOKEN"   -H "Content-Type: application/json" -d '{"decision":"REJECTED"}'
 ```
 
 **가이드 조회** (API-ANALYSIS-001, S15P31A306-312)
 
-- `GET /api/v1/guides/{guideId}`(회원). 검수 승인(APPROVED)만 200, 검수 전 · 반려 · 없음은 404.
+- `GET /api/v1/guides/{guideId}`(회원). 공개(APPROVED)만 200, 공개 전 · 반려(내림) · 없음은 404.
 - 단계는 가이드 입력 순서대로, `stepId`로 쉬운 설명(`actions` · `doneWhen`)과 영역(`subSteps`, `shared/guide-area` 그대로)을 붙인다. 설명 · 영역이 없는 단계는 빈 목록 · null.
 - `part` = 화장 종류 10종, `partLabel` = 한국어. `other`만 EXCLUDED(진행률 · `stepCount`에서 빠짐), 마스카라는 영역이 없어도 GUIDE. `previewable`은 아이섀도 · 아이라인 · 블러셔 · 하이라이트 · 립.
 - 명세 v2와 다른 곳(`application` → `subSteps`, `coordinateSystem` → `meshVersion`, `instruction` → `summary` · `actions`)은 `docs/references/api-spec.md`의 API-ANALYSIS-001에 있다(S15P31A306-312).

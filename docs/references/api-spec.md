@@ -235,7 +235,8 @@ API-VIDEO-003 · GET /api/v1/users/me/analysis-jobs/\{jobId\}
 - FAILED도 HTTP 200이며 failureCode·failureMessage·retryable로 분기. ANALYSIS\_TIMEOUT은 실패 원인 값. 승인 전 guideAvailable=false·guideId=null.
 - <b>실패 코드 추가 (S15P31A306-363)</b>: AI\_RESULT\_MISMATCH(retryable=false) — AI 결과가 맡긴 작업과 맞지 않음(다른 영상, 단계 ID 다름, 프레임을 보냈는데 영역 없음). AI 실패(AI\_GENERATION\_FAILED 등)의 failureMessage에는 단계별 이유(`steps.3: …`)가 붙을 수 있다(500자에서 자름). FE는 failureMessage를 그대로 보여 주지 말고 failureCode로 문구를 정한다.
 - <b>실패 코드 추가 (S15P31A306-357 영상 전처리 노트북)</b>: VIDEO\_DOWNLOAD\_REJECTED(retryable=false) — YouTube가 노트북의 영상 받기를 거절(우회하지 않음). PROCESSOR\_TIMEOUT(retryable=true) — 노트북이 시간 안에 끝내지 못함(꺼짐·멈춤). PROCESSOR\_FAILED(retryable은 노트북 판단) — 노트북이 알려 온 그 밖의 실패. 노트북이 알려 온 VIDEO\_UNAVAILABLE·STEP\_EXTRACTION\_FAILED·FRAME\_EXTRACTION\_FAILED·UPLOAD\_FAILED는 기존 SOURCE\_NOT\_FOUND·LLM\_UNAVAILABLE·FRAME\_EXTRACTION\_FAILED·STORAGE\_UNAVAILABLE로 바꿔 내보낸다. 표는 `processor-api.md`.
-- PENDING/RUNNING은 pollAfterSeconds 후 재조회. COMPLETED+검수 PENDING도 유효한 pollAfterSeconds를 제공하고 검수 상태를 갱신한다. FAILED·APPROVED·REJECTED는 null로 중단. 홈 진입 시 API-VIDEO-007로 재확인.
+- PENDING/RUNNING은 pollAfterSeconds 후 재조회. COMPLETED+검수 PENDING(자동 공개 전에 끝난 옛 작업)도 유효한 pollAfterSeconds를 제공하고 검수 상태를 갱신한다. FAILED·APPROVED·REJECTED는 null로 중단. 홈 진입 시 API-VIDEO-007로 재확인.
+- <b>자동 공개 (11.12 팀 합의, S15P31A306-409)</b>: AI 결과가 요청과 맞으면 저장과 함께 reviewStatus=APPROVED가 되어, status=COMPLETED와 같은 응답에서 guideAvailable=true·guideId가 온다. 운영자는 문제 가이드를 내릴 때만 반려(APPROVED → REJECTED)한다.
 - progressPercent·남은 시간은 실제 계산 가능한 경우만 제공하고 알 수 없으면 null. FE는 null일 때 단계·처리 중만 표시. foundProducts의 보유 여부는 조회 시점 파우치로 계산한다.
 - <b>진행 화면은 API-VIDEO-008(SSE)로 받는다</b>: 이 조회는 새로고침·홈 재확인과 SSE를 쓸 수 없을 때(pollAfterSeconds 폴링) 쓴다. 응답은 SSE의 status 이벤트와 같다.
 - <b>구현 메모</b>: 지금은 본인이 요청한 작업(requestedBy)만 보고, 진행 작업에 합류한 회원은 API-VIDEO-002 구현 때 넓힌다. 운영 명령으로 만든 작업은 회원이 볼 수 없다(404). Cache-Control: no-store.
@@ -710,7 +711,7 @@ GET /api/v1/users/me/analysis-jobs
 - 성공 200: Page of AnalysisJobSummary. 정렬: requestedAt 내림차순
 - 정책
   - 내가 신규 요청하거나 합류한 작업 중 분석이 COMPLETED인 것만. 홈 진입 시 조회해 카드 갱신, 알림(푸시·알림함) 없음
-  - PENDING → 'IN REVIEW · 검수 중', APPROVED → 'READY · 따라 하기'(guideId로 바로 따라 하기 준비), REJECTED → 기본 제외(카드 제거)
+  - PENDING → 'IN REVIEW · 검수 중', APPROVED → 'READY · 따라 하기'(guideId로 바로 따라 하기 준비), REJECTED → 기본 제외(카드 제거). 신규 분석은 바로 APPROVED라 PENDING은 자동 공개 전에 끝난 옛 작업에만 있다(S15P31A306-409)
   - APPROVED 카드의 노출 종료 시점(첫 실행 시작 후 제외 등)은 미정
   - 구현 메모(S15P31A306-405): requestedAt은 그 회원이 요청·합류한 시각(같은 작업이라도 회원마다 다름)이고 같은 시각이면 요청 기록 순서로 고정한다. guideId는 APPROVED일 때만 준다(API-VIDEO-003과 같음). reviewStatus는 PENDING·APPROVED·REJECTED만 받고 그 밖은 400 VALIDATION\_FAILED. 운영자가 내부 API로 만든 작업은 요청 기록이 없어 나오지 않는다
 
@@ -727,7 +728,7 @@ GET /api/v1/users/me/analysis-jobs/\{jobId\}/events
 - 끝나는 때
   - FAILED, 검수 APPROVED·REJECTED를 보낸 뒤 서버가 닫는다
   - <b>FE도 이 상태를 받으면 <code>close()</code> 해야 한다.</b> EventSource는 서버가 닫아도 몇 초 뒤 다시 붙으므로, 닫지 않으면 끝난 상태를 받고 다시 붙기를 되풀이한다
-  - 검수 대기(COMPLETED + reviewStatus PENDING)에서는 서버가 열어 둔다. FE가 홈 카드로 갈 때 <code>close()</code> 한다
+  - 검수 대기(COMPLETED + reviewStatus PENDING, 자동 공개 전에 끝난 옛 작업)에서는 서버가 열어 둔다. FE가 홈 카드로 갈 때 <code>close()</code> 한다
   - 서버는 연결 하나를 최대 30분 열어 두고 닫는다. 네트워크 끊김·배포 때도 닫힌다. 이때 EventSource가 다시 붙어 지금 상태를 다시 받는다
 - 대체: 연결이 계속 실패하면 API-VIDEO-003을 pollAfterSeconds마다 조회한다(null이면 그만)
 - 서버 동작: 상태가 바뀌면 저장 트랜잭션에서 DB 변경 알림(PostgreSQL NOTIFY)을 보내고, 연결을 가진 api가 받아 DB를 다시 읽어 보낸다. 알림을 놓쳐도 30초마다 다시 맞춘다
@@ -995,7 +996,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), Google 최초 로그인 시 약관·추가 정보 수집(구현은 FE 요청안대로 이메일 가입과 같은 약관 4개·선택 항목 5개, API-USERS-017·018 번호 임시), Google 가입 시 닉네임 기본값(구현은 채우지 않음), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
 | 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
 | 인기 Top 4 | 확정(11.11, S15P31A306-403): 영상 선택 기록으로 최근 30일 동안 고른 서로 다른 회원 수 순, 10분마다 다시 셈, 1\~4개 200 · 0개 503(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
-| 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간, 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
+| 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간(11.12 확정: 자동 공개, S15P31A306-409), 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
 | 얼굴 등록 | 미연결 등록은 원래 세션 종료까지 유지하는 것으로 확정. 서버 촬영 조건 재검증 여부·저장소 암호화 등 운영 기준·정면/좌/우 3장 확장(P1)은 별도 결정(확인 필요 7) |
 | 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |
 | 실행·준비 | 분석/얼굴 추적 준비 시점 차이에 따른 별도 준비 화면·대기 상한(확인 필요 7), 온보딩·튜토리얼 안내를 계정 단위로 바꿀지(확인 필요 9) |

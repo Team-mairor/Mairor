@@ -78,7 +78,7 @@ worker가 몇 초마다 끝난 작업 하나를 집어 AI에 맡긴다. 앱 단�
 2. 검사: `guideInput.videoId` = 작업 영상, `guideInput.durationSeconds` 있음, 단계 1개 이상 · `stepId` 비지 않고 겹치지 않음, 프레임 항목마다 저장소 키를 얻을 수 있고 `videos/{youtubeVideoId}/` 아래. 나머지 형식은 AI가 본다.
 3. 가이드 입력을 가이드 행에 남긴다(검수 `NOT_READY`). 프레임이 있으면 그 작업은 "프레임을 보낸 작업"이다(AI 결과에 영역이 있어야 한다).
 4. 노트북 JSON을 그대로 두고 `callbackUrl` · `progressUrl`을 BE 주소로, 프레임 `url`을 서명한 주소로 바꾸고 `key`를 빼서 AI에 보낸다. `guideInput`의 다른 칸(`eyeZone` 등)은 그대로 간다.
-5. 그 뒤는 AI 콜백 → 검수 대기(기존과 같다).
+5. 그 뒤는 기존과 같다: AI 콜백 → 바로 공개(검수 없음, S15P31A306-409).
 
 - 프레임 키: `key`를 쓰고, 없으면 `url`이 운영 버킷의 S3 주소(`https://mairor-prod-media.s3.<region>.amazonaws.com/<key>` 등)일 때 거기서 뽑는다.
 

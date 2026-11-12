@@ -19,10 +19,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 운영자 가이드 검수. 1차 MVP 는 운영자 계정 대신 공유 토큰 헤더({@code X-Internal-Token})로 지킨다. */
+/**
+ * 운영자 가이드 검수. AI 가이드는 저장되면 바로 공개되므로(S15P31A306-409) 운영자는 문제 가이드를 내릴 때 쓴다. 1차 MVP 는 운영자 계정 대신 공유 토큰
+ * 헤더({@code X-Internal-Token})로 지킨다.
+ */
 @Tag(
     name = "운영 · 가이드 검수",
-    description = "AI 가 만든 가이드를 보고 승인·반려한다. 공유 토큰 헤더(X-Internal-Token)가 필요하다.")
+    description = "AI 가 만든 가이드를 보고, 문제가 있으면 내린다. 공유 토큰 헤더(X-Internal-Token)가 필요하다.")
 @RestController
 @RequestMapping("/v1/internal/guides")
 public class InternalGuideController {
@@ -58,17 +61,18 @@ public class InternalGuideController {
       summary = "가이드 검수",
       description =
           """
-          검수 대기 가이드를 승인하거나 반려한다. 승인하면 이 영상의 공개 가이드가 된다.
+          가이드를 반려(내리기)하거나, 검수 대기로 남은 옛 가이드를 승인한다.
 
-          - 검수 대기(PENDING)가 아니면 409 다.
-          - 같은 영상의 이전 공개 가이드는 반려로 내려간다(공개는 영상당 하나).
+          - AI 가이드는 저장되면 바로 공개(APPROVED)된다. 반려하면 공개 가이드도 내려간다.
+          - 승인은 검수 대기(PENDING)만, 반려는 검수 대기 · 공개만 된다. 아니면 409 다.
+          - 승인하면 같은 영상의 이전 공개 가이드는 반려로 내려간다(공개는 영상당 하나).
           """,
       security = @SecurityRequirement(name = OpenApiConfig.INTERNAL_TOKEN))
   @ApiResponse(responseCode = "200", description = "검수 뒤 가이드")
   @ApiResponse(responseCode = "400", description = "입력 형식 오류. (VALIDATION_FAILED)")
   @ApiResponse(responseCode = "401", description = "공유 토큰이 없거나 다름. (UNAUTHORIZED)")
   @ApiResponse(responseCode = "404", description = "없는 가이드. (NOT_FOUND)")
-  @ApiResponse(responseCode = "409", description = "검수 대기 가이드가 아님. (CONFLICT)")
+  @ApiResponse(responseCode = "409", description = "그 결정을 내릴 수 없는 검수 상태. (CONFLICT)")
   @PostMapping("/{guideId}/review")
   public InternalGuideResponse review(
       @PathVariable UUID guideId, @Valid @RequestBody ReviewGuideRequest request) {

@@ -172,7 +172,8 @@ public class Guide {
 
   /** 같은 작업을 다시 돌려(멈춘 뒤 대기열로 되돌림) 단계를 새로 뽑았을 때 입력을 바꾼다. 설명·영역은 아직 없다. */
   /**
-   * AI 콜백의 쉬운 설명·가이드 영역을 저장하고 검수를 기다린다(NOT_READY → PENDING).
+   * AI 콜백의 쉬운 설명·가이드 영역을 저장한다(NOT_READY → PENDING). 저장하는 쪽이 같은 트랜잭션에서 바로 공개한다(검수 없음,
+   * S15P31A306-409).
    *
    * @param explanation 콜백 {@code guide} JSON
    * @param area 콜백 {@code area} JSON. 프레임 없이 맡긴 작업이면 null
@@ -185,16 +186,18 @@ public class Guide {
     this.reviewStatus = ReviewStatus.PENDING;
   }
 
-  /** 검수 승인. PENDING 일 때만. 같은 영상의 이전 공개 판은 호출하는 쪽이 먼저 내린다(공개 하나). */
+  /** 공개(승인). PENDING 일 때만. 같은 영상의 이전 공개 판은 호출하는 쪽이 먼저 내린다(공개 하나). */
   public void approve(Instant now) {
     requirePending("승인");
     this.reviewStatus = ReviewStatus.APPROVED;
     this.reviewedAt = Objects.requireNonNull(now, "now");
   }
 
-  /** 검수 반려. PENDING 일 때만. */
+  /** 반려. 공개 전(PENDING)이면 공개하지 않고, 공개된 가이드(APPROVED)면 운영자가 내린다. */
   public void reject(Instant now) {
-    requirePending("반려");
+    if (reviewStatus != ReviewStatus.PENDING && reviewStatus != ReviewStatus.APPROVED) {
+      throw new IllegalStateException("가이드 " + id + " 은 " + reviewStatus + " 상태라 반려할 수 없습니다.");
+    }
     this.reviewStatus = ReviewStatus.REJECTED;
     this.reviewedAt = Objects.requireNonNull(now, "now");
   }

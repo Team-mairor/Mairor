@@ -196,8 +196,8 @@ class AnalysisWorkerFlowTest extends AnalysisIntegrationTest {
                 "select review_status || ':' || version from guides where analysis_job_id = ?",
                 String.class,
                 receipt.jobId()))
-        .as("AI 콜백 뒤 검수 대기")
-        .isEqualTo("PENDING:1");
+        .as("AI 콜백 뒤 검수 없이 바로 공개")
+        .isEqualTo("APPROVED:1");
     assertThat(
             jdbc.queryForObject(
                 "select provider || ':' || status || ':' || input_tokens || ':' || purpose"
