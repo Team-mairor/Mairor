@@ -1,0 +1,19 @@
+{
+  "contractVersion": 1,
+  "jobId": "5f0c2a1e-8d3b-4c71-9a2e-1b7f3c9d4e10",
+  "status": "COLLECTED",
+  "reason": null,
+  "resultFile": "20261112-000012-job-5f0c2a1e.jsonl",
+  "runId": "5f0c2a1e-8d3b-4c71-9a2e-1b7f3c9d4e10",
+  "importRunId": "9b8e7d6c-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+  "products": [
+    {
+      "itemKey": "000001",
+      "source": "OFFICIAL:romand.co.kr",
+      "sourceProductId": "12",
+      "sourceUrl": "https://romand.co.kr/product/detail.html?product_no=12"
+    }
+  ],
+  "failedProducts": [],
+  "finishedAt": "2026-11-12T09:03:10+09:00"
+}

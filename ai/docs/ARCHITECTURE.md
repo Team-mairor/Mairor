@@ -25,7 +25,7 @@ ai/
 │  │  │  ├─ parts/         부위마다 한 파일 (립 · 블러셔 · 눈썹 · 아이섀도 · 아이라인)
 │  │  │  └─ common/        부위 분석이 함께 쓰는 계산 (얼굴 지도 · 마스크 · 점 번호)
 │  │  ├─ template_guide/   LLM 없이 문장 틀로 만드는 가이드. 입구 guide_builder.py (개발 도구에서만 씀)
-│  │  └─ catalog/          화장품 카탈로그 수집기. 명령줄 도구(tools/collect_catalog.py)가 쓰고 서버 API는 아니다
+│  │  └─ catalog/          화장품 카탈로그 수집기. 명령줄 도구(tools/collect_catalog.py)와 수집 워커(worker.py)가 쓰고 서버 API는 아니다
 │  ├─ clients/             외부 호출: Claude(GMS), Gemini 구글 검색(GMS), S3 객체, BE 콜백·진행 알림, 레퍼런스 사진 받기
 │  ├─ schemas/             요청·응답 모델
 │  │  └─ common.py         CamelModel, ErrorResponse
@@ -155,6 +155,10 @@ tools/collect_catalog.py      list · collect · find · product · discover
   tasks/catalog/find·extract  상품 찾기 → 호수·이미지
   tasks/catalog/color·detail  색 계산. 사진 종류·칸 위치·차트 판독은 clients/llm(Claude)
   tasks/catalog/http.py       공식몰 요청: robots · 간격 · 차단 감지 · 공용 주소 제한
+
+python -m app.tasks.catalog.worker   수집 워커(Fargate). docs/CATALOG_WORKER.md
+  tasks/catalog/worker.py     큐 읽기(clients/queue, SQS) · 재시도 · 빌 때 종료
+  tasks/catalog/job_runner.py 작업 하나: 위 수집 → 업로드 → 적재·결과 알림(clients/catalog_backend, BE)
 ```
 
 ## 의존 방향

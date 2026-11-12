@@ -1,0 +1,12 @@
+{
+  "contractVersion": 1,
+  "jobId": "5f0c2a1e-8d3b-4c71-9a2e-1b7f3c9d4e10",
+  "status": "SEARCH_EMPTY",
+  "reason": "NOT_FOUND",
+  "resultFile": null,
+  "runId": null,
+  "importRunId": null,
+  "products": [],
+  "failedProducts": [],
+  "finishedAt": "2026-11-12T09:00:40+09:00"
+}

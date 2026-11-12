@@ -1,0 +1,35 @@
+# 화장품 수집 워커 이미지: SQS 수집 큐를 읽어 공식 홈에서 수집하고 S3·BE 로 넘긴다(S15P31A306-513).
+# AI 서버 이미지(ai/Dockerfile)와 나눈다. Chromium 이 수백 MB 라 서버 이미지에 넣지 않고, 수집은 서버 메모리를 쓰지 않는다.
+# 빌드는 레포 루트에서:  docker build -f ai/Dockerfile.collector -t mairor-collector .
+# 뺄 것은 옆의 Dockerfile.collector.dockerignore 에 있다. 실행 설정은 ai/docs/CATALOG_WORKER.md.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    PYTHONUNBUFFERED=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    HOME=/tmp \
+    CATALOG_RUN_DIR=/tmp/catalog-runs \
+    CATALOG_SITES_DIR=/tmp/catalog-sites
+WORKDIR /repo/ai
+
+# OpenCV 가 쓰는 시스템 라이브러리
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --no-create-home app
+
+# 의존성만 먼저 설치해 두면 코드만 바뀐 빌드는 이 층을 다시 쓴다. 개발용(dev)은 넣지 않는다
+COPY ai/pyproject.toml ai/uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev --no-install-project
+
+# Chromium 과 그 시스템 라이브러리. playwright 판은 uv.lock 이 정한다
+RUN .venv/bin/playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY shared/ /repo/shared/
+COPY ai/app/ app/
+
+USER app
+CMD [".venv/bin/python", "-m", "app.tasks.catalog.worker"]

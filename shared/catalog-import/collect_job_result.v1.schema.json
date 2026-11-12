@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "CollectedRef": {
+      "description": "결과 파일에 쓴 상품 한 건. BE는 이 값으로 적재된 제품을 찾는다.",
+      "properties": {
+        "itemKey": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Itemkey",
+          "type": "string"
+        },
+        "source": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        },
+        "sourceProductId": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Sourceproductid",
+          "type": "string"
+        },
+        "sourceUrl": {
+          "maxLength": 2000,
+          "pattern": "^https?://\\S+$",
+          "title": "Sourceurl",
+          "type": "string"
+        }
+      },
+      "required": [
+        "itemKey",
+        "source",
+        "sourceProductId",
+        "sourceUrl"
+      ],
+      "title": "CollectedRef",
+      "type": "object"
+    },
+    "FailedProduct": {
+      "properties": {
+        "url": {
+          "maxLength": 2000,
+          "pattern": "^https?://\\S+$",
+          "title": "Url",
+          "type": "string"
+        },
+        "code": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "code"
+      ],
+      "title": "FailedProduct",
+      "type": "object"
+    },
+    "JobStatus": {
+      "enum": [
+        "COLLECTED",
+        "SEARCH_EMPTY",
+        "UNSUPPORTED_SOURCE",
+        "BLOCKED",
+        "FAILED"
+      ],
+      "title": "JobStatus",
+      "type": "string"
+    }
+  },
+  "description": "작업 하나의 끝. COLLECTED는 결과 파일을 S3에 올리고 BE 적재가 끝까지 됐다는 뜻이다.\n\nCOLLECTED가 아니면 resultFile·runId·importRunId가 없고, reason에 사유 코드가 있다.",
+  "properties": {
+    "contractVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Contractversion",
+      "type": "integer"
+    },
+    "jobId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$",
+      "title": "Jobid",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/JobStatus"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "resultFile": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resultfile"
+    },
+    "runId": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runid"
+    },
+    "importRunId": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Importrunid"
+    },
+    "products": {
+      "items": {
+        "$ref": "#/$defs/CollectedRef"
+      },
+      "title": "Products",
+      "type": "array"
+    },
+    "failedProducts": {
+      "items": {
+        "$ref": "#/$defs/FailedProduct"
+      },
+      "title": "Failedproducts",
+      "type": "array"
+    },
+    "finishedAt": {
+      "format": "date-time",
+      "title": "Finishedat",
+      "type": "string"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "jobId",
+    "status",
+    "finishedAt"
+  ],
+  "title": "CollectJobResult",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collect_job_result.v1.schema.json"
+}

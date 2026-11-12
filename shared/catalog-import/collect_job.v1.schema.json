@@ -1,0 +1,78 @@
+{
+  "description": "큐 메시지 하나. 이름으로 찾거나(name) 상품 주소로 다시 수집한다(url). 둘 중 하나만 준다.",
+  "properties": {
+    "contractVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Contractversion",
+      "type": "integer"
+    },
+    "jobId": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,63}$",
+      "title": "Jobid",
+      "type": "string"
+    },
+    "brand": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Brand",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "pattern": "^https?://\\S+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    },
+    "typeHint": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Z][A-Z0-9_]{0,49}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Typehint"
+    },
+    "requestedAt": {
+      "format": "date-time",
+      "title": "Requestedat",
+      "type": "string"
+    }
+  },
+  "required": [
+    "contractVersion",
+    "jobId",
+    "brand",
+    "requestedAt"
+  ],
+  "title": "CollectJob",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collect_job.v1.schema.json"
+}

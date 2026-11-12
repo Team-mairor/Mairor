@@ -150,6 +150,7 @@ uv run python tools/review_catalog_colors.py report <실행 결과 파일들> --
 - **운영 서버에서 자동 탐색이나 `--render`를 켜기 전에 네트워크 쪽 차단이 먼저 있어야 합니다.** 코드는 주소를 확인한 뒤 연결하므로 그 사이에 DNS 응답이 바뀌는 경우를 막지 못하고, 브라우저 안의 리다이렉트와 하위 요청의 리다이렉트는 이미 나간 뒤에야 알 수 있습니다. 실행 환경에서 인스턴스 메타데이터를 IMDSv2·hop 한도 1로 두어 컨테이너에서 닿지 않게 하고, 나가는 트래픽 규칙으로 내부망(10.0.0.0/16)을 막습니다.
 - 색 품질 기준값(BE `catalog.color.min-quality.*`, `label-in-image-enabled`)은 눈 확인 표로 정합니다. `sheet`가 칸마다 근거 사진을 받아 칸 주변·칸·계산한 색을 나란히 둔 HTML을 만들고, 브라우저에서 맞음·틀림을 고른 CSV로 `report`가 출처·연결 근거별로 정확도 95% 이상인 가장 낮은 임계값을 추천합니다.
 - 모델 호출에는 `GMS_API_KEY`가 필요합니다. 네트워크와 모델을 쓰지 않는 리포트 도구는 `tools/report_catalog_colors.py`입니다.
+- BE가 SQS에 넣은 수집 요청은 수집 워커(`python -m app.tasks.catalog.worker`, 이미지 `Dockerfile.collector`)가 Fargate에서 받아 수집 → S3 업로드 → BE 적재 → 결과 알림까지 합니다. 설정과 처리 규칙은 [docs/CATALOG_WORKER.md](docs/CATALOG_WORKER.md)에 있습니다.
 
 ## 환경변수
 

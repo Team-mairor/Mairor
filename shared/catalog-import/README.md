@@ -61,6 +61,37 @@
 | `evidence[]` | 칸마다 `{evidenceKey, imageUrl, imageHash, imageKind, bbox, method, methodVersion, whiteBalance, scores}` |
 | 보관 | 지우지 않는다. 근거 조회·재처리가 이 파일을 읽는다 |
 
+## 수집 작업 (`CollectJob` · `CollectJobResult`)
+
+BE 가 수집 큐(SQS)에 작업 메시지(`CollectJob`)를 넣으면, 수집 워커가 수집 → 결과 파일 S3 업로드 → BE `from-file` 적재(`finished=true` 까지)를 마친 뒤 작업 결과(`CollectJobResult`)를 BE 내부 API 로 보낸다(S15P31A306-513). BE 는 결과를 받아 수집 요청의 상태를 바꾼다(S15P31A306-517·518).
+
+`CollectJob`(큐 메시지 본문):
+
+| 필드 | 뜻 | 필수 |
+| --- | --- | --- |
+| `contractVersion` | 지금 `1` | ✅ |
+| `jobId` | BE 가 정한 작업 ID(영문·숫자·`-`, 64자까지). **같은 jobId 는 몇 번 받아도 한 번만 반영된다** | ✅ |
+| `brand` | 브랜드 이름. 목록에 없는 브랜드는 워커가 공식 홈을 찾는다 | ✅ |
+| `name` · `url` | 제품 이름으로 찾거나(`name`), 상품 상세 주소로 다시 수집한다(`url`). **둘 중 하나만** 준다 | ✅ |
+| `typeHint` | 소분류 코드. 주면 모델 분류를 하지 않는다 | |
+| `requestedAt` | 요청 시각(시간대 포함) | ✅ |
+
+`CollectJobResult`(BE 내부 API `POST /v1/internal/catalog/collect-jobs/{jobId}/result` 본문, `X-Internal-Token`):
+
+| 필드 | 뜻 |
+| --- | --- |
+| `status` | `COLLECTED`(수집·적재 끝) · `SEARCH_EMPTY`(이름으로 찾은 상품 없음) · `UNSUPPORTED_SOURCE`(수집할 공식 홈이 없거나 꺼졌거나 사이트 종류를 모름) · `BLOCKED`(봇 차단, 우회하지 않음) · `FAILED`(상품을 하나도 수집하지 못했거나 재시도를 다 썼음) |
+| `reason` | `COLLECTED` 가 아닐 때의 사유 코드(예: `NOT_FOUND`, `SITE_DISABLED`, `HTTP_ERROR`). 모르는 코드는 기록만 한다 |
+| `resultFile` · `runId` · `importRunId` | `COLLECTED` 일 때만. 결과 파일 이름, 결과 파일의 runId, BE 적재 실행 ID |
+| `products[]` | 결과 파일에 쓴 상품 `{itemKey, source, sourceProductId, sourceUrl}`. `COLLECTED` 면 하나 이상 |
+| `failedProducts[]` | 수집하지 못한 상품 `{url, code}` |
+| `finishedAt` | 작업이 끝난 시각 |
+
+- 이름으로 찾을 때 후보가 하나로 정해지지 않으면 후보를 최대 3개까지 수집한다. 어느 제품이 요청과 맞는지는 BE 가 정한다.
+- 같은 결과가 두 번 올 수 있다(콜백 응답 유실 뒤 재시도). BE 는 jobId 로 한 번만 반영한다.
+- 일시 오류는 결과를 보내지 않고 큐 재시도에 맡긴다. 재시도를 다 쓰면 `FAILED` 를 보낸다.
+- JSON Schema(`collect_job.v1.schema.json` · `collect_job_result.v1.schema.json`)는 `ai/app/tasks/catalog/jobs.py` 에서 같은 도구로 만든다. `name`·`url` 중 하나, 상태와 적재 결과의 짝 같은 규칙은 모델과 BE 검증이 본다.
+
 ## 샘플
 
 `samples/` 의 JSON 은 모두 **테스트용 예시이며 실제로 수집한 값이 아니다.** 수집기·적재 코드의 테스트가 같은 파일을 쓴다.
@@ -72,6 +103,8 @@
 | `samples/etude_option_image.json` | 호수마다 사진이 있어 `shadeLink=OPTION_IMAGE` | 적재: 자동 사용 판정 통과 경로 |
 | `samples/romand_named_palette.json` | 칸 이름이 있는 팔레트(`nameSource` `SITE_TEXT`·`IMAGE_PRINT`)와 색을 못 구한 칸 | 칸 이름 근거 저장, 색 없는 칸 |
 | `samples/invalid_incomplete_source.json` | 일부러 깨뜨린 건: `sourceProductId` 가 없고 `hex` 형식이 틀리다 | 적재: 그 건만 `INVALID` 로 기록, 나머지는 계속 |
+| `samples/collect_job_search.json` · `collect_job_product.json` | 이름으로 찾는 작업, 상품 주소로 다시 수집하는 작업 | 수집 워커 입력 |
+| `samples/collect_job_result_collected.json` · `collect_job_result_search_empty.json` | 수집·적재가 끝난 결과, 찾은 상품이 없는 결과 | BE 수집 요청 상태 갱신 |
 
 JSON Schema(`collected_product.v1.schema.json`)는 수집기 모델(`ai/app/tasks/catalog/contract.py`)에서 만든다. 모델을 바꾸면 `cd ai && uv run python tools/export_catalog_schema.py` 로 파일을 다시 만든다. 수집기 테스트는 이 파일이 모델과 같은지, 샘플이 통과하는지(깨뜨린 건은 실패하는지)를 본다. 스키마는 필드 모양만 검사하고, 칸 이름과 근거의 일치·`evidenceKey` 꼴 같은 건 간 규칙은 모델과 백엔드 검증이 본다.
 

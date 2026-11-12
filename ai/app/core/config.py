@@ -67,6 +67,18 @@ class Settings(BaseSettings):
     catalog_sites_s3_region: str = "ap-northeast-2"
     catalog_site_ttl_days: int = Field(default=30, gt=0)
     catalog_site_negative_ttl_days: int = Field(default=7, gt=0)
+    catalog_backend_url: str | None = None
+    catalog_internal_token: SecretStr | None = None
+    catalog_backend_timeout_seconds: float = Field(default=60, gt=0)
+    catalog_import_limit: int = Field(default=500, ge=1, le=2000)
+    catalog_job_max_candidates: int = Field(default=3, ge=1, le=10)
+    catalog_queue_url: str | None = None
+    catalog_queue_region: str = "ap-northeast-2"
+    catalog_worker_wait_seconds: int = Field(default=20, ge=0, le=20)
+    catalog_worker_visibility_seconds: int = Field(default=900, ge=60, le=43200)
+    catalog_worker_retry_delay_seconds: int = Field(default=60, ge=0, le=43200)
+    catalog_worker_max_receives: int = Field(default=3, ge=1)
+    catalog_worker_idle_exit_seconds: float = Field(default=0, ge=0)
     catalog_llm_model: str = "claude-sonnet-4-6"
     catalog_llm_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
 
