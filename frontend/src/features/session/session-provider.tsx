@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { clearFacePhoto } from "@/features/face";
+import { clearFacePhoto, moveFacePhoto } from "@/features/face";
 import type { PouchItem } from "@/features/pouch";
 import type { VideoItem } from "@/features/video";
 import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/lib/api";
@@ -237,8 +237,13 @@ export function SessionProvider({
   }, []);
 
   const startRun = useCallback((input: StartRunInput) => {
-    clearFacePhoto();
+    const previousRunId = activeRunId.current;
     const run = createRun(input, crypto.randomUUID());
+    if (input.kind === "guide" && input.faceRegistrationId) {
+      moveFacePhoto(previousRunId, run.id);
+    } else {
+      clearFacePhoto();
+    }
     activeRunId.current = run.id;
     setState((prev) => ({ ...prev, run }));
   }, []);

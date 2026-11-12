@@ -44,7 +44,12 @@ export const EMPTY_RUN: RunState = {
 };
 
 export type StartRunInput =
-  | { kind: "guide"; guideId: string; replay?: "guide" | "report" }
+  | {
+      kind: "guide";
+      guideId: string;
+      replay?: "guide" | "report";
+      faceRegistrationId?: string | null;
+    }
   | {
       kind: "sample";
       picked?: VideoItem;
@@ -65,11 +70,14 @@ export function faceReady(run: RunState) {
 }
 
 export function createRun(input: StartRunInput, id: string): RunState {
+  const faceRegistrationId = input.kind === "guide" ? (input.faceRegistrationId ?? null) : null;
   return {
     ...EMPTY_RUN,
     id,
     mode: input.kind,
     guideId: input.kind === "guide" ? input.guideId.toLowerCase() : null,
+    faceReg: faceRegistrationId !== null,
+    faceRegistrationId,
     replay: input.replay ?? (input.kind === "guide" ? "guide" : null),
     picked: input.kind === "sample" ? (input.picked ?? null) : null,
     jobId: input.kind === "sample" ? (input.jobId ?? null) : null,

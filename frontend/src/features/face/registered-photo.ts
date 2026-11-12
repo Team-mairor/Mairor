@@ -5,6 +5,10 @@ export function saveFacePhoto(runId: string, photo: Blob) {
   registered = { runId, photo };
 }
 
+export function moveFacePhoto(fromRunId: string, toRunId: string) {
+  if (registered?.runId === fromRunId) registered = { ...registered, runId: toRunId };
+}
+
 export function facePhoto(runId: string): Blob | null {
   return registered?.runId === runId ? registered.photo : null;
 }

@@ -156,6 +156,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
 
   const live = useAnalysisJob(jobId);
   const job = jobId ? live.job : null;
+  const analysisVideoId = job?.videoId ?? null;
   const pct = jobId ? live.pct : demoPct;
   const fail = jobId ? jobFail(live.error, job) : demoFail;
   const review: Review = job ? jobReview(job) : demoReview;
@@ -177,15 +178,14 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     return () => clearInterval(t);
   }, [running, sample]);
 
-  // 4%가 되면 얼굴 등록 모달을 한 번 띄운다. 실패·검수 안내 중에는 띄우지 않는다.
-  // 실제 분석(jobId)은 오래 걸려 사용자가 기다리지 않으므로, 등록은 가이드를 시작할 때 받는다
+  // 분석 중 얼굴 등록을 마쳐 두면 승인된 가이드 실행에서 그대로 사용할 수 있다.
   useEffect(() => {
-    if (pct >= 4 && !jobId && !faceShown && !faceOk && !fail && !review) {
+    if (pct >= 4 && !faceShown && !faceOk && !fail && !review && (!jobId || analysisVideoId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 진행률이 문턱을 넘는 순간 한 번만
       setFaceShown(true);
       setFaceModal(true);
     }
-  }, [pct, jobId, faceShown, faceOk, fail, review]);
+  }, [pct, jobId, analysisVideoId, faceShown, faceOk, fail, review]);
 
   // 등록 중이 아니면 추적을 쉬게 한다. 카메라는 켜 둬서 미리보기에서 바로 다시 돌린다
   // 등록 모달이 닫히면 프레임을 받는 곳이 없어 추적은 쉬고, 카메라는 미리보기에서 이어 쓴다.
@@ -319,9 +319,16 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   let ctaGo: (() => void) | null = null;
   if (approvedGuide) {
     ctaLabel = "가이드로 따라 하기";
-    // 여기서 실행을 바꾸면 실행 경로 검사가 아직 남은 ?jobId= 주소에 guideId를 붙여 덮어쓴다.
-    // 가이드 주소로만 옮기고, 새 가이드 실행은 직접 들어온 가이드 주소처럼 RunGuideProvider가 시작한다
-    ctaGo = () => router.push(runHref("/loading", approvedGuide));
+    // 분석 중 등록한 얼굴 정보를 새 가이드 실행으로 이어서 촬영을 반복하지 않는다.
+    ctaGo = () => {
+      startRun({
+        kind: "guide",
+        guideId: approvedGuide,
+        replay: "guide",
+        faceRegistrationId: run.faceRegistrationId,
+      });
+      router.push(runHref("/loading", approvedGuide));
+    };
   } else if (review === "pending") {
     ctaLabel = "홈으로";
     ctaGo = () => {
@@ -481,11 +488,16 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             ["가이드 준비", guideState, guideOk],
             [
               "얼굴 인식 준비",
-              faceOk ? "완료" : faceModal ? "등록 중" : jobId ? "가이드 시작 때 등록" : "등록 필요",
+              faceOk ? "완료" : faceModal ? "등록 중" : jobId ? "지금 등록 가능" : "등록 필요",
               faceOk,
             ],
           ]}
         />
+        {jobId && running && (
+          <PillButton variant="line" size="hero" onClick={() => setPouchModal(true)}>
+            내 파우치 확인 / 추가
+          </PillButton>
+        )}
         {fail ? (
           <div className="flex gap-3">
             {notice?.retry && (
@@ -530,11 +542,23 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           onLater={() => {
             setFaceModal(false);
             camera.stop();
+            if (jobId && running) setPouchModal(true);
           }}
           onDone={async () => {
-            // 실제 가이드는 찍은 사진을 서버에 등록한다. 실패하면 등록 창이 오류를 보여 준다
+            // 실제 영상은 찍은 사진을 분석 중 등록한다. 실패하면 등록 창이 오류를 보여 준다.
             let faceRegistrationId: string | null = null;
-            if (run.mode === "guide") {
+            if (jobId && analysisVideoId) {
+              const photo = facePhoto(run.id);
+              if (!photo) throw new Error("얼굴 사진이 없습니다");
+              const metadata = faceRegistrationRequest(analysisVideoId, null);
+              faceRegistrationId = (await registerFace(photo, metadata)).faceRegistrationId;
+              if (!isCurrentRun(run.id)) {
+                await deleteFaceRegistration(faceRegistrationId).catch((e: unknown) =>
+                  console.warn("얼굴 등록 정리 실패", e),
+                );
+                return;
+              }
+            } else if (run.mode === "guide") {
               const photo = facePhoto(run.id);
               if (load.status !== "ready" || !photo) throw new Error("가이드나 얼굴 사진이 없다");
               const metadata = faceRegistrationRequest(load.guide.videoId, load.guide.guideId);
@@ -548,7 +572,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             }
             updateRun({ faceReg: true, faceRegistrationId }, run.id);
             setFaceModal(false);
-            if (pct < 100 || replay) setPouchModal(true);
+            if (jobId || pct < 100 || replay) setPouchModal(true);
           }}
         />
       )}

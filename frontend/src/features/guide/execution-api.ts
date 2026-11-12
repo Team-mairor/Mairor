@@ -20,7 +20,10 @@ export const FACE_NOTICE_VERSION = "v1";
 const EXECUTIONS = "/v1/users/me/executions";
 
 /** 등록 창은 네 조건을 모두 통과해야 찍으므로 checks는 모두 true. 화장 감지는 FE에 없어 false */
-export function faceRegistrationRequest(videoId: string, guideId: string): FaceRegistrationRequest {
+export function faceRegistrationRequest(
+  videoId: string,
+  guideId: string | null,
+): FaceRegistrationRequest {
   return {
     videoId,
     guideId,

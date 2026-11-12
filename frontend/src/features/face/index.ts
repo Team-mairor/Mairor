@@ -25,6 +25,7 @@ export {
   faceBox,
   clearFacePhoto,
   facePhoto,
+  moveFacePhoto,
   MIN_DISTANCE_RATIO,
   NO_CHECK,
   saveFacePhoto,
