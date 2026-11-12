@@ -99,5 +99,13 @@ class SeekExtractionTests(unittest.TestCase):
             )
 
 
+class JpegStreamTests(unittest.TestCase):
+    def test_jpeg_whose_start_marker_is_split_across_reads_is_kept(self):
+        # 앞 사진이 64KiB 읽기 조각의 마지막 바이트 바로 앞에서 끝나, 다음 사진의 시작 표시(FF D8)가 두 조각에 걸친다
+        first = b"\xff\xd8" + b"\x00" * (65536 - 5) + b"\xff\xd9"
+        second = b"\xff\xd8" + b"\x01" * 10 + b"\xff\xd9"
+        self.assertEqual(list(extract.read_jpegs(io.BytesIO(first + second))), [first, second])
+
+
 if __name__ == "__main__":
     unittest.main()

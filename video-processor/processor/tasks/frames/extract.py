@@ -41,7 +41,8 @@ def read_jpegs(stream):
         while True:
             s = buffer.find(SOI)
             if s == -1:
-                buffer.clear()
+                # 끝 바이트는 다음 읽기와 이어지는 SOI의 앞 바이트일 수 있다
+                del buffer[:-1]
                 break
             e = buffer.find(EOI, s + 2)
             if e == -1:
