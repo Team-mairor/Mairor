@@ -7,6 +7,9 @@
 3. AI 사진 구간(tasks/frames/windows.py)의 프레임만 1080p에서 여러 프로세스로 뽑아 여러 스레드로 S3에 올린다
    미리 열어 둔 S3 연결은 업로드가 이어 쓰므로 첫 사진을 올리기 직전에 연결 유지를 멈춘다.
 4. 요청 JSON을 조립·검증해 올린다(tasks/guide_request/publish.py)
+
+on_stage(단계)는 BE 진행 단계(LOADING_VIDEO → EXTRACTING_STEPS → SEGMENTING)에 들어설 때 부른다.
+S3에는 s3_prefix(기본 videos/{videoId}) 아래에 올린다.
 """
 
 import json
@@ -37,9 +40,12 @@ logger = logging.getLogger("VideoProcessor")
 def run_video_pipeline(video_url, num_workers=6, *, s3_client=None, video_loader=None, step_extractor=None,
                        gap_checker=None, caption_reader=None,
                        decoder_factory=ProcessPoolExecutor, model=DEFAULT_MODEL, work_dir=None, artifact_id=None,
-                       low_resolution=True, step_check=True):
+                       low_resolution=True, step_check=True, s3_prefix=None, on_stage=None):
     source_video_id = extract_video_id(video_url)
     video_id = artifact_id or source_video_id
+    key_prefix = s3_prefix or f"videos/{video_id}"
+    stage = on_stage or (lambda _: None)
+    stage("LOADING_VIDEO")
     started = time.perf_counter()
     work_dir = Path(work_dir) if work_dir is not None else TEMP_DIR
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -47,6 +53,7 @@ def run_video_pipeline(video_url, num_workers=6, *, s3_client=None, video_loader
                             start_jitter=GMS_START_JITTER, max_in_flight=GMS_MAX_IN_FLIGHT)
     metrics = {"mode": "video", "lowResolution": low_resolution, "stepCheck": step_check,
                "requestedModel": model, "sourceVideoId": source_video_id, "artifactId": video_id,
+               "s3Prefix": key_prefix,
                "startedAtUtc": datetime.now(timezone.utc).isoformat(), "workers": num_workers}
     s3 = s3_client or connect()
     stop_warmer = start_connection_warmer(s3, CREDS["s3_bucket"])
@@ -54,6 +61,7 @@ def run_video_pipeline(video_url, num_workers=6, *, s3_client=None, video_loader
     side_pool, side = ThreadPoolExecutor(max_workers=2), {}
 
     def on_download(lowres, audio, duration):
+        stage("EXTRACTING_STEPS")
         if step_check:
             side["box"] = side_pool.submit(locate_caption, lowres, duration, api_key=CREDS["gms_api_key"],
                                            model=model, recorder=recorder, output_dir=caption_dir)
@@ -96,6 +104,7 @@ def run_video_pipeline(video_url, num_workers=6, *, s3_client=None, video_loader
         guide_steps = normalize_steps(steps)
 
         # 3. AI 사진 구간만 뽑아 올린다. 일꾼이 끝내는 대로 바로 올린다.
+        stage("SEGMENTING")
         frames = []
         jobs = plan_frame_jobs(guide_steps, meta, num_workers)
 
@@ -106,7 +115,7 @@ def run_video_pipeline(video_url, num_workers=6, *, s3_client=None, video_loader
         with decoder_factory(max_workers=max(1, len(jobs))) as decoders, \
                 ThreadPoolExecutor(max_workers=UPLOAD_CONNECTIONS) as uploads:
             decoded = [decoders.submit(decode_frames_worker, (f"job{i}", job, str(video), meta,
-                                                              CREDS["s3_bucket"], CREDS["aws_region"], video_id))
+                                                              CREDS["s3_bucket"], CREDS["aws_region"], key_prefix))
                        for i, job in enumerate(jobs)]
             pending = []
             for future in as_completed(decoded):
@@ -125,7 +134,8 @@ def run_video_pipeline(video_url, num_workers=6, *, s3_client=None, video_loader
         side_pool.shutdown(wait=False)
 
     # 4. 요청 JSON 조립·검증·업로드
-    request, request_path, s3_url = publish_guide_request(video_id, meta, guide_steps, frames, s3, work_dir)
+    request, request_path, s3_url = publish_guide_request(video_id, meta, guide_steps, frames, s3, work_dir,
+                                                          key_prefix)
     total = time.perf_counter() - started
     metrics.update(
         totalSeconds=total, videoDurationSeconds=meta["durationSeconds"], steps=len(guide_steps),

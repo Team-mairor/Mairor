@@ -53,7 +53,7 @@ class VideoPipelineTests(unittest.TestCase):
         expected = sorted({n for s in guide for n in frame_numbers(s, 30, 40)})
         items = request["frames"]["items"]
         self.assertEqual([f["frameIndex"] for f in items], expected)
-        self.assertTrue(all(f["stepId"] in (None, guide[0]["stepId"], guide[2]["stepId"]) for f in items))
+        self.assertTrue(all(f["stepId"] in (None, *(s["stepId"] for s in guide)) for f in items))
         self.assertTrue(all(f"X-Amz-Expires={7 * 24 * 3600}&X-Amz-Signature=" in f["url"] for f in items))
 
     def test_step_check_extends_and_merges_renamed_neighbours(self):
@@ -128,6 +128,35 @@ class VideoPipelineTests(unittest.TestCase):
                 )
         self.assertEqual(calls[0], "stop")
         self.assertGreater(calls.count("upload"), 1)
+
+    def test_stages_are_reported_in_order_through_the_real_download_hook(self):
+        """EXTRACTING_STEPS는 360p·원음을 받았을 때(on_download) 알린다. 실제 단계 찾기 자리를 거쳐 보는지 본다."""
+        from tests.local_s3 import LocalS3
+        from processor.services.process_video import run_video_pipeline
+
+        stages = []
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            video = tmp / "video.mp4"
+            subprocess.run(
+                [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30",
+                 "-t", "25", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(video)],
+                check=True, capture_output=True,
+            )
+            steps = to_steps([row("00:10", "00:20")], 0, 0)
+
+            def extract(url, work_dir, *, on_download=None, **_):
+                on_download(video, video, 25.0)
+                return {"steps": steps, "lowresVideo": video, "report": {}}
+
+            with mock.patch("processor.services.process_video.extract_steps", extract), \
+                    mock.patch("processor.services.process_video.transcribe", return_value=[]):
+                run_video_pipeline(
+                    "https://www.youtube.com/watch?v=test0000000", 2, s3_client=LocalS3(tmp / "s3"),
+                    video_loader=lambda: (video, 0, video.stat().st_size), decoder_factory=ThreadPoolExecutor,
+                    work_dir=tmp / "work", step_check=False, on_stage=stages.append,
+                )
+        self.assertEqual(stages, ["LOADING_VIDEO", "EXTRACTING_STEPS", "SEGMENTING"])
 
     def test_tool_step_with_the_same_misread_name_is_renamed_too(self):
         from processor.tasks.find_steps.caption_check import apply_captions

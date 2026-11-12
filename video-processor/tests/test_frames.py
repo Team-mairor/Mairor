@@ -28,7 +28,7 @@ class FrameWindowTests(unittest.TestCase):
         liner = {"makeup": "eyeliner", "startSeconds": 10, "endSeconds": 20}
         self.assertEqual(photo_ranges_ms(liner), [(8000, 11000), (19000, 24000)])
         lip = {"makeup": "lip", "startSeconds": 10, "endSeconds": 20}
-        self.assertEqual(photo_ranges_ms(lip), [(19000, 22000)])
+        self.assertEqual(photo_ranges_ms(lip), [(8000, 11000), (19000, 22000)])
         for makeup in ("foundation", "highlight", "contour", "mascara", "other"):
             self.assertEqual(photo_ranges_ms({"makeup": makeup, "startSeconds": 10, "endSeconds": 20}), [])
 
@@ -87,11 +87,11 @@ class SeekExtractionTests(unittest.TestCase):
         planned = [0, 6, 12, 30, 36, 42, 48, 72, 78]
         meta = {"fps": FPS, "width": 64, "height": 64, "durationSeconds": FRAMES / FPS}
         result = extract.decode_frames_worker(
-            ("t", [{"stepId": "s", "frames": planned}], str(self.video), meta, "bucket", "region", "vid")
+            ("t", [{"stepId": "s", "frames": planned}], str(self.video), meta, "bucket", "region", "videos/vid/jobs/j1")
         )
         self.assertEqual([f["frameNumber"] for f in result["frames"]], planned)
         self.assertEqual(result["frames"][3]["timestampMs"], 500)
-        self.assertEqual(result["frames"][3]["key"], "videos/vid/frames/000030.jpg")
+        self.assertEqual(result["frames"][3]["key"], "videos/vid/jobs/j1/frames/000030.jpg")
         for frame in result["frames"]:
             self.assertAlmostEqual(
                 brightness(frame["body"]), self.reference(frame["frameNumber"]), delta=1.0,

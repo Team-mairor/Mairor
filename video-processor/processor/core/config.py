@@ -1,4 +1,4 @@
-"""인증값, S3 업로드·GMS 호출 설정."""
+"""인증값, BE 노트북 API 주소, S3 업로드·GMS 호출 설정."""
 
 from pathlib import Path
 
@@ -14,9 +14,12 @@ def load_credentials():
     creds = {
         "aws_region": "ap-northeast-2",
         "s3_bucket": "mairor-test-299284685316-ap-northeast-2-an",
+        "s3_prod_bucket": None,
         "aws_access_key": None,
         "aws_secret_key": None,
         "gms_api_key": None,
+        "processor_api_url": "https://mairor.co.kr/api/v1/internal/processor",
+        "processor_api_token": None,
     }
 
     env_candidates = [
@@ -43,12 +46,18 @@ def load_credentials():
                     creds["aws_region"] = v
                 elif k == "S3_BUCKET":
                     creds["s3_bucket"] = v
+                elif k == "S3_PROD_BUCKET":
+                    creds["s3_prod_bucket"] = v
                 elif k == "AWS_ACCESS_KEY_ID":
                     creds["aws_access_key"] = v
                 elif k == "AWS_SECRET_ACCESS_KEY":
                     creds["aws_secret_key"] = v
                 elif k == "GMS_API_KEY":
                     creds["gms_api_key"] = v
+                elif k == "PROCESSOR_API_URL":
+                    creds["processor_api_url"] = v.rstrip("/")
+                elif k == "PROCESSOR_API_TOKEN":
+                    creds["processor_api_token"] = v
 
     return creds
 

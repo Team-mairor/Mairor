@@ -12,11 +12,19 @@ from processor.core.paths import GUIDE_REQUEST_SCHEMA
 logger = logging.getLogger("VideoProcessor")
 
 
-def publish_guide_request(video_id, video_meta, guide_steps, frames, s3, work_dir):
+def request_key(key_prefix):
+    """요청 JSON의 S3 key. BE에 완료를 알릴 때도 이 key를 보낸다."""
+    return f"{key_prefix}/guide_job_request.json"
+
+
+def publish_guide_request(video_id, video_meta, guide_steps, frames, s3, work_dir, key_prefix=None):
     """AI 서버 v2 요청 JSON을 조립·검증하고 로컬과 S3에 남긴다. 검증에 실패하면 S3에 올리지 않는다.
 
-    사진 주소는 FRAME_URL_TTL_SECONDS 동안 쓸 수 있는 서명 주소다. AI 서버는 주소로 그냥 내려받고 버킷은 공개가 아니다.
+    S3에는 key_prefix(기본 videos/{video_id}) 아래에 올린다. 사진 주소는 FRAME_URL_TTL_SECONDS 동안 쓸 수 있는
+    서명 주소다. AI 서버는 주소로 그냥 내려받고 버킷은 공개가 아니다. 프레임마다 S3 key도 넣는다.
+    연결 모드에서는 BE가 key로 서명한 주소로 url을 바꿔 AI에 보낸다.
     """
+    key_prefix = key_prefix or f"videos/{video_id}"
     logger.info(">>> [STEP 4] AI 서버 v2 규격(guide_job_request.v2.schema.json) 조립 및 검증...")
     schema = json.loads(GUIDE_REQUEST_SCHEMA.read_text(encoding="utf-8"))
     guide_job_request = {
@@ -40,6 +48,7 @@ def publish_guide_request(video_id, video_meta, guide_steps, frames, s3, work_di
                     "stepId": f["stepId"],
                     "url": s3.generate_presigned_url("get_object", Params={"Bucket": CREDS["s3_bucket"], "Key": f["key"]},
                                                      ExpiresIn=FRAME_URL_TTL_SECONDS),
+                    "key": f["key"],
                     "width": f["width"],
                     "height": f["height"]
                 }
@@ -61,8 +70,8 @@ def publish_guide_request(video_id, video_meta, guide_steps, frames, s3, work_di
         raise
     logger.info("[STEP 4 검증 성공] AI 서버 가이드 요청 v2 스키마 100% 통과 (VALID)!")
 
-    s3_req_key = f"videos/{video_id}/guide_job_request.json"
-    s3_input_key = f"videos/{video_id}/guide_input.json"
+    s3_req_key = request_key(key_prefix)
+    s3_input_key = f"{key_prefix}/guide_input.json"
     s3.put_object(Bucket=CREDS["s3_bucket"], Key=s3_req_key, Body=req_json_str.encode("utf-8"),
                   ContentType="application/json")
     s3.put_object(Bucket=CREDS["s3_bucket"], Key=s3_input_key,

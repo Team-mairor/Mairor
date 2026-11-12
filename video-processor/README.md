@@ -2,18 +2,21 @@
 
 유튜브 메이크업 영상에서 **단계 목록(`guideInput`)**과 **AI가 영역 분석에 쓰는 프레임**을 뽑아 S3에 올리고,
 AI 서버 가이드 요청 JSON을 게시하는 노트북용 처리기입니다. 운영 EC2는 유튜브를 받을 수 없어 이 처리기가 대신 받습니다.
+`--serve`로 띄우면 BE 분석 작업을 가져가 처리하고 결과를 알립니다([BE 연결 모드](#be-연결-모드---serve)).
 
 ## 폴더 구조
 
 ```text
 video-processor/
-├── pipeline.py                  실행 입구 (인자만 받아 services/process_video 실행)
+├── pipeline.py                  실행 입구 (직접 실행은 services/process_video, --serve는 worker/poll_jobs)
 ├── processor/
 │   ├── core/                    경로(paths.py), 인증·업로드 설정(config.py)
-│   ├── clients/                 바깥 서비스: GMS(gms.py), 유튜브 받기(youtube.py), S3(s3.py)
+│   ├── clients/                 바깥 서비스: GMS(gms.py), 유튜브 받기(youtube.py), S3(s3.py), BE 노트북 API(backend.py)
 │   ├── prompts/                 GMS 질문 글 (.txt)
 │   ├── schemas/                 GMS 답 JSON 모양(gms_answers.py), 화장품 종류·부위 사전(makeup.py)
-│   ├── services/                전체 순서(process_video.py)
+│   ├── worker/                  BE 연결 모드 입구: 작업 끌어오기 반복(poll_jobs.py)
+│   ├── services/                영상 한 편 처리 순서(process_video.py)
+│   │   └── backend_job/         가져온 작업 하나 처리(service.py), 진행 알림(progress.py), 실패 코드(failure.py)
 │   └── tasks/
 │       ├── find_steps/          단계 찾기: 조각 자르기·GMS에 묻기·답을 단계로·묶기 규칙, 앞뒤 확인, 글자 다시 읽기
 │       ├── frames/              AI 사진 구간 계산(windows.py), 프레임 뽑기(extract.py)
@@ -23,7 +26,7 @@ video-processor/
 └── docs/adr/
 ```
 
-의존은 `services` → `tasks` → `clients`·`schemas`·`core` 한 방향입니다.
+의존은 `worker` → `services` → `tasks` → `clients`·`schemas`·`core` 한 방향입니다.
 
 ## 처리 흐름
 
@@ -99,7 +102,7 @@ video-processor/
 
 사진은 AI가 영역 분석에 쓰는 구간만 뽑습니다(저장소 `docs/requests/2026-11-09-hyeonsoo-hyeongjun-processor-frame-rule.md` 2안).
 분석하는 단계(립·블러셔·눈썹·섀도·아이라인)마다 [시작 − 직전 창 − 1초, 시작 + 1초]와
-[끝 − 1초, 끝 + 직후 창 + 1초]입니다(창: 립 −/1초, 블러셔 1/1, 눈썹 1/2, 섀도 2/1, 아이라인 1/3, 1초는 AI 사진 판정 여유).
+[끝 − 1초, 끝 + 직후 창 + 1초]입니다(창: 립 1/1초, 블러셔 1/1, 눈썹 1/2, 섀도 2/1, 아이라인 1/3, 1초는 AI 사진 판정 여유).
 구간 안은 BE `FramePlan`과 같은 번호 규칙(`n % round(fps/10) == 0`)으로 뽑고, 겹친 번호는 한 번만 뽑습니다.
 나온 장수가 계획과 다르면 실패시킵니다. 사진의 `stepId`는 그 시각을 포함하는 단계이고 없으면 `null`입니다.
 
@@ -125,9 +128,12 @@ cp .env.example .env
 ```ini
 GMS_API_KEY=S15P32A306-...
 AWS_REGION=ap-northeast-2
-S3_BUCKET=mairor-test-...
+S3_BUCKET=mairor-test-...                                          # --url 실험
+S3_PROD_BUCKET=mairor-prod-media                                   # --serve 만
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
+PROCESSOR_API_URL=https://mairor.co.kr/api/v1/internal/processor   # --serve 만
+PROCESSOR_API_TOKEN=...                                            # --serve 만, Parameter Store /mairor/prod/PROCESSOR_API_TOKEN
 ```
 
 ## 실행·테스트·채점
@@ -140,10 +146,44 @@ python -m unittest discover -s tests -t .
 python -m tools.score_answer_key tests/golden/answer_key_VxAXD6PP76I.json temp/run1 --detail
 ```
 
+## BE 연결 모드 (`--serve`)
+
+```bash
+python pipeline.py --serve                    # 5초마다 작업을 가져간다. Ctrl+C로 멈춘다
+```
+
+계약은 저장소 `docs/references/processor-api.md`(MR !112)입니다. claim → 처리 → complete(요청 JSON key) 또는 fail.
+
+- **S3**: `.env`의 `S3_PROD_BUCKET`(운영 `mairor-prod-media`)에서 claim의 `s3Prefix`(`videos/{videoId}/jobs/{jobId}`)
+  아래에 올립니다. `S3_BUCKET`(시험 버킷)은 `--url` 실험에만 씁니다. AWS 키는 같은 키를 씁니다.
+- **진행**: 영상 받기(`LOADING_VIDEO`) → 360p를 받으면 단계 추출(`EXTRACTING_STEPS`) → 프레임(`SEGMENTING`).
+  단계가 그대로여도 임대의 1/3마다 다시 보내 임대를 늘립니다.
+- **실패 코드**: 재시도 여부는 BE 표가 정하고, 표에 없는 코드만 보낸 `retryable`을 따릅니다.
+
+  | 오류 | code | 재시도 |
+  | --- | --- | --- |
+  | 유튜브 봇 차단 · 403 · 429 | `DOWNLOAD_REJECTED` | 불가 |
+  | 없음 · 비공개 · 연령 제한 | `VIDEO_UNAVAILABLE` | 불가 |
+  | 그 밖의 받기 오류 | `DOWNLOAD_FAILED` | 가능 |
+  | 단계 추출 중 오류(GMS 등) | `STEP_EXTRACTION_FAILED` | 가능 |
+  | 프레임 오류, 프레임 단계 중 오류 | `FRAME_EXTRACTION_FAILED` | 불가 |
+  | S3 오류 | `UPLOAD_FAILED` | 가능 |
+  | 요청 JSON이 스키마에 안 맞음 | `SCHEMA_INVALID` | 불가 |
+  | 처리 중 Ctrl+C | `PROCESSOR_STOPPED` | 가능 |
+  | BE가 complete를 400으로 거절(키가 `s3Prefix` 밖 · 저장소에 없음) | `SCHEMA_INVALID` | 불가 |
+
+- **BE 오류**: 노트북은 멈추지 않습니다. 토큰이 틀리면(401) 오류 로그를 남기고 1분마다, 연결 실패 · 5xx는 5초부터
+  최대 60초까지 늘려 가며 다시 묻습니다. 진행 알림이 404 · 409면 BE가 이미 끝낸 작업이라 다음 단계에 들어설 때
+  그만두고 완료 · 실패를 보내지 않습니다.
+- 작업 폴더는 `temp/jobs/{jobId}/`이고, 완료되면 영상 · 소리 파일은 지우고 진단 JSON만 남깁니다.
+
 ## 산출물
 
-- S3 `videos/{videoId}/frames/000594.jpg`: 파일 이름은 영상 프레임 번호 6자리(BE와 같음). 분석하는 단계의 AI 사진 구간만 있습니다.
-- 요청 JSON: 로컬 `{work-dir}/{videoId}_guide_job_request.json`, S3 `videos/{videoId}/guide_job_request.json`·`guide_input.json`.
+S3 경로의 `{prefix}`는 직접 실행이면 `videos/{videoId}`, 연결 모드면 claim의 `s3Prefix`입니다.
+
+- S3 `{prefix}/frames/000594.jpg`: 파일 이름은 영상 프레임 번호 6자리(BE와 같음). 분석하는 단계의 AI 사진 구간만 있습니다.
+- 요청 JSON: 로컬 `{work-dir}/{videoId}_guide_job_request.json`, S3 `{prefix}/guide_job_request.json`·`guide_input.json`.
+  `frames.items[]`마다 S3 `key`가 있습니다(버킷이 비공개라 BE가 key로 서명한 주소로 `url`을 바꿔 AI에 보냄).
   `shared/guide-job/guide_job_request.v2.schema.json`으로 검증하고, 실패하면 S3에 올리지 않고 멈춥니다(로컬 요청본은 남음).
   사진 주소는 7일 동안 쓸 수 있는 서명 주소입니다. 버킷이 공개가 아니라 서명 없는 주소는 AI 서버가 받지 못합니다(403).
 - 진단: `{work-dir}/{videoId}_metrics.json`(단계별 시간·GMS 호출·앞뒤 확인·글자 바꿈), `video_steps/`(조각과 GMS 답), `gms_calls.jsonl`.
