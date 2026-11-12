@@ -3,7 +3,6 @@ package com.mairor.backend.users.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mairor.backend.TestcontainersConfiguration;
@@ -129,9 +128,11 @@ class GoogleLoginStartTest {
     }
 
     start(ip)
-        .andExpect(status().isTooManyRequests())
-        .andExpect(jsonPath("$.code").value("USERS_LOGIN_RATE_LIMITED"))
-        .andExpect(header().exists("Retry-After"));
+        .andExpect(status().isFound())
+        .andExpect(header().string(HttpHeaders.LOCATION, "/login?error=USERS_LOGIN_RATE_LIMITED"))
+        .andExpect(header().exists("Retry-After"))
+        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
     start(randomIp()).andExpect(status().isFound());
   }
 

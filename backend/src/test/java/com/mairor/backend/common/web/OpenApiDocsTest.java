@@ -178,10 +178,10 @@ class OpenApiDocsTest {
         .andExpect(jsonPath("$.paths['/v1/users/oauth/google'].get.security").doesNotExist())
         .andExpect(jsonPath("$.paths['/v1/users/oauth/google'].get.responses['302']").exists())
         .andExpect(
-            jsonPath("$.paths['/v1/users/oauth/google'].get.responses['429'].description")
+            jsonPath("$.paths['/v1/users/oauth/google'].get.responses['302'].description")
                 .value(containsString("USERS_LOGIN_RATE_LIMITED")))
         .andExpect(
-            jsonPath("$.paths['/v1/users/oauth/google'].get.responses['503'].description")
+            jsonPath("$.paths['/v1/users/oauth/google'].get.responses['302'].description")
                 .value(containsString("USERS_GOOGLE_AUTH_UNAVAILABLE")));
   }
 

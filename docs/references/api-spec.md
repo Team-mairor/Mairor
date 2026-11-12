@@ -85,7 +85,7 @@ API-USERS-001 · POST /api/v1/users/signup
 - 공개 JSON·허용 Origin 검증. 요청은 아래 회원가입 필드 표를 따른다.
 - 성공 201: User(provider=LOCAL), 세션 미생성. 실패: 400 VALIDATION\_FAILED(필드 오류·만 14세 미만), 400 USERS\_REQUIRED\_AGREEMENT\_MISSING(필수 동의 누락·false·버전 불일치), 400 USERS\_EMAIL\_NOT\_VERIFIED(이메일 소유 확인 사용 시, 초안), 409 USERS\_EMAIL\_DUPLICATE.
 - 이메일 정규화 후 서버 유니크 제약으로 동시 중복 방지. 회원과 약관 기록은 함께 저장·실패 시 함께 롤백. 비밀번호·확인값·개인정보는 로그 미기록. 비밀번호는 해시 저장. 성공 후 로그인 화면에 정규화 이메일을 채운다.
-- 필수는 email·password·passwordConfirm·agreements뿐. nickname·name·phone·birthDate·gender는 선택(생략/null 가능, 기능명세 USERS-001). 필드명은 phone 고정(phoneNumber 금지). Google 가입의 추가 정보·동의 수집은 미결(5절).
+- 필수는 email·password·passwordConfirm·agreements뿐. nickname·name·phone·birthDate·gender는 선택(생략/null 가능, 기능명세 USERS-001). 필드명은 phone 고정(phoneNumber 금지). Google 최초 가입도 같은 프로필 선택 필드와 약관 규칙을 사용한다(API-USERS-018).
 
 #### 회원가입 요청
 
@@ -155,8 +155,8 @@ API-USERS-006 · GET /api/v1/users/oauth/google
 
 | HTTP | code | 조건·처리 |
 | --- | --- | --- |
-| 503 | USERS\_GOOGLE\_AUTH\_UNAVAILABLE | 인증 연동 설정·제공자 이용 불가. 재시도 또는 자체 로그인 |
-| 429 | USERS\_LOGIN\_RATE\_LIMITED | 시도 제한. Retry-After 이후 재시도 |
+| 302 | USERS\_GOOGLE\_AUTH\_UNAVAILABLE | Google 인증 설정·제공자 이용 불가. `/login?error=USERS_GOOGLE_AUTH_UNAVAILABLE`로 이동하며 인증 트랜잭션·쿠키를 만들지 않는다. |
+| 302 | USERS\_LOGIN\_RATE\_LIMITED | 시도 제한. `/login?error=USERS_LOGIN_RATE_LIMITED`로 이동하며 `Retry-After`를 유지하고 인증 트랜잭션·쿠키를 만들지 않는다. |
 
 #### 정책·비고
 
@@ -686,7 +686,8 @@ POST /api/v1/users/oauth/google/signup
 - 요청 Body: API-USERS-001에서 email·password·passwordConfirm·emailVerificationToken을 뺀 나머지(nickname·name·phone·birthDate·gender 선택, agreements 필수). 필드 규칙·details[].field 이름이 API-USERS-001과 같다
 - 성공 201: <code>{ "user": User, "csrfToken": "…" }</code>(API-USERS-002 로그인 응답과 같은 형태) + 서비스 세션 쿠키 발급, 가입 대기 쿠키 만료, Cache-Control:no-store. 가입과 동시에 로그인 상태다(user.provider=GOOGLE)
 - 오류: 400 VALIDATION\_FAILED(details) · 400 USERS\_REQUIRED\_AGREEMENT\_MISSING · 403 FORBIDDEN(허용되지 않은 Origin) · 409 USERS\_ACCOUNT\_LINK\_REQUIRED(그사이 같은 이메일로 가입된 계정이 있음, 자동 연결 안 함) · 410 USERS\_GOOGLE\_SIGNUP\_EXPIRED(가입 대기 없음·만료·이미 사용) · 415 UNSUPPORTED\_MEDIA\_TYPE
-- 정책: 400은 가입 대기를 소모하지 않아 고쳐 다시 보낼 수 있다. 그 밖의 응답(201·409·410)은 가입 대기를 소모한다. 회원·Google 연결(user\_identities)·약관 동의 기록을 한 트랜잭션으로 저장하고, 비밀번호는 없다(password\_hash null). email\_verified\_at은 가입 시각. 저장 뒤 세션 발급이 실패하면 회원은 남고 사용자는 Google로 다시 로그인하면 들어온다. 약관·선택 항목을 이메일 가입과 같게 받는 것은 FE 요청안이며 기획 확인 필요 5
+- 정책(2026-11-12 확정, S15P31A306-522): Google 최초 가입은 이메일 가입과 같은 선택 프로필 5개(nickname·name·phone·birthDate·gender)와 약관 4개(TERMS·PRIVACY·AGE\_OVER\_14 필수 동의, MARKETING 선택 동의)를 받는다. Google 표시 이름은 이름 입력값으로 사용하되 FE 이름 규칙에 맞지 않으면 비워 둔다. 닉네임은 자동 생성·미리 채우기 없이 선택 입력으로 둔다.
+- 정책: 400은 가입 대기를 소모하지 않아 고쳐 다시 보낼 수 있다. 그 밖의 응답(201·409·410)은 가입 대기를 소모한다. 회원·Google 연결(user\_identities)·약관 동의 기록을 한 트랜잭션으로 저장하고, 비밀번호는 없다(password\_hash null). email\_verified\_at은 가입 시각. 저장 뒤 세션 발급이 실패하면 회원은 남고 사용자는 Google로 다시 로그인하면 들어온다.
 
 ### API-VIDEO-006 · 분석 재시도
 
@@ -695,13 +696,13 @@ POST /api/v1/users/me/analysis-jobs/\{jobId\}/retry
 - 관련 기능: VIDEO-003 · 회원(본인이 요청 또는 합류한 작업)
 - 요청: Path <code>jobId</code>. 본문 없음
 - 성공 202: AnalysisJobStatus. 영상 전처리가 끝난 뒤 멈춘 작업은 RUNNING · BUILDING\_GUIDE(멈춘 단계), 그 전에 멈춘 작업은 PENDING · QUEUED(처음부터). 이미 재시도해 다시 도는 작업 · 합류한 작업은 그 작업의 지금 상태
-- 오류: 404 <code>NOT_FOUND</code> · 409 <code>ANALYSIS_NOT_RETRYABLE</code>(실패도 아니고 재개 중인 동일 작업도 아님, 또는 retryable=false → '다른 영상 고르기'만) · 429 <code>ANALYSIS_DAILY_LIMIT_EXCEEDED</code>(재시도 차감 정책 확정 시)
-- 정책: 멈춘 단계부터 재개(영상 전처리가 끝난 뒤 멈춘 작업만 그 단계부터, 그 전에 멈춘 작업은 처음부터 — 아래 구현 메모). 다른 회원이 먼저 재시도했으면 그 작업에 합류. 재시도의 일일 한도 차감 여부는 미정
+- 오류: 404 <code>NOT_FOUND</code> · 409 <code>ANALYSIS_NOT_RETRYABLE</code>(실패도 아니고 재개 중인 동일 작업도 아님, 또는 retryable=false → '다른 영상 고르기'만)
+- 정책: 멈춘 단계부터 재개(영상 전처리가 끝난 뒤 멈춘 작업만 그 단계부터, 그 전에 멈춘 작업은 처음부터 — 아래 구현 메모). 다른 회원이 먼저 재시도했으면 그 작업에 합류. 재시도는 회원별 신규 분석 일일 한도에 포함하지 않는다(S15P31A306-400).
 - <b>구현 메모 (S15P31A306-400)</b>
   - 재개 지점: 영상 전처리 노트북이 끝낸 작업(AI 요청 JSON이 남음)은 가이드 생성만 다시 한다(202 RUNNING · BUILDING\_GUIDE). 그 전에 멈춘 작업은 노트북이 중간부터 받을 수 없어 대기열로 돌아가 처음부터 한다(202 PENDING · QUEUED). jobId는 그대로이고 시도 횟수(attempt)만 오른다. 노트북 기다림 시간 초과는 재시도한 때부터 다시 센다.
   - 이미 누가 재시도해 다시 도는 작업(attempt 2 이상, PENDING · RUNNING)이면 그 상태를 202로 준다. 처음 돌고 있는 작업은 409다. 같은 영상의 다른 진행 중 작업이 있으면(실패 뒤 누가 새로 요청함) 그 작업에 합류하고 그 작업(다른 jobId)을 준다.
   - 409 <code>ANALYSIS\_NOT\_RETRYABLE</code>: 처음 도는 중 · 완료 · retryable=false 실패 · 시도 횟수 상한(설정 <code>app.analysis.request.max-attempts</code>, 처음 포함). 상한에 닿은 실패는 상태 응답의 retryable도 false다.
-  - 일일 한도는 세지 않는다(429 없음). TODO(확인 필요 4) 재시도 차감 정책이 정해지면 바꾼다.
+  - 재시도는 회원별 신규 분석 일일 한도에 포함하지 않으며, 이 API는 한도 초과 429를 반환하지 않는다(S15P31A306-400).
 
 ### API-VIDEO-007 · 내 분석 목록 (홈 '검수 중 가이드')
 
@@ -823,7 +824,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 목록 조회 | page=0부터, size 기본 20·최대 100. 응답은 items·page·size·hasNext. 목록 API가 명시한 메타 필드(예: pouchVersion)를 추가할 수 있다. 기본 정렬은 createdAt 내림차순 후 고유 ID 내림차순. 별도 순서가 필요한 경우만 명시 |
 | 생략·null·빈 값 | 응답은 정의된 필드를 포함하고 값 없는 nullable 필드는 null, 목록은 빈 배열. 부분 수정은 생략 시 기존 값 유지, null은 초기화 허용 필드에만 허용하며 나머지는 400 |
 | 파일 | 서버 경유 multipart, JPEG·PNG, 최대 5 MiB. 단계 사진·얼굴 등록 이미지 모두 회원 인증 사진 조회 API로 제공하며 공개 파일 URL은 반환하지 않음. 보관·삭제 기준은 비기능에서 확정 |
-| 중복·제한 | 영상 분석은 동일 작업·사용 가능 결과를 재사용(VIDEO-002). 회원별 일일 신규 분석 제한은 횟수·초기화 시각 미정(초안 KST 00:00). 로그인 반복 실패·비밀번호 재설정·이메일 중복 확인 요청 제한 초과는 429와 Retry-After(초). 재시도 차감 정책은 미정 |
+| 중복·제한 | 영상 분석은 동일 작업·사용 가능 결과를 재사용(VIDEO-002). 회원별 일일 신규 분석 제한은 횟수·초기화 시각 미정(초안 KST 00:00). 로그인 반복 실패·비밀번호 재설정·이메일 중복 확인 요청 제한 초과는 429와 Retry-After(초). 분석 재시도(API-VIDEO-006)는 신규 분석 일일 한도에 포함하지 않는다(S15P31A306-400) |
 | 헬스체크 | GET /api/health는 인증 없이 200과 <code>{"status":"UP"}</code>. API 개수에 포함하지 않는다 |
 
 <b>공통 오류 예시</b>
@@ -936,7 +937,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 
 | 모델 | 필드·제약 |
 | --- | --- |
-| User <b>v2</b> | userId:string, email:string, nickname:string\|null, provider:LOCAL\|GOOGLE, createdAt:datetime. 이름·휴대폰 번호·생년월일·성별·약관 동의 이력은 저장하지만 응답에 포함하지 않는다. onboardingStatus 없음(온보딩은 기기 저장). Google 최초 로그인 시 nickname 생성 방식은 확인 필요 5. |
+| User <b>v2</b> | userId:string, email:string, nickname:string\|null, provider:LOCAL\|GOOGLE, createdAt:datetime. 이름·휴대폰 번호·생년월일·성별·약관 동의 이력은 저장하지만 응답에 포함하지 않는다. onboardingStatus 없음(온보딩은 기기 저장). Google 최초 가입의 nickname은 선택 입력이며 자동 생성·미리 채우기하지 않는다(S15P31A306-522). |
 | SignupAgreement <b>v2</b> | type:TERMS\|PRIVACY\|AGE\_OVER\_14\|MARKETING, version:string, agreed:boolean. 요청 전용. 서버는 회원별 type·version·agreed·agreedAt 기록. |
 | EmailAvailability <b>v2</b> | email:string(정규화 값), available:boolean. |
 | PasswordResetVerification <b>v2</b> | resetToken:string, expiresAt:datetime. |
@@ -994,10 +995,10 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 
 | 항목 | 남은 결정 |
 | --- | --- |
-| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), Google 최초 로그인 시 약관·추가 정보 수집(구현은 FE 요청안대로 이메일 가입과 같은 약관 4개·선택 항목 5개, API-USERS-017·018 번호 임시), Google 가입 시 닉네임 기본값(구현은 채우지 않음), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5) |
+| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5). Google 최초 가입 약관·프로필 입력 및 nickname 기본값은 S15P31A306-522에서 확정했다. |
 | 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
 | 인기 Top 4 | 확정(11.11, S15P31A306-403): 영상 선택 기록으로 최근 30일 동안 고른 서로 다른 회원 수 순, 10분마다 다시 셈, 1\~4개 200 · 0개 503(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
-| 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 재시도 차감, 검수 주체·소요 시간(11.12 확정: 자동 공개, S15P31A306-409), 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
+| 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 검수 주체·소요 시간(11.12 확정: 자동 공개, S15P31A306-409), 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
 | 얼굴 등록 | 미연결 등록은 원래 세션 종료까지 유지하는 것으로 확정. 서버 촬영 조건 재검증 여부·저장소 암호화 등 운영 기준·정면/좌/우 3장 확장(P1)은 별도 결정(확인 필요 7) |
 | 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |
 | 실행·준비 | 분석/얼굴 추적 준비 시점 차이에 따른 별도 준비 화면·대기 상한(확인 필요 7), 온보딩·튜토리얼 안내를 계정 단위로 바꿀지(확인 필요 9) |

@@ -2,7 +2,6 @@ package com.mairor.backend.users.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.mairor.backend.TestcontainersConfiguration;
@@ -29,11 +28,13 @@ class GoogleLoginUnavailableTest {
   @Autowired private MockMvc mockMvc;
 
   @Test
-  void startWithoutConfiguration_isServiceUnavailable() throws Exception {
+  void startWithoutConfiguration_redirectsToLoginWithoutCreatingCookie() throws Exception {
     mockMvc
         .perform(get("/v1/users/oauth/google"))
-        .andExpect(status().isServiceUnavailable())
-        .andExpect(jsonPath("$.code").value("USERS_GOOGLE_AUTH_UNAVAILABLE"))
+        .andExpect(status().isFound())
+        .andExpect(
+            header().string(HttpHeaders.LOCATION, "/login?error=USERS_GOOGLE_AUTH_UNAVAILABLE"))
+        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
         .andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
   }
 }

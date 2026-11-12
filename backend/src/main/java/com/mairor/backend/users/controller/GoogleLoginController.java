@@ -1,5 +1,6 @@
 package com.mairor.backend.users.controller;
 
+import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.users.dto.request.GoogleSignUpRequest;
 import com.mairor.backend.users.dto.response.GoogleSignupPendingResponse;
 import com.mairor.backend.users.dto.response.LoginResponse;
@@ -57,21 +58,33 @@ public class GoogleLoginController {
           - 로그인 시작만으로는 회원·세션을 만들지 않는다. 인증 결과는 callback 이 처리한다.
           - 인증을 마치기까지의 시간이 정해져 있다. 지나면 다시 시작한다.
           """)
-  @ApiResponse(responseCode = "302", description = "Google 인증 화면으로 이동한다.")
   @ApiResponse(
-      responseCode = "429",
-      description = "로그인 시도가 너무 많다. `Retry-After` 초 뒤에 다시 시도한다. (USERS_LOGIN_RATE_LIMITED)")
-  @ApiResponse(
-      responseCode = "503",
-      description = "Google 로그인을 쓸 수 없다. 이메일 로그인을 안내한다. (USERS_GOOGLE_AUTH_UNAVAILABLE)")
+      responseCode = "302",
+      description =
+          "Google 인증 화면으로 이동한다. 시도 제한 또는 Google 인증 불가 시 각각 `/login?error=USERS_LOGIN_RATE_LIMITED`, `/login?error=USERS_GOOGLE_AUTH_UNAVAILABLE`로 이동한다.")
   @GetMapping
   public ResponseEntity<Void> start(HttpServletRequest request) {
-    GoogleLoginService.Start start = googleLoginService.start(request);
-    return ResponseEntity.status(302)
-        .location(URI.create(start.authorizationUri()))
-        .header(HttpHeaders.SET_COOKIE, start.cookie().toString())
-        .cacheControl(CacheControl.noStore())
-        .build();
+    try {
+      GoogleLoginService.Start start = googleLoginService.start(request);
+      return ResponseEntity.status(302)
+          .location(URI.create(start.authorizationUri()))
+          .header(HttpHeaders.SET_COOKIE, start.cookie().toString())
+          .cacheControl(CacheControl.noStore())
+          .build();
+    } catch (BusinessException e) {
+      if (!"USERS_LOGIN_RATE_LIMITED".equals(e.code())
+          && !"USERS_GOOGLE_AUTH_UNAVAILABLE".equals(e.code())) {
+        throw e;
+      }
+      ResponseEntity.BodyBuilder redirect =
+          ResponseEntity.status(HttpStatus.FOUND)
+              .location(URI.create("/login?error=" + e.code()))
+              .cacheControl(CacheControl.noStore());
+      if (e.retryAfterSeconds() != null) {
+        redirect.header(HttpHeaders.RETRY_AFTER, String.valueOf(e.retryAfterSeconds()));
+      }
+      return redirect.build();
+    }
   }
 
   @Operation(

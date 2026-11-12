@@ -5,6 +5,7 @@
 - 날짜: 2026-11-02
 - 기한: 협의
 - 관련 Jira: S15P31A306-195 (USERS-004 Google 로그인), S15P31A306-208 (BE Google 로그인)
+- 정책 결정·문서 갱신: 2026-11-12, S15P31A306-522
 
 ## 요청 배경
 
@@ -16,10 +17,10 @@ Google로 처음 로그인한 사람도 이메일 가입과 **같은 추가 정�
 
 ## 요청 내용
 
-- [ ] (기획) 확인 필요 5 확정: Google 최초 가입도 약관 4개와 선택 항목 5개를 이메일 가입과 같게 받는다
-- [ ] (BE) Google callback에서 처음 온 사용자는 회원을 만들지 않고 "가입 대기"로 추가 정보 화면에 보낸다
-- [ ] (BE) 가입 대기 조회 API, Google 가입 완료 API 추가
-- [ ] (BE) callback 실패를 로그인 화면에 전달하는 형식 확정
+- [x] (기획 결정) Google 최초 가입도 이메일 가입과 같은 선택 프로필 5개와 약관 4개를 받는다
+- [x] (BE) Google callback에서 처음 온 사용자는 회원을 만들지 않고 "가입 대기"로 추가 정보 화면에 보낸다
+- [x] (BE) 가입 대기 조회 API, Google 가입 완료 API 추가
+- [x] (BE) callback 실패를 로그인 화면에 전달하는 형식 확정
 
 아래는 FE가 화면을 만들기 위한 제안입니다. 이름·코드·수치는 BE에서 바꿔도 되고, 확정되면 명세에 반영해 주세요.
 
@@ -57,7 +58,7 @@ Google로 처음 로그인한 사람도 이메일 가입과 **같은 추가 정�
   ```
 
   - `email`: 화면에 고정으로 보여 줍니다. Google이 확인한 이메일이라 가입 이메일 인증(API-USERS-012·013)은 거치지 않습니다.
-  - `name`: Google 표시 이름. 닉네임 기본값으로 채울지는 아래 확인 사항입니다. 없으면 `null`.
+  - `name`: Google 표시 이름. FE가 이름 규칙에 맞는 경우 이름 입력값으로 미리 채운다. 규칙에 맞지 않거나 값이 없으면 빈 값으로 둔다.
 - 가입 대기가 없거나 만료: `410 USERS_GOOGLE_SIGNUP_EXPIRED` → FE는 로그인 화면으로 돌려 "Google로 다시 시작해 주세요"를 안내합니다.
 
 ## 4. Google 가입 완료 `POST /api/v1/users/oauth/google/signup`
@@ -91,14 +92,18 @@ Google로 처음 로그인한 사람도 이메일 가입과 **같은 추가 정�
 
 명세는 "로그인 화면 경로·오류 전달 형식은 프론트 라우팅 확정 시 정한다"로 남겨 두었습니다. FE는 `302 /login?error=<코드>`를 제안합니다. 코드는 명세의 허용 목록(`USERS_GOOGLE_AUTH_CANCELLED`, `USERS_GOOGLE_AUTH_FAILED`, `USERS_OAUTH_STATE_INVALID`, `USERS_ACCOUNT_LINK_REQUIRED`, `USERS_GOOGLE_AUTH_UNAVAILABLE`)만 쓰고, FE는 목록에 없는 값이면 일반 실패로 안내합니다. 취소·실패·계정 연결 안내 화면은 S15P31A306-239에서 만들어 두었습니다.
 
-## 6. 확인이 필요한 것
+## 6. 확정된 결정
 
-- [ ] (기획) Google 가입도 약관 4개·선택 항목 5개를 이메일 가입과 같게 받는다 (요청자 제안)
-- [ ] (기획) 닉네임 칸에 Google 표시 이름을 기본값으로 채울지. 채우면 닉네임 규칙(2~20자, 한글·영문·숫자·밑줄)에 맞지 않는 이름은 비워 둡니다
-- [ ] (BE) 가입 대기 유효 시간, 쿠키 이름·SameSite
-- [ ] (BE) S15P31A306-208을 다시 열지, 새 이슈로 할지
+- Google 최초 가입은 이메일 가입과 같은 선택 프로필 5개(nickname·name·phone·birthDate·gender)와 약관 4개(TERMS·PRIVACY·AGE_OVER_14 필수 동의, MARKETING 선택 동의)를 받습니다.
+- Google 표시 이름은 `name` 입력값으로만 사용하며 FE 이름 규칙에 맞지 않으면 미리 채우지 않습니다. `nickname`은 자동 생성하거나 Google 이름으로 미리 채우지 않고 선택 입력으로 둡니다.
+- 가입 대기는 10분이며 `__Host-googleSignup` 쿠키(HttpOnly·Secure·SameSite=Lax·Path=/)를 사용합니다. 브라우저에 Google sub·토큰을 노출하지 않습니다.
+- callback 실패는 허용된 오류 코드로 `/login?error=<코드>`에 리다이렉트합니다.
+- 가입 대기 조회·가입 완료 흐름이 구현되어 있어 S15P31A306-208을 다시 열지 않습니다.
 
-## FE 진행 계획
+정책과 구현을 대조하고 관련 계약을 [API 명세](../references/api-spec.md)에 반영했습니다. 요청 문서는 요청자 리뷰가 끝날 때까지 기록으로 유지합니다.
 
-- 가입 화면의 "추가 정보 + 약관" 묶음을 공용 컴포넌트로 빼서 이메일 가입과 Google 가입이 같이 쓰게 합니다.
-- `/signup/google` 화면을 모의 응답으로 먼저 만들고, API가 확정되면 연결합니다. 이 작업은 FE 이슈를 새로 만들어 진행합니다.
+## 구현 대조 결과
+
+- FE `/signup/google`은 이메일 가입과 공용 `ProfileFields`·`AgreementFields`를 사용합니다.
+- Google 표시 이름은 이름 검증 통과 시 `name`에만 미리 채우며 nickname 초기값은 비어 있습니다.
+- BE는 같은 약관 검증 정책을 사용하고, 회원·Google 연결·약관 기록을 가입 완료 시 저장합니다.
