@@ -1,5 +1,6 @@
 package com.mairor.backend.guides.config;
 
+import com.mairor.backend.common.config.MdcTaskDecorator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -17,6 +18,8 @@ public class GuideReferenceExecutorConfiguration {
     executor.setThreadNamePrefix("guide-reference-");
     executor.setWaitForTasksToCompleteOnShutdown(true);
     executor.setAwaitTerminationSeconds(15);
+    // 대조를 맡긴 콜백 처리의 로그 칸(분석 작업 ID 등)을 넘긴다
+    executor.setTaskDecorator(new MdcTaskDecorator());
     return executor;
   }
 }

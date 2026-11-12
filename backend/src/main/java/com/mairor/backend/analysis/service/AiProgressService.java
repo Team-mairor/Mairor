@@ -1,6 +1,7 @@
 package com.mairor.backend.analysis.service;
 
 import com.mairor.backend.analysis.entity.AnalysisJob;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import java.util.List;
@@ -59,10 +60,18 @@ public class AiProgressService {
     Progress progress = parsed.get();
     Optional<AnalysisJob> found = jobs.lockByAiJobId(progress.aiJobId());
     if (found.isEmpty()) {
-      log.info("모르는 AI 작업의 진행 알림이라 버림 aiJobId={}", progress.aiJobId());
+      try (var ignored = AnalysisLogContext.of(null, null, progress.aiJobId())) {
+        log.info("모르는 AI 작업의 진행 알림이라 버림 aiJobId={}", progress.aiJobId());
+      }
       return Outcome.UNKNOWN_JOB;
     }
     AnalysisJob job = found.get();
+    try (var ignored = AnalysisLogContext.of(job)) {
+      return recordFor(job, progress);
+    }
+  }
+
+  private Outcome recordFor(AnalysisJob job, Progress progress) {
     if (!job.recordAiProgress(progress.json())) {
       log.info(
           "AI 결과를 기다리는 작업이 아니라 진행 알림을 버림 jobId={} aiJobId={} status={}",

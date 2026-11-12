@@ -3,6 +3,7 @@ package com.mairor.backend.analysis.service;
 import com.mairor.backend.analysis.dto.request.AiGuideJobCallbackRequest;
 import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.AnalysisJob;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.common.error.BusinessException;
@@ -82,6 +83,12 @@ public class AiResultService {
     validate(result);
     AnalysisJob job =
         jobs.lockByAiJobId(result.jobId()).orElseThrow(() -> unknownJob(result.jobId()));
+    try (var ignored = AnalysisLogContext.of(job)) {
+      return applyTo(job, result);
+    }
+  }
+
+  private Outcome applyTo(AnalysisJob job, AiGuideJobCallbackRequest result) {
     if (!job.isAwaitingAi()) {
       log.info("이미 끝난 작업의 AI 결과라 무시 jobId={} aiJobId={}", job.getId(), result.jobId());
       return Outcome.ALREADY_FINISHED;
@@ -158,7 +165,9 @@ public class AiResultService {
     }
     job.fail(AnalysisFailureCode.ANALYSIS_TIMEOUT, reason, clock.instant());
     notifier.changed(job.getId());
-    log.warn("AI 결과 시간 초과 jobId={} aiJobId={} reason={}", job.getId(), aiJobId, reason);
+    try (var ignored = AnalysisLogContext.of(job)) {
+      log.warn("AI 결과 시간 초과 jobId={} aiJobId={} reason={}", job.getId(), aiJobId, reason);
+    }
     return true;
   }
 

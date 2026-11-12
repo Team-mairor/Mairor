@@ -4,6 +4,7 @@ import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.entity.ProgressStage;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.common.error.BusinessException;
@@ -98,19 +99,24 @@ public class ProcessorJobService {
             now);
         jobs.flush();
         notifier.changed(job.getId());
-        log.warn("노트북 임대 만료가 반복돼 실패 처리 jobId={} claims={}", job.getId(), job.getProcessorClaims());
+        try (var ignored = AnalysisLogContext.of(job)) {
+          log.warn(
+              "노트북 임대 만료가 반복돼 실패 처리 jobId={} claims={}", job.getId(), job.getProcessorClaims());
+        }
         continue;
       }
       boolean reclaim = job.getStatus() == AnalysisStatus.RUNNING;
       job.claimByProcessor(now, properties.lease());
       notifier.changed(job.getId());
       String youtubeVideoId = job.getVideo().getYoutubeVideoId();
-      log.info(
-          "노트북에 작업을 내줌 jobId={} youtubeVideoId={} claims={} reclaim={}",
-          job.getId(),
-          youtubeVideoId,
-          job.getProcessorClaims(),
-          reclaim);
+      try (var ignored = AnalysisLogContext.of(job)) {
+        log.info(
+            "노트북에 작업을 내줌 jobId={} youtubeVideoId={} claims={} reclaim={}",
+            job.getId(),
+            youtubeVideoId,
+            job.getProcessorClaims(),
+            reclaim);
+      }
       return Optional.of(
           new Claim(
               job.getId(),
@@ -253,7 +259,9 @@ public class ProcessorJobService {
       }
       notifier.changed(id);
       expired++;
-      log.warn("노트북을 기다리다 시간 초과 jobId={}", id);
+      try (var ignored = AnalysisLogContext.of(job)) {
+        log.warn("노트북을 기다리다 시간 초과 jobId={}", id);
+      }
     }
     return expired;
   }

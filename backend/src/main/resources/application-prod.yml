@@ -9,7 +9,12 @@ spring:
 server:
   forward-headers-strategy: native
 
+# 운영 로그는 JSON(logstash 형식) 한 줄씩. 앱 서버 alloy 가 level 과 작업 칸(analysis_job_id · job_id · video_id 등)을 꺼내
+# Grafana(Loki)에서 작업 하나의 BE · AI 로그를 찾는다(S15P31A306-401, infra/alloy/config.alloy). 로컬 · 테스트는 글 로그 그대로
 logging:
+  structured:
+    format:
+      console: logstash
   level:
     root: INFO
     com.mairor.backend: INFO

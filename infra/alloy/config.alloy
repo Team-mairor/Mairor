@@ -42,16 +42,18 @@ loki.source.docker "containers" {
 }
 
 // BE · AI 의 JSON 로그에서 칸을 꺼낸다. level 은 label, 값이 계속 늘어나는 작업 ID 들은 structured metadata
+// analysis_job_id 는 BE 분석 작업 ID, job_id 는 AI 가이드 작업 ID(BE · AI 같은 값), video_id 는 YouTube ID(S15P31A306-401)
 loki.process "fields" {
 	stage.json {
 		expressions = {
-			level      = "",
-			job_id     = "",
-			video_id   = "",
-			step_id    = "",
-			traceId    = "",
-			request_id = "",
-			user_id    = "",
+			level           = "",
+			analysis_job_id = "",
+			job_id          = "",
+			video_id        = "",
+			step_id         = "",
+			traceId         = "",
+			request_id      = "",
+			user_id         = "",
 		}
 	}
 
@@ -63,12 +65,13 @@ loki.process "fields" {
 
 	stage.structured_metadata {
 		values = {
-			job_id     = "",
-			video_id   = "",
-			step_id    = "",
-			traceId    = "",
-			request_id = "",
-			user_id    = "",
+			analysis_job_id = "",
+			job_id          = "",
+			video_id        = "",
+			step_id         = "",
+			traceId         = "",
+			request_id      = "",
+			user_id         = "",
 		}
 	}
 

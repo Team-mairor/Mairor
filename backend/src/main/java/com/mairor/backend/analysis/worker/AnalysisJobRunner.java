@@ -2,6 +2,7 @@ package com.mairor.backend.analysis.worker;
 
 import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.ProgressStage;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -68,6 +69,13 @@ public class AnalysisJobRunner {
   }
 
   private void run(AnalysisContext context) {
+    // 이 작업 동안 찍는 로그(단계 처리기 · 저장소 · LLM 포함)에 작업 칸을 붙인다
+    try (var ignored = AnalysisLogContext.of(context.jobId(), context.youtubeVideoId(), null)) {
+      process(context);
+    }
+  }
+
+  private void process(AnalysisContext context) {
     long started = System.nanoTime();
     log.info("분석 시작 jobId={} youtubeVideoId={}", context.jobId(), context.youtubeVideoId());
     ProgressStage current = ProgressStage.QUEUED;

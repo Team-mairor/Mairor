@@ -4,6 +4,7 @@ import com.mairor.backend.analysis.entity.AnalysisFailureCode;
 import com.mairor.backend.analysis.entity.ProgressStage;
 import com.mairor.backend.analysis.extraction.GuideInput;
 import com.mairor.backend.analysis.frames.FrameManifest;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.service.AiFrameDelivery;
 import com.mairor.backend.common.external.ai.AiGuideJobClient;
 import com.mairor.backend.common.external.ai.AiProperties;
@@ -92,13 +93,22 @@ class BuildGuideStep implements AnalysisStepHandler {
       throw new AnalysisStepException(failureCode(e), e.getMessage(), e);
     }
     store.awaitAi(context.jobId(), aiJobId);
-    log.info(
-        "AI 가이드 생성 요청 jobId={} aiJobId={} steps={} frames={} requestBytes={}",
-        context.jobId(),
-        aiJobId,
-        guideInput.steps().size(),
-        frameDelivery.enabled() && context.frames() != null ? context.frames().items().size() : 0,
-        body.length());
+    int frames =
+        frameDelivery.enabled() && context.frames() != null ? context.frames().items().size() : 0;
+    // 이 줄부터 AI 작업 ID 를 붙여 AI 로그와 이어 본다(작업 칸은 AnalysisJobRunner 가 붙였다)
+    try (var ignored = AnalysisLogContext.of(null, null, aiJobId)) {
+      log.atInfo()
+          .setMessage("AI 가이드 생성 요청 jobId={} aiJobId={} steps={} frames={} requestBytes={}")
+          .addArgument(context.jobId())
+          .addArgument(aiJobId)
+          .addArgument(guideInput.steps().size())
+          .addArgument(frames)
+          .addArgument(body.length())
+          .addKeyValue("steps", guideInput.steps().size())
+          .addKeyValue("frames", frames)
+          .addKeyValue("request_bytes", body.length())
+          .log();
+    }
   }
 
   /**

@@ -1,8 +1,10 @@
 package com.mairor.backend.analysis.entity;
 
+import com.mairor.backend.analysis.log.AnalysisJobFinishLog;
 import com.mairor.backend.videos.entity.Video;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -13,6 +15,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Duration;
 import java.time.Instant;
@@ -36,6 +39,7 @@ import org.hibernate.type.SqlTypes;
  * 의 저장소 키({@code processorRequestKey})가 남는다. 임대가 지나면 다른 노트북이 다시 가져갈 수 있다.
  */
 @Entity
+@EntityListeners(AnalysisJobFinishLog.class)
 @Table(
     name = "analysis_jobs",
     uniqueConstraints =
@@ -129,6 +133,9 @@ public class AnalysisJob {
   @Column(name = "updated_at", nullable = false)
   private Instant updatedAt;
 
+  /** 이번 트랜잭션에서 끝났다(완료 · 실패). 저장될 때 요약 로그를 한 번 남기고 지운다({@link AnalysisJobFinishLog}). */
+  @Transient private boolean finished;
+
   protected AnalysisJob() {}
 
   /**
@@ -170,6 +177,7 @@ public class AnalysisJob {
     this.progressStage = ProgressStage.DONE;
     this.progressPercent = 100;
     this.finishedAt = Objects.requireNonNull(now, "now");
+    this.finished = true;
   }
 
   /**
@@ -185,6 +193,7 @@ public class AnalysisJob {
     this.retryable = code.retryable();
     this.finishedAt = Objects.requireNonNull(now, "now");
     this.processorLeaseUntil = null;
+    this.finished = true;
   }
 
   /**
@@ -334,6 +343,13 @@ public class AnalysisJob {
   /** AI 콜백을 기다리는 중인지. worker 재시작 때 대기열로 되돌리지 않는다(AI 에서는 아직 돌고 있을 수 있다). */
   public boolean isAwaitingAi() {
     return status == AnalysisStatus.RUNNING && aiJobId != null;
+  }
+
+  /** 이번에 끝났으면 true 를 주고 지운다. 끝 요약 로그를 한 번만 남기려고 쓴다. */
+  public boolean takeFinished() {
+    boolean was = finished;
+    finished = false;
+    return was;
   }
 
   // --- 재시도 (API-VIDEO-006) ---

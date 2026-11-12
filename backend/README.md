@@ -547,6 +547,22 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 - **worker 는 하나만 띄운다.** 기동할 때 RUNNING 으로 남은 작업(처리 중에 죽은 작업)을 PENDING 으로 되돌리는데, 둘이면 다른 worker 가 처리 중인 작업까지 되돌린다.
 - 단계 처리기(`AnalysisStepHandler`)는 처음 단계부터 다시 돌아도 같은 결과를 내야 하고, 긴 일(내려받기·외부 호출)을 트랜잭션 안에서 하지 않는다. 처리기가 없는 단계는 건너뛴다.
 
+## 로그 (운영 JSON · 작업 ID, S15P31A306-401)
+
+- 운영(`prod`)은 콘솔 로그를 JSON 한 줄씩 남긴다(`logging.structured.format.console: logstash`, `application-prod.yml`). 로컬 · 테스트는 글 로그 그대로다.
+- 앱 서버 `alloy`가 컨테이너 로그를 인프라 서버 Loki로 보낸다. `level`은 label, 아래 작업 칸은 structured metadata(`infra/alloy/config.alloy`).
+
+| 칸 | 값 | 붙는 곳 |
+| --- | --- | --- |
+| `analysis_job_id` | BE 분석 작업 ID(노트북 claim의 `jobId`와 같음) | worker 처리, 노트북 API 4개, AI에 맡기기, AI 콜백 · 진행 알림, 시간 초과 감시, 회원 분석 요청 · 재시도 |
+| `job_id` | AI 가이드 작업 ID(AI 로그의 `job_id`와 같은 값) | AI에 맡긴 뒤, AI 콜백 · 진행 알림 |
+| `video_id` | YouTube 영상 ID(AI 로그와 같은 값) | 위와 같음(영상을 읽을 수 있는 곳) |
+
+- 넣는 법: `try (var ignored = AnalysisLogContext.of(job))`(트랜잭션 안) 또는 `AnalysisLogContext.of(analysisJobId, youtubeVideoId, aiJobId)`. 닫으면 넣기 전 값으로 되돌린다. 실행기로 넘기는 일은 `MdcTaskDecorator`로 칸을 넘긴다(`guideReferenceTaskExecutor`, 프레임 업로드 풀).
+- 작업이 완료 · 실패로 끝나 커밋되면 한 줄 요약을 남긴다(`AnalysisJobFinishLog`, 메시지 "분석 작업 끝"): `analysis_status` · `progress_stage` · `failure_code` · `retryable` · `attempt` · `processor_claims` · `wait_ms`(요청 → 시작) · `processing_ms`(시작 → AI에 맡김. AI에 맡기기 전에 끝났으면 시작 → 끝) · `ai_ms`(AI에 맡김 → 끝, 맡기기 전에 끝났으면 없음) · `total_ms`(처음 요청 → 끝, 재시도해도 처음부터 셈). 단계 수 · 프레임 수 · 요청 크기는 AI에 맡길 때의 줄(`steps` · `frames` · `request_bytes`), Claude 토큰 · 비용은 AI 로그와 Phoenix에 있다.
+- Grafana Explore(Loki)에서 작업 하나 찾기: `{service_name=~"api|worker"} | analysis_job_id="<ID>"` → 거기 찍힌 `job_id`로 `{service_name="ai"} | job_id="<AI ID>"`. 영상 하나는 `| video_id="<YouTube ID>"`. alloy가 새 칸을 아직 꺼내지 않았으면(설정 반영 전) `| json | analysis_job_id="<ID>"`로 찾는다.
+- 로그에 비밀번호 · 세션 쿠키 · CSRF 토큰 · 이메일 · API 키 · 노트북 토큰을 넣지 않는다(개발용 메일 발송기는 운영에서 만들어지지 않고 받는 사람 주소를 가린다).
+
 ## 응답 형식
 
 [API 명세](../docs/references/api-spec.md) 공통 규약을 AI 서버(`ai/app/core/errors.py`)와 똑같이 따른다.

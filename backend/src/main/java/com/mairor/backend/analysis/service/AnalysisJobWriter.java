@@ -3,6 +3,7 @@ package com.mairor.backend.analysis.service;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisJobRequestRecord;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.notify.AnalysisJobNotifier;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.analysis.repository.AnalysisJobRequestRecordRepository;
@@ -144,15 +145,27 @@ class AnalysisJobWriter {
       return job.getId();
     }
     if (!policy.canRetry(job)) {
+      logNotRetryable(job);
+      throw new BusinessException(
+          HttpStatus.CONFLICT, NOT_RETRYABLE, "이 분석은 다시 시도할 수 없습니다. 다른 영상을 골라 주세요.");
+    }
+    try (var ignored = AnalysisLogContext.of(job)) {
+      return retryOrJoin(job, userId);
+    }
+  }
+
+  private void logNotRetryable(AnalysisJob job) {
+    try (var ignored = AnalysisLogContext.of(job)) {
       log.info(
           "재시도할 수 없는 분석 작업 jobId={} status={} failureCode={} attempt={}",
           job.getId(),
           job.getStatus(),
           job.getFailureCode(),
           job.getAttempt());
-      throw new BusinessException(
-          HttpStatus.CONFLICT, NOT_RETRYABLE, "이 분석은 다시 시도할 수 없습니다. 다른 영상을 골라 주세요.");
     }
+  }
+
+  private UUID retryOrJoin(AnalysisJob job, UUID userId) {
     Optional<AnalysisJob> other =
         jobs.findFirstByVideoIdAndStatusIn(job.getVideo().getId(), ACTIVE);
     if (other.isPresent()) {

@@ -8,6 +8,7 @@ import com.mairor.backend.analysis.frames.FrameExtractor;
 import com.mairor.backend.analysis.frames.FrameManifest;
 import com.mairor.backend.analysis.frames.FramePlan;
 import com.mairor.backend.analysis.frames.PlannedFrame;
+import com.mairor.backend.common.config.MdcTaskDecorator;
 import com.mairor.backend.common.storage.ObjectStorage;
 import com.mairor.backend.common.storage.StorageException;
 import java.io.IOException;
@@ -132,13 +133,15 @@ class SegmentFramesStep implements AnalysisStepHandler {
       for (int i = 0; i < files.size(); i++) {
         Path file = files.get(i);
         String key = items.get(i).key();
+        // 업로드 스레드의 로그에도 작업 칸을 넘긴다
         futures.add(
             pool.submit(
-                () -> {
-                  storage.upload(file, key, "image/jpeg");
-                  Files.deleteIfExists(file);
-                  return null;
-                }));
+                MdcTaskDecorator.withCurrentContext(
+                    () -> {
+                      storage.upload(file, key, "image/jpeg");
+                      Files.deleteIfExists(file);
+                      return null;
+                    })));
       }
       for (Future<?> future : futures) {
         future.get();

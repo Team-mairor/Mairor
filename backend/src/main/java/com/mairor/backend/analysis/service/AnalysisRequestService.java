@@ -1,5 +1,6 @@
 package com.mairor.backend.analysis.service;
 
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
 import com.mairor.backend.common.error.ErrorResponse;
@@ -95,11 +96,14 @@ public class AnalysisRequestService {
       log.info("분석 요청이 동시 요청과 겹쳐 다시 시도합니다. videoId={}", videoId);
       registration = writer.registerForMember(videoId, userId, limit, dayStart, resetAt);
     }
-    log.info(
-        "분석 요청 접수 jobId={} videoId={} receipt={}",
-        registration.jobId(),
-        videoId,
-        registration.receiptType());
+    try (var ignored =
+        AnalysisLogContext.of(registration.jobId(), video.getYoutubeVideoId(), null)) {
+      log.info(
+          "분석 요청 접수 jobId={} videoId={} receipt={}",
+          registration.jobId(),
+          videoId,
+          registration.receiptType());
+    }
     AnalysisJobStatusView status =
         statuses
             .find(userId, registration.jobId())

@@ -3,6 +3,7 @@ package com.mairor.backend.analysis.worker;
 import com.mairor.backend.analysis.dto.request.AiGuideJobCallbackRequest;
 import com.mairor.backend.analysis.entity.AnalysisJob;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.repository.AnalysisJobRepository;
 import com.mairor.backend.analysis.service.AiResultService;
 import com.mairor.backend.common.external.ai.AiGuideJobClient;
@@ -63,7 +64,8 @@ class AiCallbackWatcher {
     Instant late = now.minus(properties.callbackTimeout());
     Instant overdue = now.minus(properties.callbackTimeout().multipliedBy(2));
     for (AnalysisJob job : jobs.findAwaitingAiRequestedBefore(AnalysisStatus.RUNNING, late)) {
-      try {
+      // 영상은 지연 로딩이라 트랜잭션 밖에서는 읽지 않는다. 작업 칸 둘로 이어 본다
+      try (var ignored = AnalysisLogContext.of(job.getId(), null, job.getAiJobId())) {
         checkOne(job.getAiJobId(), job.aiTimeoutBaseline().isBefore(overdue));
       } catch (RuntimeException e) {
         log.warn("AI 결과 확인 실패 jobId={} aiJobId={}", job.getId(), job.getAiJobId(), e);

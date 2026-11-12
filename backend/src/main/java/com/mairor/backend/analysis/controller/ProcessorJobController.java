@@ -4,6 +4,7 @@ import com.mairor.backend.analysis.dto.request.ProcessorCompleteRequest;
 import com.mairor.backend.analysis.dto.request.ProcessorFailRequest;
 import com.mairor.backend.analysis.dto.request.ProcessorProgressRequest;
 import com.mairor.backend.analysis.dto.response.ProcessorClaimResponse;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.service.ProcessorJobService;
 import com.mairor.backend.common.web.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
@@ -73,7 +74,10 @@ public class ProcessorJobController {
   @PostMapping("/{jobId}/complete")
   public ResponseEntity<Void> complete(
       @PathVariable UUID jobId, @RequestBody ProcessorCompleteRequest request) {
-    service.complete(jobId, request == null ? null : request.guideJobRequestKey());
+    // 노트북 알림 처리 중 로그(오류 포함)에 작업 칸을 붙인다
+    try (var ignored = AnalysisLogContext.of(jobId, null, null)) {
+      service.complete(jobId, request == null ? null : request.guideJobRequestKey());
+    }
     return ResponseEntity.accepted().build();
   }
 
@@ -93,11 +97,13 @@ public class ProcessorJobController {
   @PostMapping("/{jobId}/fail")
   public ResponseEntity<Void> fail(
       @PathVariable UUID jobId, @RequestBody ProcessorFailRequest request) {
-    service.fail(
-        jobId,
-        request == null ? null : request.code(),
-        request == null ? null : request.retryable(),
-        request == null ? null : request.message());
+    try (var ignored = AnalysisLogContext.of(jobId, null, null)) {
+      service.fail(
+          jobId,
+          request == null ? null : request.code(),
+          request == null ? null : request.retryable(),
+          request == null ? null : request.message());
+    }
     return ResponseEntity.noContent().build();
   }
 
@@ -117,10 +123,12 @@ public class ProcessorJobController {
   @PostMapping("/{jobId}/progress")
   public ResponseEntity<Void> progress(
       @PathVariable UUID jobId, @RequestBody ProcessorProgressRequest request) {
-    service.progress(
-        jobId,
-        request == null ? null : request.stage(),
-        request == null ? null : request.percent());
+    try (var ignored = AnalysisLogContext.of(jobId, null, null)) {
+      service.progress(
+          jobId,
+          request == null ? null : request.stage(),
+          request == null ? null : request.percent());
+    }
     return ResponseEntity.noContent().build();
   }
 }

@@ -1,6 +1,7 @@
 package com.mairor.backend.analysis.worker;
 
 import com.mairor.backend.analysis.entity.AnalysisFailureCode;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.service.AiFrameDelivery;
 import com.mairor.backend.analysis.service.ProcessorJobService;
 import com.mairor.backend.analysis.worker.AnalysisJobStore.ProcessedJob;
@@ -95,6 +96,13 @@ public class ProcessedJobSubmitter {
       return false;
     }
     ProcessedJob job = next.get();
+    try (var ignored = AnalysisLogContext.of(job.jobId(), job.youtubeVideoId(), null)) {
+      submitOrFail(job);
+    }
+    return true;
+  }
+
+  private void submitOrFail(ProcessedJob job) {
     try {
       submit(job);
     } catch (AnalysisStepException e) {
@@ -109,7 +117,6 @@ public class ProcessedJobSubmitter {
       log.error("노트북 결과 처리 중 예기치 않은 오류 jobId={}", job.jobId(), e);
       store.fail(job.jobId(), AnalysisFailureCode.INTERNAL_ERROR, null);
     }
-    return true;
   }
 
   private void submit(ProcessedJob job) {
@@ -146,13 +153,21 @@ public class ProcessedJobSubmitter {
       throw new AnalysisStepException(BuildGuideStep.failureCode(e), e.getMessage(), e);
     }
     store.awaitAi(job.jobId(), aiJobId);
-    log.info(
-        "노트북 결과로 AI 가이드 생성 요청 jobId={} aiJobId={} steps={} frames={} requestBytes={}",
-        job.jobId(),
-        aiJobId,
-        request.stepCount(),
-        sendFrames ? request.frames().size() : 0,
-        body.length());
+    int frames = sendFrames ? request.frames().size() : 0;
+    // 이 줄부터 AI 작업 ID 를 붙여 AI 로그와 이어 본다
+    try (var ignored = AnalysisLogContext.of(null, null, aiJobId)) {
+      log.atInfo()
+          .setMessage("노트북 결과로 AI 가이드 생성 요청 jobId={} aiJobId={} steps={} frames={} requestBytes={}")
+          .addArgument(job.jobId())
+          .addArgument(aiJobId)
+          .addArgument(request.stepCount())
+          .addArgument(frames)
+          .addArgument(body.length())
+          .addKeyValue("steps", request.stepCount())
+          .addKeyValue("frames", frames)
+          .addKeyValue("request_bytes", body.length())
+          .log();
+    }
   }
 
   private String read(ProcessedJob job) {

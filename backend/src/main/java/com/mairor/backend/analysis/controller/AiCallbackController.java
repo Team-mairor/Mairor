@@ -2,6 +2,7 @@ package com.mairor.backend.analysis.controller;
 
 import com.mairor.backend.analysis.dto.request.AiGuideJobCallbackRequest;
 import com.mairor.backend.analysis.dto.request.AiGuideJobProgressRequest;
+import com.mairor.backend.analysis.log.AnalysisLogContext;
 import com.mairor.backend.analysis.service.AiProgressService;
 import com.mairor.backend.analysis.service.AiResultService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,7 +60,14 @@ public class AiCallbackController {
           "아직 모르는 AI 작업. AI 접수 직후라 작업 ID 를 저장하기 전일 수 있어 AI 가 다시 보낸다. (SERVICE_UNAVAILABLE)")
   @PostMapping("/callback")
   public ResponseEntity<Void> callback(@RequestBody AiGuideJobCallbackRequest request) {
-    aiResultService.apply(request);
+    // 모르는 작업 · 형식 오류로 끝나도 AI 작업 칸으로 찾게 먼저 붙인다(작업 칸은 서비스가 작업을 찾은 뒤 붙인다)
+    try (var ignored =
+        AnalysisLogContext.of(
+            null,
+            request == null ? null : request.videoId(),
+            request == null ? null : request.jobId())) {
+      aiResultService.apply(request);
+    }
     return ResponseEntity.noContent().build();
   }
 
