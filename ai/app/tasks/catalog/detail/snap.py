@@ -62,6 +62,7 @@ BLOB_MIN_HOMOGENEITY = 0.3
 BLOB_HOMOGENEITY_DELTA_E = 18.0
 BLOB_RADIUS_SPREAD = 0.25
 BLOB_REACH = 1.8
+MIN_BLOB_PAIRS = 2
 BLOB_READ_HALF = 0.6
 
 
@@ -309,8 +310,11 @@ def assign_blobs(boxes: list[BBox], blobs: list[Blob]) -> dict[int, Blob]:
     이를 막으려고 칸 수와 점 수가 정확히 같을 때(모델이 점을 하나도 빠뜨리지 않았다)만 잇고,
     전체 거리의 합이 가장 작은 짝을 고른다. 한 칸이라도 짝이 점 반지름의 BLOB_REACH배보다
     멀면 전체를 버린다.
+
+    칸이 하나뿐이면 잇지 않는다. 칸 1개·점 1개는 늘 짝이 맞아서, 큰 사진 한 장에 칸이 하나일 때
+    둥근 뚜껑이나 로고를 점으로 보고 그 색을 읽게 된다. 짝이 맞는다는 근거는 칸이 여럿일 때만 있다.
     """
-    if not boxes or len(boxes) != len(blobs):
+    if len(boxes) < MIN_BLOB_PAIRS or len(boxes) != len(blobs):
         return {}
     centers = [(b.x + b.width / 2, b.y + b.height / 2) for b in boxes]
     gaps = np.array([[np.hypot(cx - blob.x, cy - blob.y) for blob in blobs] for cx, cy in centers])

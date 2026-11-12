@@ -370,6 +370,13 @@ def test_the_pairing_is_dropped_when_the_cell_count_differs_from_the_dot_count()
     assert assign_blobs(dot_boxes(6) + dot_boxes(1), blobs) == {}
 
 
+def test_a_single_cell_is_never_moved_to_a_lone_dot() -> None:
+    blobs = sorted(detect_blobs(dots(), 49), key=lambda b: (b.y > 400, b.x))
+
+    assert assign_blobs(dot_boxes(1), blobs[:1]) == {}
+    assert sorted(assign_blobs(dot_boxes(2), blobs[:2])) == [0, 1]
+
+
 def test_the_pairing_is_dropped_when_a_box_is_far_from_every_dot() -> None:
     blobs = detect_blobs(dots(), 49)
     boxes = dot_boxes(6)
@@ -403,6 +410,48 @@ def test_dots_are_not_used_when_the_model_missed_one() -> None:
 
     assert sorted(c.label for c in result.cells) == labels
     assert all(c.reading is None for c in result.cells)
+
+
+def test_boxes_left_unpaired_on_a_dot_chart_are_not_read() -> None:
+    """어뮤즈: 원이 여럿인 차트에서 모델이 원 몇 개만 짚으면 칸과 원의 짝을 알 수 없다.
+
+    모델 칸이 옆 원이나 원 사이 배경을 잡았을 수 있어 읽지 않는다.
+    칸이 원 위에 있어 보여도 그 원이 그 번호인지 모른다.
+    """
+    picked = ((1, 0), (2, 3), (3, 4))
+    cells = [
+        Cell(
+            x=(DOT_CENTERS[i][0] - 30) / 900,
+            y=(DOT_CENTERS[i][1] - 30) / 1080,
+            width=60 / 900,
+            height=60 / 1080,
+            label=f"{n:02d}",
+        )
+        for n, i in picked
+    ]
+
+    result = scan_chart(dots(), cells)
+
+    assert sorted(c.label for c in result.cells) == ["01", "02", "03"]
+    assert all(c.reading is None for c in result.cells)
+
+
+def test_one_round_logo_does_not_make_big_single_cells_unreadable() -> None:
+    """큰 사진 칸 둘(줄마다 한 칸)이 있는 조각에 둥근 로고 하나가 점으로 잡혀도 점 차트가 아니다."""
+    image = Image.new("RGB", (900, 1080), "white")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((100, 100, 400, 400), fill=COLORS[0])
+    draw.rectangle((100, 600, 400, 900), fill=COLORS[1])
+    draw.ellipse((610, 160, 790, 340), fill=COLORS[2])
+    cells = [
+        Cell(x=150 / 900, y=150 / 1080, width=200 / 900, height=200 / 1080, label="01"),
+        Cell(x=150 / 900, y=650 / 1080, width=200 / 900, height=200 / 1080, label="02"),
+    ]
+
+    result = scan_chart(image, cells)
+
+    by_label = {c.label: c.reading for c in result.cells}
+    assert close(by_label["01"].hex, COLORS[0], 6) and close(by_label["02"].hex, COLORS[1], 6)
 
 
 # --- 칩 줄과 둥근 점이 한 조각에 섞인 경우: 점 짝은 칩이 못 해결한 칸끼리만 맞춘다 ---

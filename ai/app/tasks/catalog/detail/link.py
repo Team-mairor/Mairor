@@ -7,7 +7,8 @@
   번호가 아니면 이름 안에 번호가 하나일 때만 쓴다. 톤 글자(TONE_SUFFIX)가 다르면 다른 번호다.
 - 호수 쪽 번호가 없거나 한 상품 안에서 겹치면 그 호수들은 잇지 않는다. 다만 번호가 같아도
   이벤트 꼬리표("(GLIT ANGEL)", "[NEW]")를 걷어낸 이름이 같으면 같은 호수의 다른 판본이므로
-  하나로 보고 같은 칸에 잇는다.
+  하나로 보고 같은 칸에 잇는다. 이벤트 꼬리표는 이름 앞에 붙었거나 행사 낱말(EVENT_WORDS)이
+  든 것뿐이다. 이름 뒤의 "(벨벳)"·"(글로우)"는 제형이 다른 호수라 걷지 않는다(같은 번호면 겹침).
 - 번호만 적힌 라벨("2")은 같은 이미지에 서로 다른 번호가 MIN_BARE_NUMBERS개 이상 나열될 때만
   쓴다. 사용법 이미지의 단계 번호(1·2·3)가 호수에 이어지는 것을 막으려는 것이다.
 - 같은 번호의 칸이 여러 개면(칩 차트와 발색 컷이 둘 다 있는 경우) 칩 > 제품 내용물 > 피부 발색
@@ -43,6 +44,11 @@ _CODE = re.compile(
     rf"^([A-Za-z]{{0,3}})0*(\d{{1,3}})([{TONE_SUFFIX}]{{1,2}})?(?:호)?$", re.IGNORECASE
 )
 _TAG = re.compile(r"\[[^\]]*\]|\([^)]*\)")
+EVENT_WORDS = re.compile(
+    r"new|신상|신규|단독|한정|공식몰|pick|best|베스트|리뉴얼|renewal|증정|sale|세일|hot|이벤트"
+    r"|event|기획|콜라보|collab|edition|에디션|limited|품절|재입고|추천|\d+\s*p|\d+\s*\+\s*\d+",
+    re.IGNORECASE,
+)
 _HANGUL = re.compile(r"[가-힣]")
 _KIND_RANK = {ImageKind.SWATCH_CHIP: 0, ImageKind.PRODUCT_SINGLE: 1, ImageKind.SKIN_SWATCH: 2}
 
@@ -91,9 +97,29 @@ def _find_number(text: str) -> tuple[NumberKey | None, bool]:
 
 
 def _name_part(text: str) -> str:
-    """번호와 이벤트 꼬리표를 뺀 이름."""
+    """번호와 꼬리표를 모두 뺀 이름. 차트 라벨과 이름을 견줄 때 쓴다."""
     plain = _TAG.sub(" ", text)
     return " ".join(chunk for chunk in _chunks(plain) if _CODE.match(chunk) is None)
+
+
+def _variant_name(text: str) -> str:
+    """번호와 이벤트 꼬리표만 뺀 이름. 같은 번호의 호수가 같은 호수인지 가를 때 쓴다.
+
+    이름 앞의 꼬리표와 행사 낱말이 든 꼬리표는 걷고, 이름 뒤의 다른 꼬리표("(벨벳)")는 남긴다.
+    """
+    name_starts = _position_of_name(text)
+    stripped = text
+    for tag in _TAG.finditer(text):
+        if tag.end() <= name_starts or EVENT_WORDS.search(tag.group()):
+            stripped = stripped.replace(tag.group(), " ", 1)
+    return " ".join(chunk for chunk in _chunks(stripped) if _CODE.match(chunk) is None)
+
+
+def _position_of_name(text: str) -> int:
+    """꼬리표 밖에서 처음 나오는 글자(번호 포함)의 위치."""
+    masked = _TAG.sub(lambda m: " " * len(m.group()), text)
+    found = re.search(r"[^\s#.\-_/:·,]", masked)
+    return found.start() if found else len(text)
 
 
 def is_bare_number(label: str | None) -> bool:
@@ -143,7 +169,7 @@ def match_shades(
     for shade in shades:
         key = keys[shade.source_option_id]
         if key is not None:
-            names.setdefault(key, set()).add(compact_key(_name_part(shade.name)))
+            names.setdefault(key, set()).add(compact_key(_variant_name(shade.name)))
     groups: dict[NumberKey, list[tuple[ImageScan, ChartCell]]] = {}
     for scan in scans:
         numbered = {number_key(c.label) for c in scan.cells if c.label} - {None}

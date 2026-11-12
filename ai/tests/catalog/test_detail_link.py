@@ -224,6 +224,32 @@ def test_an_event_tag_does_not_hide_a_real_number_duplicate() -> None:
     assert result.reasons == {"a": NUMBER_DUPLICATE, "b": NUMBER_DUPLICATE}
 
 
+def test_shades_that_differ_by_a_trailing_variant_tag_are_different_shades() -> None:
+    shades = [shade("a", "01 로즈 (벨벳)"), shade("b", "01 로즈 (글로우)")]
+
+    result = match_shades(shades, [scan_of(cell("01 로즈"))])
+
+    assert result.matches == {}
+    assert result.reasons == {"a": NUMBER_DUPLICATE, "b": NUMBER_DUPLICATE}
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("01 로즈", "01 로즈 [NEW]"),
+        ("01 로즈", "01 로즈 (공식몰 단독)"),
+        ("01 로즈", "01 로즈 (2P)"),
+        ("01 로즈", "(이노마PICK/BASE) 01 로즈"),
+    ],
+)
+def test_event_tags_anywhere_and_leading_tags_still_mean_one_shade(names) -> None:
+    shades = [shade("a", names[0]), shade("b", names[1])]
+
+    result = match_shades(shades, [scan_of(cell("01 로즈", "#E8B9A5"))])
+
+    assert set(result.matches) == {"a", "b"}
+
+
 def test_an_event_tag_in_the_shade_name_is_not_a_name_conflict() -> None:
     assert not name_conflict("(GLIT ANGEL) 15 페어", "15 페어")
     assert name_conflict("(GLIT ANGEL) 15 페어", "15 라이트")

@@ -27,6 +27,7 @@ from app.tasks.catalog.detail.chart import CHART_SYSTEM, ChartCell, merge_duplic
 from app.tasks.catalog.detail.images import DetailImage
 from app.tasks.catalog.detail.overview import SHEET_CAPACITY, build_sheet, find_chart_tiles
 from app.tasks.catalog.detail.snap import (
+    MIN_BLOB_PAIRS,
     MIN_ROW_CELLS,
     assign_blobs,
     blob_box,
@@ -88,7 +89,12 @@ class _Pending:
 
 
 def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
-    """모델이 읽은 칸을 칩에 맞춰 색을 읽는다. 짝을 알 수 없는 줄과 배경을 읽은 칸은 색이 없다."""
+    """모델이 읽은 칸을 칩에 맞춰 색을 읽는다. 짝을 알 수 없는 줄과 배경을 읽은 칸은 색이 없다.
+
+    점이 여럿인 차트에서 칸 여럿을 점에 짝짓지 못하면(모델이 점을 빠뜨렸거나 원이 겹침) 그 칸들은
+    읽지 않는다. 모델 칸이 원 사이 배경이나 옆 원을 잡았을 수 있어서다(어뮤즈 겹친 원 차트).
+    점이 하나뿐이면(둥근 로고·뚜껑) 점 차트로 보지 않고 모델 칸을 그대로 읽는다.
+    """
     if analysis.confidence == "low" or analysis.kind in (ImageKind.STYLED, ImageKind.OTHER):
         return []
     crop, tile, height = pending.crop, pending.tile, pending.scan.height or 0
@@ -116,9 +122,12 @@ def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
         loose_boxes = [boxes[i] for i in loose]
         blobs = detect_blobs(crop, median(max(b.width, b.height) for b in loose_boxes))
         assigned = assign_blobs(loose_boxes, blobs)
+        unpaired = len(loose) >= MIN_BLOB_PAIRS and len(blobs) >= MIN_BLOB_PAIRS and not assigned
         for position, index in enumerate(loose):
             if position in assigned:
                 resolved[index] = blob_box(assigned[position])
+            elif unpaired:
+                resolved[index] = None
     cells: list[ChartCell] = []
     for index, (cell, model_box) in enumerate(entries):
         box = resolved[index]

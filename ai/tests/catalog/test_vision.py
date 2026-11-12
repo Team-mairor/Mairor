@@ -225,6 +225,28 @@ def test_a_cell_that_is_not_one_colour_keeps_its_place_without_a_colour() -> Non
     assert all(c.hex for c in colors[1:])
 
 
+def test_a_palette_whose_boxes_drifted_onto_the_background_gives_no_colours() -> None:
+    """디어달리아: 모델 칸이 함께 밀려 일부는 사진 배경을 읽었다. 남은 칸도 믿을 수 없다."""
+    drifted = [cell(0.4, 0.1), cell(0.75, 0.1), cell(0.4, 0.6), cell(0.75, 0.6)]
+    product, raw = shopify(
+        [variant(1, "A", "//cdn.example/a.jpg"), variant(2, "B", "//cdn.example/b.jpg")],
+        ["//cdn.example/m.jpg"],
+    )
+    site = Site(
+        {
+            "cdn.example/a.jpg": image_response(png(palette())),
+            "cdn.example/b.jpg": image_response(png(palette())),
+        }
+    )
+
+    colored, result = colorize(site, product, raw, FakeLlm(analysis(cells=drifted), analysis()))
+
+    drifted_shade, aligned_shade = colored.shades
+    assert all(c.hex is None for c in drifted_shade.colors)
+    assert any("CELLS_OFF_TARGET" in w for w in colored.warnings)
+    assert [c.hex is not None for c in aligned_shade.colors] == [True] * 4
+
+
 def test_printed_names_pick_the_slot_for_unverified_shades_and_upgrade_the_link() -> None:
     product, raw = shopify(
         [variant(1, "01 로즈"), variant(2, "02 피치"), variant(3, "09 코랄")],

@@ -28,7 +28,14 @@ from PIL import Image
 from app.clients.llm import Llm, LlmError
 from app.tasks.catalog.color.cell_reading import cell_box, read_cell
 from app.tasks.catalog.color.images import ImageUnusableError, LoadedImage, load_image
-from app.tasks.catalog.color.pixels import METHOD, METHOD_VERSION, ColorReading, read_color
+from app.tasks.catalog.color.pixels import (
+    METHOD,
+    METHOD_VERSION,
+    ColorReading,
+    hex_delta_e,
+    photo_background_hex,
+    read_color,
+)
 from app.tasks.catalog.color.vision import Analysis, Cell, analyze_image
 from app.tasks.catalog.contract import (
     BBox,
@@ -55,6 +62,7 @@ MAX_IMAGES = 60
 MAX_DECODED_IMAGES = 4
 MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
+BACKGROUND_MATCH = 6.0
 VISION_METHOD = "vision_box_pixel_median_lab"
 CHART_METHOD = "detail_chart_box_pixel_median_lab"
 
@@ -143,7 +151,27 @@ def _vision_slots(
     slots = _read_cells(cells, loaded.image, analysis.kind)
     if not any(slot.reading for slot in slots):
         return "CELL_NOT_UNIFORM"
+    if _boxes_on_background(slots, loaded.image):
+        return "CELLS_OFF_TARGET"
     return slots, shade_link
+
+
+def _boxes_on_background(slots: list[_Slot], image: Image.Image) -> bool:
+    """칸이 여럿인 사진에서 한 칸이라도 사진 배경색을 읽었으면 모델 칸 전체가 밀린 것으로 본다.
+
+    디어달리아 팔레트 사진에서 칸 4개가 한쪽으로 함께 밀려 셋은 흰 배경을, 하나는 팔레트 케이스를
+    읽었다. 케이스 색은 고른 색이라 칸 하나만 봐서는 틀린 줄 모른다. 같은 사진의 다른 칸이 배경을
+    읽었다는 것이 칸 위치가 어긋났다는 근거라서, 그 사진의 칸은 하나도 쓰지 않는다.
+    """
+    if len(slots) < 2:
+        return False
+    background = photo_background_hex(image)
+    if background is None:
+        return False
+    return any(
+        slot.reading is not None and hex_delta_e(slot.reading.hex, background) < BACKGROUND_MATCH
+        for slot in slots
+    )
 
 
 def _whole_slot(loaded: LoadedImage, link: ShadeImage) -> list[_Slot]:

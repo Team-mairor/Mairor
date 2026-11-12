@@ -88,6 +88,20 @@ def hex_delta_e(first: str, second: str) -> float:
     return float(np.linalg.norm(lab[0] - lab[1]))
 
 
+def photo_background_hex(image: Image.Image) -> str | None:
+    """사진 테두리가 거의 한 색이면 그 색(사진 배경). 아니면 None이다."""
+    rgb, opaque = _prepare(image, None)
+    if opaque.size == 0:
+        return None
+    lab = _to_lab(rgb.reshape(-1, 3)).reshape(rgb.shape)
+    if _background(lab, opaque) is None:
+        return None
+    ring = np.zeros_like(opaque)
+    ring[0, :] = ring[-1, :] = ring[:, 0] = ring[:, -1] = True
+    red, green, blue = (int(round(v)) for v in np.median(rgb[ring & opaque], axis=0))
+    return f"#{red:02X}{green:02X}{blue:02X}"
+
+
 def _delta(lab: np.ndarray, center: np.ndarray) -> np.ndarray:
     return np.linalg.norm(lab - center, axis=1)
 
@@ -161,6 +175,7 @@ def read_color(
     lab_all = _to_lab(rgb.reshape(-1, 3)).reshape(rgb.shape)
     valid = opaque.copy()
     background = _background(lab_all, opaque)
+    removed: np.ndarray | None = None
     if background is not None:
         foreground = opaque & (
             _delta(lab_all.reshape(-1, 3), background).reshape(opaque.shape) > BACKGROUND_DELTA
@@ -168,6 +183,7 @@ def read_color(
         enough = foreground.sum() >= MIN_FOREGROUND_SHARE * opaque.sum()
         if enough and not _only_clipped(lab_all[foreground]):
             valid = foreground
+            removed = background
     if int(valid.sum()) < MIN_PIXELS:
         return None
     chosen_rgb, chosen_lab = rgb[valid], lab_all[valid]
@@ -209,5 +225,10 @@ def read_color(
             "resolution": round(resolution, 3),
             "clip": round(clip, 3),
             "pixels": float(near.sum()),
+            "foreground": round(float(valid.sum() / opaque.sum()), 3),
+            "backgroundChroma": (
+                -1.0 if removed is None else round(float(np.hypot(removed[1], removed[2])), 1)
+            ),
+            "backgroundLightness": -1.0 if removed is None else round(float(removed[0]), 1),
         },
     )
