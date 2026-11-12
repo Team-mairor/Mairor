@@ -225,6 +225,7 @@ def test_parts_use_the_service_windows_and_color_values():
     assert list(parts) == ["brow", "eyeshadow", "eyeliner", "blush", "lip"]
     assert parts["brow"].change is brow_area.brow_darkening
     assert parts["eyeshadow"].change is eyeshadow_area.eyeshadow_reddening
+    assert parts["eyeshadow"].step_change is timing_metric.eyeshadow_change
     assert (parts["blush"].before_ms, parts["blush"].after_ms) == (
         blush_area.BEFORE_WINDOW_MS,
         blush_area.AFTER_WINDOW_MS,
@@ -491,3 +492,31 @@ def test_face_map_keep_lasts_from_the_service_windows_to_the_final_time():
     옛 기억 64장이면 대부분 단계에서 끝 시각에 다시 편다.
     """
     assert timing_metric.FACE_MAP_KEEP >= 222
+
+
+def shadow_found(under_color: str | None) -> eyeshadow_area.EyeshadowArea:
+    """눈 밑만 under_color로 찾은(None이면 못 찾은) 눈 하나의 섀도 결과."""
+    missing = eyeshadow_area.ZoneArea(mask=None, strength=0.5, reason="eyeshadowColorNotFound")
+    if under_color is None:
+        zones = {"upper": missing, "under": missing}
+        return eyeshadow_area.EyeshadowArea(mask=None, reason="eyeshadowColorNotFound", zones=zones)
+    mask = np.ones((MAP_SIZE, MAP_SIZE), dtype=bool)
+    under = eyeshadow_area.ZoneArea(mask=mask, strength=5.0, color=under_color)
+    return eyeshadow_area.EyeshadowArea(mask=mask, zones={"upper": missing, "under": under})
+
+
+def test_eyeshadow_step_found_only_by_brightening_is_measured_by_brightening():
+    """섀도 단계에서 찾은 자리가 모두 밝아진 양으로 찾은 눈 밑이면 색 값도 밝아진 양으로 잰다.
+
+    흰 애교살은 붉은 기가 늘지 않아, 붉어진 양으로 재면 진한 칸·바깥 비가 영역과 상관없는 값이 된다.
+    """
+
+    def areas(left: str | None, right: str | None) -> dict:
+        return {"leftEye": shadow_found(left), "rightEye": shadow_found(right)}
+
+    change = timing_metric.eyeshadow_change
+    assert change(areas("brightening", "brightening")) is eyeshadow_area.eyeshadow_brightening
+    assert change(areas("brightening", None)) is eyeshadow_area.eyeshadow_brightening
+    assert change(areas("reddening", "brightening")) is eyeshadow_area.eyeshadow_reddening
+    assert change(areas("reddening", "reddening")) is eyeshadow_area.eyeshadow_reddening
+    assert change(areas(None, None)) is eyeshadow_area.eyeshadow_reddening

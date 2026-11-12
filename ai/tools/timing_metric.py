@@ -3,7 +3,8 @@
 단계마다 부위 코드로 영역을 찾고(직전·직후 창은 서비스 그대로), 단계 시작 직전 지도를 기준으로
 단계 앞뒤 PAD_MS를 더한 구간을 STEP_MS마다 찍는다. 시각마다 그 직전 직후 창 길이만큼의 사진으로
 지도를 만들어, 부위 코드와 같은 색 값(눈썹 어두워진 양, 섀도·블러셔 붉어진 양, 아이라인 바뀐 칸,
-립 색이 바뀐 양)을 영역 안과 바깥 띠에서 평균 낸다. 마지막 시각(단계 끝 + 직후 창)은 서비스의
+립 색이 바뀐 양)을 영역 안과 바깥 띠에서 평균 낸다. 섀도 단계에서 찾은 자리가 모두 밝아진 양으로
+찾은 눈 밑이면 밝아진 양으로 잰다(eyeshadow_change). 마지막 시각(단계 끝 + 직후 창)은 서비스의
 직후 지도와 같다. 안쪽 값이 끝 값의 절반·90%를 넘고 다시 안 떨어진 시각을 단계 안 위치(시작 0,
 끝 1)로 내고, 끝날 때 바깥 ÷ 안을 바깥 비로, 끝 뒤 시각들의 안쪽 값 ÷ 끝 값을 유지 비로 낸다.
 유지 비가 낮으면 영역이 직후 창 순간에만 바뀐 칸을 잡은 것이다.
@@ -38,8 +39,8 @@ uv run python tools/timing_metric.py samples/local_03_seq [--occlusion <이름>]
 
 import json
 import sys
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
@@ -112,6 +113,7 @@ class Part:
     blur_sigma는 부위 코드가 색 값 지도를 흐리는 폭(칸)이고, 흐리지 않으면 0이다.
 
     zone은 쪽을 받아 서비스 부위 찾기가 rows_to_known_map에 넘기는 범위(지도 크기 표)를 낸다.
+    step_change가 있으면 단계마다 쪽별 찾기 결과로 그 단계에 쓸 change를 고른다.
     """
 
     name: str
@@ -126,6 +128,29 @@ class Part:
     change: Callable[[np.ndarray, np.ndarray, np.ndarray | None], np.ndarray]
     blur_sigma: float = 0.0
     zone: Callable[[RegionName], np.ndarray] | None = None
+    step_change: (
+        Callable[
+            [Mapping[RegionName, Area]],
+            Callable[[np.ndarray, np.ndarray, np.ndarray | None], np.ndarray],
+        ]
+        | None
+    ) = None
+
+
+def eyeshadow_change(
+    areas: Mapping[RegionName, Area],
+) -> Callable[[np.ndarray, np.ndarray, np.ndarray | None], np.ndarray]:
+    """섀도 단계에서 찾은 자리가 모두 밝아진 양으로 찾은 눈 밑이면 밝아진 양, 아니면 붉어진 양.
+
+    밝기로 찾은 흰색·회색 애교살은 붉은 기가 늘지 않아, 붉어진 양으로 재면 진한 칸·바깥 비·유지 비가
+    영역과 상관없는 값이 된다.
+    """
+    found = [
+        zone for area in areas.values() for zone in area.zones.values() if zone.mask is not None
+    ]
+    if found and all(zone.color == "brightening" for zone in found):
+        return eyeshadow_area.eyeshadow_brightening
+    return eyeshadow_area.eyeshadow_reddening
 
 
 def eyeliner_change(
@@ -161,6 +186,7 @@ PARTS = (
         eyeshadow_area.eyeshadow_reddening,
         eyeshadow_area.BLUR_SIGMA,
         eyeshadow_area.eyeshadow_range,
+        eyeshadow_change,
     ),
     Part(
         "eyeliner",
@@ -533,8 +559,19 @@ def main() -> None:
             def output(side: RegionName, drawn_areas=drawn_areas) -> np.ndarray | None:
                 return found_side(drawn_areas, side)
 
+            step_part = (
+                part if part.step_change is None else replace(part, change=part.step_change(areas))
+            )
             for row in measure_step(
-                part, result, start, end, load_map, find, output, cautions, keep_sharp=keep_sharp
+                step_part,
+                result,
+                start,
+                end,
+                load_map,
+                find,
+                output,
+                cautions,
+                keep_sharp=keep_sharp,
             ):
                 record = {"stepId": step.step_id, **row}
                 out.append(record)

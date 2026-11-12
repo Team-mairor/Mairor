@@ -269,15 +269,25 @@ def measure_eyeshadow(
     eye: RegionName,
     unknown: np.ndarray | None = None,
 ) -> Measure | None:
-    """섀도 쌍 하나. 관문 값(gate)은 자리마다 관문 대비 비율 중 큰 것이다(1 이상이면 찾음)."""
+    """섀도 쌍 하나. 관문 값(gate)은 자리마다 관문 대비 비율 중 큰 것이다(1 이상이면 찾음).
+
+    서비스처럼 눈 밑을 붉은 기로 못 찾으면 밝아진 양으로 다시 보고, 그렇게 찾은 눈 밑은
+    밝기 관문(BRIGHTENING_TOP_MIN) 대비 비율이다. 분포 값(values)은 붉어진 양이다.
+    """
     cells = known_cells(eyeshadow_area.eyeshadow_range(eye), unknown)
     if not cells.any():
         return None
     reddening = eyeshadow_area.eyeshadow_reddening(before, after, unknown)
+    brightening = eyeshadow_area.eyeshadow_brightening(before, after, unknown)
     values = reddening[cells]
-    area = eyeshadow_area.check_eyeshadow_area(reddening, eye, unknown)
+    area = eyeshadow_area.check_eyeshadow_area(reddening, eye, unknown, brightening)
     ratios = [
-        zone.strength / eyeshadow_area.FOUND_TOP_MIN[name]
+        zone.strength
+        / (
+            eyeshadow_area.BRIGHTENING_TOP_MIN
+            if zone.color == "brightening"
+            else eyeshadow_area.FOUND_TOP_MIN[name]
+        )
         for name, zone in area.zones.items()
         if zone.strength is not None
     ]

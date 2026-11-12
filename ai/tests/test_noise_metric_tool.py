@@ -109,6 +109,24 @@ def test_same_photo_before_and_after_gives_no_noise_and_no_false_find(measure, s
         assert np.abs(m.values).max() < 1e-3
 
 
+def test_eyeshadow_measure_finds_white_under_eye_by_brightening_like_the_service():
+    """눈 밑이 밝아지기만 하면 서비스처럼 밝아진 양으로 찾고, 관문 값은 밝기 관문 대비 비율이다."""
+    before = skin_map()
+    after = before.copy()
+    under = eyeshadow_area.eyeshadow_range("leftEye", "under") & polygon_mask(
+        map_points(REGION_POINTS["leftEye"]), MAP_SIZE, MAP_SIZE, band=20
+    )
+    after[under] = (245, 212, 196)
+
+    m = noise_metric.measure_eyeshadow(before, after, "leftEye")
+    zone = m.area.zone("under")
+
+    assert m.found
+    assert zone.color == "brightening"
+    assert m.gate == pytest.approx(zone.strength / eyeshadow_area.BRIGHTENING_TOP_MIN)
+    assert m.gate >= 1
+
+
 def test_blush_measure_finds_what_the_service_finds():
     before = skin_map()
     after = with_red(before, blush_area.cheek_range("leftCheek"), 12)

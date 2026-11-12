@@ -10,21 +10,30 @@ from app.tasks.area.common.eye_line import above_eye_line, eye_corners
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts import eyeshadow_area
 from app.tasks.area.parts.area_preparation import remove_lighting, rgb_to_lab
 from app.tasks.area.parts.eyeshadow_area import (
+    BRIGHTENING_TOP_MIN,
     EYES,
+    FILL_JOIN_COLS,
+    FILL_REACH_CELLS,
     FOUND_TOP_MIN,
     MERGE_AGREE_MIN,
     MIN_PIECE_CELLS,
+    REDDENING_MIN,
+    UNKNOWN_BRIGHTENING_TOP_MIN,
     UNKNOWN_ZONE_TOP_MIN,
     ZONES,
     EyeshadowArea,
     ZoneArea,
+    check_brightened_under,
     check_eyeshadow_area,
     check_zone,
+    eyeshadow_brightening,
     eyeshadow_range,
     eyeshadow_reddening,
     eyeshadow_shape,
+    filled_to_lash,
     find_eyeshadow_area,
     mirror_agreement,
     paired_eyeshadow,
@@ -47,6 +56,17 @@ MIN_SAME_AREA_AFTER_LIGHTING_ON_SAMPLE = 0.6
 LIGHTS = ((1.02, 1.0, 1.0), (1.1, 1.1, 1.1), (0.9, 0.9, 0.9))
 SKIN = (232, 192, 172)
 SHADOW = (236, 180, 170)
+WHITE_PENCIL = (245, 212, 196)
+FAINT_WHITE = (240, 205, 188)
+UNDER_BAND_CELLS = 20
+LID_HEIGHT_CELLS = 30
+WHITE = (250, 245, 240)
+WHITE_ALPHA_FOUND = 0.3
+WHITE_ALPHA_FAINT = 0.15
+MIN_WHITE_OVERLAP = 0.5
+MIN_FILLED_EDGE = 0.85
+NARROW_NOTCH_COLS = 2
+WIDE_NOTCH_COLS = 8
 START_MS, END_MS = 10000, 20000
 
 
@@ -193,6 +213,111 @@ def test_shape_drops_small_pieces_and_fills_holes():
     assert not (shape & speck).any()
 
 
+def lash_line_rows(eye: str) -> np.ndarray:
+    """지도 열마다 눈 구멍 맨 위 행(위 속눈썹 선). 눈 구멍이 없는 열은 -1."""
+    hole = eye_points(eye)
+    return np.where(hole.any(axis=0), np.argmax(hole, axis=0), -1)
+
+
+def lid_above_lash(eye: str, gap: int) -> np.ndarray:
+    """윗눈두덩 자리 중 속눈썹 선에서 gap칸 위부터 LID_HEIGHT_CELLS칸 높이의 띠."""
+    top = lash_line_rows(eye)[None, :]
+    rows = np.arange(MAP_SIZE)[:, None]
+    band = (rows < top - gap) & (rows >= top - gap - LID_HEIGHT_CELLS) & (top >= 0)
+    return band & eyeshadow_range(eye, "upper")
+
+
+def just_above_lash(eye: str, mask: np.ndarray) -> np.ndarray:
+    """mask가 있는 열마다 속눈썹 선 바로 위 칸(윗눈두덩 자리 안)."""
+    top = lash_line_rows(eye)
+    cols = np.nonzero(mask.any(axis=0) & (top > 0))[0]
+    out = np.zeros_like(mask)
+    out[top[cols] - 1, cols] = True
+    return out & eyeshadow_range(eye, "upper")
+
+
+def under_band(eye: str, depth: int = UNDER_BAND_CELLS) -> np.ndarray:
+    """눈 밑 자리 중 눈 테두리에서 depth칸 안. 아래 속눈썹 선을 따라 얹은 애교살로 쓴다."""
+    return region(eye, depth) & eyeshadow_range(eye, "under")
+
+
+def test_upper_lid_ending_near_the_lash_line_is_filled_down_to_it():
+    """찾은 윗눈두덩 아래 끝이 속눈썹 선에서 FILL_REACH_CELLS칸 안이면 속눈썹 선까지 채운다.
+
+    얼굴 지도는 눈 뜬 사진이라 쌍꺼풀 안에 접힌 눈꺼풀이 몇 칸에 눌려 있고, 그대로 두면 눈을 감았을
+    때
+    속눈썹 위로 틈이 생겼다. 가로는 찾은 열만 채우고, 눈 구멍과 눈 밑 자리에는 들어가지 않는다.
+    """
+    for eye in EYES:
+        lid = lid_above_lash(eye, FILL_REACH_CELLS)
+        filled = filled_to_lash(lid, eye)
+        edge = just_above_lash(eye, lid)
+        assert edge.any()
+        assert (filled & edge).sum() == edge.sum()
+        assert np.array_equal(filled.any(axis=0), lid.any(axis=0))
+        assert not (filled & eye_points(eye)).any()
+        assert not (filled & ~eyeshadow_range(eye, "upper")).any()
+
+
+def test_narrow_column_left_between_filled_columns_is_filled_too():
+    """채우는 열 사이에 FILL_JOIN_COLS열 이하로 낀 못 채운 열(속눈썹 선까지 조금 더 먼 열)도 채운다.
+
+    한 칸 차이로 남은 열이 FE 감은 눈 화면에서 V자 홈이 됐다(NARROW_NOTCH_COLS).
+    그보다 넓게(WIDE_NOTCH_COLS) 떨어진 곳은 그대로 둔다.
+    """
+    assert NARROW_NOTCH_COLS <= FILL_JOIN_COLS < WIDE_NOTCH_COLS
+    for eye in EYES:
+        lid = lid_above_lash(eye, FILL_REACH_CELLS)
+        cols = np.nonzero(lid.any(axis=0))[0]
+        middle = cols[len(cols) // 2]
+        notch = lid.copy()
+        top = lash_line_rows(eye)
+        for col in range(middle, middle + NARROW_NOTCH_COLS):
+            notch[top[col] - FILL_REACH_CELLS - 3 : top[col], col] = False
+        filled = filled_to_lash(notch, eye)
+        edge = just_above_lash(eye, notch)
+        assert (filled & edge).sum() == edge.sum()
+        wide = lid.copy()
+        for col in range(middle, middle + WIDE_NOTCH_COLS):
+            wide[top[col] - FILL_REACH_CELLS - 3 : top[col], col] = False
+        filled = filled_to_lash(wide, eye)
+        assert not filled[top[middle + 1] - 1, middle + 1]
+
+
+def test_upper_lid_floating_above_the_fold_is_not_filled():
+    """쌍꺼풀 라인 위만 띄워 바른 것처럼 아래 끝이 속눈썹 선에서 FILL_REACH_CELLS칸보다 멀면
+    그대로다."""
+    for eye in EYES:
+        lid = lid_above_lash(eye, FILL_REACH_CELLS + 1)
+        assert np.array_equal(filled_to_lash(lid, eye), lid)
+
+
+def test_found_upper_lid_reaches_the_lash_line_and_under_eye_is_not_filled():
+    """윗눈두덩은 찾아 다듬은 뒤 속눈썹 선까지 채우고, 눈 밑은 다듬은 모양 그대로 둔다(눈 밑만 바른
+    단계).
+
+    다듬으면 모양 양 끝이 둥글게 올라가, 그 열은 속눈썹 선에서 멀어 채우지 않는다.
+    """
+    reddening = np.zeros((MAP_SIZE, MAP_SIZE), dtype=np.float32)
+    for eye in EYES:
+        reddening[lid_above_lash(eye, 4)] = 5
+        reddening[under_band(eye) & ~region(eye, 4)] = 5
+    for eye in EYES:
+        cells = eyeshadow_range(eye, "upper")
+        shape = eyeshadow_shape((reddening > REDDENING_MIN) & cells, cells)
+        upper = check_zone(reddening, eye, "upper")
+        assert np.array_equal(upper.mask, filled_to_lash(shape, eye))
+        edge = just_above_lash(eye, upper.mask)
+        assert (upper.mask & edge).sum() > MIN_FILLED_EDGE * edge.sum()
+        assert not (shape & edge).any()
+        cells = eyeshadow_range(eye, "under")
+        under = check_zone(reddening, eye, "under")
+        assert np.array_equal(
+            under.mask, eyeshadow_shape((reddening > REDDENING_MIN) & cells, cells)
+        )
+        assert not (under.mask & region(eye, 1)).any()
+
+
 def zone_found(mask: np.ndarray | None, strength: float) -> EyeshadowArea:
     """윗눈두덩만 mask로 찾은(없으면 못 찾은) 눈 하나의 결과."""
     upper = (
@@ -280,6 +405,154 @@ def test_paired_eyeshadow_needs_the_higher_gate_when_the_zone_is_unknown():
     assert paired_eyeshadow(areas, "upper", zone_known=False) is not None
 
 
+def painted_under(color: tuple[int, int, int]) -> np.ndarray:
+    out = skin_map()
+    for eye in EYES:
+        out[under_band(eye)] = color
+    return out
+
+
+def under_found(color: str, strength: float = 5.0) -> dict[str, EyeshadowArea]:
+    """두 눈 모두 눈 밑을 color(붉어진 양·밝아진 양)로 찾은 결과."""
+    out = {}
+    for eye in EYES:
+        under = ZoneArea(mask=under_band(eye), strength=strength, color=color)
+        upper = ZoneArea(mask=None, strength=0.5, reason="eyeshadowColorNotFound")
+        out[eye] = EyeshadowArea(mask=under.mask, zones={"upper": upper, "under": under})
+    return out
+
+
+def test_white_under_eye_is_found_by_brightening_when_reddening_misses():
+    """흰 펜슬처럼 붉은 기는 줄고 밝아지기만 한 눈 밑은 밝아진 양으로 찾는다(color brightening)."""
+    after = painted_under(WHITE_PENCIL)
+    reddening = eyeshadow_reddening(skin_map(), after)
+    brightening = eyeshadow_brightening(skin_map(), after)
+    areas = {eye: check_eyeshadow_area(reddening, eye, None, brightening) for eye in EYES}
+    for eye in EYES:
+        assert check_eyeshadow_area(reddening, eye).zone("under").mask is None
+        under = areas[eye].zone("under")
+        assert under.color == "brightening"
+        assert under.strength >= BRIGHTENING_TOP_MIN
+        assert iou(under.mask, under_band(eye)) > MIN_WHITE_OVERLAP
+        assert not (under.mask & ~eyeshadow_range(eye, "under")).any()
+        assert areas[eye].zone("upper").mask is None
+        assert np.array_equal(areas[eye].mask, under.mask)
+    assert paired_eyeshadow(areas, "under") is not None
+
+
+def test_find_eyeshadow_area_looks_at_brightening_of_the_photos(monkeypatch):
+    """사진에서 찾을 때도 붉어진 양과 함께 밝아진 양을 만들어 넘겨, 흰 애교살을 밝기로 찾는다."""
+    before_row, after_row = make_row(START_MS - 500), make_row(END_MS + 500)
+    maps = {
+        before_row.timestamp_ms: skin_map(),
+        after_row.timestamp_ms: painted_under(WHITE_PENCIL),
+    }
+
+    def rows_in(result, start_ms, end_ms, regions):
+        return [row for row in (before_row, after_row) if start_ms <= row.timestamp_ms <= end_ms]
+
+    def as_map(rows, load_photo, occlusion, zone):
+        return maps[rows[0].timestamp_ms], np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    monkeypatch.setattr(eyeshadow_area, "usable_rows", rows_in)
+    monkeypatch.setattr(eyeshadow_area, "match_sizes", lambda before, after: (before, after))
+    monkeypatch.setattr(
+        eyeshadow_area, "drop_blurry", lambda before, after, load, occ: (before, after)
+    )
+    monkeypatch.setattr(eyeshadow_area, "rows_to_known_map", as_map)
+    result = LandmarksResult(video_id="test_01", frames=[before_row, after_row])
+    for eye in EYES:
+        under = find_eyeshadow_area(result, START_MS, END_MS, lambda row: None, eye).zone("under")
+        assert under.mask is not None
+        assert under.color == "brightening"
+
+
+def test_faint_white_under_eye_is_not_found():
+    """밝아진 양이 BRIGHTENING_TOP_MIN에 못 미치면 바르지 않은 시간의 흔들림만큼이라 못 찾음이다."""
+    after = painted_under(FAINT_WHITE)
+    reddening = eyeshadow_reddening(skin_map(), after)
+    brightening = eyeshadow_brightening(skin_map(), after)
+    for eye in EYES:
+        found = check_eyeshadow_area(reddening, eye, None, brightening)
+        assert found.mask is None
+        assert found.reason == "eyeshadowColorNotFound"
+        assert check_brightened_under(brightening, eye).strength < BRIGHTENING_TOP_MIN
+
+
+def test_brightening_leaves_out_changes_inside_the_eye_holes():
+    """시선이 바뀌어 흰자가 밝아져도 눈 밑을 밝아진 곳으로 찾지 않는다. 눈 구멍은 흐리기 전에 0으로
+    둔다."""
+    after = skin_map()
+    for eye in EYES:
+        after[eye_points(eye)] = (255, 255, 255)
+    brightening = eyeshadow_brightening(skin_map(), after)
+    for eye in EYES:
+        assert np.abs(brightening[eyeshadow_range(eye)]).max() < 0.01
+        assert check_brightened_under(brightening, eye).mask is None
+
+
+def test_reddened_under_eye_is_not_looked_at_again_by_brightening():
+    """붉은 기로 찾은 눈 밑은 그대로 쓰고, 밝아진 양으로 다시 보지 않는다."""
+    after = painted_under(SHADOW)
+    reddening = eyeshadow_reddening(skin_map(), after)
+    brightening = np.full((MAP_SIZE, MAP_SIZE), 2 * BRIGHTENING_TOP_MIN, dtype=np.float32)
+    for eye in EYES:
+        under = check_eyeshadow_area(reddening, eye, None, brightening).zone("under")
+        assert under.color == "reddening"
+        assert np.array_equal(under.mask, check_zone(reddening, eye, "under").mask)
+
+
+def test_paired_eyeshadow_needs_the_same_color_in_both_eyes():
+    """한 눈은 붉어지고 다른 눈은 밝아지기만 했으면 같은 섀도로 보지 않는다."""
+    red, bright = under_found("reddening"), under_found("brightening")
+    assert paired_eyeshadow(red, "under") is not None
+    assert paired_eyeshadow(bright, "under") is not None
+    mixed = {"leftEye": red["leftEye"], "rightEye": bright["rightEye"]}
+    assert paired_eyeshadow(mixed, "under") is None
+
+
+def test_brightened_under_eye_needs_a_higher_gate_when_the_zone_is_unknown():
+    """밝아진 양으로 찾은 눈 밑은 단계 글로 자리를 모르면 UNKNOWN_BRIGHTENING_TOP_MIN을 넘어야 쓴다.
+
+    자리를 모르면 두 자리를 다 보므로, 자리를 알 때의 관문으로는 바르지 않은 시간의 헛것이
+    판정선을 넘었다.
+    """
+    weak = (BRIGHTENING_TOP_MIN + UNKNOWN_BRIGHTENING_TOP_MIN) / 2
+    assert paired_eyeshadow(under_found("brightening", weak), "under", zone_known=True) is not None
+    assert paired_eyeshadow(under_found("brightening", weak), "under", zone_known=False) is None
+    strong = UNKNOWN_BRIGHTENING_TOP_MIN
+    assert (
+        paired_eyeshadow(under_found("brightening", strong), "under", zone_known=False) is not None
+    )
+
+
+def test_brightened_under_eyes_keep_their_own_shapes():
+    """밝아진 양으로 찾은 두 눈은 모양이 많이 겹쳐도 합치지 않고 눈마다 자기 모양을 쓴다.
+
+    흰 펜슬은 눈마다 밝아진 자리가 조금씩 달라, 합치면 반대쪽의 덜 밝아진 칸이 섞여 진한 칸이
+    줄고 흔들림이 커졌다. 붉어진 양으로 찾은 두 눈은 전처럼 합친다.
+    """
+
+    def found(color: str) -> dict[str, EyeshadowArea]:
+        out = under_found(color)
+        right = out["rightEye"].zone("under")
+        cut = cut_columns(right.mask, 0.8)
+        under = ZoneArea(mask=cut, strength=right.strength, color=color)
+        out["rightEye"] = EyeshadowArea(
+            mask=cut, zones={"upper": out["rightEye"].zone("upper"), "under": under}
+        )
+        return out
+
+    bright = found("brightening")
+    assert mirror_agreement(*(bright[eye].zone("under").mask for eye in EYES)) >= MERGE_AGREE_MIN
+    masks = paired_eyeshadow(bright, "under")
+    for eye in EYES:
+        assert masks[eye] is bright[eye].zone("under").mask
+    red = found("reddening")
+    merged = paired_eyeshadow(red, "under")
+    assert merged["rightEye"].sum() > red["rightEye"].zone("under").mask.sum()
+
+
 def load_map(name: str) -> np.ndarray:
     """영상 local_03_seq 섀도 챕터의 얼굴 지도.
 
@@ -308,8 +581,17 @@ def eyeshadow_on_sample(
 ) -> dict[str, dict[str, np.ndarray] | None]:
     """시험 사진 쌍에서 자리마다 paired_eyeshadow로 만든 양쪽 가이드 영역(못 쓰면 None)."""
     after = load_map(f"after_{step}") if after is None else after
-    reddening = eyeshadow_reddening(load_map(f"before_{step}"), after)
-    areas = {eye: check_eyeshadow_area(reddening, eye) for eye in EYES}
+    return eyeshadow_on_maps(load_map(f"before_{step}"), after)
+
+
+def eyeshadow_on_maps(
+    before: np.ndarray, after: np.ndarray
+) -> dict[str, dict[str, np.ndarray] | None]:
+    """직전·직후 지도에서 서비스처럼(붉어진 양, 눈 밑은 밝아진 양도) 찾아 자리마다 양쪽 영역을
+    낸다."""
+    reddening = eyeshadow_reddening(before, after)
+    brightening = eyeshadow_brightening(before, after)
+    areas = {eye: check_eyeshadow_area(reddening, eye, None, brightening) for eye in EYES}
     return {zone: paired_eyeshadow(areas, zone) for zone in ZONES}
 
 
@@ -426,9 +708,12 @@ def test_lighting_change_after_eyeshadow_keeps_the_same_area_on_sample_video():
 
 
 def test_unchanged_eyes_are_not_found_on_sample_video():
-    reddening = eyeshadow_reddening(load_map("unchanged_s10"), load_map("before_s10"))
+    """바르기 전 두 묶음은 붉어진 양으로도, 눈 밑 밝아진 양으로도 찾지 않는다."""
+    before, after = load_map("unchanged_s10"), load_map("before_s10")
+    reddening = eyeshadow_reddening(before, after)
+    brightening = eyeshadow_brightening(before, after)
     for eye in EYES:
-        found = check_eyeshadow_area(reddening, eye)
+        found = check_eyeshadow_area(reddening, eye, None, brightening)
         assert found.reason == "eyeshadowColorNotFound"
         assert all(found.zone(zone).mask is None for zone in ZONES)
 
@@ -440,3 +725,31 @@ def test_found_check_uses_most_reddened_cells_not_the_middle_on_sample_video():
         cells = eyeshadow_range(eye, "under")
         assert np.median(reddening[cells]) < FOUND_TOP_MIN["under"]
         assert check_zone(reddening, eye, "under").mask is not None
+
+
+def with_white_under_eyes(face_map: np.ndarray, alpha: float) -> np.ndarray:
+    """두 눈 밑 띠(under_band)를 흰색(WHITE) 쪽으로 alpha만큼 섞은 지도. 흰 펜슬 애교살로 쓴다."""
+    out = face_map.astype(np.float32)
+    for eye in EYES:
+        band = under_band(eye)
+        out[band] = out[band] * (1 - alpha) + np.array(WHITE) * alpha
+    return out.astype(np.uint8)
+
+
+def test_white_under_eye_on_sample_video_is_found_by_brightening():
+    """시험 사진(s10 직전)에 흰 펜슬 애교살을 얹으면 두 눈 모두 밝아진 양으로 찾고, 얹은 곳을
+    따라간다.
+
+    옅게 얹으면(WHITE_ALPHA_FAINT) 바르지 않은 시간의 흔들림만큼이라 못 찾는다. 시험 영상의 흰 펜슬
+    애교살(s17)도 서비스 창에서 두 눈 중 낮은 쪽이 관문에 못 미쳐 기본 가이드로 간다.
+    """
+    before = load_map("before_s10")
+    masks = eyeshadow_on_maps(before, with_white_under_eyes(before, WHITE_ALPHA_FOUND))
+    assert masks["upper"] is None
+    assert masks["under"] is not None
+    holes = region("leftEye") | region("rightEye")
+    for eye in EYES:
+        assert iou(masks["under"][eye], under_band(eye)) > MIN_WHITE_OVERLAP
+        assert not (masks["under"][eye] & holes).any()
+    faint = eyeshadow_on_maps(before, with_white_under_eyes(before, WHITE_ALPHA_FAINT))
+    assert faint["under"] is None
