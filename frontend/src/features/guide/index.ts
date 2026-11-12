@@ -3,6 +3,7 @@ export { resolveStep, resolveSubStep } from "./area";
 export {
   abandonExecution,
   completeExecution,
+  deleteFaceRegistration,
   executionSelections,
   ExecutionMismatchError,
   faceRegistrationRequest,
@@ -10,6 +11,7 @@ export {
   registerFace,
   setPhotoConsent,
   startExecution,
+  uploadStepPhoto,
 } from "./execution-api";
 export {
   fetchGuide,

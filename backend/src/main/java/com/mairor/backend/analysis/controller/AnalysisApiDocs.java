@@ -19,9 +19,25 @@ final class AnalysisApiDocs {
         "reviewStatus": "NOT_READY",
         "guideAvailable": false,
         "guideId": null,
-        "foundProducts": [],
-        "foundProductCount": 0,
-        "totalProductCount": null,
+        "foundProducts": [
+          {
+            "stepId": "s1",
+            "part": "lip",
+            "referenceProduct": {
+              "productId": null,
+              "shadeId": null,
+              "name": "브랜드 립 제품",
+              "shadeName": null,
+              "matchStatus": "UNMATCHED",
+              "verification": "UNKNOWN",
+              "sources": [],
+              "videoConfirmed": true
+            },
+            "ownership": "NOT_OWNED"
+          }
+        ],
+        "foundProductCount": 1,
+        "totalProductCount": 1,
         "failureCode": null,
         "failureMessage": null,
         "pollAfterSeconds": 3,

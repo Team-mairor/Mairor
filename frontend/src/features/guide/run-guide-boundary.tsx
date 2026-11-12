@@ -7,6 +7,7 @@ import { facePhoto } from "@/features/face";
 import { faceReady, isRunPath, useSession, type RunRouteAction } from "@/features/session";
 import { GuideStatus } from "@/features/tutorial";
 
+import { deleteFaceRegistration } from "./execution-api";
 import { useGuide } from "./use-guide";
 
 /** 실행 화면 본문보다 먼저 진입·조회·인증을 검사한다 */
@@ -28,6 +29,10 @@ export function RunGuideBoundary({
   const home = {
     label: "홈으로",
     onClick: () => {
+      if (run.mode === "guide" && run.faceRegistrationId && !run.executionId)
+        deleteFaceRegistration(run.faceRegistrationId).catch((e: unknown) =>
+          console.warn("얼굴 등록 정리 실패", e),
+        );
       endRun(run.id);
       router.push("/home");
     },

@@ -63,7 +63,8 @@ public class SseHub implements SmartLifecycle {
   private static final class Channel {
     final ReentrantLock lock = new ReentrantLock();
     final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
-    volatile AnalysisJobStatusView lastSent;
+    final Map<SseEmitter, UUID> userIds = new ConcurrentHashMap<>();
+    final Map<SseEmitter, AnalysisJobStatusView> lastSent = new ConcurrentHashMap<>();
     volatile String fingerprint;
   }
 
@@ -72,7 +73,7 @@ public class SseHub implements SmartLifecycle {
    *
    * @return 열린 연결. 이미 끝난 작업이면 상태를 하나 보내고 닫힌다
    */
-  public SseEmitter subscribe(UUID jobId) {
+  public SseEmitter subscribe(UUID userId, UUID jobId) {
     SseEmitter emitter = new SseEmitter(properties.timeout().toMillis());
     if (!running) {
       // 내려가는 중이면 받지 않는다. FE 는 다시 붙어 다른 슬롯으로 간다
@@ -88,6 +89,7 @@ public class SseHub implements SmartLifecycle {
             (id, existing) -> {
               Channel c = existing == null ? new Channel() : existing;
               c.emitters.add(emitter);
+              c.userIds.put(emitter, userId);
               return c;
             });
     channel.lock.lock();
@@ -192,27 +194,33 @@ public class SseHub implements SmartLifecycle {
     return channels.values().stream().mapToInt(c -> c.emitters.size()).sum();
   }
 
-  /**
-   * 잠금을 쥔 채 부른다. 상태를 새로 읽어 바뀌었으면 모두에게, 그대로면 새로 붙은 연결({@code newcomer})에만 보낸다. 더 바뀌지 않는 상태면 모두 닫는다.
-   */
+  /** 잠금을 쥔 채 연결별 조회 회원의 상태를 읽어, 달라진 값만 해당 회원에게 보낸다. */
   private void deliver(UUID jobId, Channel channel, SseEmitter newcomer) {
-    Optional<AnalysisJobStatusView> found = statuses.find(jobId);
-    if (found.isEmpty()) {
-      log.info("분석 작업이 없어 SSE 연결을 닫음 jobId={}", jobId);
-      close(jobId, channel, newcomer);
-      return;
-    }
-    AnalysisJobStatusView view = found.get();
-    if (!view.equals(channel.lastSent)) {
-      for (SseEmitter emitter : channel.emitters) {
-        send(jobId, emitter, view);
+    boolean finished = false;
+    Map<UUID, Optional<AnalysisJobStatusView>> viewsByUser = new HashMap<>();
+    for (SseEmitter emitter : List.copyOf(channel.emitters)) {
+      UUID userId = channel.userIds.get(emitter);
+      Optional<AnalysisJobStatusView> found =
+          userId == null
+              ? Optional.empty()
+              : viewsByUser.computeIfAbsent(userId, id -> statuses.find(id, jobId));
+      if (found.isEmpty()) {
+        log.info("조회 권한이 없거나 작업이 없어 SSE 연결을 닫음 jobId={}", jobId);
+        emitter.complete();
+        remove(jobId, emitter);
+        continue;
       }
-      channel.lastSent = view;
-    } else if (newcomer != null) {
-      send(jobId, newcomer, view);
+      AnalysisJobStatusView view = found.get();
+      if (emitter == newcomer || !view.equals(channel.lastSent.get(emitter))) {
+        send(jobId, emitter, view);
+        channel.lastSent.put(emitter, view);
+      }
+      finished |= view.isFinal();
     }
-    if (view.isFinal()) {
+    if (finished) {
       close(jobId, channel, newcomer);
+    } else if (channel.emitters.isEmpty()) {
+      channels.remove(jobId, channel);
     }
   }
 
@@ -240,6 +248,8 @@ public class SseHub implements SmartLifecycle {
       newcomer.complete();
     }
     channel.emitters.clear();
+    channel.userIds.clear();
+    channel.lastSent.clear();
     channels.remove(jobId, channel);
   }
 
@@ -248,6 +258,8 @@ public class SseHub implements SmartLifecycle {
         jobId,
         (id, channel) -> {
           channel.emitters.remove(emitter);
+          channel.userIds.remove(emitter);
+          channel.lastSent.remove(emitter);
           return channel.emitters.isEmpty() ? null : channel;
         });
   }

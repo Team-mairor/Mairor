@@ -21,7 +21,12 @@ import {
   type GuideSet,
   type Makeup,
 } from "@/features/guide";
-import { abandonExecution, useRunQuery as useQuery } from "@/features/guide";
+import {
+  abandonExecution,
+  deleteFaceRegistration,
+  uploadStepPhoto,
+  useRunQuery as useQuery,
+} from "@/features/guide";
 import { LiveNote, parseAlert, RoundBack, useLiveState } from "@/features/live";
 import {
   matchFor,
@@ -291,8 +296,15 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const paused = run.mode === "guide" && (load.status !== "ready" || load.checking || !!load.error);
   const blocked = !canMeasure || paused;
 
-  // 찍으면 사진과 촬영 기록을 같이 남기고 다음 단계로 간다. 같은 단계를 다시 찍으면 덮어쓴다
-  const shot = useStepShot(photoRegions, (photo) => {
+  // 실제 가이드는 단계 사진을 서버에 저장한 뒤 화면 상태를 확정하고 다음으로 간다.
+  // 업로드에 실패하면 이전 사진과 단계 상태를 유지해 재시도할 수 있게 한다.
+  const shot = useStepShot(photoRegions, async (photo) => {
+    if (!isCurrentRun(run.id)) return;
+    if (run.mode === "guide") {
+      if (!run.executionId) throw new Error("실행 정보가 없습니다.");
+      const image = await fetch(photo.url).then((response) => response.blob());
+      await uploadStepPhoto(run.executionId, info.stepId, image);
+    }
     if (!isCurrentRun(run.id)) return;
     saveStepPhoto(run.id, info.stepId, photo);
     updateRun(
@@ -351,7 +363,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   }
   // 모든 단계(제품 없는 단계·생략한 단계 포함)를 넘길 때 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
   const next = () => {
-    if (shot.shooting || paused) return;
+    if (shot.shooting || shot.saving || paused) return;
     if (!lastAct) {
       setAct((a) => a + 1);
       return;
@@ -368,6 +380,10 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     // 실제 가이드는 서버 실행을 중도 종료한다. 실패해도 서버가 세션 종료 때 정리하므로 기다리지 않는다
     if (run.mode === "guide" && run.executionId)
       abandonExecution(run.executionId).catch((e: unknown) => console.warn("중도 종료 실패", e));
+    else if (run.mode === "guide" && run.faceRegistrationId)
+      deleteFaceRegistration(run.faceRegistrationId).catch((e: unknown) =>
+        console.warn("얼굴 등록 정리 실패", e),
+      );
     endRun(run.id);
     router.push("/home");
   };
@@ -402,8 +418,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           cancelShot();
           setExitAsk(true);
         }}
-        reachable={reachable}
-        onGoStep={(i) => i <= reachable && goStep(i, i > step)}
+        reachable={shot.saving ? -1 : reachable}
+        onGoStep={(i) => !shot.saving && i <= reachable && goStep(i, i > step)}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
       {/* 영상 제품 정보가 없어도 고른 제품이 있으면 보여 준다 */}
@@ -466,6 +482,14 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
             주세요.
           </p>
         )}
+        {shot.saving && (
+          <p
+            role="status"
+            className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-ink"
+          >
+            사진을 저장하고 있어요. 잠시만 기다려 주세요.
+          </p>
+        )}
         {defaultsFailed && photoRegions.length === 0 && (
           <p
             role="alert"
@@ -487,6 +511,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         <div className="flex items-center gap-3">
           <RoundBack
             onClick={() => {
+              if (shot.saving) return;
               // 촬영을 기다리는 중이면(부위가 계속 화면 밖 등) 대기만 접고 지금 단계에 머문다
               if (shot.shooting) return cancelShot();
               if (act > 0) {
@@ -496,11 +521,25 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
               }
               if (step > 0) goStep(step - 1, false);
             }}
-            label={shot.shooting ? "촬영 취소" : act > 0 ? "이전 할 일" : "이전 단계"}
-            disabled={!shot.shooting && step === 0 && act === 0}
+            label={
+              shot.saving
+                ? "저장 중…"
+                : shot.shooting
+                  ? "촬영 취소"
+                  : act > 0
+                    ? "이전 할 일"
+                    : "이전 단계"
+            }
+            disabled={shot.saving || (!shot.shooting && step === 0 && act === 0)}
           />
-          <PillButton size="cta" trailing onClick={next} className="min-w-0 flex-1">
-            {nextLabel}
+          <PillButton
+            size="cta"
+            trailing
+            onClick={next}
+            disabled={shot.saving}
+            className="min-w-0 flex-1"
+          >
+            {shot.saving ? "저장 중…" : nextLabel}
           </PillButton>
         </div>
       </div>

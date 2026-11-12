@@ -197,7 +197,7 @@ public class AnalysisJobController {
 
           - 실패해도 200 이며 failureCode·retryable 로 구분한다.
           - stageProgress 는 지금 단계 안의 숫자이고 전체 %가 아니다. 완료 여부는 status 로만 본다.
-          - foundProducts 는 제품 인식이 연결되기 전까지 빈 목록이다.
+          - foundProducts 는 guideInput steps 를 읽으면 단계별 제품과 조회 시점 파우치 보유 여부를 담는다. 읽기 전·실패 시 목록은 비고 totalProductCount 는 null 이다.
           """,
       security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE))
   @ApiResponse(

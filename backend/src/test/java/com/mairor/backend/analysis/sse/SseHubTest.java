@@ -81,21 +81,22 @@ class SseHubTest {
     NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
     SseHub hub = new SseHub(statuses, jdbc, PROPERTIES);
     hub.start();
+    UUID userId = UUID.randomUUID();
     UUID jobId = UUID.randomUUID();
-    when(statuses.find(jobId))
+    when(statuses.find(userId, jobId))
         // 연결 직후
         .thenReturn(Optional.of(view(jobId, AnalysisStatus.RUNNING)))
         // 완료 알림을 놓친 뒤 첫 맞추기: DB 를 못 읽음
         .thenThrow(new IllegalStateException("DB 일시 장애"))
         // 다음 맞추기
         .thenReturn(Optional.of(view(jobId, AnalysisStatus.COMPLETED)));
-    hub.subscribe(jobId);
+    hub.subscribe(userId, jobId);
     fingerprintIs(jdbc, jobId, "completed");
 
     hub.reconcile();
     hub.reconcile();
 
-    verify(statuses, times(3)).find(jobId);
+    verify(statuses, times(3)).find(userId, jobId);
   }
 
   @Test
@@ -104,15 +105,16 @@ class SseHubTest {
     NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
     SseHub hub = new SseHub(statuses, jdbc, PROPERTIES);
     hub.start();
+    UUID userId = UUID.randomUUID();
     UUID jobId = UUID.randomUUID();
-    when(statuses.find(jobId)).thenReturn(Optional.of(view(jobId, AnalysisStatus.RUNNING)));
-    hub.subscribe(jobId);
+    when(statuses.find(userId, jobId)).thenReturn(Optional.of(view(jobId, AnalysisStatus.RUNNING)));
+    hub.subscribe(userId, jobId);
     fingerprintIs(jdbc, jobId, "same");
 
     hub.reconcile();
     hub.reconcile();
 
-    verify(statuses, times(2)).find(jobId);
+    verify(statuses, times(2)).find(userId, jobId);
   }
 
   /** 새 연결과 종료가 겹쳐도 닫히지 않은 연결이 남지 않는다. 새 연결이 "실행 중"을 확인한 뒤 등록하기 전에 종료가 끝나는 순서를 여러 번 겹쳐 본다. */
@@ -120,9 +122,9 @@ class SseHubTest {
   void connectionsOpenedWhileShuttingDownAreClosed() throws Exception {
     AnalysisJobStatusService statuses = mock(AnalysisJobStatusService.class);
     NamedParameterJdbcTemplate jdbc = mock(NamedParameterJdbcTemplate.class);
-    when(statuses.find(any()))
+    when(statuses.find(any(UUID.class), any(UUID.class)))
         .thenAnswer(
-            invocation -> Optional.of(view(invocation.getArgument(0), AnalysisStatus.RUNNING)));
+            invocation -> Optional.of(view(invocation.getArgument(1), AnalysisStatus.RUNNING)));
     int subscribers = 4;
 
     for (int round = 0; round < 500; round++) {
@@ -136,7 +138,7 @@ class SseHubTest {
                 .start(
                     () -> {
                       await(start);
-                      hub.subscribe(UUID.randomUUID());
+                      hub.subscribe(UUID.randomUUID(), UUID.randomUUID());
                     }));
       }
       Thread stopper =

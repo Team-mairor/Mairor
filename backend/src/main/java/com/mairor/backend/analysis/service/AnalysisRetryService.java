@@ -45,7 +45,7 @@ public class AnalysisRetryService {
     }
     UUID found = target;
     return statuses
-        .find(found)
+        .find(userId, found)
         .orElseThrow(() -> new IllegalStateException("재시도한 작업 " + found + " 을 찾지 못했습니다."));
   }
 }

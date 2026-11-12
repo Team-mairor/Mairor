@@ -67,7 +67,7 @@ public class AnalysisJobEventsController {
   @ApiResponse(
       responseCode = "404",
       description =
-          "없는 작업이거나 내가 요청한 작업이 아니다(구분하지 않는다). EventSource 가 JSON 을 받지 않아 본문은 없다. (NOT_FOUND)")
+          "없는 작업이거나 내가 요청·합류한 작업이 아니다(구분하지 않는다). EventSource 가 JSON 을 받지 않아 본문은 없다. (NOT_FOUND)")
   @AuthApiDocs.Unauthorized
   @GetMapping("/{jobId}/events")
   public ResponseEntity<SseEmitter> events(
@@ -82,6 +82,6 @@ public class AnalysisJobEventsController {
         .header(NO_BUFFERING, "no")
         .cacheControl(CacheControl.noStore())
         .contentType(MediaType.TEXT_EVENT_STREAM)
-        .body(hub.subscribe(jobId));
+        .body(hub.subscribe(principal.userId(), jobId));
   }
 }

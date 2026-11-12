@@ -150,8 +150,8 @@ export interface AnalysisJobStatus {
   reviewStatus: "NOT_READY" | "PENDING" | "APPROVED" | "REJECTED";
   guideAvailable: boolean;
   guideId: string | null;
-  /** 제품 인식이 연결되기 전에는 늘 빈 목록 */
-  foundProducts: unknown[];
+  /** 분석 단계에서 확인한 제품 */
+  foundProducts: FoundProduct[];
   foundProductCount: number;
   totalProductCount: number | null;
   failureCode: string | null;
@@ -160,6 +160,24 @@ export interface AnalysisJobStatus {
   pollAfterSeconds: number | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+export interface FoundProduct {
+  stepId: string | null;
+  part: string | null;
+  referenceProduct: ReferenceProduct;
+  ownership: "OWNED" | "NOT_OWNED" | "UNKNOWN";
+}
+
+export interface ReferenceProduct {
+  productId: string | null;
+  shadeId: string | null;
+  name: string | null;
+  shadeName: string | null;
+  matchStatus: "MATCHED" | "CANDIDATE" | "UNMATCHED";
+  verification: "CONFIRMED" | "ESTIMATED" | "UNKNOWN";
+  sources: string[];
+  videoConfirmed: boolean | null;
 }
 
 /** 색 (ColorInfo). 색이 없으면 객체 자체가 null */

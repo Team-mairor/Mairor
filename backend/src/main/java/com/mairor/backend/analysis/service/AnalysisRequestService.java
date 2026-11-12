@@ -102,7 +102,7 @@ public class AnalysisRequestService {
         registration.receiptType());
     AnalysisJobStatusView status =
         statuses
-            .find(registration.jobId())
+            .find(userId, registration.jobId())
             .orElseThrow(() -> new IllegalStateException("방금 접수한 작업을 찾지 못했습니다."));
     return AnalysisRequestReceipt.of(registration.receiptType(), status);
   }

@@ -239,9 +239,10 @@ API-VIDEO-003 · GET /api/v1/users/me/analysis-jobs/\{jobId\}
 - <b>자동 공개 (11.12 팀 합의, S15P31A306-409)</b>: AI 결과가 요청과 맞으면 저장과 함께 reviewStatus=APPROVED가 되어, status=COMPLETED와 같은 응답에서 guideAvailable=true·guideId가 온다. 운영자는 문제 가이드를 내릴 때만 반려(APPROVED → REJECTED)한다.
 - progressPercent·남은 시간은 실제 계산 가능한 경우만 제공하고 알 수 없으면 null. FE는 null일 때 단계·처리 중만 표시. foundProducts의 보유 여부는 조회 시점 파우치로 계산한다.
 - <b>진행 화면은 API-VIDEO-008(SSE)로 받는다</b>: 이 조회는 새로고침·홈 재확인과 SSE를 쓸 수 없을 때(pollAfterSeconds 폴링) 쓴다. 응답은 SSE의 status 이벤트와 같다.
-- <b>구현 메모</b>: 지금은 본인이 요청한 작업(requestedBy)만 보고, 진행 작업에 합류한 회원은 API-VIDEO-002 구현 때 넓힌다. 운영 명령으로 만든 작업은 회원이 볼 수 없다(404). Cache-Control: no-store.
+- <b>구현 메모</b>: 본인이 요청했거나 API-VIDEO-002로 합류한 작업을 본다. 운영 명령으로 만든 작업은 회원이 합류하기 전까지 볼 수 없다(404). Cache-Control: no-store.
 - <b>단계 안 숫자</b>: stageProgress로 지금 단계 안에서 센 수를 준다(아래 StageProgress). 전체 %가 아니며 완료 여부는 status로만 본다. progressPercent는 가중치 실측 전이라 COMPLETED일 때만 100이고 그 밖은 null, estimatedRemainingSeconds는 늘 null이다.
-- <b>제품 칸 임시값</b>: 제품 인식(RECOGNIZING\_PRODUCTS)이 연결되기 전까지 foundProducts=[]·foundProductCount=0·totalProductCount=null이다.
+- foundProducts는 분석 전처리에서 추출해 가이드 입력에 저장한 제품을 단계별로 반환한다. referenceProduct의 카탈로그 연결은 비동기 대조 결과를 반영하고, ownership은 조회 회원의 현재 파우치 기준이다. 가이드 입력 JSON에서 steps 배열을 읽지 못하면 빈 목록·0·null을 반환한다. steps 배열을 읽으면 제품이 없어도 totalProductCount는 0이다.
+- SSE(API-VIDEO-008) 구독자도 각자의 회원 권한과 현재 파우치 기준으로 상태를 받는다. 같은 작업에 합류한 회원끼리 ownership이 공유되지 않는다.
 </toggle>
 
 <toggle>
@@ -967,7 +968,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | VideoChapter <b>v2</b> | startSeconds:integer, label:string. 설명란 챕터. ANALYSIS-001 단계 경계 교차 확인에도 사용. |
 | VideoSelection <b>v2</b> | videoId:string, youtubeVideoId:string, title:string, channelTitle:string, durationSeconds:integer, thumbnailUrl:string\|null, viewCount:integer\|null, publishedAt:datetime\|null, chapters:VideoChapter\[\], guideId:string\|null, guideAvailable:boolean, analysisJobId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED\|null. embeddable 칸 없음. |
 | AnalysisJobReceipt <b>v2</b> | jobId:string\|null, videoId:string, receiptType:REUSED\_GUIDE\|JOINED\_JOB\|NEW\_JOB, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:string, guideId:string\|null, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, pollAfterSeconds:integer\|null. REUSED\_GUIDE면 jobId=null·status=COMPLETED·reviewStatus=APPROVED·guideId 필수. |
-| FoundProduct <b>v2</b> | stepId:string\|null, part:string, referenceProduct:ReferenceProduct, ownership:OWNED\|NOT\_OWNED\|UNKNOWN. ownership은 조회 시점 파우치 기준. |
+| FoundProduct <b>v2</b> | stepId:string\|null, part:string\|null, referenceProduct:ReferenceProduct, ownership:OWNED\|NOT\_OWNED\|UNKNOWN. part는 makeup 값이 없거나 빈 문자열이면 null. ownership은 조회 시점 파우치 기준. |
 | AnalysisJobStatus <b>v2</b> | jobId:string, videoId:string, status:PENDING\|RUNNING\|COMPLETED\|FAILED, progressStage:QUEUED\|LOADING\_VIDEO\|SEGMENTING\|RECOGNIZING\_PRODUCTS\|EXTRACTING\_STEPS\|BUILDING\_GUIDE\|DONE, progressPercent:integer(0\~100)\|null, estimatedRemainingSeconds:integer\|null, stageProgress:StageProgress\|null, retryable:boolean, reviewStatus:NOT\_READY\|PENDING\|APPROVED\|REJECTED, guideAvailable:boolean, guideId:string\|null, foundProducts:FoundProduct\[\], foundProductCount:integer, totalProductCount:integer\|null, failureCode:string\|null, failureMessage:string\|null, pollAfterSeconds:integer\|null, createdAt:datetime, completedAt:datetime\|null. FAILED면 progressStage=멈춘 단계. 실패·승인·반려 시 pollAfterSeconds=null. 얼굴 등록 상태는 별도(FaceRegistration). |
 | StageProgress | item:FRAMES\|LANDMARKS\|AREA\|EXPLANATION, done:integer, total:integer. 지금 진행 단계 안에서 센 수(전체 % 아님). 지금은 BUILDING\_GUIDE에서만 있고 그 밖·진행 알림 전·COMPLETED·FAILED는 null. FRAMES 사진 받기(장), LANDMARKS 얼굴 점 찾기(장), AREA 영역 만들기(단계), EXPLANATION 쉬운 설명(단계). 프레임 있는 작업은 사진 → 얼굴 점 → 영역 순서에서 덜 끝난 것, 영역이 끝났거나 프레임 없는 작업은 설명. done은 실패한 것도 센다. 영역 분석이 통째로 실패하면 AI가 영역 숫자를 멈춘 채 설명을 계속해 콜백 전까지 멈춘 숫자가 보인다. |
 | AnalysisJobSummary <b>v2</b> | jobId:string, videoId:string, youtubeVideoId:string, title:string, thumbnailUrl:string\|null, status:COMPLETED, reviewStatus:PENDING\|APPROVED\|REJECTED, guideId:string\|null, requestedAt:datetime, reviewedAt:datetime\|null. API-VIDEO-007 항목. |

@@ -11,6 +11,7 @@ import {
   type ExecutionSummary,
   type FaceRegistration,
   type FaceRegistrationRequest,
+  type PhotoMeta,
 } from "@/lib/api";
 
 /** 서버 얼굴 등록 안내 판(FACE_REGISTRATION_NOTICE_VERSION)과 같아야 한다 */
@@ -41,6 +42,13 @@ export function registerFace(photo: Blob, metadata: FaceRegistrationRequest) {
   form.append("image", photo, "face.jpg");
   form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
   return api.post<FaceRegistration>("/v1/users/me/face-registrations", { body: form });
+}
+
+/** DELETE /v1/users/me/face-registrations/{id}. 실행에 연결되지 않은 등록을 정리한다 */
+export function deleteFaceRegistration(faceRegistrationId: string) {
+  return api.delete<void>(
+    `/v1/users/me/face-registrations/${encodeURIComponent(faceRegistrationId)}`,
+  );
 }
 
 /** GET /v1/users/me/face-registrations/{id}. 연결된 executionId를 찾는다 */
@@ -125,6 +133,16 @@ export function setPhotoConsent(executionId: string, enabled: boolean) {
   return api.patch<unknown>(`${EXECUTIONS}/${encodeURIComponent(executionId)}/photo-consent`, {
     body: { enabled },
   });
+}
+
+/** PUT /v1/users/me/executions/{id}/steps/{stepId}/photo. 실제 JPEG/PNG 바이트를 전송한다 */
+export function uploadStepPhoto(executionId: string, stepId: string, image: Blob) {
+  const form = new FormData();
+  form.append("image", image, "step.jpg");
+  return api.put<PhotoMeta>(
+    `${EXECUTIONS}/${encodeURIComponent(executionId)}/steps/${encodeURIComponent(stepId)}/photo`,
+    { body: form },
+  );
 }
 
 /** POST …/{executionId}/completion. 다시 보내도 같은 recordId다. 이미 완료(409)면 실행 조회의 recordId를 쓴다 */

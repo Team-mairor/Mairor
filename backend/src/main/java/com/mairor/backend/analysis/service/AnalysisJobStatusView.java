@@ -1,5 +1,6 @@
 package com.mairor.backend.analysis.service;
 
+import com.mairor.backend.analysis.dto.response.FoundProductResponse;
 import com.mairor.backend.analysis.entity.AnalysisStatus;
 import com.mairor.backend.analysis.entity.ProgressStage;
 import com.mairor.backend.guides.entity.ReviewStatus;
@@ -12,7 +13,7 @@ import java.util.UUID;
  * 준다.
  *
  * @param stageProgress 지금 진행 단계 안의 숫자. 셀 수 없으면 {@code null}
- * @param foundProducts 찾은 제품. 제품 인식(RECOGNIZING_PRODUCTS)이 연결되기 전에는 늘 빈 목록이다
+ * @param foundProducts 단계 추출에서 확인한 제품과 현재 파우치 보유 상태
  * @param pollAfterSeconds 폴링할 때 다음 조회까지의 초. 더 바뀌지 않는 상태(실패·승인·반려)면 {@code null}
  */
 public record AnalysisJobStatusView(
@@ -27,7 +28,7 @@ public record AnalysisJobStatusView(
     ReviewStatus reviewStatus,
     boolean guideAvailable,
     UUID guideId,
-    List<Object> foundProducts,
+    List<FoundProductResponse> foundProducts,
     int foundProductCount,
     Integer totalProductCount,
     String failureCode,

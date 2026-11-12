@@ -17,6 +17,7 @@ import { facePhoto } from "@/features/face";
 import { faceReady, isRunPath, runHref, runRouteAction, useSession } from "@/features/session";
 import { GuideStatus } from "@/features/tutorial";
 
+import { deleteFaceRegistration } from "./execution-api";
 import { fetchGuide } from "./guide-api";
 import { GuideStore, LOADING } from "./guide-store";
 import { RunGuideBoundary } from "./run-guide-boundary";
@@ -103,7 +104,13 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
     previousPath.current = route.path;
     if (!isRunPath(route.path)) {
       bootstrapped.current = null;
-      if (previous && isRunPath(previous) && run.id) endRun(run.id);
+      if (previous && isRunPath(previous) && run.id) {
+        if (run.mode === "guide" && run.faceRegistrationId && !run.executionId)
+          deleteFaceRegistration(run.faceRegistrationId).catch((e: unknown) =>
+            console.warn("얼굴 등록 정리 실패", e),
+          );
+        endRun(run.id);
+      }
       return;
     }
     if (!state.loggedIn) return;

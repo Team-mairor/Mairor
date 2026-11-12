@@ -30,9 +30,9 @@ public record AnalysisJobStatusResponse(
     @Schema(description = "따라 하기에 쓸 수 있는 가이드가 있는지(검수 승인)", example = "false")
         boolean guideAvailable,
     @Schema(description = "승인된 가이드 ID. 승인 전에는 null", nullable = true) UUID guideId,
-    @Schema(description = "찾은 제품. 제품 인식이 연결되기 전에는 늘 빈 목록이다") List<Object> foundProducts,
-    @Schema(description = "찾은 제품 수. 제품 인식이 연결되기 전에는 0", example = "0") int foundProductCount,
-    @Schema(description = "영상의 전체 제품 수. 모르면 null(제품 인식이 연결되기 전에는 늘 null)", nullable = true)
+    @Schema(description = "분석 단계에서 확인한 제품") List<FoundProductResponse> foundProducts,
+    @Schema(description = "확인한 제품 수", example = "3") int foundProductCount,
+    @Schema(description = "영상에서 확인한 전체 제품 수. guideInput steps를 읽지 못하면 null", nullable = true)
         Integer totalProductCount,
     @Schema(description = "실패 원인 코드. 실패가 아니면 null", nullable = true, example = "ANALYSIS_TIMEOUT")
         String failureCode,

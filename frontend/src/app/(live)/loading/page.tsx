@@ -9,6 +9,7 @@ import { PillButton } from "@/components/ui/pill-button";
 import { facePhoto, useCamera, useHiddenVideo } from "@/features/face";
 import {
   faceRegistrationRequest,
+  deleteFaceRegistration,
   registerFace,
   useGuide,
   useRunQuery as useQuery,
@@ -26,13 +27,55 @@ import {
   stageText,
   useAnalysisJob,
 } from "@/features/loading";
-import { emptyDraft, ProductSheet, type ProductDraft } from "@/features/pouch";
+import { emptyDraft, ProductSheet, type PouchCat, type ProductDraft } from "@/features/pouch";
 import { faceReady, hasSame, isGuideId, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
 import { ApiError, errorMessage, type AnalysisJobStatus } from "@/lib/api";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
 const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composing"];
+
+function partLabel(part: string | null) {
+  if (!part) return "기타";
+  return (
+    (
+      {
+        foundation: "파운데이션",
+        eyeshadow: "아이섀도",
+        eyeliner: "아이라이너",
+        blush: "블러셔",
+        lip: "립",
+        brow: "브로우",
+        mascara: "마스카라",
+        contour: "컨투어",
+        highlight: "하이라이터",
+        other: "기타",
+      } as Record<string, string>
+    )[part] ?? part
+  );
+}
+
+function pouchCategory(part?: string): PouchCat {
+  const value = (part ?? "").toLowerCase();
+  if (value.includes("foundation") || value.includes("파운데이션") || value.includes("베이스")) {
+    return "베이스";
+  }
+  if (
+    ["eyeshadow", "eyeliner", "mascara"].some((partName) => value.includes(partName)) ||
+    /아이섀도|아이라이너|마스카라|아이/.test(value)
+  ) {
+    return "아이";
+  }
+  if (value.includes("brow") || value.includes("브로우")) return "브로우";
+  if (
+    ["blush", "contour", "highlight"].some((partName) => value.includes(partName)) ||
+    /블러셔|컨투어|하이라이터|치크/.test(value)
+  ) {
+    return "치크";
+  }
+  if (value.includes("lip") || value.includes("립")) return "립";
+  return "도구";
+}
 
 /** i번째 제품을 찾았다고 보여 줄 진행률. 단계 수와 상관없이 6~90% 사이에 고르게 나눈다 */
 const foundAt = (i: number) => 6 + (i * 84) / REF_PRODUCTS.length;
@@ -62,7 +105,7 @@ export default function LoadingPage() {
 
 function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string | null }) {
   const router = useRouter();
-  const { state, update, updateRun, startRun } = useSession();
+  const { state, update, updateRun, startRun, isCurrentRun } = useSession();
   const camera = useCamera();
   const { load } = useGuide();
   const run = state.run;
@@ -178,13 +221,25 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const scanSec = Math.floor(pct * 7.5);
   const scanTime = `${Math.floor(scanSec / 60)}:${String(scanSec % 60).padStart(2, "0")}`;
 
-  // 실제 작업·실제 가이드는 제품 인식이 연결되기 전까지 찾은 제품이 비어 있다
-  const rows = (sample && run.mode !== "guide" ? REF_PRODUCTS : []).map((r, i) => ({
-    ...r,
-    found: pct >= foundAt(i),
-    next: pct < foundAt(i) && (i === 0 || pct >= foundAt(i - 1)),
-    have: r.have || hasSame(r, state.pouch),
-  }));
+  // 실제 작업은 상태 응답의 단계별 제품 결과를 표시한다
+  const rows =
+    sample && run.mode !== "guide"
+      ? REF_PRODUCTS.map((r, i) => ({
+          ...r,
+          found: pct >= foundAt(i),
+          next: pct < foundAt(i) && (i === 0 || pct >= foundAt(i - 1)),
+          have: r.have || hasSame(r, state.pouch),
+        }))
+      : (job?.foundProducts ?? []).map((product, i) => ({
+          id: `${product.stepId ?? "product"}-${i}`,
+          cat: partLabel(product.part),
+          color: "#EADDE0",
+          found: true,
+          next: false,
+          have: product.ownership === "OWNED",
+          name: product.referenceProduct.name,
+          productName: product.referenceProduct.name,
+        }));
   const foundCount = rows.filter((r) => r.found).length;
   const haveCount = rows.filter((r) => r.have).length;
 
@@ -407,7 +462,15 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             rows={rows}
             foundCount={foundCount}
             haveCount={haveCount}
-            onAdd={() => setForm(emptyDraft({ brand: "", name: "" }))}
+            onAdd={(row) =>
+              setForm(
+                emptyDraft({
+                  cat: pouchCategory(row?.cat),
+                  name: row?.name ?? "",
+                  custom: Boolean(row?.name),
+                }),
+              )
+            }
           />
         )}
       </div>
@@ -476,6 +539,12 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
               if (load.status !== "ready" || !photo) throw new Error("가이드나 얼굴 사진이 없다");
               const metadata = faceRegistrationRequest(load.guide.videoId, load.guide.guideId);
               faceRegistrationId = (await registerFace(photo, metadata)).faceRegistrationId;
+              if (!isCurrentRun(run.id)) {
+                await deleteFaceRegistration(faceRegistrationId).catch((e: unknown) =>
+                  console.warn("얼굴 등록 정리 실패", e),
+                );
+                return;
+              }
             }
             updateRun({ faceReg: true, faceRegistrationId }, run.id);
             setFaceModal(false);

@@ -7,10 +7,19 @@ export function FoundProducts({
   haveCount,
   onAdd,
 }: {
-  rows: { id: string; cat: string; color: string; found: boolean; next: boolean; have: boolean }[];
+  rows: {
+    id: string;
+    cat: string;
+    color: string;
+    found: boolean;
+    next: boolean;
+    have: boolean;
+    name?: string | null;
+    productName?: string | null;
+  }[];
   foundCount: number;
   haveCount: number;
-  onAdd: () => void;
+  onAdd: (row?: { cat: string; name?: string | null }) => void;
 }) {
   return (
     <div className="flex shrink-0 flex-col gap-3">
@@ -36,7 +45,7 @@ export function FoundProducts({
               key={r.id}
               type="button"
               disabled={r.have}
-              onClick={onAdd}
+              onClick={() => onAdd(r)}
               className={cn(
                 "flex h-20 items-center gap-3 rounded-[20px] border px-4 text-left transition-colors",
                 r.have ? "border-navy bg-navy" : "border-line bg-white",
@@ -54,7 +63,7 @@ export function FoundProducts({
                     r.have ? "text-white" : "text-mute",
                   )}
                 >
-                  {r.cat}
+                  {r.productName || r.cat}
                 </span>
                 <span className={cn("truncate text-[18px]", r.have ? "text-blush" : "text-mute")}>
                   {r.have ? "보유" : "없음 · 추가"}

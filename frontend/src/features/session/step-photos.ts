@@ -1,4 +1,4 @@
-// ponytail: 업로드 API가 붙기 전까지 단계 사진은 메모리에만 둔다. 새로 고침하면 실행과 함께 사라진다.
+// 현재 실행 화면과 완료 직후 미리보기에 쓰는 로컬 캐시. 서버 리포트는 API에서 사진 URL을 다시 읽는다.
 import type { PhotoBox } from "@/features/face";
 
 export interface StepPhoto {

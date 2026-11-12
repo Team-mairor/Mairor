@@ -27,8 +27,8 @@ export const STILL_MAX_WAIT_MS = 2500;
 /** 프레임이 오지 않거나 추적이 끊겨도 기다림이 끝나도록 거는 대비 시간 */
 export const SHOT_FALLBACK_MS = STILL_MAX_WAIT_MS + 500;
 
-/** idle: 대기 없음 · waiting: 멈추기를 기다림 · outOfView: 찍을 부위가 화면 밖 · failed: 못 찍음 */
-export type ShotState = "idle" | "waiting" | "outOfView" | "failed";
+/** idle: 대기 없음 · waiting: 멈추기를 기다림 · outOfView: 부위가 화면 밖 · saving: 업로드 중 · failed: 저장 실패 */
+export type ShotState = "idle" | "waiting" | "outOfView" | "saving" | "failed";
 
 // 얼굴 전체(faceOval)는 가까이 가면 늘 잘려 보지 않는다
 const inView = (frame: FaceFrame, regions: readonly RegionName[]) =>
@@ -48,7 +48,10 @@ export function reachableStep(stepIds: readonly string[], hasPhoto: (stepId: str
  * 단계 사진 한 장을 찍는다. start로 기다리기 시작해, 부위가 보이고 얼굴이 멈추면 onShot을 부른다.
  * 추적이 끊기거나 프레임이 오래됐거나 부위가 잘린 채로는 찍지 않고 failed가 된다.
  */
-export function useStepShot(regions: readonly RegionName[], onShot: (photo: StepPhoto) => void) {
+export function useStepShot(
+  regions: readonly RegionName[],
+  onShot: (photo: StepPhoto) => void | Promise<void>,
+) {
   const { videoRef } = useCamera();
   const timer = useTimeout();
   const [state, setState] = useState<ShotState>("idle");
@@ -62,11 +65,11 @@ export function useStepShot(regions: readonly RegionName[], onShot: (photo: Step
     latest.current = { regions, onShot };
   });
 
-  const shoot = () => {
+  const shoot = async () => {
     if (waitFrom.current === null) return;
     waitFrom.current = null;
     timer.clear();
-    const { regions, onShot } = latest.current;
+    const { regions } = latest.current;
     const frame = frameRef.current;
     // 찍을 부위를 모르면(기본 가이드를 못 불러옴 등) 확인 없이 찍지 않는다
     const ok =
@@ -76,8 +79,13 @@ export function useStepShot(regions: readonly RegionName[], onShot: (photo: Step
       inView(frame, regions);
     const url = ok ? snapMirrored(videoRef.current) : null;
     if (!frame || !url) return setState("failed");
-    setState("idle");
-    onShot({ url, box: mirroredRegionBox(frame, regions) });
+    setState("saving");
+    try {
+      await latest.current.onShot({ url, box: mirroredRegionBox(frame, regions) });
+      setState("idle");
+    } catch {
+      setState("failed");
+    }
   };
 
   useFaceFrame((frame) => {
@@ -102,15 +110,23 @@ export function useStepShot(regions: readonly RegionName[], onShot: (photo: Step
   });
 
   const start = () => {
+    if (state === "saving" || state === "waiting" || state === "outOfView") return;
     waitFrom.current = performance.now();
     setState("waiting");
     timer.set(shoot, SHOT_FALLBACK_MS);
   };
   const cancel = useCallback(() => {
+    if (state === "saving") return;
     waitFrom.current = null;
     timer.clear();
     setState("idle");
-  }, [timer]);
+  }, [state, timer]);
 
-  return { state, shooting: state === "waiting" || state === "outOfView", start, cancel };
+  return {
+    state,
+    shooting: state === "waiting" || state === "outOfView",
+    saving: state === "saving",
+    start,
+    cancel,
+  };
 }
