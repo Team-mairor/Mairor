@@ -60,6 +60,8 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
 아이라인도 그린 자리(윗라인 · 윗점막 · 아랫라인)마다 하위 단계를 하나씩 둔다(윗라인 → 윗점막 → 아랫라인). 자리는 `eyeZone`(`upper` · `under` · `both` · `waterline`)으로, 없으면 단계 글로 고른다. 찾은 자리는 `extracted`, 못 찾은 윗라인은 `eyeliner`, 아랫라인은 `eyelinerUnder`이고, 윗점막은 사진으로 찾지 않고 `eyelinerWaterline`(이유 `notAnalyzed`)이다. 아이섀도와 달리 자리를 아는 단계는 어느 자리도 못 찾아도 자리마다 그 키를 둔다(「위아래」면 `eyeliner` · `eyelinerUnder` 둘). 자리를 모르는 단계는 찾은 자리만 두고, 아무것도 못 찾으면 `eyeliner` 하나다. 아이라인 영역은 선이 눈을 감쌀 때만 그 눈을 `exclude`에 넣는다.
 `blushNose`는 블러셔 단계의 `partLabel` · `facts.area` 글이 코에만 바른다고 할 때 쓴다(이유 `notAnalyzed`). 코는 색으로 찾지 않는다.
 
+FE는 `contour` 단계의 이름(`partLabel`)에 코가 있으면 코 쉐딩 기본 가이드(`contourNose`)로 바꿔 그린다. `contourNose`는 FE에서만 쓰는 키라 AI는 보내지 않는다.
+
 ## 형식을 바꿀 때
 
 1. `ai/app/schemas/guide_area.py`의 모델을 고친다.

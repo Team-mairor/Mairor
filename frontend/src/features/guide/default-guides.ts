@@ -140,6 +140,11 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     type: "polygon",
     outline: [...edge.map(at), ...[...edge].reverse().map((i) => between(i, 4, 0.12))],
   });
+  /** 콧대 옆선(위 → 아래)과, 그 점들을 바깥 점 쪽으로 조금 벌린 선 사이의 가는 띠 */
+  const noseBand = (side: number[], outward: number[]): GuideShape => ({
+    type: "polygon",
+    outline: [...side.map(at), ...side.map((i, k) => between(i, outward[k], 0.25)).reverse()],
+  });
   /** 윗눈꺼풀 선(바깥 → 안쪽)과, [눈꺼풀 점, 눈썹 점]을 40% 올라간 선(안쪽 → 바깥) 사이의 띠 */
   const lidBand = (lid: number[], toBrow: [number, number][]): GuideShape => ({
     type: "polygon",
@@ -268,7 +273,20 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       ],
     },
     {
-      // 작게 세 군데: 미간 아래 콧대, 눈 밑 앞쪽, 턱 끝.
+      // 콧대 양옆: 눈썹 앞머리 아래(193·417)에서 콧볼 위(45·275)까지 콧대 옆선을 따라 가늘게.
+      // 바깥 경계는 위쪽은 눈 앞머리(133·362), 아래쪽은 콧볼(129·358) 쪽으로 조금 벌린 선
+      stepId: "contourNose",
+      title: "코 쉐딩: 콧대 양옆을 눈썹 앞머리 아래에서 콧볼 위까지 가늘게 내려 그어요",
+      regions: ["rightEye", "leftEye"],
+      guides: [
+        noseBand([193, 122, 196, 3, 51, 45], [133, 133, 133, 129, 129, 129]),
+        arrow(at(193), between(193, 45, 0.6)),
+        noseBand([417, 351, 419, 248, 281, 275], [362, 362, 362, 358, 358, 358]),
+        arrow(at(417), between(417, 275, 0.6)),
+      ],
+    },
+    {
+      // 작게 세 군데: 미간 아래 콧대, 눈 밑 앞쪽, 턱 끝(아랫입술 밑이 아니라 턱 끝 둥근 곳).
       // 얼굴을 가까이 대면 윤곽이 화면 밖으로 나가므로, 그리는 곳 옆 부위(눈·입술)로 숨김을 판정한다.
       stepId: "highlight",
       title: "하이라이트: 콧대 위쪽·눈 밑 앞쪽·턱 끝에 살짝 얹어요",
@@ -277,7 +295,7 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
         outline([193, 417, 351, 419, 196, 122]),
         outline([230, 231, 232, 121, 47, 100, 119]),
         outline([450, 451, 452, 350, 277, 329, 348]),
-        outline([201, 421, 428, 208]),
+        outline([208, 428, 396, 171]),
       ],
     },
     {
@@ -456,7 +474,11 @@ export function buildBrowHairs(mesh: FaceMesh, pairs: [number, number][]): Guide
   });
 }
 
-/** 볼 전체 외접 범위의 타원과 기존 시작점·방향. */
+/** 블러셔 타원을 볼 부위 세로 반지름의 몇 배만큼 올릴지와 세로 크기 배율 */
+const BLUSH_LIFT = 0.45;
+const BLUSH_HEIGHT = 0.8;
+
+/** 볼 범위를 광대 앞쪽으로 올린 타원과 기존 시작점·방향. */
 export function buildBlushGuides(mesh: FaceMesh, regions: RegionIndices): GuideShape[] {
   const { uvPt, anchorAt, between } = anchorTools(mesh);
   const ellipse = (indices: readonly number[]): GuideShape => {
@@ -464,9 +486,12 @@ export function buildBlushGuides(mesh: FaceMesh, regions: RegionIndices): GuideS
     const xs = points.map((p) => p.x),
       ys = points.map((p) => p.y);
     const cx = (Math.min(...xs) + Math.max(...xs)) / 2,
-      cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      cy =
+        (Math.min(...ys) + Math.max(...ys)) / 2 -
+        ((Math.max(...ys) - Math.min(...ys)) / 2) * BLUSH_LIFT;
     const rx = (Math.max(...xs) - Math.min(...xs)) / 2,
-      ry = (Math.max(...ys) - Math.min(...ys)) / 2;
+      // 볼 부위는 코끝 아래까지 내려가 그대로면 중심이 코끝 높이다. 광대 앞쪽에 오도록 위로 올리고 조금 줄인다
+      ry = ((Math.max(...ys) - Math.min(...ys)) / 2) * BLUSH_HEIGHT;
     return {
       type: "polygon",
       outline: Array.from({ length: 32 }, (_, k) => {

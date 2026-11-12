@@ -48,6 +48,7 @@ import {
   reachableStep,
   TutorialTopBar,
   useStepShot,
+  withStepTemplate,
   type StepProduct,
 } from "@/features/tutorial";
 import { ApiError, errorMessage } from "@/lib/api";
@@ -262,7 +263,11 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다.
   // 영역에 없는 단계는 화장 종류의 기본 가이드를 쓰고, 그릴 것이 없으면 설명만 보여 준다
   const subs = useMemo(
-    () => area?.steps.find((s) => s.stepId === info.stepId)?.subSteps ?? [templateOf(info)],
+    () =>
+      withStepTemplate(
+        area?.steps.find((s) => s.stepId === info.stepId)?.subSteps ?? [templateOf(info)],
+        info.short,
+      ),
     [area, info],
   );
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다

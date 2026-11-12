@@ -36,9 +36,17 @@ export type Makeup =
   | "highlight"
   | "other";
 
-/** 기본 가이드 키. 눈 화장은 바른 자리별 템플릿을 더 쓴다 */
+/**
+ * 기본 가이드 키. 눈 화장은 바른 자리별 템플릿을 더 쓴다.
+ * contourNose는 FE에서만 쓴다. 쉐딩 단계 이름에 코가 있으면 contour 대신 고른다
+ */
 export type TemplateId =
-  Makeup | "eyeshadowUpper" | "eyeshadowUnder" | "eyelinerWaterline" | "eyelinerUnder";
+  | Makeup
+  | "eyeshadowUpper"
+  | "eyeshadowUnder"
+  | "eyelinerWaterline"
+  | "eyelinerUnder"
+  | "contourNose";
 
 /**
  * AI가 넘기는 영상 하나의 단계별 도포 영역 (shared/guide-area).
