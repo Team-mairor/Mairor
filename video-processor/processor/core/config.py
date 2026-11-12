@@ -1,4 +1,4 @@
-"""인증값, BE 노트북 API 주소, S3 업로드·GMS 호출 설정."""
+"""인증값, BE 노트북 API 주소, 디스코드 알림 주소, S3 업로드·GMS 호출 설정."""
 
 from pathlib import Path
 
@@ -20,6 +20,7 @@ def load_credentials():
         "gms_api_key": None,
         "processor_api_url": "https://mairor.co.kr/api/v1/internal/processor",
         "processor_api_token": None,
+        "discord_webhook_url": None,
     }
 
     env_candidates = [
@@ -58,6 +59,8 @@ def load_credentials():
                     creds["processor_api_url"] = v.rstrip("/")
                 elif k == "PROCESSOR_API_TOKEN":
                     creds["processor_api_token"] = v
+                elif k == "DISCORD_WEBHOOK_URL":
+                    creds["discord_webhook_url"] = v
 
     return creds
 

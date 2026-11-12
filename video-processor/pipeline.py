@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from processor.clients.backend import ProcessorApi
+from processor.clients.discord import ALERT, start_alerts, stop_alerts
 from processor.clients.gms import DEFAULT_MODEL
 from processor.core.config import CREDS
 from processor.services.process_video import run_video_pipeline
@@ -46,11 +47,19 @@ def main():
             parser.error("--serve에는 .env의 S3_PROD_BUCKET(운영 버킷 이름)이 필요합니다")
         CREDS["s3_bucket"] = CREDS["s3_prod_bucket"]
         api = ProcessorApi(CREDS["processor_api_url"], CREDS["processor_api_token"])
+        alerts = start_alerts(CREDS["discord_webhook_url"])
+        if alerts is None:
+            logger.info("[연결 모드] .env에 DISCORD_WEBHOOK_URL이 없어 디스코드 알림을 보내지 않습니다")
         try:
             poll_jobs(api, poll_seconds=args.poll_seconds, num_workers=args.workers, model=args.model,
                       low_resolution=args.media_resolution == "low", step_check=not args.no_step_check)
         except KeyboardInterrupt:
             logger.info("[연결 모드] 멈춤")
+        except Exception:
+            logger.exception("[연결 모드] 처리기가 오류로 멈춤", extra=ALERT)
+            raise
+        finally:
+            stop_alerts(alerts)
         return
     run_video_pipeline(args.url, args.workers, model=args.model, work_dir=args.work_dir,
                        artifact_id=args.artifact_id, low_resolution=args.media_resolution == "low",
