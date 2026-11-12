@@ -4,6 +4,11 @@ frontend:
   stage: check
   image: node:24
   rules:
+    # master 머지 뒤에는 다시 돌리지 않는다. 같은 코드를 MR에서 이미 검사했다(fast-forward 머지 · 파이프라인 성공 필수)
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+      when: never
+    # 손으로 돌린 파이프라인(Run pipeline)에서는 바뀐 곳과 상관없이 돈다
+    - if: $CI_PIPELINE_SOURCE == "web"
     - changes:
         - frontend/**/*
         - shared/**/*

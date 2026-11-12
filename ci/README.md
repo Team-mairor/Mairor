@@ -1,19 +1,21 @@
 # CI 안내
 
-MR을 올리거나 master에 머지되면 GitLab이 파트별 검사를 자동으로 돌린다. 검사 결과는 MR 화면에 초록(통과) 또는 빨강(실패)으로 표시된다. 검사가 실패한 MR은 master에 머지하지 않는다.
+MR을 올리면 GitLab이 파트별 검사를 자동으로 돌린다. 검사 결과는 MR 화면에 초록(통과) 또는 빨강(실패)으로 표시된다. 검사가 실패한 MR은 master에 머지하지 않는다.
 
 MR 승인·머지 규칙은 노션 [Git Convention](https://app.notion.com/p/3f2dce3252f680fcbd70da68cc09596b)을 따른다.
 
 ## 언제 무엇이 도나
 
-파이프라인은 **MR**과 **master**에서만 돈다. 브랜치에 push만 하고 MR이 없으면 돌지 않는다. 각 검사는 자기 폴더가 바뀌었을 때만 돈다. master에서는 검사 뒤에 배포가 이어진다(아래 "배포").
+파이프라인은 **MR**과 **master**에서만 돈다. 브랜치에 push만 하고 MR이 없으면 돌지 않는다. 각 검사는 자기 폴더가 바뀌었을 때만 돈다. 아래 표는 MR 기준이다.
+
+master에 머지된 뒤에는 파트별 검사(`backend` · `frontend` · `ai`)를 **다시 돌리지 않고** `repo-guard` 뒤 바로 배포가 이어진다(아래 "배포"). master에 들어가는 코드는 MR에서 마지막으로 검사한 코드와 같기 때문이다. 머지는 fast-forward만 되어 master보다 뒤처진 MR은 다시 맞춘 뒤 파이프라인을 새로 통과해야 하고, master에는 직접 push할 수 없다. 건너뛴 파이프라인(`[skip ci]` · `ci.skip`)은 성공으로 치지 않는다(GitLab 설정 "Skipped pipelines are considered successful" 꺼 둠, 11.12). 켜면 검사 없는 코드가 바로 배포되므로 끄고 둔다. master 전체를 다시 검사하고 싶으면 **Build → Pipelines → Run pipeline**으로 master를 손으로 돌린다. 이때는 검사가 전부 돈다.
 
 | 바뀐 곳 | 도는 검사 |
 |---|---|
 | `backend/` | `backend`, `repo-guard` |
 | `frontend/` | `frontend`, `repo-guard` |
 | `ai/` | `ai`, `repo-guard` |
-| `shared/` | `frontend`, `ai`, `repo-guard` |
+| `shared/` | `backend`, `frontend`, `ai`, `repo-guard` |
 | `.gitlab-ci.yml`, `ci/` | 전부 |
 | 그 밖의 것(문서 등) | `repo-guard`만 |
 
@@ -32,7 +34,7 @@ CI가 실패하면 아래 명령을 자기 PC에서 그대로 돌려 같은 오�
 
 ## 배포 (master)
 
-master에 머지되면 검사가 끝난 뒤 운영 배포가 이어진다(`ci/deploy.yml`, BE 관리). MR 파이프라인에서는 돌지 않는다.
+master에 머지되면 `repo-guard`가 끝난 뒤 바로 운영 배포가 이어진다(`ci/deploy.yml`, BE 관리). 파트별 검사는 MR에서 이미 통과했으므로 master에서는 다시 돌지 않는다. 배포 잡은 MR 파이프라인에서는 돌지 않는다.
 
 | 잡 | 하는 일 |
 |---|---|
@@ -71,4 +73,4 @@ master에 머지되면 검사가 끝난 뒤 운영 배포가 이어진다(`ci/de
 
 1. CI 담당(BE)에게 알린다.
 2. 급한 MR은 CI 담당이 "파이프라인 성공 후 머지" 설정을 잠시 끄고 팀에 알린다. 그동안 MR 본문에 위 로컬 명령의 결과를 적는다.
-3. 러너가 복구되면 설정을 다시 켜고 팀에 알린다.
+3. 러너가 복구되면 설정을 다시 켜고 팀에 알린다. 그동안 머지된 코드는 master에서 검사가 돌지 않으므로(위 "언제 무엇이 도나") **Build → Pipelines → Run pipeline**으로 master를 손으로 돌려 검사를 한 번 거친다.

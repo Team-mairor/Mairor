@@ -1,6 +1,8 @@
 # MAIROR CI. 사용법과 규칙은 ci/README.md
 # 파이프라인은 MR과 master에서만 돈다. 파트별 검사는 ci/<파트>.yml에 있고, 각 파트가 자기 파일을 고친다.
-# master에서는 검사가 통과하면 이미지 빌드 · 운영 배포가 이어진다(ci/deploy.yml, BE 관리).
+# master 머지 뒤에는 파트별 검사를 다시 돌리지 않는다. 같은 코드를 MR에서 이미 검사했기 때문이다
+# (fast-forward 머지 · 파이프라인 성공 필수 · master 직접 push 불가). 대신 repo-guard 뒤 바로 이미지 빌드 · 운영 배포가 이어진다(ci/deploy.yml, BE 관리).
+# 손으로 돌린 파이프라인(Run pipeline)에서는 검사가 전부 돈다.
 # infra/ 가 바뀌면 인프라 서버 배포도 돈다(ci/infra.yml).
 
 workflow:
