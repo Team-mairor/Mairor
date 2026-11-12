@@ -77,7 +77,6 @@ public class ExecutionQueryService {
       snapshot.putNull("photo");
       var photo = step.getPhotoId() == null ? null : byId.get(step.getPhotoId());
       if (photo != null
-          && !step.isSkipped()
           && photo.getKind() == PhotoKind.STEP
           && photo.getState() == PhotoState.AVAILABLE
           && photo.getExpiresAt() == null

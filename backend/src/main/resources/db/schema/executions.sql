@@ -76,8 +76,7 @@ CREATE TABLE execution_steps (
     CONSTRAINT uk_execution_steps_position UNIQUE (execution_id, position),
     CONSTRAINT uk_execution_steps_photo UNIQUE (photo_id),
     CONSTRAINT ck_execution_steps_step CHECK (btrim(step_id) <> '' AND position >= 0),
-    CONSTRAINT ck_execution_steps_snapshot CHECK (jsonb_typeof(step_snapshot) = 'object'),
-    CONSTRAINT ck_execution_steps_skipped_photo CHECK (NOT skipped OR photo_id IS NULL)
+    CONSTRAINT ck_execution_steps_snapshot CHECK (jsonb_typeof(step_snapshot) = 'object')
 );
 
 -- 실행 행을 먼저 저장/flush한 뒤 얼굴 등록을 LINKED로 전환한다.

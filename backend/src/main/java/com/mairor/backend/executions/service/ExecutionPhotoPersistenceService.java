@@ -61,9 +61,8 @@ public class ExecutionPhotoPersistenceService {
   public void validateUpload(UUID userId, String sessionId, UUID executionId, String stepId) {
     GuideExecution execution = ownedActive(userId, sessionId, executionId);
     requireConsent(execution);
-    ExecutionStep step =
-        steps.findByExecutionIdAndStepId(executionId, stepId).orElseThrow(this::notFound);
-    requireAllowed(step);
+    // 제품 없이 넘긴(skipped) 단계도 받는다. 리포트에는 모든 단계 사진이 남는다(단계 사진 정책 E8 A안)
+    steps.findByExecutionIdAndStepId(executionId, stepId).orElseThrow(this::notFound);
   }
 
   @Transactional
@@ -72,7 +71,6 @@ public class ExecutionPhotoPersistenceService {
     requireConsent(execution);
     ExecutionStep step =
         steps.findByExecutionIdAndStepIdForUpdate(executionId, stepId).orElseThrow(this::notFound);
-    requireAllowed(step);
     StoredPhoto photo = records.attach(photoId, userId, sessionId);
     UUID oldPhotoId = step.getPhotoId();
     step.attachPhoto(photo);
@@ -114,13 +112,6 @@ public class ExecutionPhotoPersistenceService {
   }
 
   public record PhotoDownload(String storageKey, String contentType) {}
-
-  private void requireAllowed(ExecutionStep step) {
-    if (step.isSkipped()) {
-      throw new BusinessException(
-          HttpStatus.CONFLICT, "GUIDE_STEP_PHOTO_NOT_ALLOWED", "선택하지 않은 단계에는 사진을 연결할 수 없습니다.");
-    }
-  }
 
   private GuideExecution ownedActive(UUID userId, String sessionId, UUID executionId) {
     GuideExecution execution =

@@ -495,7 +495,8 @@ API-GUIDE-005 · PUT /api/v1/users/me/executions/\{executionId\}/steps/\{stepId\
 
 - 회원·CSRF 필요. Path executionId:string·stepId:string 필수. multipart image:file 필수(API-CAMERA-001과 동일 필드명), JPEG/PNG 최대5MiB. 200 Photo(새 사진·교체 동일).
 - 파일 크기와 별도로 서버의 디코딩 픽셀 수 상한을 초과하면 413 PAYLOAD_TOO_LARGE다. 실제 이미지 형식을 디코딩해 검사하며 파일명이나 요청 MIME만으로 판정하지 않는다.
-- 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE, 409 GUIDE\_PHOTO\_CONSENT\_REQUIRED(동의 아님), 409 GUIDE\_STEP\_PHOTO\_NOT\_ALLOWED(skipped), 413 PAYLOAD\_TOO\_LARGE, 415 UNSUPPORTED\_MEDIA\_TYPE.
+- 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE, 409 GUIDE\_PHOTO\_CONSENT\_REQUIRED(동의 아님), 413 PAYLOAD\_TOO\_LARGE, 415 UNSUPPORTED\_MEDIA\_TYPE.
+- 제품 없이 건너뛴(skipped) 단계도 사진을 받는다. 리포트에는 모든 단계 사진이 남는다(기능명세 GUIDE-002, 단계 사진 정책 E8 A안 S15P31A306-413, 되살아난 409 삭제 S15P31A306-400).
 - 오버레이·UI 없는 캡처만 업로드. 이미지 디코딩·형식·크기 검증. 단계당 현재 사진1개, 새 파일 저장·연결 성공 후 이전 파일 정리. 실패 시 기존 참조 유지. UI는 성공 확인/다시 찍기/다음, 실패 재시도/사진 없이 진행을 구분.
 </toggle>
 

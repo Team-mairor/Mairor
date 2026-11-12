@@ -178,7 +178,7 @@ public class ExecutionCompletionService {
   }
 
   private StoredPhoto availableStepPhoto(GuideExecution execution, ExecutionStep step) {
-    if (step.isSkipped() || step.getPhotoId() == null) return null;
+    if (step.getPhotoId() == null) return null;
     return photos
         .findByIdAndUserId(step.getPhotoId(), execution.getUserId())
         .filter(

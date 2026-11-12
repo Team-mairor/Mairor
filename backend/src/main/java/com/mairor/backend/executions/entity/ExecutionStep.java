@@ -84,8 +84,7 @@ public class ExecutionStep {
   /** 호출자는 실행의 상태·동의를 잠금 안에서 검증하고 PhotoRecordService.attach를 먼저 호출한다. */
   public void attachPhoto(StoredPhoto photo) {
     Objects.requireNonNull(photo, "photo");
-    if (skipped
-        || photo.getKind() != PhotoKind.STEP
+    if (photo.getKind() != PhotoKind.STEP
         || photo.getState() != PhotoState.AVAILABLE
         || photo.getExpiresAt() != null
         || !userId.equals(photo.getUserId())

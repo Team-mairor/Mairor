@@ -83,9 +83,7 @@ class OpenApiDocsTest {
         .andExpect(
             jsonPath(
                     "$.paths['/v1/users/me/executions/{executionId}/steps/{stepId}/photo'].put.responses['409'].description")
-                .value(
-                    containsString(
-                        "GUIDE_EXECUTION_NOT_ACTIVE, GUIDE_PHOTO_CONSENT_REQUIRED, GUIDE_STEP_PHOTO_NOT_ALLOWED")))
+                .value(containsString("GUIDE_EXECUTION_NOT_ACTIVE, GUIDE_PHOTO_CONSENT_REQUIRED)")))
         .andExpect(
             jsonPath("$.paths['/v1/users/me/executions/{executionId}'].get.responses['404']")
                 .exists())

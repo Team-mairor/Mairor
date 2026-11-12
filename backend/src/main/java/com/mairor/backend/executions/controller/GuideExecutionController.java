@@ -135,7 +135,7 @@ public class GuideExecutionController {
 
   @Operation(
       summary = "가이드 단계 사진 저장",
-      description = "동의한 진행 실행의 선택 단계에 JPEG/PNG 사진을 저장한다. 새 사진 연결 성공 후 이전 사진을 정리한다.",
+      description = "동의한 진행 실행의 단계에 JPEG/PNG 사진을 저장한다. 제품 없이 넘긴 단계도 받는다. 새 사진 연결 성공 후 이전 사진을 정리한다.",
       security = {
         @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE),
         @SecurityRequirement(name = OpenApiConfig.CSRF_TOKEN)
@@ -143,8 +143,7 @@ public class GuideExecutionController {
   @ApiResponse(responseCode = "200", description = "저장된 단계 사진 메타데이터.")
   @ApiResponse(
       responseCode = "409",
-      description =
-          "실행 상태·동의·단계 정책과 충돌했다. (GUIDE_EXECUTION_NOT_ACTIVE, GUIDE_PHOTO_CONSENT_REQUIRED, GUIDE_STEP_PHOTO_NOT_ALLOWED)")
+      description = "실행 상태·동의와 충돌했다. (GUIDE_EXECUTION_NOT_ACTIVE, GUIDE_PHOTO_CONSENT_REQUIRED)")
   @ApiResponse(responseCode = "413", description = "사진 파일 크기 또는 해상도 상한을 초과했다. (PAYLOAD_TOO_LARGE)")
   @ApiResponse(
       responseCode = "415",

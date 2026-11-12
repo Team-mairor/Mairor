@@ -199,7 +199,7 @@ class ExecutionPersistenceTest {
   }
 
   @Test
-  void stepPhotoCanBeAttachedButSkippedStepsAndStagingPhotosAreRejected() {
+  void stepPhotoCanBeAttachedEvenToSkippedStepsButStagingPhotosAreRejected() {
     GuideExecution execution = savedExecution();
     ExecutionStep step = steps.saveAndFlush(new ExecutionStep(execution, "lip", 0, false, "{}"));
     StoredPhoto photo = savedPhoto(SESSION, PhotoKind.STEP, "lip");
@@ -209,9 +209,10 @@ class ExecutionPersistenceTest {
     assertThat(
             steps.findByExecutionIdAndStepId(execution.getId(), "lip").orElseThrow().getPhotoId())
         .isEqualTo(photo.getId());
+    // 제품 없이 넘긴 단계에도 사진을 연결한다
     ExecutionStep skipped = new ExecutionStep(execution, "lip", 1, true, "{}");
-    assertThatThrownBy(() -> skipped.attachPhoto(photo))
-        .isInstanceOf(IllegalArgumentException.class);
+    skipped.attachPhoto(photo);
+    assertThat(skipped.getPhotoId()).isEqualTo(photo.getId());
     StoredPhoto staging =
         new StoredPhoto(
             user,
@@ -311,15 +312,26 @@ class ExecutionPersistenceTest {
 
   @Test
   void productionUpgradeContainsTheSameSchema() throws Exception {
-    String schema =
-        new ClassPathResource("db/schema/executions.sql")
-            .getContentAsString(StandardCharsets.UTF_8);
-    String upgrade =
-        new ClassPathResource("db/upgrade/395-guide-executions.sql")
-            .getContentAsString(StandardCharsets.UTF_8);
+    String schema = sql("db/schema/executions.sql");
+    String upgrade = sql("db/upgrade/395-guide-executions.sql");
+    // 395 는 운영에 적용된 그대로 두고, 400 이 건너뛴 단계 사진 제약을 지운다
+    String skippedPhoto =
+        ",\n    CONSTRAINT ck_execution_steps_skipped_photo CHECK (NOT skipped OR photo_id IS NULL)";
+    assertThat(upgrade).contains(skippedPhoto);
+    assertThat(sql("db/upgrade/400-step-photo-skipped.sql"))
+        .contains("DROP CONSTRAINT IF EXISTS ck_execution_steps_skipped_photo");
     assertThat(
-            upgrade.substring(upgrade.indexOf("BEGIN;") + 6, upgrade.lastIndexOf("COMMIT;")).trim())
+            upgrade
+                .substring(upgrade.indexOf("BEGIN;") + 6, upgrade.lastIndexOf("COMMIT;"))
+                .replace(skippedPhoto, "")
+                .trim())
         .isEqualTo(schema.trim());
+  }
+
+  private static String sql(String path) throws Exception {
+    return new ClassPathResource(path)
+        .getContentAsString(StandardCharsets.UTF_8)
+        .replace("\r\n", "\n");
   }
 
   private GuideExecution savedExecution() {

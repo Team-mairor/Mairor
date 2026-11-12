@@ -299,7 +299,7 @@ class GuideExecutionApiTest {
   }
 
   @Test
-  void stepPhotoUploadRequiresConsentAndRejectsSkippedSteps() throws Exception {
+  void stepPhotoUploadRequiresConsentAndAcceptsSkippedSteps() throws Exception {
     UUID faceId = face(user, login.id(), video);
     String executionId = created(body(match(), faceId, null)).path("executionId").asString();
     var upload =
@@ -325,9 +325,11 @@ class GuideExecutionApiTest {
                 .contentType("application/json")
                 .content("{\"enabled\":true}"))
         .andExpect(status().isOk());
+    // 제품 없이 넘긴 단계(lip)도 사진을 받는다
     mvc.perform(upload)
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.code").value("GUIDE_STEP_PHOTO_NOT_ALLOWED"));
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.kind").value("STEP"))
+        .andExpect(jsonPath("$.stepId").value("lip"));
   }
 
   @Test
