@@ -8,6 +8,7 @@ import com.mairor.backend.analysis.service.AnalysisJobListService;
 import com.mairor.backend.analysis.service.AnalysisJobStatusService;
 import com.mairor.backend.analysis.service.AnalysisRequestReceipt;
 import com.mairor.backend.analysis.service.AnalysisRequestService;
+import com.mairor.backend.analysis.service.AnalysisRetryService;
 import com.mairor.backend.analysis.service.ReceiptType;
 import com.mairor.backend.common.error.ErrorResponse;
 import com.mairor.backend.common.web.OpenApiConfig;
@@ -43,8 +44,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 회원의 분석 요청(API-VIDEO-002), 작업 상태(API-VIDEO-003), 내 분석 목록(API-VIDEO-007). 로그인이 필요하고 요청했거나 합류한 작업만
- * 본다({@code AnalysisJobAccess}). 진행 화면은 분석 상태 SSE 로 바뀔 때마다 받고, 상태 조회는 새로고침·홈 재확인과 SSE 를 못 쓸 때 쓴다.
+ * 회원의 분석 요청(API-VIDEO-002), 작업 상태(API-VIDEO-003), 분석 재시도(API-VIDEO-006), 내 분석 목록(API-VIDEO-007).
+ * 로그인이 필요하고 요청했거나 합류한 작업만 본다({@code AnalysisJobAccess}). 진행 화면은 분석 상태 SSE 로 바뀔 때마다 받고, 상태 조회는
+ * 새로고침·홈 재확인과 SSE 를 못 쓸 때 쓴다.
  */
 @Tag(name = "분석 작업", description = "영상 분석 요청과 내 분석 작업의 진행 상태.")
 @RestController
@@ -54,14 +56,17 @@ public class AnalysisJobController {
   private final AnalysisJobStatusService statusService;
   private final AnalysisRequestService requestService;
   private final AnalysisJobListService listService;
+  private final AnalysisRetryService retryService;
 
   public AnalysisJobController(
       AnalysisJobStatusService statusService,
       AnalysisRequestService requestService,
-      AnalysisJobListService listService) {
+      AnalysisJobListService listService,
+      AnalysisRetryService retryService) {
     this.statusService = statusService;
     this.requestService = requestService;
     this.listService = listService;
+    this.retryService = retryService;
   }
 
   @Operation(
@@ -217,5 +222,49 @@ public class AnalysisJobController {
     return ResponseEntity.ok()
         .cacheControl(CacheControl.noStore())
         .body(AnalysisJobStatusResponse.from(statusService.get(principal.userId(), jobId)));
+  }
+
+  @Operation(
+      summary = "분석 재시도",
+      description =
+          """
+          재시도할 수 있는 실패(상태의 retryable=true)로 끝난 분석 작업을 다시 돌리고 그 상태를 준다.
+          - 영상 전처리가 끝난 작업은 가이드 생성만 다시 하고(RUNNING · BUILDING_GUIDE), 그 전에 멈춘 작업은 대기열로 돌아가 처음부터 한다(PENDING · QUEUED).
+          - 이미 누가 다시 시도해 진행 중이면 그 상태를, 같은 영상의 다른 진행 중 작업이 있으면 그 작업에 합류해 그 작업(다른 jobId)을 준다.
+          - 하루 분석 한도는 세지 않는다. 작업마다 시도 횟수 상한이 있고, 닿으면 상태의 retryable 이 false 다.
+          """,
+      security = {
+        @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE),
+        @SecurityRequirement(name = OpenApiConfig.CSRF_TOKEN)
+      })
+  @ApiResponse(
+      responseCode = "202",
+      description = "다시 돌리는 작업(또는 합류한 작업)의 상태",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = AnalysisJobStatusResponse.class)))
+  @AuthApiDocs.Unauthorized
+  @AuthApiDocs.CsrfRejected
+  @ApiResponse(
+      responseCode = "404",
+      description = "없는 작업이거나 내가 요청 · 합류한 작업이 아니다(구분하지 않는다). (NOT_FOUND)",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ErrorResponse.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "처음 돌고 있거나 완료된 작업, 재시도해도 같은 결과인 실패, 또는 시도 횟수 상한이다. (ANALYSIS_NOT_RETRYABLE)",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ErrorResponse.class)))
+  @PostMapping(value = "/{jobId}/retry", produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<AnalysisJobStatusResponse> retry(
+      @AuthenticationPrincipal AuthenticatedUser principal, @PathVariable UUID jobId) {
+    return ResponseEntity.status(HttpStatus.ACCEPTED)
+        .cacheControl(CacheControl.noStore())
+        .body(AnalysisJobStatusResponse.from(retryService.retry(principal.userId(), jobId)));
   }
 }

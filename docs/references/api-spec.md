@@ -6,7 +6,7 @@
 
 ## 0. 구현 규칙 (AI·팀원 공통)
 
-구현·머지·배포 상태는 [BE 구현 현황](../../backend/docs/implementation-status.md)에서 구분한다. 현재 코드에 얼굴 등록 3개, 인증된 사진 바이너리 GET을 포함한 실행·사진 관련 7개, 리포트 목록·상세·삭제 3개 API가 구현되어 있다. 운영 배포 뒤 실제 사진 저장·삭제 확인 여부는 구현 현황 문서를 따른다.
+구현·머지·배포 상태는 [BE 구현 현황](../../backend/docs/implementation-status.md)에서 구분한다. 현재 코드에 얼굴 등록 3개, 인증된 사진 바이너리 GET을 포함한 실행·사진 관련 7개, 리포트 목록·상세·삭제 3개, 분석 재시도(API-VIDEO-006) API가 구현되어 있다. 운영 배포 뒤 실제 사진 저장·삭제 확인 여부는 구현 현황 문서를 따른다.
 
 - 정책 충돌 시 기능명세서 > 이 문서. 충돌을 발견하면 임의 해석하지 말고 문서 수정 요청
 - 5절 미결 항목은 임의 결정 금지. 수치는 설정값으로 분리, 분기는 기본 동작만 구현하고 <code>TODO(확인 필요 N)</code> 표기 (N = 기능명세서 번호)
@@ -691,9 +691,14 @@ POST /api/v1/users/me/analysis-jobs/\{jobId\}/retry
 
 - 관련 기능: VIDEO-003 · 회원(본인이 요청 또는 합류한 작업)
 - 요청: Path <code>jobId</code>. 본문 없음
-- 성공 202: AnalysisJobStatus(status=PENDING 또는 RUNNING, progressStage=멈춘 단계)
+- 성공 202: AnalysisJobStatus. 영상 전처리가 끝난 뒤 멈춘 작업은 RUNNING · BUILDING\_GUIDE(멈춘 단계), 그 전에 멈춘 작업은 PENDING · QUEUED(처음부터). 이미 재시도해 다시 도는 작업 · 합류한 작업은 그 작업의 지금 상태
 - 오류: 404 <code>NOT_FOUND</code> · 409 <code>ANALYSIS_NOT_RETRYABLE</code>(실패도 아니고 재개 중인 동일 작업도 아님, 또는 retryable=false → '다른 영상 고르기'만) · 429 <code>ANALYSIS_DAILY_LIMIT_EXCEEDED</code>(재시도 차감 정책 확정 시)
-- 정책: 멈춘 단계부터 재개. 다른 회원이 먼저 재시도했으면 그 작업에 합류. 재시도의 일일 한도 차감 여부는 미정
+- 정책: 멈춘 단계부터 재개(영상 전처리가 끝난 뒤 멈춘 작업만 그 단계부터, 그 전에 멈춘 작업은 처음부터 — 아래 구현 메모). 다른 회원이 먼저 재시도했으면 그 작업에 합류. 재시도의 일일 한도 차감 여부는 미정
+- <b>구현 메모 (S15P31A306-400)</b>
+  - 재개 지점: 영상 전처리 노트북이 끝낸 작업(AI 요청 JSON이 남음)은 가이드 생성만 다시 한다(202 RUNNING · BUILDING\_GUIDE). 그 전에 멈춘 작업은 노트북이 중간부터 받을 수 없어 대기열로 돌아가 처음부터 한다(202 PENDING · QUEUED). jobId는 그대로이고 시도 횟수(attempt)만 오른다. 노트북 기다림 시간 초과는 재시도한 때부터 다시 센다.
+  - 이미 누가 재시도해 다시 도는 작업(attempt 2 이상, PENDING · RUNNING)이면 그 상태를 202로 준다. 처음 돌고 있는 작업은 409다. 같은 영상의 다른 진행 중 작업이 있으면(실패 뒤 누가 새로 요청함) 그 작업에 합류하고 그 작업(다른 jobId)을 준다.
+  - 409 <code>ANALYSIS\_NOT\_RETRYABLE</code>: 처음 도는 중 · 완료 · retryable=false 실패 · 시도 횟수 상한(설정 <code>app.analysis.request.max-attempts</code>, 처음 포함). 상한에 닿은 실패는 상태 응답의 retryable도 false다.
+  - 일일 한도는 세지 않는다(429 없음). TODO(확인 필요 4) 재시도 차감 정책이 정해지면 바꾼다.
 
 ### API-VIDEO-007 · 내 분석 목록 (홈 '검수 중 가이드')
 

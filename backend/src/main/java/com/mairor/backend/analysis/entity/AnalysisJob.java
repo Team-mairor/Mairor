@@ -336,6 +336,40 @@ public class AnalysisJob {
     return status == AnalysisStatus.RUNNING && aiJobId != null;
   }
 
+  // --- 재시도 (API-VIDEO-006) ---
+
+  /**
+   * 실패한 작업을 다시 돌린다. 재시도할 수 있는 실패일 때만. 시도 횟수가 1 오르고 실패 · 진행 · AI 칸을 비운다.
+   *
+   * <p>노트북이 끝낸 작업(AI 요청 JSON 키가 있음)은 AI 에 맡길 차례(RUNNING · BUILDING_GUIDE)로 돌아가 같은 요청 JSON 으로 다시
+   * 맡긴다. 그 전에 멈춘 작업은 노트북 · worker 가 중간부터 이어 받을 수 없어 대기열(PENDING · QUEUED)로 돌아가 처음부터 한다.
+   */
+  public void retry() {
+    requireStatus(AnalysisStatus.FAILED, "재시도");
+    if (!retryable) {
+      throw new IllegalStateException("분석 작업 " + id + " 은 재시도할 수 없는 실패(" + failureCode + ")입니다.");
+    }
+    this.attempt++;
+    this.failureCode = null;
+    this.failureMessage = null;
+    this.retryable = false;
+    this.finishedAt = null;
+    this.progressPercent = null;
+    this.aiJobId = null;
+    this.aiRequestedAt = null;
+    this.aiProgress = null;
+    this.processorLeaseUntil = null;
+    this.processorClaims = 0;
+    if (processorRequestKey != null) {
+      this.status = AnalysisStatus.RUNNING;
+      this.progressStage = ProgressStage.BUILDING_GUIDE;
+    } else {
+      this.status = AnalysisStatus.PENDING;
+      this.progressStage = ProgressStage.QUEUED;
+      this.startedAt = null;
+    }
+  }
+
   /** worker 가 처리 중에 죽었다. 다시 기동할 때 대기열로 돌린다. RUNNING 일 때만. */
   public void requeueAfterCrash() {
     requireStatus(AnalysisStatus.RUNNING, "재시작 복구");

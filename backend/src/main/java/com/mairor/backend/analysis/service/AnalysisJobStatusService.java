@@ -30,6 +30,7 @@ public class AnalysisJobStatusService {
   private final AnalysisJobRepository jobs;
   private final GuideRepository guides;
   private final AnalysisStatusProperties properties;
+  private final AnalysisRequestProperties requestProperties;
   private final ObjectMapper objectMapper;
 
   AnalysisJobStatusService(
@@ -37,11 +38,13 @@ public class AnalysisJobStatusService {
       AnalysisJobRepository jobs,
       GuideRepository guides,
       AnalysisStatusProperties properties,
+      AnalysisRequestProperties requestProperties,
       ObjectMapper objectMapper) {
     this.access = access;
     this.jobs = jobs;
     this.guides = guides;
     this.properties = properties;
+    this.requestProperties = requestProperties;
     this.objectMapper = objectMapper;
   }
 
@@ -84,7 +87,8 @@ public class AnalysisJobStatusService {
         job.getProgressPercent(),
         null,
         StageProgress.of(job.getStatus(), job.getProgressStage(), progress(job)),
-        job.isRetryable(),
+        // 재시도 가능한 실패라도 시도 횟수 상한에 닿았으면 재시도 버튼을 보이지 않게 false
+        requestProperties.canRetry(job),
         reviewStatus,
         approved,
         approved ? guide.get().getId() : null,

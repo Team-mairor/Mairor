@@ -3,6 +3,7 @@ package com.mairor.backend.analysis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -15,6 +16,8 @@ import com.mairor.backend.analysis.service.AiFrameDelivery;
 import com.mairor.backend.analysis.service.AiResultService;
 import com.mairor.backend.analysis.service.AnalysisJobRequest;
 import com.mairor.backend.analysis.service.AnalysisJobService;
+import com.mairor.backend.analysis.service.AnalysisJobStatusView;
+import com.mairor.backend.analysis.service.AnalysisRetryService;
 import com.mairor.backend.analysis.service.ProcessorJobService;
 import com.mairor.backend.analysis.worker.AnalysisJobStore;
 import com.mairor.backend.analysis.worker.ProcessedJobSubmitter;
@@ -71,6 +74,7 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
   @Autowired private WorkerProperties workerProperties;
   @Autowired private ObjectMapper objectMapper;
   @Autowired private AiResultService aiResults;
+  @Autowired private AnalysisRetryService retries;
   @MockitoBean private AiGuideJobClient ai;
   // AI 결과 반영 뒤 제품 링크 대조(-324)는 비동기라 다음 테스트의 표 정리와 겹칠 수 있다. 이 흐름과 무관해 가짜로 둔다
   @Autowired private AiFrameDelivery frameDelivery;
@@ -229,7 +233,8 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
                     "procFresh01", "videos/procFresh01/source.mp4", "제목", "채널", 600))
             .jobId();
     jdbc.update(
-        "update analysis_jobs set created_at = now() - interval '31 minutes' where id = ?",
+        "update analysis_jobs set created_at = now() - interval '31 minutes',"
+            + " updated_at = now() - interval '31 minutes' where id = ?",
         waiting);
     assertThat(processorJobs.expireWaiting()).isEqualTo(1);
     AnalysisJob expired = jobs.findById(waiting).orElseThrow();
@@ -291,7 +296,9 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
                     "procQueue01", "videos/procQueue01/source.mp4", "제목", "채널", 600))
             .jobId();
     jdbc.update(
-        "update analysis_jobs set created_at = now() - interval '40 minutes' where id = ?", queued);
+        "update analysis_jobs set created_at = now() - interval '40 minutes',"
+            + " updated_at = now() - interval '40 minutes' where id = ?",
+        queued);
 
     // 노트북이 방금 작업을 가져갔으므로 줄 선 작업 · 임대가 지난 작업 모두 그대로 둔다
     assertThat(processorJobs.expireWaiting()).isZero();
@@ -307,5 +314,90 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
     assertThat(jobs.findById(stalled).orElseThrow().getFailureCode())
         .isEqualTo("PROCESSOR_TIMEOUT");
     assertThat(jobs.findById(working).orElseThrow().getStatus().name()).isEqualTo("RUNNING");
+  }
+
+  /** 재시도(API-VIDEO-006): 노트북 단계에서 멈춘 작업은 대기열로 돌아가 노트북이 다시 가져가고, 노트북 기다림 시간은 재시도한 때부터 센다. */
+  @Test
+  void jobRetriedBeforeTheNotebookFinishedIsClaimedAgainAndWaitsAnew() throws Exception {
+    UUID jobId =
+        service
+            .register(
+                new AnalysisJobRequest(
+                    "procRetry01", "videos/procRetry01/source.mp4", "제목", "채널", 600))
+            .jobId();
+    mockMvc
+        .perform(post(JOBS + "/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(
+            post(JOBS + "/" + jobId + "/fail")
+                .header("X-Processor-Token", PROCESSOR_TOKEN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"code\": \"STEP_EXTRACTION_FAILED\", \"retryable\": true, \"message\": \"503\"}"))
+        .andExpect(status().isNoContent());
+    // 처음 요청한 지 40분: 만든 시각으로 세면 재시도하자마자 노트북 기다림 시간 초과다
+    jdbc.update(
+        "update analysis_jobs set created_at = now() - interval '40 minutes',"
+            + " updated_at = now() - interval '40 minutes' where id = ?",
+        jobId);
+
+    AnalysisJobStatusView retried = retries.retry(member(jobId), jobId);
+
+    assertThat(retried.status().name()).isEqualTo("PENDING");
+    assertThat(retried.progressStage().name()).isEqualTo("QUEUED");
+    assertThat(processorJobs.expireWaiting()).as("재시도한 때부터 다시 기다린다").isZero();
+    String claimed =
+        mockMvc
+            .perform(post(JOBS + "/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(claimed).contains(jobId.toString());
+    AnalysisJob job = jobs.findById(jobId).orElseThrow();
+    assertThat(job.getAttempt()).isEqualTo(2);
+    assertThat(job.getProcessorClaims()).isEqualTo(1);
+    assertThat(job.getProgressStage().name()).isEqualTo("LOADING_VIDEO");
+  }
+
+  /** 재시도(API-VIDEO-006): 노트북이 끝낸 뒤 AI 단계에서 멈춘 작업은 영상 처리를 되풀이하지 않고 같은 요청 JSON 으로 AI 에 다시 맡긴다. */
+  @Test
+  void jobRetriedAfterTheNotebookFinishedIsHandedToTheAiAgain() throws Exception {
+    UUID jobId = processedJob("procRetryAi", requestJson("procRetryAi"));
+    when(ai.submit(any())).thenReturn("ai-try-1", "ai-try-2");
+    assertThat(submitter.submitNext()).isTrue();
+    assertThat(aiResults.timeout("ai-try-1", "콜백이 오지 않음")).isTrue();
+
+    AnalysisJobStatusView retried = retries.retry(member(jobId), jobId);
+
+    assertThat(retried.status().name()).isEqualTo("RUNNING");
+    assertThat(retried.progressStage().name()).isEqualTo("BUILDING_GUIDE");
+    assertThat(submitter.submitNext()).isTrue();
+    verify(ai, times(2)).submit(any());
+    AnalysisJob job = jobs.findById(jobId).orElseThrow();
+    assertThat(job.getAiJobId()).isEqualTo("ai-try-2");
+    assertThat(job.getAttempt()).isEqualTo(2);
+    assertThat(job.getProcessorClaims()).as("노트북에 다시 내주지 않았다").isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from guides where analysis_job_id = ?", Integer.class, jobId))
+        .isEqualTo(1);
+  }
+
+  /** 이 작업에 합류한 회원(재시도는 요청 · 합류한 회원만 할 수 있다). */
+  private UUID member(UUID jobId) {
+    UUID id = UUID.randomUUID();
+    jdbc.update(
+        "insert into users (id, email, provider, created_at, updated_at) values (?, ?, 'LOCAL', now(), now())",
+        id,
+        id + "@example.com");
+    jdbc.update(
+        "insert into analysis_job_requests (id, analysis_job_id, user_id, receipt_type, created_at)"
+            + " values (?, ?, ?, 'JOINED_JOB', now())",
+        UUID.randomUUID(),
+        jobId,
+        id);
+    return id;
   }
 }

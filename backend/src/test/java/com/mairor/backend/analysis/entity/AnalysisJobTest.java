@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mairor.backend.videos.entity.Video;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,7 @@ class AnalysisJobTest {
 
   private static final Instant T0 = Instant.parse("2026-11-03T00:00:00Z");
   private static final Instant T1 = Instant.parse("2026-11-03T00:05:00Z");
+  private static final Duration LEASE = Duration.ofMinutes(10);
 
   private static AnalysisJob newJob() {
     Video video = new Video("VxAXD6PP76I", "제목", "채널", 1858, null, null, "[]", T0);
@@ -157,5 +159,76 @@ class AnalysisJobTest {
     AnalysisJob failed = awaitingAiJob();
     failed.fail(AnalysisFailureCode.ANALYSIS_TIMEOUT, null, T1);
     assertThat(failed.recordAiProgress(PROGRESS)).isFalse();
+  }
+
+  @Test
+  void retryBeforeTheNotebookFinishedGoesBackToTheQueue() {
+    AnalysisJob job = newJob();
+    job.claimByProcessor(T0, LEASE);
+    job.progressByProcessor(ProgressStage.EXTRACTING_STEPS, T0, LEASE);
+    job.fail(AnalysisFailureCode.LLM_UNAVAILABLE, null, T1);
+
+    job.retry();
+
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.PENDING);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.QUEUED);
+    assertThat(job.getAttempt()).isEqualTo(2);
+    assertThat(job.getFailureCode()).isNull();
+    assertThat(job.getFailureMessage()).isNull();
+    assertThat(job.isRetryable()).isFalse();
+    assertThat(job.getStartedAt()).isNull();
+    assertThat(job.getFinishedAt()).isNull();
+    assertThat(job.getProcessorLeaseUntil()).isNull();
+    assertThat(job.getProcessorClaims()).isZero();
+    assertThat(job.isClaimableByProcessor(T1)).isTrue();
+  }
+
+  @Test
+  void retryAfterTheNotebookFinishedHandsTheSameRequestToTheAiAgain() {
+    AnalysisJob job = newJob();
+    job.claimByProcessor(T0, LEASE);
+    job.completeByProcessor("videos/VxAXD6PP76I/jobs/x/guide_job_request.json");
+    job.awaitAi("ai-1", T0);
+    job.recordAiProgress(PROGRESS);
+    job.fail(AnalysisFailureCode.ANALYSIS_TIMEOUT, null, T1);
+
+    job.retry();
+
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.RUNNING);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.BUILDING_GUIDE);
+    assertThat(job.getAttempt()).isEqualTo(2);
+    assertThat(job.getProcessorRequestKey())
+        .isEqualTo("videos/VxAXD6PP76I/jobs/x/guide_job_request.json");
+    assertThat(job.getAiJobId()).isNull();
+    assertThat(job.getAiRequestedAt()).isNull();
+    assertThat(job.getAiProgress()).isNull();
+    assertThat(job.getStartedAt()).isEqualTo(T0);
+    assertThat(job.isProcessed()).isTrue();
+    assertThat(job.isClaimableByProcessor(T1)).isFalse();
+  }
+
+  @Test
+  void retryAfterTheNotebookNeverCameGoesBackToTheQueue() {
+    AnalysisJob job = newJob();
+    job.failBeforeStart(AnalysisFailureCode.PROCESSOR_TIMEOUT, null, T1);
+
+    job.retry();
+
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.PENDING);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.QUEUED);
+    assertThat(job.getAttempt()).isEqualTo(2);
+  }
+
+  @Test
+  void onlyRetryableFailuresCanBeRetried() {
+    AnalysisJob pending = newJob();
+    assertThatThrownBy(pending::retry).isInstanceOf(IllegalStateException.class);
+
+    AnalysisJob notRetryable = newJob();
+    notRetryable.start(T0);
+    notRetryable.fail(AnalysisFailureCode.NO_VALID_STEPS, null, T1);
+    assertThatThrownBy(notRetryable::retry).isInstanceOf(IllegalStateException.class);
+    assertThat(notRetryable.getStatus()).isEqualTo(AnalysisStatus.FAILED);
+    assertThat(notRetryable.getAttempt()).isEqualTo(1);
   }
 }

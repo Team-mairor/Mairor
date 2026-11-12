@@ -240,7 +240,7 @@ public class ProcessorJobService {
       if (job == null) {
         continue;
       }
-      if (job.getStatus() == AnalysisStatus.PENDING && job.getCreatedAt().isBefore(before)) {
+      if (job.getStatus() == AnalysisStatus.PENDING && job.getUpdatedAt().isBefore(before)) {
         job.failBeforeStart(
             AnalysisFailureCode.PROCESSOR_TIMEOUT,
             "영상 전처리 노트북이 " + properties.waitTimeout().toMinutes() + "분 동안 작업을 가져가지 않았습니다.",

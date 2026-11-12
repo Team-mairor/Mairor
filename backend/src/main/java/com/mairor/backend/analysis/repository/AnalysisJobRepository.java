@@ -52,14 +52,14 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
           AnalysisStatus status);
 
   /**
-   * 노트북을 너무 오래 기다린 작업: {@code before} 전에 만들어졌는데 아무도 가져가지 않은 PENDING, 또는 임대가 {@code before} 전에 끝났는데
-   * 아무도 다시 가져가지 않은 RUNNING. S15P31A306-358. 노트북이 일하는 중인지는 {@link #existsTouchedByProcessorSince}로
-   * 따로 본다.
+   * 노트북을 너무 오래 기다린 작업: {@code before} 전부터 대기열에 있는데(만들어졌거나 재시도 · 재시작 복구로 돌아온 뒤 바뀐 적 없음) 아무도 가져가지 않은
+   * PENDING, 또는 임대가 {@code before} 전에 끝났는데 아무도 다시 가져가지 않은 RUNNING. S15P31A306-358. 노트북이 일하는 중인지는
+   * {@link #existsTouchedByProcessorSince}로 따로 본다.
    */
   @Query(
       value =
           "select id from analysis_jobs"
-              + " where (status = 'PENDING' and created_at < :before)"
+              + " where (status = 'PENDING' and updated_at < :before)"
               + " or (status = 'RUNNING' and processor_lease_until < :before)",
       nativeQuery = true)
   List<UUID> findIdsWaitingForProcessorSince(@Param("before") Instant before);
