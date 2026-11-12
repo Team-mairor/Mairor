@@ -12,6 +12,7 @@ from app.schemas.guide import Fact, GuideInputStep, StepFacts
 from app.schemas.landmarks import FrameLandmarks, ImageSize, LandmarksResult
 from app.schemas.manifest import Step
 from app.tasks.area import guide_area_builder
+from app.tasks.area.common.eye_line import above_eye_line
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -20,6 +21,8 @@ from app.tasks.area.guide_area_builder import (
     NOT_ANALYZED,
     brow_sub_step,
     build_guide_area,
+    eyeliner_sub_step,
+    eyeliner_zones,
     failed_guide_area,
 )
 from app.tasks.area.parts.area_preparation import usable_rows
@@ -36,7 +39,8 @@ from app.tasks.area.parts.eyeshadow_area import (
 )
 from app.tasks.area.parts.lip_area import LipArea, check_lip_area, lip_area_on_maps
 from tests.test_area_preparation import make_row
-from tests.test_eyeliner_area import lash_line, with_gap
+from tests.test_eyeliner_area import lash_line, lines, with_gap
+from tools.output_area import anchor_points
 
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = json.loads(
@@ -641,19 +645,36 @@ def build_eyeliner(monkeypatch, finder, steps):
     return build_guide_area("test_01", steps, RESULT, never)
 
 
+def liner_found(**zones):
+    """자리마다 눈별 선(눈 → 마스크)을 돌려주는 찾기 함수. 안 준 자리는 못 찾음이다."""
+
+    def finder(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
+        return lines(**{zone: masks(eye) for zone, masks in zones.items()})
+
+    return finder
+
+
+def upper_line(eye):
+    return lash_line(eye)
+
+
+def lower_line(eye):
+    return lash_line(eye, upper=False)
+
+
 def test_eyeliner_step_gets_one_polygon_per_line_on_each_eye_without_exclude(monkeypatch):
     """앞머리 아래와 눈꼬리 트임처럼 떨어져 그린 선은 덩어리마다 도형 하나씩 나가야 한다."""
     seen = []
 
     def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
         seen.append((step_start_ms, step_end_ms, eye))
-        return EyelinerArea(mask=with_gap(lash_line(eye, upper=False), 20))
+        return lines(under=with_gap(lash_line(eye, upper=False), 20))
 
     area = build_eyeliner(monkeypatch, found, eyeliner_steps(8))
-    sub_step = area.steps[0].sub_steps[0]
+    sub_steps = area.steps[0].sub_steps
     assert seen == [(8000, 10500, "leftEye"), (8000, 10500, "rightEye")]
-    assert (sub_step.status, sub_step.reasons) == ("extracted", [])
-    assert [(s.region, len(s.guides), s.exclude) for s in sub_step.guide_sets] == [
+    assert [(s.status, s.reasons) for s in sub_steps] == [("extracted", [])]
+    assert [(s.region, len(s.guides), s.exclude) for s in sub_steps[0].guide_sets] == [
         ("leftEye", 2, []),
         ("rightEye", 2, []),
     ]
@@ -661,9 +682,7 @@ def test_eyeliner_step_gets_one_polygon_per_line_on_each_eye_without_exclude(mon
 
 
 def test_next_eyeliner_step_leaves_out_lines_the_earlier_step_guided(monkeypatch):
-    area = build_eyeliner(
-        monkeypatch, lambda *args, **_: EyelinerArea(mask=lash_line(args[-1])), eyeliner_steps(1, 2)
-    )
+    area = build_eyeliner(monkeypatch, liner_found(upper=upper_line), eyeliner_steps(1, 2))
     first, second = (step.sub_steps[0] for step in area.steps)
     assert first.status == "extracted"
     assert (second.status, second.template_id, second.reasons) == (
@@ -689,7 +708,7 @@ def test_error_in_one_eyeliner_step_fails_only_that_step(monkeypatch, caplog):
     def broken_first(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
         if step_start_ms == 1000:
             raise OSError("사진 파일이 깨짐")
-        return EyelinerArea(mask=lash_line(eye))
+        return lines(upper=lash_line(eye))
 
     with caplog.at_level(logging.ERROR):
         area = build_eyeliner(monkeypatch, broken_first, eyeliner_steps(1, 2))
@@ -697,6 +716,154 @@ def test_error_in_one_eyeliner_step_fails_only_that_step(monkeypatch, caplog):
     assert (first.status, first.reasons) == ("failed", [ANALYSIS_ERROR])
     assert second.status == "extracted"
     assert "s1" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area", "zones"),
+    [
+        ("아이라인", "윗눈꺼풀 라인과 눈꼬리", ("upper",)),
+        ("아이라인", "아이라인 뒤쪽", ("upper",)),
+        ("아이라인 앞쪽", "아이라인 앞쪽", ("upper",)),
+        ("아이라인 중간", "아이라인 중간", ("upper",)),
+        ("쌍꺼풀 라인 연장", "쌍꺼풀 라인 연장", ("upper",)),
+        ("쌍꺼풀 라인 평행 아이라인", "쌍꺼풀 라인 평행 아이라인", ("upper",)),
+        ("언더 아이라인 윙", "언더 아이라인 윙", ("under",)),
+        ("눈 밑 트임", "눈 밑 트임", ("under",)),
+        ("점막 아이라인", "점막 아이라인", ("waterline",)),
+        ("페이크 래쉬", "페이크 래쉬", ("under",)),
+        ("아이라인", "눈꼬리 빼고 윗라인", ("upper",)),
+        ("아이라인", "점막은 빼고 윗라인", ("upper",)),
+        ("언더트임", "눈 앞머리 아래", ("under",)),
+        ("언더트임", "아래 눈꼬리", ("under",)),
+        ("언더래쉬", "아래 속눈썹 라인", ("under",)),
+        ("페이크래쉬", "아래 속눈썹", ("under",)),
+        ("아이라인", "아랫눈꺼풀", ("under",)),
+        ("언더 아이라인", "눈 점막에서 살짝 띄운 눈 아래", ("under",)),
+        ("눈 점막 아래", "눈 점막 아래", ("under",)),
+        ("점막", "윗점막", ("waterline",)),
+        ("점막 아이라인", "눈 점막", ("waterline",)),
+        ("아이라인", "위아래 라인", ("upper", "under")),
+        ("아이라인", "아이라인", None),
+    ],
+)
+def test_eyeliner_zones_come_from_step_words(part_label, area, zones):
+    assert eyeliner_zones(input_step("eyeliner", part_label, area)) == zones
+
+
+@pytest.mark.parametrize(
+    ("eye_zone", "zones"),
+    [
+        ("upper", ("upper",)),
+        ("under", ("under",)),
+        ("both", ("upper", "under")),
+        ("waterline", ("waterline",)),
+    ],
+)
+def test_eyeliner_zone_value_from_be_comes_before_words(eye_zone, zones):
+    assert eyeliner_zones(input_step("eyeliner", "아이라인", "윗점막", eye_zone)) == zones
+
+
+def test_manifest_eyeliner_step_without_words_has_unknown_zones():
+    assert eyeliner_zones(eyeliner_steps(1)[0]) is None
+
+
+def liner_sub_steps(monkeypatch, finder, step):
+    return build_eyeliner(monkeypatch, finder, [step]).steps[0].sub_steps
+
+
+def test_waterline_step_uses_waterline_default_guide_without_reading_photos(monkeypatch):
+    def never_find(*args, **kwargs):
+        raise AssertionError("윗점막 단계는 사진으로 찾지 않아야 합니다")
+
+    step = input_step("eyeliner", "점막", "윗점막")
+    sub_steps = liner_sub_steps(monkeypatch, never_find, step)
+    assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("template", "eyelinerWaterline", [NOT_ANALYZED])
+    ]
+
+
+def test_lower_line_step_sends_only_the_lower_line(monkeypatch):
+    """아랫라인 단계에서는 윗라인 자리에 바뀐 칸이 있어도 보내지 않는다."""
+    step = input_step("eyeliner", "언더트임", "아래 눈꼬리")
+    sub_steps = liner_sub_steps(monkeypatch, liner_found(upper=upper_line, under=lower_line), step)
+    assert [s.status for s in sub_steps] == ["extracted"]
+    for guide_set in sub_steps[0].guide_sets:
+        points = np.rint(anchor_points(guide_set.guides[0].outline)).astype(int)
+        assert (~above_eye_line(guide_set.region))[points[:, 1], points[:, 0]].mean() > 0.9
+
+
+def test_lower_line_not_found_uses_lower_default_guide(monkeypatch):
+    step = input_step("eyeliner", "언더래쉬", "아래 속눈썹 라인")
+    sub_steps = liner_sub_steps(monkeypatch, liner_found(upper=upper_line), step)
+    assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("template", "eyelinerUnder", ["eyelinerColorNotFound"])
+    ]
+
+
+def test_both_zones_step_mixes_a_found_line_and_a_default_guide(monkeypatch):
+    step = input_step("eyeliner", "아이라인", "위아래 라인")
+    sub_steps = liner_sub_steps(monkeypatch, liner_found(upper=upper_line), step)
+    assert [(s.sub_step_id, s.order, s.status, s.template_id) for s in sub_steps] == [
+        ("s5-1", 1, "extracted", None),
+        ("s5-2", 2, "template", "eyelinerUnder"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area", "eye_zone", "templates"),
+    [
+        ("아이라인", "위아래 라인", None, ["eyeliner", "eyelinerUnder"]),
+        ("아이라인", "아이라인", "both", ["eyeliner", "eyelinerUnder"]),
+        ("아이라인", "윗라인과 점막", None, ["eyeliner", "eyelinerWaterline"]),
+    ],
+)
+def test_known_zones_found_nowhere_send_each_zone_default_guide(
+    monkeypatch, part_label, area, eye_zone, templates
+):
+    """자리를 아는 단계는 아무 자리도 못 찾아도 하나로 합치지 않고 자리마다 그 자리 기본 가이드를
+    둔다(guide-area README 「못 찾은 윗라인은 eyeliner, 아랫라인은 eyelinerUnder」)."""
+    step = input_step("eyeliner", part_label, area, eye_zone)
+    sub_steps = liner_sub_steps(monkeypatch, liner_found(), step)
+    assert [(s.sub_step_id, s.order, s.status, s.template_id) for s in sub_steps] == [
+        (f"s5-{order}", order, "template", template)
+        for order, template in enumerate(templates, start=1)
+    ]
+
+
+def test_unknown_zone_step_found_nowhere_sends_one_default_guide(monkeypatch):
+    sub_steps = liner_sub_steps(monkeypatch, liner_found(), eyeliner_steps(1)[0])
+    assert [(s.status, s.template_id) for s in sub_steps] == [("template", "eyeliner")]
+
+
+def test_unknown_zone_step_sends_only_the_found_lines(monkeypatch):
+    sub_steps = liner_sub_steps(monkeypatch, liner_found(under=lower_line), eyeliner_steps(1)[0])
+    assert [(s.sub_step_id, s.status) for s in sub_steps] == [("s1-1", "extracted")]
+
+
+def test_eyeliner_step_record_has_zones(monkeypatch):
+    records = []
+    monkeypatch.setattr(guide_area_builder, "set_output", lambda span, out: records.append(out))
+    step = input_step("eyeliner", "아이라인", "위아래 라인")
+    liner_sub_steps(monkeypatch, liner_found(upper=upper_line), step)
+    assert records[0]["eyeZones"] == ["upper", "under"]
+    assert [(s["subStepId"], s["status"]) for s in records[0]["subSteps"]] == [
+        ("s5-1", "extracted"),
+        ("s5-2", "template"),
+    ]
+
+
+def test_line_around_the_whole_eye_excludes_the_eye_hole():
+    """고리 모양으로 눈을 감싼 선은 테두리 안에 눈 구멍이 들어, 눈을 exclude에 넣어 FE가 눈을
+    칠하지 않게 한다. 한쪽 자리 선은 감싸지 않아 exclude가 비어 있다."""
+    ring = {
+        eye: polygon_mask(map_points(REGION_POINTS[eye]), MAP_SIZE, MAP_SIZE, band=6)
+        & ~polygon_mask(map_points(REGION_POINTS[eye]), MAP_SIZE, MAP_SIZE)
+        for eye in ("leftEye", "rightEye")
+    }
+    sub_step = eyeliner_sub_step("s1-1", ring)
+    assert [s.exclude for s in sub_step.guide_sets] == [["leftEye"], ["rightEye"]]
+    one_side = eyeliner_sub_step("s1-1", {eye: upper_line(eye) for eye in ring})
+    assert [s.exclude for s in one_side.guide_sets] == [[], []]
 
 
 def hides_nothing(row: FrameLandmarks, photo: np.ndarray) -> np.ndarray:

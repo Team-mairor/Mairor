@@ -1,10 +1,11 @@
 """단계마다 부위 분석을 불러 영상 하나의 가이드 영역(GuideArea)을 만든다.
 
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
-아이라인은 앞 아이라인 단계에서 안내한 곳을 빼고 봐야 하고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을
-써야 하고, 아이섀도는 단계 글로 바른 자리(윗눈두덩·눈 밑)를 골라야 해서,
-세 부위(STEP_MAKEUPS)는 단계마다 따로 부른다. 그중 앞 단계 결과를 이어받는 아이라인·눈썹
-(ORDERED_MAKEUPS)은 단계를 여러 줄로 나눠 만들 때도 한 줄에 순서대로 둬야 한다.
+아이라인은 단계 글로 그린 자리(윗라인·아랫라인·윗점막)를 고르고 앞 아이라인 단계에서 안내한 곳을
+빼고 봐야 하고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을 써야 하고, 아이섀도는 단계 글로 바른 자리
+(윗눈두덩·눈 밑)를 골라야 해서, 세 부위(STEP_MAKEUPS)는 단계마다 따로 부른다.
+그중 앞 단계 결과를 이어받는 아이라인·눈썹(ORDERED_MAKEUPS)은 단계를 여러 줄로 나눠 만들 때도
+한 줄에 순서대로 둬야 한다.
 가림 찾기 함수를 받으면 모든 부위 분석에 그대로 넘겨 사진마다 가린 칸을 빼고 보게 한다.
 단계마다 area_step 기록(이름 뒤에 단계 ID)을 남기고, 부위 분석에서 빠진 사진 번호를 이유별로 적는다.
 """
@@ -13,6 +14,7 @@ import logging
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 
@@ -31,8 +33,9 @@ from app.schemas.guide_area import (
 )
 from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Makeup, Step
-from app.tasks.area.common.face_map import points_to_anchors
+from app.tasks.area.common.face_map import MAP_SIZE, points_to_anchors
 from app.tasks.area.common.mask_outline import smooth_outlines
+from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import (
@@ -46,7 +49,7 @@ from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symm
 from app.tasks.area.parts.eyeliner_area import (
     EyelinerArea,
     find_eyeliner_area,
-    symmetric_eyeliner,
+    paired_eyeliner,
 )
 from app.tasks.area.parts.eyeshadow_area import (
     EYES,
@@ -80,6 +83,33 @@ EYE_ZONES: dict[EyeZone, tuple[Zone, ...]] = {
     "both": ZONES,
 }
 ZONE_TEMPLATES: dict[Zone, TemplateId] = {"upper": "eyeshadowUpper", "under": "eyeshadowUnder"}
+LineZone = Literal["upper", "waterline", "under"]
+LINE_ZONES: tuple[LineZone, ...] = ("upper", "waterline", "under")
+LINE_EYE_ZONES: dict[EyeZone, tuple[LineZone, ...]] = {
+    "upper": ("upper",),
+    "under": ("under",),
+    "both": ("upper", "under"),
+    "waterline": ("waterline",),
+}
+LINE_TEMPLATES: dict[LineZone, TemplateId] = {
+    "upper": "eyeliner",
+    "waterline": "eyelinerWaterline",
+    "under": "eyelinerUnder",
+}
+LINE_UNDER_WORDS = ("아랫눈꺼풀", "아래눈꺼풀", "언더", "아래", "아랫", "밑", "하단", "래쉬")
+LINE_UNDER_PATTERN = re.compile("|".join(LINE_UNDER_WORDS))
+LINE_UPPER_WORDS = ("윗", "위쪽", "눈꺼풀", "쌍꺼풀")
+LINE_BOTH_WORDS = ("위아래", "아래위", "위아랫")
+LINE_TAIL_WORDS = ("꼬리", "뒤쪽", "윙", "앞쪽", "중간")
+LINE_WATERLINE_WORDS = ("점막", "워터라인")
+LINE_WORDS = (
+    LINE_BOTH_WORDS + LINE_UNDER_WORDS + LINE_UPPER_WORDS + LINE_TAIL_WORDS + LINE_WATERLINE_WORDS
+)
+LINE_EXCLUSION_PATTERN = re.compile(
+    rf"(?:{'|'.join(LINE_WORDS)})(?:에는|은|는|을|를|에)?"
+    rf"(?:{'|'.join(EYE_EXCLUSION_WORDS)})"
+)
+SURROUND_SHARE = 0.5
 
 ORDERED_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow")
 STEP_MAKEUPS: tuple[Makeup, ...] = (*ORDERED_MAKEUPS, "eyeshadow")
@@ -103,12 +133,14 @@ def build_guide_area(
     steps는 매니페스트나 가이드 입력의 단계이고 stepId·order·makeup을 그대로 옮긴다.
     result는 check_frames를 거친 얼굴 점 결과, load_photo는 사진 1장의 RGB 배열을 돌려주는 함수다.
     other는 notApplicable, AREA_FINDERS에 분석이 있으면 그 결과다.
-    아이라인은 _eyeliner_step이 단계 순서대로 앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
+    아이라인은 _eyeliner_step이 단계 글의 그린 자리마다 하위 단계를 하나씩 만들고, 단계 순서대로
+    앞 아이라인 단계에서 안내한 칸을 넘겨받는다.
     눈썹은 _brow_step이 단계 순서대로 앞 눈썹 단계들에서 보낸 눈썹 영역을 넘겨받는다.
     못 찾아 앞 단계 영역을 쓰면 area_step 기록에 reusedAreaFrom(그 영역을 보낸 단계 ID)을 남긴다.
-    아이섀도는 _eyeshadow_step이 단계 글의 바른 자리마다 하위 단계를 하나씩 만들고, area_step 기록에
-    본 자리(eyeZones, 모르면 None)를 남긴다. 하위 단계가 둘 이상이면 하위 단계마다 상태·이유를
-    subSteps에 더한다. 기록의 status·reasons는 첫 하위 단계의 것이다.
+    아이섀도는 _eyeshadow_step이 단계 글의 바른 자리마다 하위 단계를 하나씩 만든다.
+    아이라인·아이섀도는 area_step 기록에 본 자리(eyeZones, 모르면 None)를 남긴다.
+    하위 단계가 둘 이상이면 하위 단계마다 상태·이유를 subSteps에 더한다.
+    기록의 status·reasons는 첫 하위 단계의 것이다.
     나머지(베이스·마스카라처럼 영역 분석을 하지 않는 부위)는 notAnalyzed 이유로
     기본 가이드(template)를 쓴다.
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
@@ -130,7 +162,7 @@ def build_guide_area(
     area_steps = []
     for step in ordered:
         reused_from = None
-        zones: tuple[Zone, ...] | None = None
+        zones: tuple[Zone, ...] | tuple[LineZone, ...] | None = None
         with (
             traced(
                 f"area_step {step.step_id}", {"makeup": step.makeup}, step_id=step.step_id
@@ -139,8 +171,8 @@ def build_guide_area(
             within_step(*bounds[step.step_id]),
         ):
             if step.makeup == "eyeliner":
-                sub_step, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion)
-                sub_steps = [sub_step]
+                zones = eyeliner_zones(step)
+                sub_steps, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion, zones)
             elif step.makeup == "brow":
                 sub_step, drawn_brow, reused_from = _brow_step(
                     step, result, load_photo, drawn_brow, occlusion
@@ -158,7 +190,7 @@ def build_guide_area(
             }
             if reused_from is not None:
                 record["reusedAreaFrom"] = reused_from
-            if step.makeup == "eyeshadow":
+            if step.makeup in ("eyeshadow", "eyeliner"):
                 record["eyeZones"] = None if zones is None else list(zones)
             if len(sub_steps) > 1:
                 record["subSteps"] = [
@@ -281,20 +313,67 @@ def _nose_blush(step: Step | GuideInputStep) -> bool:
     return nose and not cheek
 
 
+def eyeliner_zones(step: Step | GuideInputStep) -> tuple[LineZone, ...] | None:
+    """아이라인 단계의 그린 자리를 BE가 준 바른 자리(eyeZone)나 단계 글로 고른다.
+
+    순서는 윗라인(upper) → 윗점막(waterline) → 아랫라인(under)이고, 모르면 None이다.
+    eyeZone이 있으면 그 값(LINE_EYE_ZONES)을 먼저 쓴다. under에는 아랫점막도 든다.
+    단계 글은 partLabel·facts.area이고 띄어쓰기를 지우고 본다.
+    아래 낱말(LINE_UNDER_WORDS)이 있으면 아랫라인이다.
+    아이라인으로 그리는 속눈썹(래쉬)은 아래 속눈썹이라 「래쉬」도 아래 낱말이다.
+    「점막에서 띄운 눈 아래」·「점막 아래」처럼
+    아래 낱말과 점막이 같이 있으면 아랫라인이나 아랫점막이라 점막 단계로 보지 않는다.
+    아래 낱말 없이 점막 낱말(LINE_WATERLINE_WORDS)만 있으면 윗점막이다.
+    위 낱말(LINE_UPPER_WORDS)은 아래 낱말과 점막 낱말을 지운 글에서 찾아,
+    「아랫눈꺼풀」·「윗점막」의 「눈꺼풀」·「윗」을 윗라인으로 보지 않는다.
+    꼬리·앞쪽·중간 같은 선 위치 낱말(LINE_TAIL_WORDS)은 아래 낱말이 없을 때만 윗라인이다.
+    「아래 눈꼬리」·「언더 아이라인 윙」은 아랫라인이기 때문이다.
+    위아래 낱말(LINE_BOTH_WORDS)이 있으면 윗라인·아랫라인 둘 다다.
+    부위 뒤에 피하고·제외하고 같은 말이 붙으면 그 부위를 지운 뒤 찾는다.
+    글이 없는 매니페스트 단계는 모름이다.
+    """
+    if not isinstance(step, GuideInputStep):
+        return None
+    if step.eye_zone in LINE_EYE_ZONES:
+        return LINE_EYE_ZONES[step.eye_zone]
+    texts = [
+        LINE_EXCLUSION_PATTERN.sub("", "".join(text.split()))
+        for text in (step.part_label, step.facts.area.value)
+    ]
+    both = any(word in text for text in texts for word in LINE_BOTH_WORDS)
+    under = both or any(LINE_UNDER_PATTERN.search(text) for text in texts)
+    rest = [LINE_UNDER_PATTERN.sub("", text) for text in texts]
+    waterline = not under and any(word in text for text in rest for word in LINE_WATERLINE_WORDS)
+    for word in LINE_WATERLINE_WORDS:
+        rest = [text.replace(f"윗{word}", "").replace(word, "") for text in rest]
+    upper = (
+        both
+        or any(word in text for text in rest for word in LINE_UPPER_WORDS)
+        or (not under and any(word in text for text in rest for word in LINE_TAIL_WORDS))
+    )
+    picked = {"upper": upper, "waterline": waterline, "under": under}
+    zones = tuple(zone for zone in LINE_ZONES if picked[zone])
+    return zones or None
+
+
 def _eyeliner_step(
     step: Step | GuideInputStep,
     result: LandmarksResult,
     load_photo: PhotoLoader,
     drawn: np.ndarray | None,
     occlusion: OcclusionFinder | None,
-) -> tuple[AreaSubStep, np.ndarray | None]:
-    """아이라인 단계의 하위 단계와, 이 단계까지 아이라인 가이드로 안내한 칸(양쪽 눈 합)을 돌려준다.
+    zones: tuple[LineZone, ...] | None,
+) -> tuple[list[AreaSubStep], np.ndarray | None]:
+    """아이라인 단계의 하위 단계들과, 이 단계까지 아이라인 가이드로 안내한 칸(양쪽 눈 합).
 
-    drawn은 앞 아이라인 단계들에서 안내한 칸이고 symmetric_eyeliner에 넘겨 빼고 보게 한다.
-    이 단계가 extracted이면 이번 마스크를 더해 돌려주고, 아니면 drawn을 그대로 돌려준다.
-    분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
+    zones는 단계의 그린 자리(eyeliner_zones)이고 None이면 모른다.
+    윗점막만 그린 단계는 사진으로 찾지 않는다(눈 구멍 안이라 찾을 수 없다).
+    drawn은 앞 아이라인 단계들에서 안내한 칸이고 paired_eyeliner에 넘겨 빼고 보게 한다.
+    찾은 자리가 있으면 그 마스크를 더해 돌려주고, 없으면 drawn을 그대로 돌려준다.
+    분석 중 오류가 나면 이 단계만 failed 하나로 적고 로그를 남긴다.
     """
-    sub_step_id = f"{step.step_id}-1"
+    if zones == ("waterline",):
+        return eyeliner_sub_steps(step.step_id, {}, zones, drawn)
     try:
         areas = {
             eye: find_eyeliner_area(
@@ -307,52 +386,96 @@ def _eyeliner_step(
             )
             for eye in EYES
         }
-        masks = symmetric_eyeliner(areas, drawn)
+        return eyeliner_sub_steps(step.step_id, areas, zones, drawn)
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
-        return _failed(sub_step_id), drawn
-    sub_step = eyeliner_sub_step(sub_step_id, areas, masks)
-    if sub_step.status != "extracted" or masks is None:
-        return sub_step, drawn
-    guided = np.any(list(masks.values()), axis=0)
-    return sub_step, guided if drawn is None else drawn | guided
+        return [_failed(f"{step.step_id}-1")], drawn
+
+
+def eyeliner_sub_steps(
+    step_id: str,
+    areas: Mapping[RegionName, EyelinerArea],
+    zones: tuple[LineZone, ...] | None,
+    drawn: np.ndarray | None = None,
+) -> tuple[list[AreaSubStep], np.ndarray | None]:
+    """두 눈의 찾기 결과를 그린 자리마다 하위 단계로 적고, 다음 아이라인 단계에 넘길 칸을 낸다.
+
+    하위 단계 순서는 윗라인 → 윗점막 → 아랫라인이다.
+    zones(단계 글의 그린 자리)가 있으면 그 자리만 본다. 윗라인·아랫라인은 paired_eyeliner로
+    양쪽 모양을 정했으면 눈마다 영역을 적은 extracted, 못 정했으면 그 자리 기본 가이드
+    (LINE_TEMPLATES)다. 윗점막은 찾지 않고 notAnalyzed 이유로 eyelinerWaterline 기본 가이드다.
+    zones가 None(모름)이면 윗라인·아랫라인을 다 보고 찾은 자리만 적고,
+    아무 자리도 못 찾으면 윗라인 기본 가이드(eyeliner) 하나에 자리·눈마다의 이유를 모은다.
+    자리를 알면 아무 자리도 못 찾아도 그 자리마다 기본 가이드를 둬서,
+    「위아래」 단계에서 아랫라인 기본 가이드가 빠지지 않게 한다.
+    넘길 칸은 drawn에 이번에 찾은 자리의 마스크(양쪽 눈)를 더한 것이다.
+    지표 도구(tools/output_area.py)도 이 함수로 서비스가 보낼 하위 단계를 만든다.
+    """
+    looked = zones if zones is not None else ("upper", "under")
+    picked: dict[LineZone, AreaSubStep] = {}
+    reasons: dict[LineZone, list[str]] = {}
+    guided = drawn
+    for zone in looked:
+        if zone == "waterline":
+            reasons[zone] = [NOT_ANALYZED]
+            continue
+        masks = paired_eyeliner(areas, zone, drawn) if areas else None
+        if masks is not None:
+            sub_step = eyeliner_sub_step(step_id, masks)
+            if sub_step is not None:
+                picked[zone] = sub_step
+                found = np.any(list(masks.values()), axis=0)
+                guided = found if guided is None else guided | found
+                continue
+        reasons[zone] = list(
+            dict.fromkeys(
+                area.zone(zone).reason or "eyelinerColorNotFound" for area in areas.values()
+            )
+        ) or ["eyelinerColorNotFound"]
+    templates = [zone for zone in looked if zone not in picked and zones is not None]
+    if not picked and not templates:
+        merged = list(dict.fromkeys(reason for zone in looked for reason in reasons[zone]))
+        return [template_sub_step(f"{step_id}-1", "eyeliner", merged)], guided
+    out = [
+        picked[zone]
+        if zone in picked
+        else template_sub_step(step_id, LINE_TEMPLATES[zone], reasons[zone])
+        for zone in LINE_ZONES
+        if zone in picked or zone in templates
+    ]
+    return [
+        sub_step.model_copy(update={"sub_step_id": f"{step_id}-{order}", "order": order})
+        for order, sub_step in enumerate(out, start=1)
+    ], guided
 
 
 def eyeliner_sub_step(
-    sub_step_id: str,
-    areas: Mapping[RegionName, EyelinerArea],
-    masks: Mapping[RegionName, np.ndarray] | None,
-) -> AreaSubStep:
-    """양쪽 눈의 아이라인 마스크를 눈마다 영역 하나씩 적는다.
+    sub_step_id: str, masks: Mapping[RegionName, np.ndarray]
+) -> AreaSubStep | None:
+    """양쪽 눈의 아이라인 마스크(한 자리)를 눈마다 영역을 적은 extracted로. 테두리가 안 나오면 None.
 
     앞머리 아래와 눈꼬리 트임처럼 떨어진 선은 덩어리마다 polygon 하나씩이다.
     얇은 선이 테두리로 바꿀 때 가늘어지지 않게 OUTLINE_GROW_CELLS칸 굵혀 테두리를 뽑고,
     아이라인 세기(OUTLINE_SMOOTH_CELLS)로 테두리를 편다(smooth_outlines).
-    두 눈 모두 못 찾았으면 눈마다의 이유를 모아 기본 아이라인 가이드(template)를 쓴다.
-    찾았지만 앞 단계에서 안내한 곳뿐이거나 테두리가 나오지 않으면 eyelinerColorNotFound다.
-    아이라인은 눈 테두리 바깥에서만 찾아 눈 구멍을 감싸지 않으므로 exclude는 비운다.
+    선이 눈 구멍을 감싸면(_surrounds) FE가 눈까지 칠하지 않게 그 눈을 exclude에 넣는다.
+    자리마다 눈 가로선 한쪽에만 있어 보통은 감싸지 않으므로 exclude는 비어 있다.
+    FE는 exclude가 있으면 그 테두리도 구멍으로 그려서, 감쌀 때만 넣는다.
     """
-    if masks is None:
-        reasons = [area.reason or "eyelinerColorNotFound" for area in areas.values()]
-        return template_sub_step(sub_step_id, "eyeliner", list(dict.fromkeys(reasons)))
-    guides = {
+    outlines = {
         eye: [
-            PolygonShape(type="polygon", outline=outline)
-            for outline in (
-                points_to_anchors(points)
-                for points in smooth_outlines(
-                    masks[eye],
-                    eyeliner_area.OUTLINE_SMOOTH_CELLS,
-                    eyeliner_area.OUTLINE_GROW_CELLS,
-                    every_piece=True,
-                )
+            points
+            for points in smooth_outlines(
+                masks[eye],
+                eyeliner_area.OUTLINE_SMOOTH_CELLS,
+                eyeliner_area.OUTLINE_GROW_CELLS,
+                every_piece=True,
             )
-            if outline
+            if points_to_anchors(points)
         ]
-        for eye in areas
+        for eye in EYES
     }
-    if not all(guides.values()):
-        return template_sub_step(sub_step_id, "eyeliner", ["eyelinerColorNotFound"])
+    if not all(outlines.values()):
+        return None
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,
@@ -360,10 +483,27 @@ def eyeliner_sub_step(
         reasons=[],
         template_id=None,
         guide_sets=[
-            GuideSet(region=eye, source="extracted", guides=guides[eye], exclude=[])
-            for eye in areas
+            GuideSet(
+                region=eye,
+                source="extracted",
+                guides=[
+                    PolygonShape(type="polygon", outline=points_to_anchors(points))
+                    for points in outlines[eye]
+                ],
+                exclude=[eye] if _surrounds(outlines[eye], eye) else [],
+            )
+            for eye in EYES
         ],
     )
+
+
+def _surrounds(outlines: Sequence[Sequence[tuple[float, float]]], eye: RegionName) -> bool:
+    """테두리들(지도 칸 좌표) 안에 눈 구멍이 SURROUND_SHARE 넘게 드는지(고리 모양 아이라인)."""
+    hole = eyeliner_area._hole(eye)
+    filled = np.zeros_like(hole)
+    for points in outlines:
+        filled |= polygon_mask(points, MAP_SIZE, MAP_SIZE)
+    return int((filled & hole).sum()) > SURROUND_SHARE * int(hole.sum())
 
 
 def _fixed_sub_step(makeup: Makeup, sub_step_id: str) -> AreaSubStep | None:

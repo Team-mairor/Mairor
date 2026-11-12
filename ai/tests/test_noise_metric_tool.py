@@ -5,7 +5,6 @@ import pytest
 
 from app.schemas.landmarks import Face, FrameLandmarks, ImageSize, Point, Pose
 from app.schemas.manifest import Manifest
-from app.tasks.area.common.eye_line import above_eye_line
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -17,6 +16,7 @@ from app.tasks.area.parts import (
     eyeshadow_area,
     lip_area,
 )
+from tests.test_eyeliner_area import lash_line, thirds_hidden_twice
 from tools import noise_metric, timing_metric
 
 SKIN = (224, 186, 168)
@@ -137,6 +137,92 @@ def test_blush_measure_finds_what_the_service_finds():
     assert m.found
     assert np.array_equal(m.area.mask, service.mask)
     assert m.gate == service.peak
+
+
+def test_eyeliner_measure_with_a_hidden_slice_finds_what_the_service_finds():
+    """직후 첫 1초 조각이 다 가려져도 잡음 도구는 서비스(zone_change)처럼 그 조각만 빼고
+    윗라인은 창 통째로, 아랫라인은 남은 조각으로 찾는다."""
+    before = skin_map()
+    drawn = with_red(before, lash_line("leftEye") | lash_line("leftEye", upper=False), 30)
+    covered = np.ones((MAP_SIZE, MAP_SIZE), dtype=bool)
+    after = {
+        eyeliner_area.AFTER_SLICE_MS["upper"]: [(drawn, None)],
+        eyeliner_area.AFTER_SLICE_MS["under"]: [(before, covered)] + [(drawn, None)] * 3,
+    }
+
+    m = noise_metric.measure_eyeliner(before, after, "leftEye")
+    changed, unknown = eyeliner_area.zone_change(before, after, "leftEye")
+    service = eyeliner_area.check_eyeliner_area(changed, "leftEye", unknown)
+
+    assert m.found
+    assert np.array_equal(m.area.mask, service.mask)
+    assert {zone: m.area.zone(zone).mask is not None for zone in eyeliner_area.ZONES} == {
+        "upper": True,
+        "under": True,
+    }
+
+
+def test_eyeliner_measure_uses_each_zone_unknown_like_the_service():
+    """아랫라인 칸 대부분을 두 조각 이상이 못 봤으면 서비스처럼 아랫라인만 noUsableFrame이다."""
+    before = skin_map()
+    drawn = with_red(before, lash_line("leftEye") | lash_line("leftEye", upper=False), 30)
+    after = {
+        eyeliner_area.AFTER_SLICE_MS["upper"]: [(drawn, None)],
+        eyeliner_area.AFTER_SLICE_MS["under"]: [
+            (drawn, mask) for mask in thirds_hidden_twice("leftEye")
+        ],
+    }
+
+    m = noise_metric.measure_eyeliner(before, after, "leftEye")
+
+    assert m.area.zone("upper").mask is not None
+    assert m.area.zone("under").reason == "noUsableFrame"
+
+
+def test_eyeliner_pairs_hand_each_slice_its_own_unknown(monkeypatch):
+    """잡음 도구가 쌍마다 직후 창을 서비스처럼 조각내고, 조각마다 그 조각의 모름 칸을 함께 넘기며,
+    직전 모름 칸은 따로 넘기는지 본다(모든 조각의 합으로 넘기면 서비스와 달라진다)."""
+
+    def rows(result, start, end, regions):
+        return [
+            SimpleNamespace(frame_index=t, timestamp_ms=t) for t in range(start + 250, end, 500)
+        ]
+
+    def load_map(rows_, side):
+        hidden = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+        hidden[0, rows_[0].timestamp_ms % MAP_SIZE] = True
+        return skin_map(), hidden
+
+    seen = []
+
+    def measure(before, after, eye, unknown=None):
+        seen.append((after, unknown))
+        area = eyeliner_area.EyelinerArea(mask=None, reason="eyelinerColorNotFound")
+        return noise_metric.Measure(None, 0.0, None, False, area)
+
+    monkeypatch.setattr(noise_metric, "usable_rows", rows)
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
+    part = noise_metric.Part(
+        "eyeliner",
+        eyeliner_area.EYES,
+        eyeliner_area.BEFORE_WINDOW_MS,
+        eyeliner_area.AFTER_WINDOW_MS,
+        0.5,
+        None,
+        lambda side: [side],
+        measure,
+        eyeliner_area.eyeliner_range,
+        eyeliner_area.after_groups,
+    )
+    noise_metric.measure_part(part, None, [(0, 30000)], [], load_map, keep_sharp=keep_all)
+
+    assert seen
+    for after, unknown in seen:
+        assert set(after) == set(eyeliner_area.AFTER_SLICE_MS.values())
+        slices = [hidden for maps in after.values() for _, hidden in maps]
+        assert all(hidden is not None and hidden.sum() == 1 for hidden in slices)
+        assert unknown.sum() == 1
+        assert not any(np.array_equal(unknown, hidden) for hidden in slices)
 
 
 def test_lip_measure_finds_what_the_service_finds():
@@ -289,22 +375,34 @@ def test_a_false_find_on_one_cheek_is_not_output(monkeypatch):
     assert not any(r["outputFound"] for r in records)
 
 
-def test_a_side_of_the_eye_line_counts_only_with_enough_cells():
-    """아이라인이 선 아래로 넘친 칸이 찾음으로 보는 가장 적은 칸보다 적으면 아랫선 헛것이 아니다.
+def test_a_false_upper_line_counts_for_upper_line_steps_only(monkeypatch):
+    """아이라인도 자리 하나만 보는 단계로 바꿔 다시 센다. 두 눈 윗라인에만 헛것이 나면
+    윗라인 단계의 헛것으로만 세고, 자리를 모르는 단계(두 자리를 다 봄)의 헛것에도 든다."""
+    monkeypatch.setattr(noise_metric, "usable_rows", lambda *args: ["photo"])
+    monkeypatch.setattr(noise_metric, "match_sizes", lambda before, after: (before, after))
 
-    선에 걸친 몇 칸 때문에 윗선 헛것이 두 자리 모두에 세어지지 않게 하려고 고른 경계다.
-    """
-    least = eyeliner_area.FOUND_MIN_CELLS
-    upper = above_eye_line("leftEye")
-    rows, cols = np.nonzero(~upper)
-    mask = upper.copy()
-    mask[rows[: least - 1], cols[: least - 1]] = True
+    def measure(before, after, eye, unknown=None):
+        upper = eyeliner_area.eyeliner_range(eye, "upper")
+        zones = {
+            "upper": eyeliner_area.ZoneLine(mask=upper),
+            "under": eyeliner_area.ZoneLine(mask=None, reason="eyelinerColorNotFound"),
+        }
+        area = eyeliner_area.EyelinerArea(mask=upper, zones=zones)
+        return noise_metric.Measure(None, 0.0, None, True, area)
 
-    assert noise_metric.zone_finds("eyeliner", "leftEye", mask) == {"upper": True, "under": False}
-    mask[rows[least - 1], cols[least - 1]] = True
-    assert noise_metric.zone_finds("eyeliner", "leftEye", mask) == {"upper": True, "under": True}
-    assert noise_metric.zone_finds("eyeliner", "leftEye", None) == {"upper": False, "under": False}
-    assert noise_metric.zone_finds("blush", "leftCheek", mask) == {}
+    part = noise_metric.Part(
+        "eyeliner", eyeliner_area.EYES, 1000, 1000, 0.5, None, lambda side: [side], measure
+    )
+    empty = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    tallies, records = noise_metric.measure_part(
+        part, None, [(0, 12000)], [], lambda rows, side: (skin_map(), empty), keep_sharp=keep_all
+    )
+    for eye in eyeliner_area.EYES:
+        tally = tallies[(eye, 1)]
+        assert tally.pairs > 0
+        assert tally.zone_found == {"upper": tally.pairs, "under": 0}
+        assert tally.output_found == tally.pairs
+    assert all(r["outputZones"] == {"upper": True, "under": False} for r in records)
 
 
 def eyeshadow_tallies(monkeypatch, found_eyes, upper_strength):

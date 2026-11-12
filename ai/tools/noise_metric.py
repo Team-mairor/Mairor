@@ -15,10 +15,9 @@
 쌍마다 두 쪽 결과를 서비스처럼 하위 단계로 바꿔(tools/output_area.py), FE로 나가는 영역이
 생기는지도 센다(나가는 영역 헛것).
 섀도·아이라인은 나가는 영역 헛것을 눈꼬리 점과 앞머리 점을 잇는 직선 위(upper)와 아래(under)
-자리(ZONES)마다도 센다. 섀도는 서비스가 단계 글의 바른 자리만 보므로, 단계 글이 그 자리 하나만
+자리(ZONES)마다도 센다. 서비스가 단계 글의 바른 자리만 보므로, 단계 글이 그 자리 하나만
 말하는 단계처럼 자리 하나만 보고 만든 하위 단계로 센다. 자리를 따로 주지 않은 나가는 영역 헛것은
 단계 글로 자리를 모르는 단계(두 자리를 다 봄)의 것이다.
-아이라인은 나가는 영역에서 한쪽 칸이 ZONE_MIN_CELLS 이상이면 그 자리의 헛것이다.
 아이라인은 그 시각 전에 끝난 아이라인 단계들이 안내한 칸을 빼고 본다.
 사진 판정 결과(output/frames_checked.json)를 읽으므로 먼저 tools/check_frames.py를 실행해 둔다.
 --occlusion <이름>을 주면 그 가림 표로 사진마다 가린 칸을 빼고 잰다(tools/occlusion_tables.py).
@@ -50,7 +49,6 @@ sys.path.insert(0, str(AI_ROOT))
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Step
-from app.tasks.area.common.eye_line import above_eye_line
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
@@ -81,6 +79,7 @@ from tools.output_area import (
     found_side,
     missing_area,
     output_area,
+    step_zones,
 )
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
@@ -101,7 +100,6 @@ UNTOUCHED_SECONDS: dict[str, tuple[tuple[float, float], ...]] = {
 }
 ZONES = ("upper", "under")
 ZONED_PARTS = ("eyeshadow", "eyeliner")
-ZONE_MIN_CELLS = {"eyeliner": eyeliner_area.FOUND_MIN_CELLS}
 
 Span = tuple[int, int]
 MapLoader = Callable[[Sequence[FrameLandmarks], RegionName], tuple[np.ndarray, np.ndarray]]
@@ -148,6 +146,9 @@ class Part:
         [np.ndarray | None, np.ndarray, RegionName, np.ndarray | None], Measure | None
     ]
     zone: Callable[[RegionName], np.ndarray] | None = None
+    split_after: (
+        Callable[[Sequence[FrameLandmarks], int], dict[int, list[list[FrameLandmarks]]]] | None
+    ) = None
 
 
 @dataclass
@@ -180,25 +181,6 @@ def untouched_spans(ranges: Sequence[tuple[float, float]]) -> list[Span]:
         else:
             merged.append((start, end))
     return merged
-
-
-def zone_finds(part: str, side: RegionName, mask: np.ndarray | None) -> dict[str, bool]:
-    """아이라인 나가는 영역이 자리(ZONES)마다 헛것을 냈는지. 다른 부위는 빈 dict다.
-
-    아이라인 코드가 윗선·아랫선을 가르는 직선(눈꼬리 점과 앞머리 점을 잇는 선)으로 나눈다.
-    한쪽 칸이 ZONE_MIN_CELLS(찾음으로 보는 가장 적은 칸) 이상일 때만 그 자리의 헛것으로 세어,
-    선에 걸친 몇 칸 때문에 두 자리 모두에 세지 않게 한다. 윗점막은 윗선과 같은 쪽이라 upper에 든다.
-    """
-    if part not in ZONE_MIN_CELLS:
-        return {}
-    if mask is None:
-        return dict.fromkeys(ZONES, False)
-    upper = above_eye_line(side)
-    least = ZONE_MIN_CELLS[part]
-    return {
-        "upper": int((mask & upper).sum()) >= least,
-        "under": int((mask & ~upper).sum()) >= least,
-    }
 
 
 def caution_spans(doc: dict) -> list[Span]:
@@ -297,16 +279,26 @@ def measure_eyeshadow(
 
 def measure_eyeliner(
     before: np.ndarray | None,
-    after: np.ndarray,
+    after: np.ndarray | Mapping[int, Sequence[eyeliner_area.KnownMap]],
     eye: RegionName,
     unknown: np.ndarray | None = None,
 ) -> Measure | None:
-    cells = known_cells(eyeliner_area.eyeliner_range(eye), unknown)
+    """아이라인 눈 하나의 잡음. after는 서비스처럼 직후 창을 조각 길이마다 자른
+    (지도, 모름 칸)들(after_groups)이고 unknown은 직전 지도의 모름 칸이다.
+    서비스처럼 자리마다 그 자리가 쓰는 조각의 모름 칸만 본다(zone_change).
+    after가 지도 한 장이면 조각내지 않고 unknown을 모든 자리에 쓴다."""
+    if isinstance(after, np.ndarray):
+        changed = eyeliner_area.eyeliner_color_change(before, after, unknown)
+        hidden = dict.fromkeys(eyeliner_area.ZONES, unknown)
+    else:
+        changed, hidden = eyeliner_area.zone_change(before, after, eye, unknown)
+    fences = {zone: eyeliner_area.eyeliner_range(eye, zone) for zone in eyeliner_area.ZONES}
+    cells = np.any([known_cells(fences[zone], hidden[zone]) for zone in fences], axis=0)
     if not cells.any():
         return None
-    changed = eyeliner_area.eyeliner_color_change(before, after, unknown)
-    area = eyeliner_area.check_eyeliner_area(changed, eye, unknown)
-    return Measure(None, float(changed[cells].mean()), None, area.mask is not None, area)
+    zoned = np.any([changed[zone] & fences[zone] for zone in fences], axis=0)
+    area = eyeliner_area.check_eyeliner_area(changed, eye, hidden)
+    return Measure(None, float(zoned[cells].mean()), None, area.mask is not None, area)
 
 
 def measure_blush(
@@ -390,6 +382,7 @@ PARTS = (
         lambda side: [side],
         measure_eyeliner,
         eyeliner_area.eyeliner_range,
+        eyeliner_area.after_groups,
     ),
     Part(
         "blush",
@@ -437,8 +430,7 @@ def measure_part(
     load_map은 (사진 목록, 쪽)으로 그 쪽 범위를 넘겨 만든 (지도, 모름 칸)을 낸다.
     쌍마다 쪽을 다 잰 뒤 서비스처럼 하위 단계로 바꿔 쪽마다 나가는 영역이 생기는지 센다.
     재지 못한 쪽은 서비스처럼 못 찾음(noUsableFrame)으로 넘기고, 나가는 영역 헛것은 그 쪽을 잰
-    쌍에서만 센다. 섀도는 자리 하나만 보는 단계로 바꿔 자리마다 다시 세고,
-    아이라인은 그 헛것이 난 자리(zone_finds)를 센다.
+    쌍에서만 센다. 섀도·아이라인은 자리 하나만 보는 단계로 바꿔 자리마다 다시 센다.
     drawn_at은 쌍 기준 시각에 앞 아이라인 단계들이 안내한 칸을 내고 아이라인에만 쓴다.
     """
     tallies: dict[tuple[str, int], Tally] = {}
@@ -473,11 +465,20 @@ def measure_part(
                         tally.skipped += 1
                         tally.blur_skipped += 1
                         continue
-                    after, unknown = load_map(after_rows, side)
+                    if part.split_after is None:
+                        after, unknown = load_map(after_rows, side)
+                    else:
+                        after = {
+                            slice_ms: [load_map(rows, side) for rows in pieces]
+                            for slice_ms, pieces in part.split_after(
+                                after_rows, t + gap * 1000
+                            ).items()
+                        }
+                        unknown = None
                     before = None
                     if part.before_ms:
                         before, before_unknown = load_map(before_rows, side)
-                        unknown = unknown | before_unknown
+                        unknown = before_unknown if unknown is None else unknown | before_unknown
                     m = part.measure(before, after, side, unknown)
                     if m is None:
                         tally.skipped += 1
@@ -500,7 +501,7 @@ def measure_part(
                 output, _, _ = output_area(part.name, areas, drawn)
                 zone_outputs = (
                     {zone: output_area(part.name, areas, drawn, (zone,))[0] for zone in ZONES}
-                    if part.name == "eyeshadow"
+                    if part.name in ZONED_PARTS
                     else {}
                 )
                 for side, m in measures.items():
@@ -508,14 +509,10 @@ def measure_part(
                     output_found = output_mask is not None
                     tally = tallies[(side, gap)]
                     tally.output_found += output_found
-                    zones = (
-                        {
-                            zone: found_side(masks, side) is not None
-                            for zone, masks in zone_outputs.items()
-                        }
-                        if zone_outputs
-                        else zone_finds(part.name, side, output_mask)
-                    )
+                    zones = {
+                        zone: found_side(masks, side) is not None
+                        for zone, masks in zone_outputs.items()
+                    }
                     for zone, zone_found in zones.items():
                         tally.zone_found[zone] = tally.zone_found.get(zone, 0) + zone_found
                     record = {
@@ -722,7 +719,9 @@ def main() -> None:
 
     chosen = {part.name for part in selected_parts(PARTS, part_names)}
     timeline = (
-        eyeliner_drawn(reference.manifest.steps, find_eyeliner) if "eyeliner" in chosen else []
+        eyeliner_drawn(reference.manifest.steps, find_eyeliner, step_zones(folder))
+        if "eyeliner" in chosen
+        else []
     )
 
     def eyeliner_drawn_at(start_ms: int) -> np.ndarray | None:

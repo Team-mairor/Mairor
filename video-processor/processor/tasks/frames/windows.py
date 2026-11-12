@@ -10,11 +10,11 @@ AI는 분석하는 단계(립·블러셔·눈썹·섀도·아이라인)의 시�
 import math
 
 AI_WINDOWS_MS: dict[str, tuple[int | None, int]] = {
-    "lip": (1000, 1000),
+    "lip": (4000, 4000),
     "blush": (1000, 1000),
     "brow": (1000, 2000),
     "eyeshadow": (2000, 1000),
-    "eyeliner": (1000, 3000),
+    "eyeliner": (3000, 4000),
 }
 RATIO_WINDOW_MS = 1000
 WINDOW_FPS = 10.0

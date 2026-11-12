@@ -8,7 +8,9 @@ from app.schemas.manifest import Makeup
 TRIANGLE_COUNT = 898
 BARY_TOLERANCE = 0.001
 NO_AREA_MAKEUPS: tuple[Makeup, ...] = ("other",)
-TemplateId = Literal[Makeup, "eyeshadowUpper", "eyeshadowUnder", "blushNose"]
+TemplateId = Literal[
+    Makeup, "eyeshadowUpper", "eyeshadowUnder", "eyelinerWaterline", "eyelinerUnder", "blushNose"
+]
 
 RegionName = Literal[
     "leftEye",
@@ -68,6 +70,8 @@ class AreaSubStep(CamelModel):
     failed: 영역 없이 이유만
     templateId는 FE 기본 가이드 키다. 화장 종류에 더해 아이섀도는 바른 자리별 키
     (eyeshadowUpper 윗눈두덩, eyeshadowUnder 눈 밑)가 있고, eyeshadow는 위아래 모두다.
+    아이라인은 그린 자리별 키(eyelinerWaterline 꼬리 없는 윗점막 선, eyelinerUnder 아랫라인)가 있고,
+    eyeliner는 꼬리까지 그린 윗라인이다.
     블러셔는 코(코끝·콧등·콧대)에 바르는 단계의 키 blushNose가 있고, blush는 두 볼이다.
     """
 

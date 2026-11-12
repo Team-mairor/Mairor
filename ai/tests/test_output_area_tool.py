@@ -162,7 +162,7 @@ def test_eyeshadow_output_follows_the_step_zone():
 
 
 def test_step_zones_come_from_the_sample_guide_input():
-    """시험 영상 가이드 입력 글로 섀도 단계마다 자리를 정한다. 가이드 입력이 없으면 빈 dict다."""
+    """시험 영상 가이드 입력 글로 섀도·아이라인 단계마다 자리를 정한다. 입력이 없으면 빈 dict다."""
     samples = Path(__file__).resolve().parents[1] / "samples"
 
     zones = output_area.step_zones(samples / "local_03_seq")
@@ -173,6 +173,14 @@ def test_step_zones_come_from_the_sample_guide_input():
         "s11a": ("under",),
         "s11b": ("upper",),
         "s17": ("under",),
+        "s12": ("upper",),
+        "s13a": ("under",),
+        "s13b": ("under",),
+        "s14": ("under",),
+        "s15b": ("under",),
+        "s16a": ("waterline",),
+        "s16b": ("under",),
+        "s19": ("upper",),
     }
     assert output_area.step_zones(samples / "local_01_lip_seq") == {}
 

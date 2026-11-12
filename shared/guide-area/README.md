@@ -51,10 +51,13 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
 | `eyeshadow` | 아이섀도 위아래 모두 (바른 자리를 모를 때) |
 | `eyeshadowUpper` | 아이섀도 윗눈두덩 |
 | `eyeshadowUnder` | 아이섀도 눈 밑(애교살) |
+| `eyelinerWaterline` | 아이라인 윗점막(꼬리 없는 윗선) |
+| `eyelinerUnder` | 아이라인 아랫라인 · 아랫점막(아래 속눈썹 바깥쪽 절반) |
 | `blushNose` | 블러셔 코(코끝 · 콧등 · 콧대) |
 
 아이섀도 키는 가이드 입력의 `eyeZone`(`upper` · `under` · `both`)으로 고르고, 없으면 `partLabel` · `facts.area` 글로 고른다([ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md)).
 아이섀도 단계는 그 바른 자리(윗눈두덩 · 눈 밑)마다 하위 단계를 하나씩 둔다(위 → 아래). 찾은 자리는 `extracted`, 단계 글에 있는데 못 찾은 자리는 그 자리 키의 `template`이라 한 단계에 둘이 섞일 수 있다. 어느 자리도 못 찾으면 전처럼 하위 단계 하나다.
+아이라인도 그린 자리(윗라인 · 윗점막 · 아랫라인)마다 하위 단계를 하나씩 둔다(윗라인 → 윗점막 → 아랫라인). 자리는 `eyeZone`(`upper` · `under` · `both` · `waterline`)으로, 없으면 단계 글로 고른다. 찾은 자리는 `extracted`, 못 찾은 윗라인은 `eyeliner`, 아랫라인은 `eyelinerUnder`이고, 윗점막은 사진으로 찾지 않고 `eyelinerWaterline`(이유 `notAnalyzed`)이다. 아이섀도와 달리 자리를 아는 단계는 어느 자리도 못 찾아도 자리마다 그 키를 둔다(「위아래」면 `eyeliner` · `eyelinerUnder` 둘). 자리를 모르는 단계는 찾은 자리만 두고, 아무것도 못 찾으면 `eyeliner` 하나다. 아이라인 영역은 선이 눈을 감쌀 때만 그 눈을 `exclude`에 넣는다.
 `blushNose`는 블러셔 단계의 `partLabel` · `facts.area` 글이 코에만 바른다고 할 때 쓴다(이유 `notAnalyzed`). 코는 색으로 찾지 않는다.
 
 ## 형식을 바꿀 때

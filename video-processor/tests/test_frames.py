@@ -26,20 +26,20 @@ class FrameWindowTests(unittest.TestCase):
 
     def test_only_analyzed_steps_get_before_and_after_windows(self):
         liner = {"makeup": "eyeliner", "startSeconds": 10, "endSeconds": 20}
-        self.assertEqual(photo_ranges_ms(liner), [(8000, 11000), (19000, 24000)])
+        self.assertEqual(photo_ranges_ms(liner), [(6000, 11000), (19000, 25000)])
         lip = {"makeup": "lip", "startSeconds": 10, "endSeconds": 20}
-        self.assertEqual(photo_ranges_ms(lip), [(8000, 11000), (19000, 22000)])
+        self.assertEqual(photo_ranges_ms(lip), [(5000, 11000), (19000, 25000)])
         for makeup in ("foundation", "highlight", "contour", "mascara", "other"):
             self.assertEqual(photo_ranges_ms({"makeup": makeup, "startSeconds": 10, "endSeconds": 20}), [])
 
     def test_frame_numbers_are_interval_multiples_inside_windows(self):
         liner = {"makeup": "eyeliner", "startSeconds": 10, "endSeconds": 20}
         numbers = frame_numbers(liner, 30, 60)
-        self.assertEqual(numbers[:2], [240, 243])
-        self.assertEqual((numbers[30], numbers[31]), (330, 570))
-        self.assertEqual(numbers[-1], 720)
+        self.assertEqual(numbers[:2], [180, 183])
+        self.assertEqual((numbers[50], numbers[51]), (330, 570))
+        self.assertEqual(numbers[-1], 750)
         self.assertTrue(all(n % 3 == 0 for n in numbers))
-        self.assertEqual(frame_runs(numbers, 3), [list(range(240, 331, 3)), list(range(570, 721, 3))])
+        self.assertEqual(frame_runs(numbers, 3), [list(range(180, 331, 3)), list(range(570, 751, 3))])
 
     def test_frame_belongs_to_the_later_step_on_a_shared_boundary(self):
         steps = [

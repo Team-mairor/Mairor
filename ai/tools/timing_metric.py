@@ -156,8 +156,14 @@ def eyeshadow_change(
 def eyeliner_change(
     before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
 ) -> np.ndarray:
-    """아이라인 색으로 바뀐 칸을 1, 아닌 칸을 0으로 낸다. 평균이 바뀐 칸 비율이 된다."""
-    return eyeliner_area.eyeliner_color_change(before, after, unknown).astype(np.float32)
+    """아이라인 색으로 바뀐 칸을 1, 아닌 칸을 0으로 낸다. 평균이 바뀐 칸 비율이 된다.
+
+    자리마다 기준이 달라 아랫라인 울타리 안은 아랫라인 기준, 그 밖은 윗라인 기준을 쓴다.
+    """
+    changed = eyeliner_area.eyeliner_color_change(before, after, unknown)
+    eyes = eyeliner_area.EYES
+    under = np.any([eyeliner_area.eyeliner_range(eye, "under") for eye in eyes], axis=0)
+    return np.where(under, changed["under"], changed["upper"]).astype(np.float32)
 
 
 PARTS = (
