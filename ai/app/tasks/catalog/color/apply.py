@@ -20,7 +20,7 @@
 """
 
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from PIL import Image
@@ -36,7 +36,7 @@ from app.tasks.catalog.color.pixels import (
     photo_background_hex,
     read_color,
 )
-from app.tasks.catalog.color.vision import Analysis, Cell, analyze_image
+from app.tasks.catalog.color.vision import Analysis, Cell, analyze_product_photo
 from app.tasks.catalog.contract import (
     BBox,
     CollectedProduct,
@@ -63,6 +63,7 @@ MAX_DECODED_IMAGES = 4
 MAX_VISION_CALLS = 30
 MAX_WARNINGS = 50
 BACKGROUND_MATCH = 6.0
+SMALL_CELL_SHARE = 0.3
 VISION_METHOD = "vision_box_pixel_median_lab"
 CHART_METHOD = "detail_chart_box_pixel_median_lab"
 
@@ -108,7 +109,7 @@ async def _analysis(ctx: _Context, loaded: LoadedImage) -> Analysis | None:
     result: Analysis | None = None
     if ctx.llm is not None and len(ctx.analyses) < MAX_VISION_CALLS:
         try:
-            result = await analyze_image(ctx.llm, loaded.image)
+            result = await analyze_product_photo(ctx.llm, loaded.image)
             ctx.vision.append(
                 {
                     "imageUrl": loaded.url,
@@ -148,22 +149,52 @@ def _vision_slots(
         if match is None:
             return "NO_LABEL_MATCH"
         cells, shade_link = (match,), ShadeLink.LABEL_IN_IMAGE
-    slots = _read_cells(cells, loaded.image, analysis.kind)
+    read = _read_cells(cells, loaded.image, analysis.kind)
+    slots = _drop_small_background_cells(read, loaded.image)
     if not any(slot.reading for slot in slots):
         return "CELL_NOT_UNIFORM"
-    if _boxes_on_background(slots, loaded.image):
+    if _boxes_on_background(slots, loaded.image, several=len(read) >= 2):
         return "CELLS_OFF_TARGET"
     return slots, shade_link
 
 
-def _boxes_on_background(slots: list[_Slot], image: Image.Image) -> bool:
+def _drop_small_background_cells(slots: list[_Slot], image: Image.Image) -> list[_Slot]:
+    """사진 배경을 읽은 아주 작은 칸(가장 큰 칸의 SMALL_CELL_SHARE 미만)은 칸에서 뺀다.
+
+    단색 제품 사진에서 모델이 몸통과 함께 어플리케이터 팁 같은 작은 부분에도 칸을 잡는데, 작은 칸은
+    조금만 비껴도 배경에 떨어진다(디어달리아 블러셔). 이런 칸은 칸 전체가 밀렸다는 근거가 아니라
+    작은 부분을 놓친 것이라 그 칸만 뺀다. 크기가 비슷한 칸이 배경을 읽으면 _boxes_on_background가
+    사진 전체를 버린다.
+    """
+    sized = [s for s in slots if s.bbox is not None]
+    background = photo_background_hex(image) if len(sized) >= 2 else None
+    if background is None:
+        return slots
+    largest = max(s.bbox.width * s.bbox.height for s in sized)
+    kept = [
+        slot
+        for slot in slots
+        if not (
+            slot.bbox is not None
+            and slot.reading is not None
+            and slot.bbox.width * slot.bbox.height < SMALL_CELL_SHARE * largest
+            and hex_delta_e(slot.reading.hex, background) < BACKGROUND_MATCH
+        )
+    ]
+    if len(kept) == len(slots):
+        return slots
+    return [replace(slot, sort_order=index) for index, slot in enumerate(kept, start=1)]
+
+
+def _boxes_on_background(slots: list[_Slot], image: Image.Image, *, several: bool) -> bool:
     """칸이 여럿인 사진에서 한 칸이라도 사진 배경색을 읽었으면 모델 칸 전체가 밀린 것으로 본다.
 
     디어달리아 팔레트 사진에서 칸 4개가 한쪽으로 함께 밀려 셋은 흰 배경을, 하나는 팔레트 케이스를
     읽었다. 케이스 색은 고른 색이라 칸 하나만 봐서는 틀린 줄 모른다. 같은 사진의 다른 칸이 배경을
     읽었다는 것이 칸 위치가 어긋났다는 근거라서, 그 사진의 칸은 하나도 쓰지 않는다.
+    several은 작은 배경 칸을 빼기 전 칸 수로 정한다. 빼고 한 칸만 남아도 그 칸이 배경이면 버린다.
     """
-    if len(slots) < 2:
+    if not several:
         return False
     background = photo_background_hex(image)
     if background is None:

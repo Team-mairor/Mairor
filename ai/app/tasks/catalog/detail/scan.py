@@ -21,7 +21,7 @@ from PIL import Image
 from app.clients.llm import Llm, LlmError
 from app.tasks.catalog.color.cell_reading import cell_box, read_cell
 from app.tasks.catalog.color.images import ImageUnusableError, load_image
-from app.tasks.catalog.color.vision import Analysis, analyze_image
+from app.tasks.catalog.color.vision import Analysis, Cell, analyze_image
 from app.tasks.catalog.contract import BBox, ImageKind
 from app.tasks.catalog.detail.chart import CHART_SYSTEM, ChartCell, merge_duplicates
 from app.tasks.catalog.detail.images import DetailImage
@@ -38,6 +38,7 @@ from app.tasks.catalog.detail.snap import (
     edge_background,
     group_rows,
     is_background,
+    label_band,
     match_row,
 )
 from app.tasks.catalog.detail.tiles import (
@@ -94,6 +95,8 @@ def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
     점이 여럿인 차트에서 칸 여럿을 점에 짝짓지 못하면(모델이 점을 빠뜨렸거나 원이 겹침) 그 칸들은
     읽지 않는다. 모델 칸이 원 사이 배경이나 옆 원을 잡았을 수 있어서다(어뮤즈 겹친 원 차트).
     점이 하나뿐이면(둥근 로고·뚜껑) 점 차트로 보지 않고 모델 칸을 그대로 읽는다.
+    모델 칸을 그대로 읽는 칸과 칩 줄을 못 맞춘 칸이 세로 색 띠 여럿에 걸치면 호수 이름이 인쇄된 띠만
+    읽는다(label_band). 칩 줄을 못 맞춘 칸은 띠 하나에만 있으면 지금처럼 읽지 않는다.
     """
     if analysis.confidence == "low" or analysis.kind in (ImageKind.STYLED, ImageKind.OTHER):
         return []
@@ -115,8 +118,15 @@ def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
             continue
         matched = match_row([boxes[i] for i in row], chips)
         for position, index in enumerate(row):
-            resolved[index] = None if matched is None else chip_box(matched[position])
-            if matched is None:
+            if matched is not None:
+                resolved[index] = chip_box(matched[position])
+                continue
+            rect = _cell_rect(entries[index][0], crop)
+            band = label_band(crop, rect)
+            if band is not None and band is not rect:
+                resolved[index] = band
+            else:
+                resolved[index] = None
                 loose.append(index)
     if loose:
         loose_boxes = [boxes[i] for i in loose]
@@ -128,6 +138,10 @@ def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
                 resolved[index] = blob_box(assigned[position])
             elif unpaired:
                 resolved[index] = None
+            elif resolved[index] is boxes[index]:
+                rect = _cell_rect(entries[index][0], crop)
+                band = label_band(crop, rect)
+                resolved[index] = boxes[index] if band is rect else band
     cells: list[ChartCell] = []
     for index, (cell, model_box) in enumerate(entries):
         box = resolved[index]
@@ -139,6 +153,16 @@ def _chart_cells(pending: _Pending, analysis: Analysis) -> list[ChartCell]:
         original = BBox(x=used.x, y=used.y + tile.top, width=used.width, height=used.height)
         cells.append(ChartCell(cell.label, original, reading, analysis.kind, tile.index))
     return cells
+
+
+def _cell_rect(cell: Cell, crop: Image.Image) -> BBox:
+    """모델 칸 전체(가장자리를 줄이기 전)의 픽셀 영역."""
+    return BBox(
+        x=cell.x * crop.width,
+        y=cell.y * crop.height,
+        width=cell.width * crop.width,
+        height=cell.height * crop.height,
+    )
 
 
 async def _flush(batch: list[_Pending], llm: Llm, budget: ChartBudget, warnings: list[str]) -> None:

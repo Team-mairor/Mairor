@@ -102,6 +102,42 @@ def photo_background_hex(image: Image.Image) -> str | None:
     return f"#{red:02X}{green:02X}{blue:02X}"
 
 
+FOCUS_DELTA = 8.0
+FOCUS_PADDING = 0.08
+FOCUS_MAX_SHARE = 0.6
+FOCUS_WORK_SIDE = 400
+
+
+def foreground_box(image: Image.Image) -> BBox | None:
+    """사진 배경이 한 색이고 제품이 일부만 차지하면 제품 둘레(조금 여유를 둔)의 픽셀 영역.
+
+    배경이 없거나 제품이 사진의 FOCUS_MAX_SHARE 이상을 차지하면 None이다(잘라 낼 필요가 없다).
+    큰 사진을 원본 해상도로 계산하면 메모리를 크게 써서, FOCUS_WORK_SIDE로 줄인 사본에서 경계를 구해
+    원본 좌표로 되돌린다.
+    """
+    background = photo_background_hex(image)
+    if background is None:
+        return None
+    small = image.convert("RGB")
+    small.thumbnail((FOCUS_WORK_SIDE, FOCUS_WORK_SIDE), Image.Resampling.BOX)
+    rgb = np.asarray(small, dtype=np.float64)
+    reference = np.array([[int(background[i : i + 2], 16) for i in (1, 3, 5)]], dtype=np.float64)
+    distance = _delta(to_lab(rgb.reshape(-1, 3)), to_lab(reference)[0]).reshape(rgb.shape[:2])
+    ys, xs = np.nonzero(distance > FOCUS_DELTA)
+    if len(xs) == 0:
+        return None
+    width, height = image.size
+    scale_x, scale_y = width / small.width, height / small.height
+    left, right = xs.min() * scale_x, (xs.max() + 1) * scale_x
+    top, bottom = ys.min() * scale_y, (ys.max() + 1) * scale_y
+    pad_x, pad_y = (right - left) * FOCUS_PADDING, (bottom - top) * FOCUS_PADDING
+    left, top = max(0.0, left - pad_x), max(0.0, top - pad_y)
+    right, bottom = min(float(width), right + pad_x), min(float(height), bottom + pad_y)
+    if (right - left) * (bottom - top) >= FOCUS_MAX_SHARE * width * height:
+        return None
+    return BBox(x=left, y=top, width=right - left, height=bottom - top)
+
+
 def _delta(lab: np.ndarray, center: np.ndarray) -> np.ndarray:
     return np.linalg.norm(lab - center, axis=1)
 

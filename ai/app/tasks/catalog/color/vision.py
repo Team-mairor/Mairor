@@ -18,6 +18,7 @@ from PIL import Image
 from pydantic import BaseModel
 
 from app.clients.llm import Llm
+from app.tasks.catalog.color.pixels import foreground_box
 from app.tasks.catalog.contract import ImageKind
 
 PROMPT_SIDE = 1024
@@ -145,3 +146,32 @@ async def analyze_image(llm: Llm, image: Image.Image, *, system: str = VISION_SY
         cells=tuple(cells),
         dropped=dropped,
     )
+
+
+async def analyze_product_photo(llm: Llm, image: Image.Image) -> Analysis:
+    """제품 사진은 흰 여백을 잘라 제품 둘레만 모델에 보이고, 받은 칸을 원래 사진 비율로 되돌린다.
+
+    제품이 사진 일부만 차지하면(디어달리아 블러셔 제품 사진) 모델이 칸을 제품 옆 배경에 잡는 일이
+    세 번 다 같게 났다. 제품을 크게 보이면 칸이 제품 위에 잡혔다.
+    """
+    focus = foreground_box(image)
+    if focus is None:
+        return await analyze_image(llm, image)
+    crop = image.crop(
+        (int(focus.x), int(focus.y), int(focus.x + focus.width), int(focus.y + focus.height))
+    )
+    result = await analyze_image(llm, crop)
+    width, height = image.size
+    left, top = int(focus.x), int(focus.y)
+    crop_width, crop_height = crop.size
+    cells = tuple(
+        Cell(
+            x=(left + cell.x * crop_width) / width,
+            y=(top + cell.y * crop_height) / height,
+            width=cell.width * crop_width / width,
+            height=cell.height * crop_height / height,
+            label=cell.label,
+        )
+        for cell in result.cells
+    )
+    return Analysis(result.kind, result.confidence, cells, result.dropped)

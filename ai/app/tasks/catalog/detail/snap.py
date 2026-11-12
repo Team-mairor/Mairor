@@ -328,3 +328,120 @@ def blob_box(blob: Blob) -> BBox:
     """점에서 색을 읽을 곳. 중심의 안쪽 정사각형이다."""
     half = blob.radius * BLOB_READ_HALF
     return BBox(x=blob.x - half, y=blob.y - half, width=2 * half, height=2 * half)
+
+
+BAND_DELTA = 6.0
+MIN_BAND_SHARE = 0.12
+TEXT_LIGHTER = 12.0
+TEXT_CHROMA = 14.0
+MIN_TEXT_COLUMNS = 2
+TEXT_DOMINANCE = 2.0
+MIN_CLEAR_SHARE = 0.2
+BAND_INSET = 0.12
+BAND_WORK_WIDTH = 160
+
+
+def label_band(image: Image.Image, box: BBox) -> BBox | None:
+    """모델 칸이 세로 색 띠 여럿에 걸치면, 호수 이름이 인쇄된 띠만 남긴다.
+
+    칩이 띠처럼 붙은 차트(롬앤 베러 댄 치크)에서 모델 칸이 옆 띠로 밀리면 옆 띠의 고른 색이
+    높은 품질로 나온다. 이름은 그 호수의 띠 위에 밝은 글자로 인쇄돼 있으니, 칸 안의 띠 가운데
+    밝은 글자가 가장 많은 띠를 고른다. 옆 호수 이름 끝이 걸칠 수 있어 옆 띠보다 TEXT_DOMINANCE배
+    이상일 때만 고른다. 고른 띠에서 글자 줄을 피한 위·아래 구간을 읽는다. 띠가 하나면 받은 칸을
+    그대로(같은 객체) 돌려주고, 글자가 없거나 어느 띠인지 분명하지 않으면 None(색을 비운다).
+    """
+    rgb_image = image.convert("RGB")
+    left, top = max(0, int(box.x)), max(0, int(box.y))
+    right = min(rgb_image.width, int(box.x + box.width))
+    bottom = min(rgb_image.height, int(box.y + box.height))
+    if right - left < 8 or bottom - top < 8:
+        return box
+    region = rgb_image.crop((left, top, right, bottom))
+    scale = min(1.0, BAND_WORK_WIDTH / region.width)
+    small = region.resize(
+        (max(8, round(region.width * scale)), max(8, round(region.height * scale))),
+        Image.Resampling.BOX,
+    )
+    scale_x, scale_y = small.width / region.width, small.height / region.height
+    lab = _lab_image(np.asarray(small, dtype=np.float64))
+    chroma = np.hypot(lab[..., 1], lab[..., 2])
+    columns = np.median(lab, axis=0)
+    runs = _bands(columns)
+    if len(runs) == 1:
+        return box
+    width = lab.shape[1]
+    bright = (lab[..., 0] > columns[None, :, 0] + TEXT_LIGHTER) & (chroma < TEXT_CHROMA)
+    shares = bright.mean(axis=0)
+    text_columns = [x for x in range(width) if 0.02 <= shares[x] <= 0.6]
+    counts = sorted(
+        (
+            (sum(1 for x in text_columns if start <= x < end), index)
+            for index, (start, end) in enumerate(runs)
+        ),
+        reverse=True,
+    )
+    best, chosen = counts[0]
+    second = counts[1][0] if len(counts) > 1 else 0
+    if best < MIN_TEXT_COLUMNS or best < TEXT_DOMINANCE * second:
+        return None
+    start, end = runs[chosen]
+    rows = _clear_rows(bright[:, start:end])
+    if rows is None:
+        return None
+    row_top, row_bottom = rows
+    return BBox(
+        x=left + (start + (end - start) * BAND_INSET) / scale_x,
+        y=top + (row_top + (row_bottom - row_top) * BAND_INSET) / scale_y,
+        width=max(1.0, (end - start) * (1 - 2 * BAND_INSET) / scale_x),
+        height=max(1.0, (row_bottom - row_top) * (1 - 2 * BAND_INSET) / scale_y),
+    )
+
+
+def _clear_rows(bright: np.ndarray) -> tuple[int, int] | None:
+    """글자가 없는 가장 긴 가로 구간(위·아래). 띠 높이의 MIN_CLEAR_SHARE보다 짧으면 None이다."""
+    height = bright.shape[0]
+    clear = bright.mean(axis=1) < 0.01
+    best: tuple[int, int] | None = None
+    row = 0
+    while row < height:
+        if not clear[row]:
+            row += 1
+            continue
+        begin = row
+        while row < height and clear[row]:
+            row += 1
+        if best is None or row - begin > best[1] - best[0]:
+            best = (begin, row)
+    if best is None or best[1] - best[0] < MIN_CLEAR_SHARE * height:
+        return None
+    return best
+
+
+def _bands(columns: np.ndarray) -> list[tuple[int, int]]:
+    """세로 줄의 색을 왼쪽부터 이어 붙여 띠로 나눈다. 너무 좁은 띠는 옆 띠에 붙인다."""
+    width = len(columns)
+    runs: list[list[int]] = [[0, 1]]
+    total = columns[0].copy()
+    for x in range(1, width):
+        start, end = runs[-1]
+        mean = total / (end - start)
+        if float(np.linalg.norm(columns[x] - mean)) > BAND_DELTA:
+            runs.append([x, x + 1])
+            total = columns[x].copy()
+        else:
+            runs[-1][1] = x + 1
+            total = total + columns[x]
+    minimum = max(1, int(width * MIN_BAND_SHARE))
+    merged: list[list[int]] = []
+    for run in runs:
+        if merged and run[1] - run[0] < minimum:
+            merged[-1][1] = run[1]
+        elif merged and merged[-1][1] - merged[-1][0] < minimum:
+            merged[-1][1] = run[1]
+        else:
+            merged.append(run)
+    return [(start, end) for start, end in merged]
+
+
+def _lab_image(rgb: np.ndarray) -> np.ndarray:
+    return to_lab(rgb.reshape(-1, 3)).reshape(rgb.shape)

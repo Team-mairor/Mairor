@@ -452,6 +452,7 @@ def test_a_vision_cell_that_reads_as_near_white_gets_a_low_quality() -> None:
 
     white_cap = Image.new("RGB", (200, 200), (247, 247, 247))
     white_cap.paste(Image.new("RGB", (40, 40), (200, 40, 40)), (150, 150))
+    white_cap.paste(Image.new("RGB", (30, 200), (60, 60, 60)), (0, 0))
     product, raw = shopify(
         [variant(1, "A", "//cdn.example/a.jpg"), variant(2, "B", "//cdn.example/b.jpg")],
         ["//cdn.example/m.jpg"],
@@ -479,3 +480,63 @@ def test_the_prompt_asks_for_the_contents_not_the_case() -> None:
     from app.tasks.catalog.color.vision import VISION_SYSTEM
 
     assert "내용물" in VISION_SYSTEM and "케이스" in VISION_SYSTEM
+
+
+def small_product_photo() -> Image.Image:
+    """흰 바탕 가운데 작은 제품(몸통과 작은 팁). 제품이 사진의 일부만 차지한다."""
+    image = Image.new("RGB", (600, 600), (247, 247, 247))
+    image.paste(Image.new("RGB", (60, 160), (238, 186, 181)), (240, 260))
+    image.paste(Image.new("RGB", (12, 12), (220, 150, 140)), (330, 220))
+    return image
+
+
+def test_a_small_product_is_shown_to_the_model_cropped_and_cells_are_mapped_back() -> None:
+    """디어달리아 블러셔: 흰 여백이 넓으면 제품 둘레만 보이고, 받은 칸을 원래 사진으로 되돌린다."""
+    body = Cell(x=0.25, y=0.45, width=0.3, height=0.4, label=None)
+    tip_missed = Cell(x=0.9, y=0.02, width=0.08, height=0.06, label=None)
+    llm = FakeLlm(analysis(cells=[body, tip_missed]), analysis(cells=[body]))
+    product, raw = shopify(
+        [variant(1, "A", "//cdn.example/a.jpg"), variant(2, "B", "//cdn.example/b.jpg")],
+        ["//cdn.example/m.jpg"],
+    )
+    site = Site(
+        {
+            "cdn.example/a.jpg": image_response(png(small_product_photo())),
+            "cdn.example/b.jpg": image_response(png(small_product_photo())),
+        }
+    )
+
+    colored, _ = colorize(site, product, raw, llm)
+
+    sent = Image.open(BytesIO(llm.calls[0].images[0].data))
+    assert sent.size[0] < sent.size[1] * 0.7
+    [slot] = colored.shades[0].colors
+    assert slot.hex is not None and close(slot.hex, (238, 186, 181), 6)
+    assert slot.sort_order == 1
+    assert not any("CELLS_OFF_TARGET" in w for w in colored.warnings)
+
+
+def test_a_large_cell_on_the_background_is_caught_even_after_small_cells_are_dropped() -> None:
+    """작은 칸 둘을 빼고 큰 칸 하나만 남아도, 그 칸이 사진 배경을 읽었으면 사진을 버린다."""
+    image = Image.new("RGB", (600, 600), (247, 247, 247))
+    image.paste(Image.new("RGB", (500, 420), (200, 120, 130)), (60, 120))
+    cells = [
+        Cell(x=0.0, y=0.0, width=0.18, height=0.18, label=None),
+        Cell(x=0.9, y=0.0, width=0.04, height=0.04, label=None),
+        Cell(x=0.9, y=0.95, width=0.04, height=0.04, label=None),
+    ]
+    product, raw = shopify(
+        [variant(1, "A", "//cdn.example/a.jpg"), variant(2, "B", "//cdn.example/b.jpg")],
+        ["//cdn.example/m.jpg"],
+    )
+    site = Site(
+        {
+            "cdn.example/a.jpg": image_response(png(image)),
+            "cdn.example/b.jpg": image_response(png(image)),
+        }
+    )
+
+    colored, _ = colorize(site, product, raw, FakeLlm(analysis(cells=cells), analysis()))
+
+    assert all(c.hex is None for c in colored.shades[0].colors)
+    assert any("CELLS_OFF_TARGET" in w for w in colored.warnings)

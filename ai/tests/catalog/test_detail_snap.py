@@ -20,6 +20,7 @@ from app.tasks.catalog.detail.snap import (
     edge_background,
     group_rows,
     is_background,
+    label_band,
     match_row,
 )
 from tests.catalog.helpers import run
@@ -452,6 +453,105 @@ def test_one_round_logo_does_not_make_big_single_cells_unreadable() -> None:
 
     by_label = {c.label: c.reading for c in result.cells}
     assert close(by_label["01"].hex, COLORS[0], 6) and close(by_label["02"].hex, COLORS[1], 6)
+
+
+BASE_BAND = (215, 182, 166)
+N01_BAND = (212, 165, 142)
+GAP_BAND = (220, 190, 178)
+N02_BAND = (208, 159, 151)
+
+
+def banded_strip() -> Image.Image:
+    """칩이 세로 띠로 붙고 이름이 칩 위에 흰 글자로 인쇄된 차트(롬앤 베러 댄 치크)."""
+    image = Image.new("RGB", (900, 500), (243, 233, 225))
+    draw = ImageDraw.Draw(image)
+    for (x0, x1), color in zip(
+        ((50, 280), (280, 430), (430, 470), (470, 620), (620, 850)),
+        (BASE_BAND, N01_BAND, GAP_BAND, N02_BAND, BASE_BAND),
+        strict=True,
+    ):
+        draw.rectangle((x0, 90, x1, 340), fill=color)
+    for x0 in (295, 485):
+        for i in range(6):
+            draw.rectangle((x0 + i * 20, 205, x0 + i * 20 + 10, 225), fill="white")
+    return image
+
+
+def test_a_box_drifted_onto_the_neighbouring_band_reads_the_band_with_the_name() -> None:
+    image = banded_strip()
+    n01 = BBox(x=54, y=165, width=342, height=140)
+    n02 = BBox(x=396, y=165, width=342, height=140)
+
+    first, second = label_band(image, n01), label_band(image, n02)
+
+    assert first is not None and 280 <= first.x and first.x + first.width <= 430
+    assert second is not None and 470 <= second.x and second.x + second.width <= 620
+    for box in (first, second):
+        assert box.y + box.height <= 205 or box.y >= 225
+
+
+def test_a_box_on_one_band_is_kept_and_a_box_without_a_name_is_dropped() -> None:
+    image = banded_strip()
+    inside = BBox(x=300, y=100, width=100, height=80)
+    no_name = BBox(x=60, y=100, width=420, height=80)
+
+    assert label_band(image, inside) is inside
+    assert label_band(image, no_name) is None
+
+
+def test_a_short_row_on_a_banded_chart_reads_the_named_bands() -> None:
+    cells = [
+        Cell(x=54 / 900, y=165 / 500, width=342 / 900, height=140 / 500, label="N01 너티 누드"),
+        Cell(x=396 / 900, y=165 / 500, width=342 / 900, height=140 / 500, label="N02 바인 누드"),
+    ]
+
+    result = scan_chart(banded_strip(), cells)
+
+    by_label = {c.label: c.reading for c in result.cells}
+    assert close(by_label["N01 너티 누드"].hex, N01_BAND, 4)
+    assert close(by_label["N02 바인 누드"].hex, N02_BAND, 4)
+
+
+def test_a_row_of_split_boxes_on_a_banded_chart_reads_the_named_bands() -> None:
+    """모델이 한 띠를 둘로 나눠 칸 넷을 주면 칩 줄 맞추기가 안 된다. 이름 띠를 찾은 칸만 읽는다."""
+    boxes = [(222, 113), (371, 50), (461, 50), (546, 113)]
+    labels = ["N01 너티 누드", "N01 너티 누드", "N02 바인 누드", "N02 바인 누드"]
+    cells = [
+        Cell(
+            x=(x - w * 0.15 / 0.7) / 900,
+            y=(185 - 91 * 0.15 / 0.7) / 500,
+            width=w / 0.7 / 900,
+            height=91 / 0.7 / 500,
+            label=label,
+        )
+        for (x, w), label in zip(boxes, labels, strict=True)
+    ]
+
+    result = scan_chart(banded_strip(), cells)
+
+    read = [(c.label, c.reading.hex) for c in result.cells if c.reading is not None]
+    assert read and all(
+        close(hex_value, N01_BAND if label.startswith("N01") else N02_BAND, 4)
+        for label, hex_value in read
+    )
+    assert {label for label, _ in read} == {"N01 너티 누드", "N02 바인 누드"}
+
+
+def test_a_flat_box_keeps_the_band_inside_its_own_height() -> None:
+    """낮은 칸은 줄인 사본 높이가 최소 8로 늘어난다. 되돌릴 때 원래 칸 밖으로 나가면 안 된다."""
+    image = Image.new("RGB", (900, 100), (243, 233, 225))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((100, 0, 300, 99), fill=BASE_BAND)
+    draw.rectangle((300, 0, 500, 99), fill=N01_BAND)
+    for i in range(4):
+        draw.rectangle((320 + i * 30, 43, 330 + i * 30, 46), fill="white")
+    box = BBox(x=100, y=40, width=400, height=15)
+
+    band = label_band(image, box)
+
+    assert band is not None
+    assert band.y >= box.y - 0.5 and band.y + band.height <= box.y + box.height + 0.5
+    assert band.x >= 300 - 1
 
 
 # --- 칩 줄과 둥근 점이 한 조각에 섞인 경우: 점 짝은 칩이 못 해결한 칸끼리만 맞춘다 ---
