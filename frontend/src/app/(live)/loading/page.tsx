@@ -116,7 +116,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const pct = jobId ? live.pct : demoPct;
   const fail = jobId ? jobFail(live.error, job) : demoFail;
   const review: Review = job ? jobReview(job) : demoReview;
-  // 검수 대기 중에도 상태를 계속 받으므로, 이 화면에 있는 동안 승인되면 그 가이드로 바로 넘어갈 수 있다
+  // 분석이 끝나 공개되면 그 가이드로 바로 넘어간다. 옛 검수 대기 작업은 상태를 계속 받다가 승인되면 넘어간다
   const approvedGuide =
     job?.status === "COMPLETED" && job.reviewStatus === "APPROVED" && isGuideId(job.guideId)
       ? job.guideId
@@ -135,7 +135,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   }, [running, sample]);
 
   // 4%가 되면 얼굴 등록 모달을 한 번 띄운다. 실패·검수 안내 중에는 띄우지 않는다.
-  // 실제 분석(jobId)은 오래 걸리고 검수도 거쳐 사용자가 기다리지 않으므로, 등록은 가이드를 시작할 때 받는다
+  // 실제 분석(jobId)은 오래 걸려 사용자가 기다리지 않으므로, 등록은 가이드를 시작할 때 받는다
   useEffect(() => {
     if (pct >= 4 && !jobId && !faceShown && !faceOk && !fail && !review) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 진행률이 문턱을 넘는 순간 한 번만
@@ -161,7 +161,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
       ? review === "pending"
         ? "분석 완료 · 검수 대기"
         : review === "rejected"
-          ? "검수 반려"
+          ? "이용할 수 없음"
           : "분석이 끝났어요"
       : jobId
         ? (stageText(job?.stageProgress ?? null) ?? phaseName)
@@ -231,13 +231,13 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
         ? {
             tag: "REJECTED",
             title: "이 영상은 가이드로 쓸 수 없어요",
-            sub: "검수에서 반려됐어요. 다른 영상을 골라 주세요.",
+            sub: "이 영상의 가이드는 내려졌어요. 다른 영상을 골라 주세요.",
             retry: false,
           }
         : approvedGuide
           ? {
-              tag: "APPROVED",
-              title: "검수를 통과했어요",
+              tag: "READY",
+              title: "분석이 끝났어요",
               sub: "이 영상의 가이드로 바로 따라 할 수 있어요. 얼굴 등록은 다음 화면에서 해요.",
               retry: false,
             }
@@ -255,7 +255,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
         ? "검수 대기"
         : "이용 불가"
       : approvedGuide
-        ? "검수 통과"
+        ? "준비 완료"
         : guideOk
           ? "완료"
           : `분석 중 ${pct}%`;
@@ -291,7 +291,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
 
   const barText = replay
     ? run.replay === "guide"
-      ? "검수된 가이드가 있어 분석 없이 시작해요"
+      ? "분석해 둔 가이드가 있어 바로 시작해요"
       : "이전에 분석한 가이드를 그대로 써요"
     : "영상 분석은 그대로 진행 중이에요";
 
@@ -400,7 +400,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           </div>
         ) : run.mode === "guide" && load.status === "ready" ? (
           <div className="rounded-3xl bg-cream px-7 py-6 text-[20px] text-ink">
-            검수된 가이드 · {load.guide.steps.length}단계가 준비됐어요.
+            가이드 · {load.guide.steps.length}단계가 준비됐어요.
           </div>
         ) : (
           <FoundProducts

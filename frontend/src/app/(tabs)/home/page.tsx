@@ -93,7 +93,7 @@ export default function HomePage() {
   // 승인됐어도 guideId가 올바르지 않으면 시작하지 않고 다시 확인을 안내한다
   const ready = approved && isGuideId(pg?.guideId);
   const pendingText = ready
-    ? "검수 완료 · 지금 따라 할 수 있어요"
+    ? "분석 완료 · 지금 따라 할 수 있어요"
     : approved
       ? "가이드 정보를 다시 확인해 주세요"
       : "검수 중 · 끝나면 여기서 바로 시작해요";

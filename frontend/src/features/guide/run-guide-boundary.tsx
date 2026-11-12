@@ -62,7 +62,7 @@ export function RunGuideBoundary({
       return (
         <GuideStatus
           title="가이드가 없거나 아직 이용할 수 없어요"
-          body="검수가 끝난 가이드만 따라 할 수 있어요."
+          body="분석이 끝나고 내려지지 않은 가이드만 따라 할 수 있어요."
           action={home}
         />
       );
