@@ -3,7 +3,7 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { MirrorToggle } from "@/components/mirror-toggle";
 import { Modal } from "@/components/ui/modal";
@@ -18,6 +18,7 @@ import { videoThumb } from "@/features/video";
 import { useQuery } from "@/lib/hooks/use-query";
 
 const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+const MIN_POUCH_STICKER_HEIGHT = 260;
 const MONTHS = [
   "JANUARY",
   "FEBRUARY",
@@ -38,6 +39,8 @@ const MONTHS = [
 /** 02 홈. 최근 리포트·다시 하기·파우치·검수 카드(로그인하면 API-VIDEO-007) */
 export default function HomePage() {
   const router = useRouter();
+  const pouchBoardRef = useRef<HTMLDivElement>(null);
+  const [pouchBoardHeight, setPouchBoardHeight] = useState(0);
   const { state, sessionChecked, startRun } = useSession();
   // 로그인했으면 파우치 보드를 서버 목록으로 맞춘다
   const sync = usePouchSync();
@@ -76,6 +79,9 @@ export default function HomePage() {
   const d = new Date();
   const today = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
   const last = reports[0];
+  const hidePouchStickers = Boolean(
+    last && pouchBoardHeight > 0 && pouchBoardHeight < MIN_POUCH_STICKER_HEIGHT,
+  );
   // 로그인했으면 검수 카드는 내 분석 목록(API-VIDEO-007)의 가장 최근 것이다. 받기 전에는 띄우지 않고,
   // 비로그인이거나 목록을 받지 못하면 기기에 저장한 카드(샘플 흐름 · 개발 도구)를 쓴다
   const mine = useLatestAnalysis(sessionChecked && state.loggedIn ? state.email : null);
@@ -97,6 +103,18 @@ export default function HomePage() {
     : approved
       ? "가이드 정보를 다시 확인해 주세요"
       : "검수 중 · 끝나면 여기서 바로 시작해요";
+
+  useEffect(() => {
+    const board = pouchBoardRef.current;
+    if (!board) return;
+
+    const updateHeight = () => setPouchBoardHeight(board.getBoundingClientRect().height);
+    updateHeight();
+
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, []);
 
   const replayLast = () => {
     if (!isGuideId(last?.guideId)) return router.push("/select");
@@ -277,57 +295,61 @@ export default function HomePage() {
           </div>
         )}
 
-        <PouchBoard
-          items={pouch}
-          scale={0.6}
-          className="min-h-0 flex-1"
-          onEdit={(p) => router.push(`/my/pouch?edit=${p.id}`)}
-          stickerSize="lg"
-        >
-          <div className="absolute top-5 right-[22px] left-[22px] z-[2] flex items-start justify-between">
-            <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
-              <span className="font-serif text-[32px] leading-none text-ink italic">My pouch</span>
-              {sync.status === "error" ? (
-                <span className="flex items-center gap-2 text-[16px] text-mute">
-                  파우치를 불러오지 못했어요
-                  <button type="button" onClick={sync.retry} className="font-bold text-navy">
-                    다시 시도
-                  </button>
+        <div ref={pouchBoardRef} className="min-h-0 flex-1">
+          <PouchBoard
+            items={hidePouchStickers ? [] : pouch}
+            scale={0.6}
+            className="h-full"
+            onEdit={(p) => router.push(`/my/pouch?edit=${p.id}`)}
+            stickerSize="lg"
+          >
+            <div className="absolute top-5 right-[22px] left-[22px] z-[2] flex items-start justify-between">
+              <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
+                <span className="font-serif text-[32px] leading-none text-ink italic">
+                  My pouch
                 </span>
-              ) : waiting ? (
-                <span className="text-[16px] text-mute">파우치를 불러오고 있어요</span>
-              ) : (
-                <span className="text-[16px] text-mute">
-                  내 파우치 · {pouch.length}개 · 탭해서 수정
-                </span>
-              )}
-            </span>
-            <Link
-              href="/my/pouch?add=1"
-              className="flex h-11 items-center gap-2 rounded-full bg-ink px-[18px] text-[17px] font-semibold text-white"
-            >
-              <Plus className="size-4" strokeWidth={2} aria-hidden />
-              제품 추가
-            </Link>
-          </div>
-          {pouch.length === 0 && !hidden && (
-            <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3.5 px-10 pt-[90px] pb-6 text-center">
-              <span className="font-display text-[24px] leading-[1.35] text-ink">
-                파우치가 비어 있어요
-              </span>
-              <span className="max-w-[420px] text-[17px] leading-[1.5] text-pretty text-mute">
-                가진 제품을 담아 두면 영상 속 제품과 비교해 바로 쓸 수 있는 것과 대체할 수 있는 것을
-                알려 드려요.
+                {sync.status === "error" ? (
+                  <span className="flex items-center gap-2 text-[16px] text-mute">
+                    파우치를 불러오지 못했어요
+                    <button type="button" onClick={sync.retry} className="font-bold text-navy">
+                      다시 시도
+                    </button>
+                  </span>
+                ) : waiting ? (
+                  <span className="text-[16px] text-mute">파우치를 불러오고 있어요</span>
+                ) : (
+                  <span className="text-[16px] text-mute">
+                    내 파우치 · {pouch.length}개 · 탭해서 수정
+                  </span>
+                )}
               </span>
               <Link
                 href="/my/pouch?add=1"
-                className="flex h-12 items-center gap-2 rounded-full bg-ice px-[22px] text-[17px] font-semibold text-ink"
+                className="flex h-11 items-center gap-2 rounded-full bg-ink px-[18px] text-[17px] font-semibold text-white"
               >
-                <Plus className="size-4" strokeWidth={2} aria-hidden />첫 제품 담기
+                <Plus className="size-4" strokeWidth={2} aria-hidden />
+                제품 추가
               </Link>
             </div>
-          )}
-        </PouchBoard>
+            {pouch.length === 0 && !hidden && (
+              <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-3.5 px-10 pt-[90px] pb-6 text-center">
+                <span className="font-display text-[24px] leading-[1.35] text-ink">
+                  파우치가 비어 있어요
+                </span>
+                <span className="max-w-[420px] text-[17px] leading-[1.5] text-pretty text-mute">
+                  가진 제품을 담아 두면 영상 속 제품과 비교해 바로 쓸 수 있는 것과 대체할 수 있는
+                  것을 알려 드려요.
+                </span>
+                <Link
+                  href="/my/pouch?add=1"
+                  className="flex h-12 items-center gap-2 rounded-full bg-ice px-[22px] text-[17px] font-semibold text-ink"
+                >
+                  <Plus className="size-4" strokeWidth={2} aria-hidden />첫 제품 담기
+                </Link>
+              </div>
+            )}
+          </PouchBoard>
+        </div>
 
         <div className="flex shrink-0 flex-col gap-3">
           <div className="flex items-baseline justify-between gap-2.5">

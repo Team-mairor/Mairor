@@ -87,7 +87,7 @@ export default function MyPouchPage() {
     <main className="relative flex min-h-0 flex-1 flex-col">
       {fx && <PouchOpenFx />}
       <MyHeader tab="pouch" />
-      <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-10 pt-1 pb-8">
+      <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto px-10 pt-1 pb-8">
         {notice && (
           <Notice tone="error" title={notice}>
             목록에서 다시 골라 주세요.

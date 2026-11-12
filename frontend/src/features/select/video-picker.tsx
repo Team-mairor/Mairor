@@ -114,7 +114,7 @@ export function VideoPicker({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-4">
+      <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col overflow-y-auto pt-4">
         {sel ? (
           <div className="flex flex-col">
             <button

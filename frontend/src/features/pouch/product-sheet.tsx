@@ -223,7 +223,7 @@ export function ProductSheet({
       onClose={delAsk ? undefined : onClose}
       label={isEdit ? "제품 수정" : "새 제품 등록"}
       overlayClassName="z-30 animate-fade"
-      className="relative flex max-h-[92dvh] flex-col gap-6 overflow-y-auto rounded-t-[32px] px-10 pt-4 pb-9 shadow-none"
+      className="scrollbar-hidden relative flex max-h-[92dvh] flex-col gap-6 overflow-y-auto rounded-t-[32px] px-10 pt-4 pb-9 shadow-none"
     >
       <span className="h-1.5 w-14 shrink-0 self-center rounded-full bg-line" />
       <div className="flex items-center justify-between">
@@ -417,7 +417,7 @@ export function ProductSheet({
                 </div>
               )}
               {shOpen && found?.status === "ready" && (
-                <div className="flex max-h-[300px] animate-fade flex-col overflow-y-auto border-t border-line">
+                <div className="scrollbar-hidden flex max-h-[300px] animate-fade flex-col overflow-y-auto border-t border-line">
                   {shades.length === 0 && (
                     <span className="px-[18px] pt-4 pb-2 text-[17px] leading-[1.5] text-mute">
                       {product
