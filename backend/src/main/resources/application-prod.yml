@@ -31,6 +31,13 @@ catalog:
   import:
     source: storage
     result-dir: ${CATALOG_IMPORT_RESULT_DIR:/tmp/mairor-catalog-runs}
+  # 색 품질 기준값(S15P31A306-515 눈 확인 표로 정함, 시연·운영 공통). 통과 55칸 중 54칸 맞음.
+  # 출처 이름이 키라 환경변수 이름으로는 못 덮으므로 값마다 따로 둔 환경변수로만 바꾼다
+  color:
+    min-quality:
+      PRODUCT_PHOTO: ${CATALOG_COLOR_MIN_QUALITY_PRODUCT_PHOTO:0.75}
+      SWATCH_CHIP: ${CATALOG_COLOR_MIN_QUALITY_SWATCH_CHIP:0.55}
+    label-in-image-enabled: ${CATALOG_COLOR_LABEL_IN_IMAGE_ENABLED:true}
 
 # 운영 저장소는 S3 비공개 버킷(-203). 자격 증명은 EC2 역할이라 키를 두지 않는다
 app:

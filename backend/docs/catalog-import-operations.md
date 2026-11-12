@@ -8,7 +8,7 @@
 | --- | --- |
 | DB | `backend/src/main/resources/db/upgrade/295-catalog-import-runs.sql` 을 운영 DB 에 먼저 적용한다. 서버가 `ddl-auto=validate` 라 표가 없으면 기동하지 못한다. |
 | 결과 파일 전달(S3) | 수집기와 서버는 다른 서버라 폴더를 같이 쓰지 않는다. 수집기가 `CATALOG_RUNS_STORE=s3` 로 결과 파일을 `s3://mairor-prod-media/catalog-runs/<파일>.jsonl` 에 올리고, 운영 서버(`catalog.import.source=storage`)는 그 키를 받아 캐시 폴더(`catalog.import.result-dir`, 운영 `/tmp/mairor-catalog-runs`)에서 읽는다. 받은 파일은 `catalog.import.storage-cache-ttl`(기본 5분) 동안 다시 받지 않고, 지난 파일은 다음에 받을 때 지운다. 서버 역할 `mairor-ec2-app` 은 `catalog-runs/*` 의 `GetObject`, 수집기 쪽 역할은 `GetObject`·`PutObject` 가 필요하다(올리기 전에 이미 올린 파일인지 읽어 본다). 로컬 개발(`source=local`)은 폴더에서 바로 읽는다. |
-| 색 임계값 | `catalog.color.min-quality.<출처>`(`SWATCH_CHIP`, `PRODUCT_PHOTO`, `WEB_PHOTO`). 기본값은 아무 색도 통과시키지 않는다. 사람이 라벨링한 실제 사진 기준 세트 리포트로 정한 뒤 채운다. 비어 있으면 사진에서 뽑은 색이 모두 `BELOW_THRESHOLD`(서비스에는 null)가 된다. |
+| 색 임계값 | `catalog.color.min-quality.<출처>`(`SWATCH_CHIP`, `PRODUCT_PHOTO`, `WEB_PHOTO`)와 `catalog.color.label-in-image-enabled`. 운영(`application-prod.yml`)은 눈 확인 표로 정한 값을 기본으로 둔다: `PRODUCT_PHOTO` 0.75, `SWATCH_CHIP` 0.55, 사진 속 표기 연결 켬, `WEB_PHOTO` 미설정(S15P31A306-515, 통과 55칸 중 54칸 맞음). 바꿀 때는 `CATALOG_COLOR_MIN_QUALITY_PRODUCT_PHOTO`·`CATALOG_COLOR_MIN_QUALITY_SWATCH_CHIP`·`CATALOG_COLOR_LABEL_IN_IMAGE_ENABLED` 환경변수를 쓴다(출처 이름이 맵 키라 `CATALOG_COLOR_MINQUALITY_...` 같은 일반 환경변수 이름으로는 덮이지 않는다). 개발·로컬은 기본값이 없어 사진 색이 모두 `BELOW_THRESHOLD`(서비스에는 null)다. |
 | 선택 설정 | `catalog.color.label-in-image-enabled`(판독 일치율 95% 이상일 때만), `catalog.color.llm-estimate-enabled`(기준 세트로 확인한 뒤에만), `catalog.color.source-value-sites`(옵션과 색값 연결을 확인한 사이트만). |
 | 사이트 허용 기록 | 사이트별 수집 허용 근거는 317 에서 사이트마다 남긴다. 약관 확인은 사용자가 한다. |
 
