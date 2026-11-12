@@ -137,6 +137,8 @@ uv run python tools/collect_catalog.py find --brand 롬앤 --name "제품명" --
 uv run python tools/collect_catalog.py list --brand 롬앤 --out p.jsonl --allow-disabled
 uv run python tools/collect_catalog.py collect --brand 롬앤 --products p.jsonl --name romand --render --colors --vision --classify
 uv run python tools/report_catalog_colors.py run <실행 결과 파일>   # 실행 요약
+uv run python tools/review_catalog_colors.py sheet <실행 결과 파일들> --out review.html   # 색 칸 눈 확인 표
+uv run python tools/review_catalog_colors.py report <실행 결과 파일들> --verdicts color-review.csv  # 기준값 리포트
 ```
 
 - 실제 사이트에 요청하려면 `CATALOG_CONTACT`가 필요합니다. 운영 수집은 켜진(`enabled`) 사이트에만 합니다. 켜진 사이트는 사이트 목록(`app/resources/brand_sites.yaml`)에서 사람이 켠 것과, 목록에 없는 브랜드를 찾아 `ROBOTS_CHECKED`로 자동 허용한 것(아래) 두 가지입니다. 켜지지 않은 목록 사이트는 구조를 확인하는 소량 요청만 `--allow-disabled`로 할 수 있습니다.
@@ -146,6 +148,7 @@ uv run python tools/report_catalog_colors.py run <실행 결과 파일>   # 실�
 - BE는 수집기와 서버가 달라 결과 파일을 S3 `catalog-runs/`에서 읽습니다. `CATALOG_RUNS_STORE=s3`이면 `collect`가 끝난 뒤 결과 파일과 `.manifest.json`을 올립니다. 올리지 못해도 로컬 파일은 남고, `upload <파일>`로 다시 올립니다. 한 번 올린 결과 파일은 바꾸지 않습니다(BE가 runId로 적재를 기억해서, 같은 실행에 상품을 더해도 읽지 않습니다). 그래서 올린 실행은 `--resume`으로 이어 쓰지 않고, 실패한 상품은 `collect … --retry-of <처음 파일>`로 새 파일·새 runId로 다시 수집합니다. 적재는 BE 내부 API `from-file`에 파일 이름을 넘깁니다.
 - robots.txt를 따르고, 사이트마다 동시 요청 1건과 요청 간격을 지키며, 차단(403·확인 페이지)을 받으면 우회하지 않고 그 사이트 수집을 멈춥니다. 공용 인터넷 주소의 http·https 기본 포트에만 요청하고, 내부망·메타데이터 주소로 가는 요청과 리다이렉트는 보내지 않습니다(`UNSAFE_ADDRESS`). `--render`의 브라우저 하위 요청도 같은 기준으로 끊고, 브라우저 안의 리다이렉트는 받은 뒤 거쳐 온 주소를 확인해 결과를 버립니다.
 - **운영 서버에서 자동 탐색이나 `--render`를 켜기 전에 네트워크 쪽 차단이 먼저 있어야 합니다.** 코드는 주소를 확인한 뒤 연결하므로 그 사이에 DNS 응답이 바뀌는 경우를 막지 못하고, 브라우저 안의 리다이렉트와 하위 요청의 리다이렉트는 이미 나간 뒤에야 알 수 있습니다. 실행 환경에서 인스턴스 메타데이터를 IMDSv2·hop 한도 1로 두어 컨테이너에서 닿지 않게 하고, 나가는 트래픽 규칙으로 내부망(10.0.0.0/16)을 막습니다.
+- 색 품질 기준값(BE `catalog.color.min-quality.*`, `label-in-image-enabled`)은 눈 확인 표로 정합니다. `sheet`가 칸마다 근거 사진을 받아 칸 주변·칸·계산한 색을 나란히 둔 HTML을 만들고, 브라우저에서 맞음·틀림을 고른 CSV로 `report`가 출처·연결 근거별로 정확도 95% 이상인 가장 낮은 임계값을 추천합니다.
 - 모델 호출에는 `GMS_API_KEY`가 필요합니다. 네트워크와 모델을 쓰지 않는 리포트 도구는 `tools/report_catalog_colors.py`입니다.
 
 ## 환경변수
