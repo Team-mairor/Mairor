@@ -1,6 +1,6 @@
-# 바른 곳 찾기 모델 학습 사진·정답지 도구
+# 바른 곳 찾기 모델 학습 도구
 
-바른 곳 찾기 모델을 학습시킬 영상과 사진을 모으고, 그 사진으로 학습 정답지를 만드는 스크립트다. 서버 코드가 아니다. 영상 목록·규칙·사진 수는 [docs/experiments/GUIDE_AREA_TRAIN_FRAMES.md](../../../docs/experiments/GUIDE_AREA_TRAIN_FRAMES.md), 정답지 규칙·수는 [docs/experiments/GUIDE_AREA_TRAIN_LABELS.md](../../../docs/experiments/GUIDE_AREA_TRAIN_LABELS.md)에 있다.
+바른 곳 찾기 모델을 학습시킬 영상과 사진을 모으고, 그 사진으로 학습 정답지를 만들고, 정답지로 모델을 학습하는 스크립트다. 서버 코드가 아니다. 영상 목록·규칙·사진 수는 [docs/experiments/GUIDE_AREA_TRAIN_FRAMES.md](../../../docs/experiments/GUIDE_AREA_TRAIN_FRAMES.md), 정답지 규칙·수는 [docs/experiments/GUIDE_AREA_TRAIN_LABELS.md](../../../docs/experiments/GUIDE_AREA_TRAIN_LABELS.md), 모델·설정 비교와 고른 가중치는 [docs/experiments/GUIDE_AREA_TRAIN_MODEL.md](../../../docs/experiments/GUIDE_AREA_TRAIN_MODEL.md)에 있다.
 
 사람이 사진을 보고 고르거나 적는 단계는 없다. 단계표는 운영과 같은 영상 처리기(`video-processor`)가 뽑고, 사진은 정해진 구간·간격으로 뽑고, 쓸 사진은 서비스 사진 판정 코드가 고른다. 정답은 사람이 그리지 않는다. 합성은 칠한 자리가 정답이고, 실제 장면은 서비스 규칙이 사진 창을 옮겨도 똑같이 찾은 자리만 정답이다.
 
@@ -12,6 +12,7 @@
 | 영상 받기·단계표·사진 뽑기 | `yt-dlp`·`imageio-ffmpeg`·영상 처리기 패키지가 필요하다. ai 가상환경에 깔지 않고 `uv run --no-project --with-requirements ../video-processor/requirements.txt python <스크립트>`로 돌린다 |
 | 단계표 | `video-processor/.env`에 `GMS_API_KEY`가 있어야 한다. S3에는 올리지 않는다(처리기 시험용 `tests/local_s3.py`로 로컬 폴더에 쓴다) |
 | 사진 판정·집계·정답지 | ai 가상환경(`uv run --no-sync python <스크립트>`) |
+| 모델 학습 | GPU와 ai 가상환경의 train 묶음(torch·torchvision)이 필요하다. `uv sync`는 `--group train`과 함께 돌린다. BiSeNet에서 출발하려면 `<작업 폴더>/models/bisenet_resnet18.pt`([yakhyo/face-parsing 릴리스](https://github.com/yakhyo/face-parsing/releases/download/weights/resnet18.pt), SHA-256 `18c44e06b77e47da86fe2b48fac78e0ccbd0b5241c829f9487ebf7fd4a6389e6`)를 둔다. 학습 결과와 가중치는 `<작업 폴더>/runs/`에 쓰고 저장소에 넣지 않는다 |
 | 합성의 가림 조각 | 손과 물건 조각은 `tools/occlusion_training/real_labels.py`를 이 영상들의 샘플 폴더로 돌려 만든다(`train:`·`val:`·`test:`). 자막은 Windows 맑은 고딕 굵게로 그리고, 다른 글꼴은 환경 변수 `SYNTH_FONT`에 파일 경로를 준다 |
 
 ## 실행 순서
@@ -28,6 +29,9 @@
 | 6 | `make_labels.py` | 실제 화장 장면 정답지. 단계마다 서비스 규칙으로 바른 곳을 찾고, 사진 창을 옮긴 9조합이 모두 찾은 자리만 쓴다 | `<작업 폴더>/labels/<나눔>/real/`, `labels/real_steps.json` |
 | 7 | `make_synth.py --test-sample <시험 영상 샘플 폴더> --pieces <가림 학습 작업 폴더>/data` | 합성 정답지. 맨얼굴 사진에 부위별 화장을 칠하고 서비스와 같은 코드로 얼굴 지도에 편다. 자리마다 수는 6번 결과와 합쳐 같아지게 채우므로 6번 뒤에 돌린다. 끊기면 다시 돌려 이어서 만든다 | `<작업 폴더>/labels/<나눔>/synth/` |
 | 8 | `label_report.py` | 정답지 수 표, 숫자 확인(모름 비율·범위 밖 비율), 품질 그림 | `<작업 폴더>/labels/report/` |
+| 9 | `search.py` | 출발 모델 × 학습률, 바른 칸 손실 가중치, 실제 장면 비율, 지도 크기를 축마다 5에폭씩 시작값 2개로 학습해 검증 점수 평균으로 고르고(끝 값이 이기면 바깥도), 모은 설정으로 학습률 방식 2개 × 시작값 2개를 15에폭 학습해 최종 실행을 고른다. 시작값이 다른 실행은 같이 띄운다. 실행마다 `train.py --preload`를 부른다. 끊기면 다시 돌려 이어 간다 | `<작업 폴더>/runs/<실행 이름>/`(`log.json`·`best.pt`), `runs/search.json` |
+| 10 | `plot.py curves <실행 이름> …`, `plot.py predictions <실행 이름>` | 에폭별 학습 손실·검증 점수 곡선, 검증 정답지 예측 그림 | `--out`으로 준 그림 |
+| 따로 | `train.py <실행 이름> [설정]` | 설정 하나로 한 번 학습 | `<작업 폴더>/runs/<실행 이름>/` |
 | 따로 | `same_video.py <샘플 폴더> …` | 이름이 다른 샘플이 후보 영상과 같은 영상인지 찾기 | 화면 출력 |
 
 `sample/`은 `ai/samples`와 같은 모양이라 `tools/build_guide_area.py` 같은 다른 도구가 그대로 읽는다.
@@ -69,3 +73,6 @@
 | `plan.py` | 뽑는 구간·간격·고르기·나눔 규칙과 합성 바탕·수 규칙. 사진·영상을 읽지 않는다 (`tests/test_guide_area_training_plan.py`) |
 | `labels.py` | 정답지 한 건의 모양, 칸 표를 정답 그림으로 바꾸는 규칙, 품질 그림 (`tests/test_guide_area_training_labels.py`) |
 | `paint.py` | 합성 화장 모양(립 3·블러셔 3·아이섀도 4·아이라인 4·눈썹 3)과 사진에 칠하기·조명 바꾸기 |
+| `train.py` | 전후 얼굴 지도 6겹 입력, 칸마다 자리 번호 출력. 출발 모델(BiSeNet 이어 학습·작은 모델 처음부터), 모름 칸을 뺀 가중 손실, 에폭별 검증 점수(자리별 IoU·안 바른 정답지에 칠한 비율). 정답지를 메모리에 올리기(`--preload`), 시작값(`--seed`), 학습률 줄이기(`--schedule cosine`) (`tests/test_guide_area_training_train.py`) |
+| `search.py` | 축별 설정 탐색과 고르기 |
+| `plot.py` | 학습 곡선과 예측 그림 |
