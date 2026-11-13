@@ -1,5 +1,6 @@
 """AI 사진 구간 계산과, 찾아가서 뽑은 사진이 계획한 프레임 번호 그대로인지 확인한다."""
 
+import ast
 import io
 import subprocess
 import tempfile
@@ -9,8 +10,11 @@ from pathlib import Path
 import imageio_ffmpeg
 from PIL import Image, ImageStat
 
+from processor.core.paths import REPO_ROOT
 from processor.tasks.frames import extract
-from processor.tasks.frames.windows import frame_numbers, frame_runs, photo_ranges_ms, step_at, window_step
+from processor.tasks.frames.windows import (
+    AI_WINDOWS_MS, RATIO_WINDOW_MS, frame_numbers, frame_runs, photo_ranges_ms, step_at, window_step,
+)
 
 FPS = 60
 FRAMES = 100
@@ -20,9 +24,35 @@ def brightness(jpeg: bytes) -> float:
     return ImageStat.Stat(Image.open(io.BytesIO(jpeg)).convert("L")).mean[0]
 
 
+def constants(path: Path, names: set[str]) -> dict:
+    """모듈 맨 위에서 names에 값을 넣는 줄만 읽는다. AI 의존 없이 소스 글로 본다."""
+    return {node.targets[0].id: ast.literal_eval(node.value)
+            for node in ast.parse(path.read_text(encoding="utf-8")).body
+            if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", None) in names}
+
+
+def ai_photo_windows() -> tuple[dict[str, tuple[int | None, int]], int]:
+    """AI reference_area가 쓰는 부위별 (직전 창, 직후 창)과 창 앞뒤 판정 여유(RATIO_WINDOW_MS)."""
+    area = REPO_ROOT / "ai" / "app" / "tasks" / "area"
+    reference = ast.parse((area / "reference_area.py").read_text(encoding="utf-8")).body
+    table = next(node.value for node in reference
+                 if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "PART_WINDOWS")
+    ratio_module = next(node.module for node in reference if isinstance(node, ast.ImportFrom)
+                        and any(alias.name == "RATIO_WINDOW_MS" for alias in node.names))
+    windows = {}
+    for key, value in zip(table.keys, table.values):
+        part = constants(area / "parts" / f"{value.elts[0].value.id}.py", {"BEFORE_WINDOW_MS", "AFTER_WINDOW_MS"})
+        windows[key.value] = (part["BEFORE_WINDOW_MS"], part["AFTER_WINDOW_MS"])
+    ratio = constants(REPO_ROOT.joinpath("ai", *ratio_module.split(".")).with_suffix(".py"), {"RATIO_WINDOW_MS"})
+    return windows, ratio["RATIO_WINDOW_MS"]
+
+
 class FrameWindowTests(unittest.TestCase):
     def test_interval_matches_backend_rounding(self):
         self.assertEqual([window_step(f) for f in (60, 30, 29.97, 25, 24)], [6, 3, 3, 3, 2])
+
+    def test_windows_match_ai_part_code(self):
+        self.assertEqual((AI_WINDOWS_MS, RATIO_WINDOW_MS), ai_photo_windows())
 
     def test_only_analyzed_steps_get_before_and_after_windows(self):
         liner = {"makeup": "eyeliner", "startSeconds": 10, "endSeconds": 20}
