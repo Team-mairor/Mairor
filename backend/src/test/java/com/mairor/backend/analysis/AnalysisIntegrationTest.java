@@ -5,11 +5,14 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -44,13 +47,42 @@ abstract class AnalysisIntegrationTest {
 
   @Autowired protected JdbcTemplate jdbc;
 
+  @Autowired
+  @Qualifier("guideReferenceTaskExecutor")
+  private ThreadPoolTaskExecutor guideReferenceTasks;
+
   @BeforeEach
   void clearAnalysisTables() {
+    waitForGuideReferenceTasks();
     jdbc.update("delete from llm_calls");
     jdbc.update("delete from guide_step_product_links");
     jdbc.update("delete from guides");
     jdbc.update("delete from analysis_jobs");
     jdbc.update("delete from videos");
+  }
+
+  /**
+   * 앞 테스트가 맡긴 가이드 제품 대조(AI 콜백 · 수집 결과 뒤 비동기)가 끝나기를 기다린다. 링크를 지운 뒤 대조가 링크를 새로 넣으면 가이드를 지울 때 FK 에
+   * 걸린다. 큐에서 꺼낸 직후처럼 잠깐 비어 보이는 틈이 있어 연달아 세 번 비어 있어야 끝난 것으로 본다.
+   */
+  private void waitForGuideReferenceTasks() {
+    long deadline = System.nanoTime() + Duration.ofSeconds(10).toNanos();
+    int idle = 0;
+    while (idle < 3) {
+      boolean busy =
+          guideReferenceTasks.getActiveCount() > 0
+              || !guideReferenceTasks.getThreadPoolExecutor().getQueue().isEmpty();
+      idle = busy ? 0 : idle + 1;
+      if (System.nanoTime() > deadline) {
+        throw new IllegalStateException("가이드 제품 대조 작업이 10초 안에 끝나지 않았습니다.");
+      }
+      try {
+        Thread.sleep(20);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException(e);
+      }
+    }
   }
 
   /** 저장소에 영상 파일(내용은 아무것이나)을 둔다. ffprobe 는 테스트에서 가짜로 바꾼다. */

@@ -15,9 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 가이드 공개와 내리기. AI 결과를 저장하면 운영자 검수 없이 바로 공개한다({@link #publish}, S15P31A306-409 · 11.12 팀 합의). 운영자는
- * 문제 있는 가이드를 내릴 때 검수 API 를 쓴다. 같은 영상의 공개 가이드는 하나라({@code uk_guides_video_approved}) 새 판을 공개하면 이전 공개
- * 판은 반려(REJECTED)로 내린다.
+ * 가이드 공개와 내리기. AI 결과를 저장하면 검수 없이 바로 공개한다({@link #publish}, S15P31A306-409 · 11.12 팀 합의). 사람이 부르는 검수
+ * API 는 없다(모두 자동). 같은 영상의 공개 가이드는 하나라({@code uk_guides_video_approved}) 새 판을 공개하면 이전 공개 판은
+ * 반려(REJECTED)로 내린다.
  *
  * <p>검수 상태는 회원의 분석 상태에 보이므로, 바뀐 가이드마다 그 분석 작업을 {@link AnalysisJobNotifier}로 알린다.
  */
@@ -41,13 +41,8 @@ public class GuideReviewService {
     this.clock = clock;
   }
 
-  @Transactional(readOnly = true)
-  public GuideView get(UUID guideId) {
-    return GuideView.of(load(guideId));
-  }
-
   /**
-   * 운영자 검수. 승인은 검수 대기(PENDING) 가이드만(자동 공개 전에 만든 옛 작업), 반려는 검수 대기 · 공개 가이드 둘 다 받는다(공개 가이드면 내린다).
+   * 검수 결정. 승인은 검수 대기(PENDING) 가이드만(자동 공개 전에 만든 옛 작업), 반려는 검수 대기 · 공개 가이드 둘 다 받는다(공개 가이드면 내린다).
    *
    * @throws BusinessException NOT_FOUND(없는 가이드), CONFLICT(그 결정을 내릴 수 없는 상태)
    */

@@ -128,7 +128,7 @@ class ProcessorJobApiTest extends AnalysisIntegrationTest {
   // ---------- 인증 ----------
 
   @Test
-  void processorAndOperatorTokensAreSeparate() throws Exception {
+  void processorAndInternalTokensAreSeparate() throws Exception {
     mockMvc.perform(post(JOBS + "/claim")).andExpect(status().isUnauthorized());
     mockMvc
         .perform(post(JOBS + "/claim").header("X-Processor-Token", "wrong"))
@@ -137,16 +137,13 @@ class ProcessorJobApiTest extends AnalysisIntegrationTest {
     mockMvc
         .perform(post(JOBS + "/claim").header("X-Internal-Token", TOKEN))
         .andExpect(status().isUnauthorized());
+    // 다른 내부 API(카탈로그)는 노트북 토큰으로 열리지 않는다
     mockMvc
-        .perform(
-            get("/v1/internal/analysis-jobs/" + UUID.randomUUID())
-                .header("X-Processor-Token", PROCESSOR_TOKEN))
+        .perform(get("/v1/internal/catalog/quality").header("X-Processor-Token", PROCESSOR_TOKEN))
         .andExpect(status().isUnauthorized());
     mockMvc
-        .perform(
-            get("/v1/internal/analysis-jobs/" + UUID.randomUUID())
-                .header("X-Internal-Token", TOKEN))
-        .andExpect(status().isNotFound());
+        .perform(get("/v1/internal/catalog/quality").header("X-Internal-Token", TOKEN))
+        .andExpect(status().isOk());
   }
 
   // ---------- complete ----------

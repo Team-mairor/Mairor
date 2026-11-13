@@ -19,10 +19,11 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * UNAUTHORIZED}이고, 토큰이 설정되지 않았으면 내부 API 는 전부 401 이다.
  *
  * <p>영상 전처리 노트북 API({@code /v1/internal/processor/**})는 같은 필터를 다른 헤더({@value #PROCESSOR_HEADER})와
- * 다른 토큰으로 하나 더 끼워 지킨다(S15P31A306-357). 노트북 토큰으로 운영자 API 를, 운영자 토큰으로 노트북 API 를 부를 수 없다.
+ * 다른 토큰으로 하나 더 끼워 지킨다(S15P31A306-357). 노트북 토큰으로 다른 내부 API 를, 공유 토큰으로 노트북 API 를 부를 수 없다.
  *
- * <p>내부 API 는 사람(운영자 curl)과 서버(AI 콜백)가 부르므로 세션·CSRF·Origin 검사 대신 이 필터가 지킨다. 비교는 상수 시간이고 토큰 값은 로그에
- * 남기지 않는다. {@code @Component}로 만들면 서블릿 컨테이너에 한 번 더 등록되므로 {@link SecurityConfig}가 만들어 보안 체인에만 끼운다.
+ * <p>내부 API 는 서버(AI · 수집기 · 노트북)와 카탈로그를 확인하는 운영자가 토큰 헤더로 부르므로 세션·CSRF·Origin 검사 대신 이 필터가 지킨다. 비교는
+ * 상수 시간이고 토큰 값은 로그에 남기지 않는다. {@code @Component}로 만들면 서블릿 컨테이너에 한 번 더 등록되므로 {@link SecurityConfig}가
+ * 만들어 보안 체인에만 끼운다.
  */
 public class InternalTokenFilter extends OncePerRequestFilter {
 
@@ -36,7 +37,7 @@ public class InternalTokenFilter extends OncePerRequestFilter {
   private final String token;
   private final ErrorResponseWriter errorWriter;
 
-  /** 운영자 · 내부 API: {@value #HEADER}와 {@code app.internal.token}. */
+  /** 내부 API: {@value #HEADER}와 {@code app.internal.token}. */
   public InternalTokenFilter(
       RequestMatcher internalRequests,
       InternalApiProperties properties,

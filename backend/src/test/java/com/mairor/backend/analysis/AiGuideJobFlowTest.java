@@ -1,7 +1,7 @@
 package com.mairor.backend.analysis;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -15,7 +15,9 @@ import com.mairor.backend.analysis.service.AiResultService;
 import com.mairor.backend.analysis.service.AnalysisJobRequest;
 import com.mairor.backend.analysis.service.AnalysisJobService;
 import com.mairor.backend.analysis.worker.AnalysisJobStore;
-import com.mairor.backend.common.security.InternalTokenFilter;
+import com.mairor.backend.common.error.BusinessException;
+import com.mairor.backend.guides.service.GuideReviewService;
+import com.mairor.backend.guides.service.GuideReviewService.Decision;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -31,20 +33,20 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * AI 콜백 → 가이드 저장 → 운영자 검수, 그리고 콜백이 오지 않은 작업의 시간 초과. 작업은 AI 에 맡긴 상태(RUNNING · BUILDING_GUIDE ·
+ * AI 콜백 → 가이드 저장 · 바로 공개 · 내리기, 그리고 콜백이 오지 않은 작업의 시간 초과. 작업은 AI 에 맡긴 상태(RUNNING · BUILDING_GUIDE ·
  * {@code ai_job_id})로 바로 만들어 둔다(앞 단계는 {@code AnalysisWorkerFlowTest}).
  */
 @AutoConfigureMockMvc
 class AiGuideJobFlowTest extends AnalysisIntegrationTest {
 
   private static final String CALLBACK = "/v1/internal/ai/guide-jobs/callback";
-  private static final String GUIDES = "/v1/internal/guides";
 
   @Autowired private MockMvc mockMvc;
   @Autowired private AnalysisJobService service;
   @Autowired private AnalysisJobStore store;
   @Autowired private AnalysisJobRepository jobs;
   @Autowired private AiResultService aiResults;
+  @Autowired private GuideReviewService reviews;
 
   private String completedCallback;
 
@@ -136,13 +138,7 @@ class AiGuideJobFlowTest extends AnalysisIntegrationTest {
                 String.class,
                 jobId))
         .isEqualTo("APPROVED:v1:19:19:true");
-
-    mockMvc
-        .perform(
-            get("/v1/internal/analysis-jobs/" + jobId).header(InternalTokenFilter.HEADER, TOKEN))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.aiJobId").value("ai-done-1"))
-        .andExpect(jsonPath("$.guideId").value(guideIdOf(jobId)));
+    assertThat(job.getAiJobId()).isEqualTo("ai-done-1");
   }
 
   @Test
@@ -297,61 +293,33 @@ class AiGuideJobFlowTest extends AnalysisIntegrationTest {
         .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
   }
 
-  /** 운영자는 공개된 가이드를 내린다(반려). 이미 공개된 가이드 승인 · 내린 가이드 다시 반려는 409. */
+  /** 공개된 가이드는 한 번 내릴 수 있다(반려). 이미 공개된 가이드 승인 · 내린 가이드 다시 반려는 CONFLICT. */
   @Test
-  void reviewTakesAPublishedGuideDownAndNeedsTheToken() throws Exception {
+  void aPublishedGuideCanBeTakenDownOnce() {
     UUID jobId = awaitingJob("reviewVid01", "ai-review-1");
     aiResults.apply(callbackRequest("ai-review-1"));
-    String guideId = guideIdOf(jobId);
+    UUID guideId = UUID.fromString(guideIdOf(jobId));
 
-    mockMvc
-        .perform(get(GUIDES + "/" + guideId).header(InternalTokenFilter.HEADER, TOKEN))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.reviewStatus").value("APPROVED"))
-        .andExpect(jsonPath("$.explanation.steps.length()").value(19))
-        .andExpect(jsonPath("$.area.meshVersion").value("v1"))
-        .andExpect(jsonPath("$.guideInput.videoId").value("reviewVid01"));
-    mockMvc
-        .perform(
-            post(GUIDES + "/" + guideId + "/review")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"decision\": \"REJECTED\"}"))
-        .andExpect(status().isUnauthorized());
+    assertThatThrownBy(() -> reviews.review(guideId, Decision.APPROVED))
+        .isInstanceOf(BusinessException.class)
+        .extracting(e -> ((BusinessException) e).code())
+        .isEqualTo("CONFLICT");
 
-    mockMvc
-        .perform(
-            post(GUIDES + "/" + guideId + "/review")
-                .header(InternalTokenFilter.HEADER, TOKEN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"decision\": \"APPROVED\"}"))
-        .andExpect(status().isConflict())
-        .andExpect(jsonPath("$.code").value("CONFLICT"));
-    mockMvc
-        .perform(
-            post(GUIDES + "/" + guideId + "/review")
-                .header(InternalTokenFilter.HEADER, TOKEN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"decision\": \"REJECTED\"}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.reviewStatus").value("REJECTED"))
-        .andExpect(jsonPath("$.reviewedAt").isNotEmpty());
-    mockMvc
-        .perform(
-            post(GUIDES + "/" + guideId + "/review")
-                .header(InternalTokenFilter.HEADER, TOKEN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"decision\": \"REJECTED\"}"))
-        .andExpect(status().isConflict());
-    mockMvc
-        .perform(
-            post(GUIDES + "/" + UUID.randomUUID() + "/review")
-                .header(InternalTokenFilter.HEADER, TOKEN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"decision\": \"REJECTED\"}"))
-        .andExpect(status().isNotFound());
+    var rejected = reviews.review(guideId, Decision.REJECTED);
+    assertThat(rejected.reviewStatus().name()).isEqualTo("REJECTED");
+    assertThat(rejected.reviewedAt()).isNotNull();
+
+    assertThatThrownBy(() -> reviews.review(guideId, Decision.REJECTED))
+        .isInstanceOf(BusinessException.class)
+        .extracting(e -> ((BusinessException) e).code())
+        .isEqualTo("CONFLICT");
+    assertThatThrownBy(() -> reviews.review(UUID.randomUUID(), Decision.REJECTED))
+        .isInstanceOf(BusinessException.class)
+        .extracting(e -> ((BusinessException) e).code())
+        .isEqualTo("NOT_FOUND");
   }
 
-  /** 자동 공개 전에 끝나 검수 대기로 남은 옛 가이드는 운영자가 승인할 수 있다. */
+  /** 자동 공개 전에 끝나 검수 대기로 남은 옛 가이드는 승인할 수 있다. */
   @Test
   void aPendingGuideFromBeforeAutoPublishCanStillBeApproved() throws Exception {
     UUID jobId = awaitingJob("oldPending1", "ai-old-1");
@@ -403,13 +371,7 @@ class AiGuideJobFlowTest extends AnalysisIntegrationTest {
         .readValue(callbackFor(aiJobId), AiGuideJobCallbackRequest.class);
   }
 
-  private void review(String guideId, String decision) throws Exception {
-    mockMvc
-        .perform(
-            post(GUIDES + "/" + guideId + "/review")
-                .header(InternalTokenFilter.HEADER, TOKEN)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"decision\": \"" + decision + "\"}"))
-        .andExpect(status().isOk());
+  private void review(String guideId, String decision) {
+    reviews.review(UUID.fromString(guideId), Decision.valueOf(decision));
   }
 }

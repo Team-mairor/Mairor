@@ -19,7 +19,7 @@ BE      요청 JSON 읽기 → callbackUrl · progressUrl 교체 → 프레임 k
 ## 공통
 
 - 주소: `https://mairor.co.kr/api/v1/internal/processor/jobs/...`
-- 헤더: `X-Processor-Token: <토큰>`. 운영자 토큰(`X-Internal-Token`)과 다른 값이다(Parameter Store `/mairor/prod/PROCESSOR_API_TOKEN`). 없거나 틀리면 401 `UNAUTHORIZED`. 노트북 토큰으로 운영자 API를, 운영자 토큰으로 노트북 API를 부를 수 없다.
+- 헤더: `X-Processor-Token: <토큰>`. 내부 API 공유 토큰(`X-Internal-Token`, 카탈로그 적재 등)과 다른 값이다(Parameter Store `/mairor/prod/PROCESSOR_API_TOKEN`). 없거나 틀리면 401 `UNAUTHORIZED`. 노트북 토큰으로 다른 내부 API를, 공유 토큰으로 노트북 API를 부를 수 없다.
 - 본문은 JSON, 오류는 공통 형식 `{code, message, details?}`.
 
 ## API
@@ -68,7 +68,7 @@ Claim:
 | `SCHEMA_INVALID` · 그 밖 | 요청 JSON이 스키마에 맞지 않음 등 | `PROCESSOR_FAILED` | 본문 `retryable`(없으면 가능) |
 
 - 재시도 여부는 BE 표가 정한다. 표에 없는 코드만 노트북 `retryable`을 따른다.
-- 실패 메시지는 `[<code>] <message>`로 남는다(운영자 조회 · 로그).
+- 실패 메시지는 `[<code>] <message>`로 남는다(작업 상태 조회 `failureMessage` · 로그).
 
 ## complete 뒤 BE 처리 (S15P31A306-358)
 

@@ -85,9 +85,9 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `LOGIN_MAX_ENTRIES` | `10000` | 기억하는 이메일 상태의 최대 개수. 넘으면 진행 중 시도가 없는 가장 오래된 상태부터 지우고, 잠금만으로 가득 차면 새 이메일을 거절한다 |
 | `LOGIN_MAX_CONCURRENT_HASHES` | `4` | 서버 전체에서 동시에 처리하는 로그인 수. 사용자 조회부터 BCrypt 비교까지를 한 번에 묶어 센다(DB 연결 대기가 쌓이는 것도 막는다). 넘으면 DB 에 가지 않고 기다리지 않고 429 로 거절한다. 서버 코어 수에 맞춰 조정한다 |
 | `DB_CONNECTION_TIMEOUT_MS` | `5000` | DB 연결을 얻기까지 기다리는 최대 시간(ms). 넘으면 요청이 `503 SERVICE_UNAVAILABLE` 로 끝난다. 쿼리 실행 시간 제한은 두지 않았다(아래 "운영 전 확인") |
-| `PROCESSOR_API_TOKEN` | (없음) | 영상 전처리 노트북 API(`/api/v1/internal/processor/**`)의 토큰. `X-Processor-Token` 헤더와 비교한다. 운영자 토큰과 다른 값. **비우면 노트북 API 는 모두 401**(앱은 뜬다). 계약 `docs/references/processor-api.md` |
-| `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` · `ANALYSIS_PROCESSOR_WAIT_TIMEOUT` · `ANALYSIS_PROCESSOR_WARN_AFTER` | `false` · `900s` · `30m` · `5m` | 노트북 연결 모드, 임대 시간, 노트북을 기다리는 최대 시간, 그 전에 "노트북이 작업을 가져가지 않음" 경고를 남기는 시간(Grafana 알림, S15P31A306-406). 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않으며, 노트북이 끝낸 작업을 worker 가 AI 에 맡긴다(S15P31A306-358). 끄면 지금처럼 worker 가 운영자가 올린 영상으로 처리한다 |
-| `INTERNAL_API_TOKEN` | (없음) | 내부 API(`/api/v1/internal/**`: 운영자 분석 명령, AI 콜백)의 공유 토큰. `X-Internal-Token` 헤더와 비교한다. **비우면 내부 API 는 모두 401**(앱은 뜬다). 코드·문서에 적지 않는다 ([분석 작업](#분석-작업-운영-명령--worker)) |
+| `PROCESSOR_API_TOKEN` | (없음) | 영상 전처리 노트북 API(`/api/v1/internal/processor/**`)의 토큰. `X-Processor-Token` 헤더와 비교한다. 공유 토큰(`INTERNAL_API_TOKEN`)과 다른 값. **비우면 노트북 API 는 모두 401**(앱은 뜬다). 계약 `docs/references/processor-api.md` |
+| `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` · `ANALYSIS_PROCESSOR_WAIT_TIMEOUT` · `ANALYSIS_PROCESSOR_WARN_AFTER` | `false` · `900s` · `30m` · `5m` | 노트북 연결 모드, 임대 시간, 노트북을 기다리는 최대 시간, 그 전에 "노트북이 작업을 가져가지 않음" 경고를 남기는 시간(Grafana 알림, S15P31A306-406). 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않으며, 노트북이 끝낸 작업을 worker 가 AI 에 맡긴다(S15P31A306-358). 끄면 worker 가 직접 처리한다 |
+| `INTERNAL_API_TOKEN` | (없음) | 내부 API(`/api/v1/internal/**`: 카탈로그 적재 · 수집 결과처럼 서버끼리 부르는 API와 운영자의 카탈로그 확인)의 공유 토큰. `X-Internal-Token` 헤더와 비교한다. **비우면 내부 API 는 모두 401**(앱은 뜬다). 코드·문서에 적지 않는다 ([화장품 수집 요청](#화장품-수집-요청-s15p31a306-517)의 운영 확인) |
 | `CATALOG_COLLECT_QUEUE_URL` | (없음) | DB 에 없는 화장품 수집 요청을 보낼 SQS 큐 주소([화장품 수집 요청](#화장품-수집-요청-s15p31a306-517)). 비우면 보내지 않고 요청은 QUEUED 로 남는다 |
 | `APP_STORAGE_TYPE` | dev `local` / prod `s3` | 객체 저장소. `local` 은 아래 폴더, `s3` 는 버킷(자격 증명은 AWS 기본 공급자 체인, 운영은 EC2 역할) |
 | `APP_STORAGE_LOCAL_ROOT` | `<임시 폴더>/mairor-storage` | `local` 저장소의 뿌리 폴더. 저장소 키가 이 아래 상대 경로다 |
@@ -454,12 +454,12 @@ SELECT EXISTS (
   - 요청이 끝나면(상태 상관없음) 기다리던 가이드를 다시 대조한다. 연결이 좋아지면 `reference_version` 이 올라 추천이 다시 계산된다. 같은 부족분이 24시간 안에 끝났으면 다시 요청하지 않아 되풀이되지 않는다.
 - **운영 확인**: `GET /api/v1/internal/catalog/collect-requests?status=UNRESOLVED&limit=50`(`X-Internal-Token`)으로 최근 요청의 상태·사유·자동 연결 결과·부족 유형·기다리는 가이드 단계를 본다.
 
-## 분석 작업 (운영 명령 · worker)
+## 분석 작업 (worker)
 
-1차 MVP 에서는 사용자 분석 요청 API(VIDEO-002·003) 대신 **운영자가** 저장소에 올린 영상으로 분석 작업을 넣는다(S15P31A306-308). 작업은 `worker` 프로파일로 뜬 별도 프로세스가 처리하고, 사용자 요청을 받는 api 는 작업을 돌리지 않는다.
+회원이 영상을 골라 분석을 요청하면(API-VIDEO-002) 작업이 생기고, 그 뒤는 노트북 · worker · AI 가 자동으로 끝까지 처리한다. **분석 · 가이드에는 사람이 부르는 운영 API 가 없다**(운영자 등록 · 검수 · 대조 재실행 API 는 S15P31A306-409 에서 지움). 작업은 `worker` 프로파일로 뜬 별도 프로세스가 처리하고, 사용자 요청을 받는 api 는 작업을 돌리지 않는다. 아래 그림은 worker 가 직접 처리하는 모드이고, 노트북 연결 모드(`ANALYSIS_PROCESSOR_ENABLED`)에서는 노트북이 대기 작업을 가져가 BUILDING_GUIDE 앞까지 한다.
 
 ```
-운영자 ── POST /api/v1/internal/analysis-jobs ──▶ api: videos·analysis_jobs(PENDING) 저장
+회원 ── POST /api/v1/users/me/analysis-jobs ──▶ api: videos·analysis_jobs(PENDING) 저장
                                                      │
 worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED 로 집음 → RUNNING
    └─ 단계 처리기를 차례로: LOADING_VIDEO(내려받기 + ffprobe → videos.source_*)
@@ -467,31 +467,18 @@ worker(5초마다) ── 가장 오래된 PENDING 을 FOR UPDATE SKIP LOCKED �
         → SEGMENTING(단계 구간을 따라 프레임 JPEG → 저장소, frames.json → guides.frames_manifest_key)
         → BUILDING_GUIDE(AI 서버에 가이드 생성 요청: 가이드 입력 + 프레임 사전 서명 URL → ai_job_id, 작업은 RUNNING 으로 대기)
 ai ── POST api:8080/api/v1/internal/ai/guide-jobs/callback ──▶ guides.explanation·area·mesh_version, 바로 공개(APPROVED), 작업 COMPLETED
-운영자 ── POST /api/v1/internal/guides/{guideId}/review {REJECTED} ──▶ 문제 가이드를 내림(선택)
       실패하면 멈춘 단계에서 FAILED + failureCode·retryable
 ```
 
-**운영 명령** — 공유 토큰(`INTERNAL_API_TOKEN`)이 필요하다. 세션·CSRF 는 쓰지 않는다.
-
-```bash
-curl -X POST https://mairor.co.kr/api/v1/internal/analysis-jobs \
-  -H "X-Internal-Token: $INTERNAL_API_TOKEN" -H "Content-Type: application/json" \
-  -d '{"youtubeVideoId":"VxAXD6PP76I","sourceObjectKey":"videos/VxAXD6PP76I/source.mp4",
-       "title":"완성도 up! 요즘 진짜 예뻐진 메이크업","channelTitle":"GO지승","durationSeconds":1858}'
-# 202 {"jobId":"…","videoId":"…","receiptType":"NEW_JOB","status":"PENDING","progressStage":"QUEUED"}
-
-curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
-```
-
-- 영상 파일은 먼저 저장소에 올린다. 운영은 S3 `mairor-prod-media` 의 `videos/<youtubeVideoId>/source.mp4` 를 권장한다. 로컬은 `APP_STORAGE_LOCAL_ROOT` 아래 같은 경로에 둔다.
-- 같은 영상의 진행 중(PENDING·RUNNING) 작업이 있으면 새로 만들지 않고 그 작업을 돌려준다(`JOINED_JOB`). DB 부분 유일 인덱스가 동시 요청까지 막는다. 끝난(COMPLETED·FAILED) 뒤에는 다시 넣을 수 있다.
-- 제목·채널·길이는 1차에 운영자가 넣는다(YouTube Data API 연동은 6단계). 이미 있는 영상의 값은 바꾸지 않는다.
+- 같은 영상의 진행 중(PENDING·RUNNING) 작업이 있으면 새로 만들지 않고 그 작업에 합류한다(`JOINED_JOB`). DB 부분 유일 인덱스가 동시 요청까지 막는다. 끝난(COMPLETED·FAILED) 뒤에는 다시 요청할 수 있다.
+- 노트북 연결을 끈 기본 모드(`ANALYSIS_PROCESSOR_ENABLED=false`)에서는 영상 파일이 저장소에 먼저 있어야 한다. 운영은 S3 `mairor-prod-media` 의 `videos/<youtubeVideoId>/source.mp4`, 로컬은 `APP_STORAGE_LOCAL_ROOT` 아래 같은 경로다. 없으면 `SOURCE_NOT_FOUND` 로 끝난다.
+- 작업 상태는 회원 화면(SSE, 아래 "분석 상태")과 Grafana 로그(아래 "로그")로 본다.
 
 **실패 코드** (`failureCode`, 실패해도 조회는 200)
 
 | 코드 | 원인 | 다시 시도 |
 |---|---|---|
-| `SOURCE_NOT_FOUND` | 저장소에 영상 파일이 없다(키가 틀리거나 안 올림) | 아니오 — 파일을 올리고 새로 넣는다 |
+| `SOURCE_NOT_FOUND` | 저장소에 영상 파일이 없다(키가 틀리거나 안 올림) | 아니오 — 파일을 올리고 회원이 다시 요청한다 |
 | `SOURCE_UNREADABLE` | ffprobe 가 영상으로 읽지 못한다(영상 스트림 없음·손상) | 아니오 |
 | `STORAGE_UNAVAILABLE` | 저장소에 일시적으로 닿지 못했다 | 예 |
 | `LLM_UNAVAILABLE` | Gemini 를 부르지 못했다(키 없음·거절, 429·5xx·시간 초과를 재시도까지 다 씀). `llm_calls.error_code` 에 종류·HTTP 상태 | 예 |
@@ -528,27 +515,12 @@ curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-T
 - **콜백 `POST /api/v1/internal/ai/guide-jobs/callback` 은 공유 토큰을 받지 않는다**(AI 가 헤더를 못 붙임). 대신 `frontend/nginx/api.conf` 가 바깥에서 `/api/v1/internal/ai/` 를 404 로 막고, AI 는 `core` 망으로 `api:8080` 에 바로 붙는다. 이 줄이 빠지면 `NginxInternalRouteTest` 가 실패한다.
 - 같은 작업의 콜백이 다시 오면(AI 재전송) 바꾸지 않고 204. 필수 칸이 없으면 400(AI 는 다시 보내지 않는다).
 
-**레퍼런스 제품 자동 대조 재실행** (S15P31A306-324) — AI 콜백 커밋 뒤 자동 대조 작업이 실패했거나 다시 실행해야 할 때 운영자가 호출한다. 대조는 비동기라 202 는 예약 완료를 뜻한다. 결과는 가이드 조회에서 확인하고, 실패 로그가 있으면 같은 요청을 다시 보낸다.
-
-```bash
-curl -X POST "https://mairor.co.kr/api/v1/internal/guides/<guideId>/reference-links/reconcile" \
-  -H "X-Internal-Token: $INTERNAL_API_TOKEN"
-# 202 Accepted
-```
+- **레퍼런스 제품 자동 대조** (S15P31A306-324): AI 콜백 커밋 뒤 가이드 원본 제품을 카탈로그와 비동기로 대조한다. 실패하면 로그 `가이드 원본 제품 대조 실패 guideId=…` 만 남긴다(손으로 다시 돌리는 API 는 지움).
 - 모르는 AI 작업의 콜백은 **503**(S15P31A306-311 추가 작업). AI 는 202 를 보낸 직후 작업을 시작해 BE 가 `ai_job_id` 를 커밋하기 전에 콜백이 올 수 있는데, 503 이면 AI 가 1·5·25초 뒤 다시 보내 반영된다. 정말 없는 작업이면 AI 가 네 번 보내고 멈춘다.
 - **진행 알림 `POST /api/v1/internal/ai/guide-jobs/progress`** (S15P31A306-296): AI 가 1초에 한 번까지 보내는 진행 숫자(설명·사진·얼굴 점·영역)를 `analysis_jobs.ai_progress` 에 저장한다. 콜백과 같은 경로 아래라 공유 토큰 없이 받고 nginx 가 막는다. 받을 수 없는 알림(모르는 작업·끝난 작업·형식·숫자 오류)은 저장하지 않고 204 로 답한다(AI 는 진행 알림을 다시 보내지 않는다). DB 장애 같은 서버 오류는 예외로 5xx 가 날 수 있다.
 - 콜백이 AI 에 맡긴 시각(`ai_requested_at`)부터 `AI_CALLBACK_TIMEOUT` 안에 오지 않으면 worker 가 1분마다 AI 에 상태를 묻는다: 끝났으면 콜백처럼 반영, AI 에 작업이 없으면(재시작·만료) 또는 두 배가 지나면 `ANALYSIS_TIMEOUT`. 진행 알림이 와도 이 기준은 밀리지 않는다(`updated_at` 이 아니라 맡긴 시각 기준).
 - **공개는 자동이다**(S15P31A306-409, 11.12 팀 합의). 콜백 결과가 작업과 맞으면 같은 트랜잭션에서 가이드를 `APPROVED` 로 바꾸고 작업을 끝낸다. 같은 영상에 이전 공개 판이 있으면 먼저 `REJECTED` 로 내린다(영상당 공개 하나). 운영자 승인을 기다리지 않는다.
-- 내리기(운영자, 공유 토큰): 저작권 · 품질 문제가 보이면 반려해 공개에서 내린다. 승인은 자동 공개 전에 끝나 검수 대기(`PENDING`)로 남은 옛 가이드에만 쓴다. 그 밖의 상태면 409.
-
-```bash
-# 작업 → guideId
-curl https://mairor.co.kr/api/v1/internal/analysis-jobs/<jobId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
-# 가이드 입력·쉬운 설명·영역 보기
-curl https://mairor.co.kr/api/v1/internal/guides/<guideId> -H "X-Internal-Token: $INTERNAL_API_TOKEN"
-# 내리기(공개 · 검수 대기 → REJECTED). 옛 검수 대기 가이드 승인은 {"decision":"APPROVED"}
-curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-Internal-Token: $INTERNAL_API_TOKEN"   -H "Content-Type: application/json" -d '{"decision":"REJECTED"}'
-```
+- 사람이 가이드를 승인 · 내리는 API 는 없다(S15P31A306-409 에서 지움). 공개 판은 새 판이 나오면 자동으로 바뀐다.
 
 **가이드 조회** (API-ANALYSIS-001, S15P31A306-312)
 

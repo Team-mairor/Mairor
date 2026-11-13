@@ -191,10 +191,10 @@ app:
       privacy: ${AGREEMENT_PRIVACY_VERSION:2026-10-26}
       age-over-14: ${AGREEMENT_AGE_OVER_14_VERSION:2026-10-26}
   internal:
-    # 내부 API(/api/v1/internal/**: 운영자 명령·AI 콜백)의 공유 토큰. X-Internal-Token 헤더와 비교한다. 비우면 내부 API 는 모두 401
+    # 내부 API(/api/v1/internal/**: 카탈로그 적재 등 서버끼리 부르는 API)의 공유 토큰. X-Internal-Token 헤더와 비교한다. 비우면 내부 API 는 모두 401
     token: ${INTERNAL_API_TOKEN:}
   processor:
-    # 영상 전처리 노트북 API(/api/v1/internal/processor/**)의 토큰. X-Processor-Token 헤더와 비교한다. 운영자 토큰과 다른 값.
+    # 영상 전처리 노트북 API(/api/v1/internal/processor/**)의 토큰. X-Processor-Token 헤더와 비교한다. 공유 토큰과 다른 값.
     # 비우면 노트북 API 는 모두 401 (S15P31A306-357)
     token: ${PROCESSOR_API_TOKEN:}
   storage:

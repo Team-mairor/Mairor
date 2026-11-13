@@ -193,7 +193,7 @@ public class Guide {
     this.reviewedAt = Objects.requireNonNull(now, "now");
   }
 
-  /** 반려. 공개 전(PENDING)이면 공개하지 않고, 공개된 가이드(APPROVED)면 운영자가 내린다. */
+  /** 반려. 공개 전(PENDING)이면 공개하지 않고, 공개된 가이드(APPROVED)면 내린다. */
   public void reject(Instant now) {
     if (reviewStatus != ReviewStatus.PENDING && reviewStatus != ReviewStatus.APPROVED) {
       throw new IllegalStateException("가이드 " + id + " 은 " + reviewStatus + " 상태라 반려할 수 없습니다.");

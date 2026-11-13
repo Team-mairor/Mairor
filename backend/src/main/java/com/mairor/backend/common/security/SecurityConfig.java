@@ -136,8 +136,8 @@ public class SecurityConfig {
               .matcher(HttpMethod.GET, "/v1/users/oauth/google/signup"));
 
   /**
-   * 내부 API(운영자 명령·AI 콜백). 세션·CSRF 대신 {@link InternalTokenFilter}가 공유 토큰 헤더로 지킨다. 인가 규칙에서는 공개로 두고 토큰
-   * 필터가 막는다.
+   * 내부 API(서버끼리 부르는 API · AI 콜백). 세션·CSRF 대신 {@link InternalTokenFilter}가 공유 토큰 헤더로 지킨다. 인가 규칙에서는
+   * 공개로 두고 토큰 필터가 막는다.
    */
   static final RequestMatcher INTERNAL =
       PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/**");
@@ -150,12 +150,12 @@ public class SecurityConfig {
       PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/ai/**");
 
   /**
-   * 영상 전처리 노트북 API(S15P31A306-357). 노트북은 인터넷에서 부르므로 운영자 토큰과 다른 토큰({@code X-Processor-Token})으로 지킨다.
+   * 영상 전처리 노트북 API(S15P31A306-357). 노트북은 인터넷에서 부르므로 공유 토큰과 다른 토큰({@code X-Processor-Token})으로 지킨다.
    */
   static final RequestMatcher PROCESSOR =
       PathPatternRequestMatcher.withDefaults().matcher("/v1/internal/processor/**");
 
-  /** 공유 토큰을 요구하는 내부 API(운영자 명령). */
+  /** 공유 토큰을 요구하는 내부 API(카탈로그 적재 등). */
   static final RequestMatcher INTERNAL_TOKEN_REQUIRED =
       new AndRequestMatcher(
           INTERNAL, new NegatedRequestMatcher(AI_CALLBACK), new NegatedRequestMatcher(PROCESSOR));

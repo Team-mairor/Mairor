@@ -33,7 +33,7 @@ class OpenApiDocsTest {
    * 가이드 매칭 POST·GET, 얼굴 등록 3개, 실행 생성·조회·사진 동의·업로드·바이너리 조회·완료·중도 종료, 리포트 목록·상세·삭제 포함. API 를 추가하면 함께
    * 올린다.
    */
-  private static final int ALL_OPERATIONS = 73;
+  private static final int ALL_OPERATIONS = 68;
 
   @Autowired private MockMvc mockMvc;
 
@@ -546,28 +546,19 @@ class OpenApiDocsTest {
         .andExpect(jsonPath("$.paths.*.*.description", hasSize(ALL_OPERATIONS)));
   }
 
-  /** 운영 내부 API 는 세션이 아니라 공유 토큰 헤더로 표시한다. */
+  /** 내부 API 는 세션이 아니라 공유 토큰 헤더로 표시한다. 운영자가 부르는 분석 · 가이드 API 는 없다(S15P31A306-409). */
   @Test
-  void apiDocs_internalAnalysisJobsUseTheInternalToken() throws Exception {
+  void apiDocs_internalApisUseTheInternalTokenAndOperatorApisAreGone() throws Exception {
     mockMvc
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
         .andExpect(
-            jsonPath("$.paths['/v1/internal/analysis-jobs'].post.tags[0]").value("운영 · 분석 작업"))
-        .andExpect(
-            jsonPath("$.paths['/v1/internal/analysis-jobs'].post.security[0].internalToken")
+            jsonPath("$.paths['/v1/internal/catalog/quality'].get.security[0].internalToken")
                 .exists())
-        .andExpect(jsonPath("$.paths['/v1/internal/analysis-jobs'].post.responses['202']").exists())
-        .andExpect(
-            jsonPath(
-                    "$.paths['/v1/internal/analysis-jobs/{jobId}'].get.responses['404'].description")
-                .value(containsString("NOT_FOUND")))
         .andExpect(
             jsonPath("$.components.securitySchemes.internalToken.name").value("X-Internal-Token"))
-        .andExpect(
-            jsonPath(
-                    "$.components.schemas.RegisterAnalysisJobRequest.properties.youtubeVideoId.example")
-                .value("VxAXD6PP76I"));
+        .andExpect(jsonPath("$.paths['/v1/internal/analysis-jobs']").doesNotExist())
+        .andExpect(jsonPath("$.paths['/v1/internal/guides/{guideId}/review']").doesNotExist());
   }
 
   /** Swagger UI 가 로그인 응답의 csrfToken 을 변경 요청에 자동으로 넣는다(springdoc 의 기본 설정은 그대로 유지). */

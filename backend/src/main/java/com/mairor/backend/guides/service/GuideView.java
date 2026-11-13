@@ -5,7 +5,7 @@ import com.mairor.backend.guides.entity.ReviewStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-/** 운영자가 검수할 때 보는 가이드 한 건. JSON 칸(입력·설명·영역)은 저장된 문자열 그대로다. */
+/** 가이드 한 건(검수 결정의 결과). JSON 칸(입력·설명·영역)은 저장된 문자열 그대로다. */
 public record GuideView(
     UUID guideId,
     UUID analysisJobId,

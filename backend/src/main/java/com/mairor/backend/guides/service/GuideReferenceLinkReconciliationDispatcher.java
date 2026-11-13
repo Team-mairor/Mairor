@@ -1,8 +1,5 @@
 package com.mairor.backend.guides.service;
 
-import com.mairor.backend.common.error.BusinessException;
-import com.mairor.backend.common.error.ErrorCode;
-import com.mairor.backend.guides.repository.GuideRepository;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +9,7 @@ import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 
 /**
- * 커밋 후 자동 처리와 운영자 재실행을 같은 비동기 경로로 보낸다. 대조가 끝나면 카탈로그에 부족한 제품·호수·색을 수집 요청으로 보낸다 (S15P31A306-518). 수집
+ * AI 콜백 커밋 뒤 가이드 원본 제품 대조를 비동기로 돌린다. 대조가 끝나면 카탈로그에 부족한 제품·호수·색을 수집 요청으로 보낸다 (S15P31A306-518). 수집
  * 요청이 실패해도 대조 결과는 그대로다.
  */
 @Service
@@ -22,39 +19,20 @@ public class GuideReferenceLinkReconciliationDispatcher {
       LoggerFactory.getLogger(GuideReferenceLinkReconciliationDispatcher.class);
 
   private final TaskExecutor executor;
-  private final GuideRepository guides;
   private final GuideStepProductLinkReconciler reconciler;
   private final GuideCatalogGapCollector gapCollector;
 
   GuideReferenceLinkReconciliationDispatcher(
       @Qualifier("guideReferenceTaskExecutor") TaskExecutor executor,
-      GuideRepository guides,
       GuideStepProductLinkReconciler reconciler,
       GuideCatalogGapCollector gapCollector) {
     this.executor = executor;
-    this.guides = guides;
     this.reconciler = reconciler;
     this.gapCollector = gapCollector;
   }
 
   /** AI 콜백 뒤 예약 실패는 이미 커밋된 분석 응답에 영향을 주지 않는다. */
   public void scheduleAfterCommit(UUID guideId) {
-    try {
-      submit(guideId, true);
-    } catch (RuntimeException e) {
-      log.error("가이드 원본 제품 대조 예약 중 예기치 않은 오류 guideId={}", guideId, e);
-    }
-  }
-
-  /** 내부 운영 API 의 재대조 요청. 202 는 예약 완료를 뜻하며 처리가 끝났다는 뜻은 아니다. */
-  public void requestManualReconciliation(UUID guideId) {
-    if (!guides.existsById(guideId)) {
-      throw new BusinessException(ErrorCode.NOT_FOUND);
-    }
-    submit(guideId, false);
-  }
-
-  private void submit(UUID guideId, boolean suppressRejection) {
     try {
       executor.execute(
           () -> {
@@ -73,9 +51,8 @@ public class GuideReferenceLinkReconciliationDispatcher {
           });
     } catch (TaskRejectedException e) {
       log.error("가이드 원본 제품 대조 작업 예약 실패 guideId={}", guideId, e);
-      if (!suppressRejection) {
-        throw new BusinessException(ErrorCode.SERVICE_UNAVAILABLE, "대조 작업 대기열이 가득 찼습니다.");
-      }
+    } catch (RuntimeException e) {
+      log.error("가이드 원본 제품 대조 예약 중 예기치 않은 오류 guideId={}", guideId, e);
     }
   }
 }
