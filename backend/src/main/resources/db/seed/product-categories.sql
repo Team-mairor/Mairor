@@ -8,9 +8,9 @@
 --     꼭 바꿔야 하면 모든 참조와 FK 순서를 고려한 별도 이관 SQL 로 새 코드 추가 → 참조 갱신 → 구 코드 삭제를 한다.
 --
 -- 카테고리·종류는 기능명세 POUCH-004, matchable·shade_selectable 은 API 명세 API-POUCH-008 기준이다.
--- TODO(확인 필요 2): 종류 코드명 확정. 기능명세에 향수 하위 종류가 없어 PERFUME 하나를 임시로 둔다.
---   NAIL 은 호수 선택 카테고리지만 NAIL_FILE 에는 호수가 없다 (카테고리 단위 설정을 따른다).
--- 호환 부위(product_category_parts)는 값이 정해지지 않아 넣지 않는다. TODO(확인 필요 2)
+-- 카테고리·종류 코드는 현재 FE 파우치 등록·일러스트 및 BE 추천 매칭 계약의 기준값이다. 코드는 유지하고 라벨·순서만 조정한다.
+-- FRAGRANCE 는 PERFUME 한 종류를 제공한다. NAIL_FILE 은 호수 선택 여부를 카테고리 설정에 따른다.
+-- product_category_parts 는 현재 비워 둔다. 가이드 단계별 대체 가능 종류는 PouchCompatibilityPolicy 에서 관리한다.
 
 INSERT INTO product_categories (code, label, matchable, shade_selectable, sort_order) VALUES
     ('BASE',      '베이스',   true,  true,  1),
@@ -65,7 +65,7 @@ INSERT INTO product_types (code, category_code, label, sort_order) VALUES
     -- 네일
     ('NAIL_POLISH',       'NAIL',      '네일 폴리시',   1),
     ('NAIL_FILE',         'NAIL',      '네일 파일',     2),
-    -- 향수 (TODO(확인 필요 2): 기능명세에 하위 종류 없음)
+    -- 향수
     ('PERFUME',           'FRAGRANCE', '향수',          1),
     -- 도구
     ('BRUSH',             'TOOL',      '브러시',        1),

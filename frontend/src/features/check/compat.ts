@@ -23,11 +23,12 @@ export const COMPAT_TYPES: Record<Makeup, readonly string[]> = {
   other: [],
 };
 
-/** 종류가 없는 제품은 후보에서 뺀다 */
+/** 수동 선택은 해당 단계 카테고리의 대표 색상이 있는 제품만 허용한다. */
 export function isCompatible(
   step: Pick<GuideStepModel, "makeup" | "matchCategory">,
   item: PouchItem,
 ) {
-  if (!item.type || !COMPAT_TYPES[step.makeup].includes(item.type)) return false;
-  return !step.matchCategory || CATEGORY_CAT[step.matchCategory] === item.cat;
+  if (!item.color) return false;
+  if (step.matchCategory) return CATEGORY_CAT[step.matchCategory] === item.cat;
+  return !!item.type && COMPAT_TYPES[step.makeup].includes(item.type);
 }

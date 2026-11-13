@@ -1,6 +1,6 @@
 # 395 실행·단계 스냅샷 저장 모델
 
-이 문서의 모델 단계 기록은 초기 커밋 당시 범위다. 이후 생성·조회, 사진, 완료 API가 추가됐고 현재 계약은 README와 이어지는 요청 문서를 따른다.
+이 문서는 모델·SQL 초기 구현 기록이다. 당시 미완성으로 적은 후속 API 작업은 이후 구현됐다. 현재 실행·사진 계약은 [실행 API 문서](guide-execution-api.md), 리포트 계약은 [연동 계약 문서](report-api-integration-request.md)를 따른다.
 
 ## 기반과 변경 범위
 
@@ -45,7 +45,7 @@
 - 빈 DB: users → products → analysis → pouch → camera → executions 스키마 순서.
 - 기존 396 DB: db/upgrade/395-guide-executions.sql. 기존 세 테이블의 복합 유일 제약·두 새 테이블·얼굴 execution FK를 한 트랜잭션으로 추가한다.
 - 기존 execution_id 비NULL 얼굴 등록이 있으면 원인을 확인한 뒤 별도 전환 계획이 필요하다. 현재 upgrade는 없는 실행을 참조하는 기존 링크를 허용하지 않고 전체 롤백한다.
-- 아직 395 API/리포트 계약이 미완성이므로 운영 적용하지 않는다. SQL 자동 실행/기존 396 재적용은 하지 않는다.
+- 당시에는 395 API/리포트 계약이 미완성이어서 운영 적용하지 않았다. 이후 395 upgrade는 운영 DB에 적용됐다(적용 기록은 [FE 인계 문서](guide-execution-fe-handoff.md) 참조). SQL 자동 실행/기존 DB 재적용은 하지 않는다.
 - JPA validate를 사용하는 기존 테스트의 schema-locations에 executions.sql을 추가한다. 396 실행 연결 테스트도 무작위 ID 대신 실제 실행/매칭 fixture를 생성하도록 맞춘다.
 - ExecutionPersistenceTest는 스냅샷/기본 상태 저장, 소유권·세션·step FK, 중복 얼굴/단계/기록 ID, 상태 CHECK·엔티티 종료 전이를 검증한다.
 - ExecutionUpgradeSqlTest는 실제 396 upgrade 후 395 성공, 중간 실패 전체 롤백, 기존 잘못된 실행 링크로 인한 롤백을 검증한다.
@@ -59,4 +59,4 @@
 
 초기 모델/API 단계의 검증 결과는 위 기록을 참고한다. 후속 완료·리포트 원장과 현재 구현 범위는 [생성·조회·완료 API 계약](guide-execution-api.md)과 [리포트 API 연동 요청](report-api-integration-request.md)에 정리한다.
 
-모델 변경은 사용자 승인 후 `a51d6e5 feat(execution): 실행·선택 스냅샷 모델과 스키마 추가`로 커밋/푸시했다(`Refs: S15P31A306-395`). 원격이 기존 착수 문서 1f3ee75에서 변경되지 않았는지 확인한 뒤 정확한 이전 SHA를 지정한 force-with-lease로 396 기반 재배치 이력까지 반영했다. 현재 후속 API 구현 변경은 별도 미커밋 상태다.
+모델 변경은 `a51d6e5 feat(execution): 실행·선택 스냅샷 모델과 스키마 추가`로 커밋/푸시했다(`Refs: S15P31A306-395`). 원격이 기존 착수 문서 1f3ee75에서 변경되지 않았는지 확인한 뒤 정확한 이전 SHA를 지정한 force-with-lease로 396 기반 재배치 이력까지 반영했다. 이 커밋·재배치 내역은 당시 기록이다.

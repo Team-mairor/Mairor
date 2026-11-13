@@ -130,7 +130,30 @@ beforeEach(async () => {
     clear: () => saved.clear(),
   });
   vi.clearAllMocks();
-  vi.spyOn(api, "get").mockResolvedValue({ user: { email: "t@example.com" }, csrfToken: "c" });
+  vi.spyOn(api, "get").mockImplementation(async (path: string) => {
+    if (path === "/v1/users/me")
+      return { user: { email: "t@example.com", nickname: "테스트" }, csrfToken: "c" };
+    if (path === "/v1/users/me/pouch-items")
+      return {
+        items: pouch.map((item) => ({
+          pouchItemId: item.id,
+          registrationMode: "MANUAL",
+          productId: null,
+          shadeId: null,
+          brand: item.brand,
+          name: item.name,
+          category: item.cat === "치크" ? "CHEEK" : "LIP",
+          type: item.type,
+          shadeName: null,
+          color: item.color ? { hex: item.color, source: "USER_INPUT", estimated: false } : null,
+          colorSource: item.color ? "USER_INPUT" : "NONE",
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        })),
+        hasNext: false,
+      };
+    return { user: { email: "t@example.com" }, csrfToken: "c" };
+  });
   // 매칭과 실행 시작
   vi.spyOn(api, "post").mockImplementation(async (path: string) =>
     path === "/v1/users/me/executions" ? { executionId: "e1" } : MATCH,
@@ -176,6 +199,18 @@ const steps = () =>
 const tab = (label: string) => button(label, element.querySelector('[role="tablist"]')!);
 
 describe("실제 가이드 제품 체크", () => {
+  it("화면 진입 시 서버 파우치를 동기화하고 매칭 요청을 보낸다", () => {
+    expect(api.get).toHaveBeenCalledWith(
+      "/v1/users/me/pouch-items",
+      expect.objectContaining({ query: { page: 0, size: 100 } }),
+    );
+    expect(session.state.pouch.map((item) => item.id)).toEqual(pouch.map((item) => item.id));
+    expect(api.post).toHaveBeenCalledWith(
+      "/v1/users/me/guide-matches",
+      expect.objectContaining({ body: { guideId: GUIDE_ID } }),
+    );
+  });
+
   it("서버 매칭으로 보유·대체·없음을 나누고 없음부터 보여 준다", () => {
     expect(api.post).toHaveBeenCalledWith(
       "/v1/users/me/guide-matches",
@@ -194,6 +229,15 @@ describe("실제 가이드 제품 체크", () => {
     await click(tab("대체"));
     expect(steps()).toEqual(["s5"]);
     expect(text()).toContain("→ C 틴트");
+  });
+
+  it("같은 카테고리의 다른 종류 제품도 직접 선택할 수 있다", async () => {
+    await click(tab("보유"));
+    await click(button("바꾸기", element.querySelector('[data-step="s2"]')!));
+    await click(button("글로우"));
+    expect(session.state.run.choice.s2).toEqual({ kind: "pouch", id: "high" });
+    await click(tab("대체"));
+    expect(element.querySelector('[data-step="s2"]')?.textContent).toContain("B 글로우");
   });
 
   it("없음 단계에서 고르면 대체로 옮기고, 선택 해제하면 서버 결과로 돌아간다", async () => {

@@ -411,7 +411,7 @@ class OpenApiDocsTest {
         .andExpect(
             jsonPath("$.components.schemas.ProductTypeResponse.properties.code.example")
                 .value("CUSHION"))
-        // 호환 부위 코드는 정해지지 않았으므로 예시에 임의의 코드를 싣지 않는다
+        // compatibleParts는 현재 추천 매칭에서 사용하지 않는 예약 필드이므로 빈 목록을 유지한다
         .andExpect(
             jsonPath(
                     "$.components.schemas.ProductCategoryResponse.properties.compatibleParts.example")

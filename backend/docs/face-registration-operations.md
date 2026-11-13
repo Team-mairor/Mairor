@@ -1,10 +1,10 @@
 # 얼굴 등록 API 확인·배포 인계 (S15P31A306-396)
 
-이 문서는 396의 얼굴 등록·조회·삭제 API와 공통 사진 저장 기반을 확인하는 절차다. 실행 생성·단계 사진·사진 바이너리 조회는 후속 395에 속한다.
+이 문서는 396의 얼굴 등록·조회·삭제 API와 공통 사진 저장 기반의 운영 확인 절차다. 395에서 실행 생성·단계 사진·인증 사진 바이너리 조회와 execution FK를 추가했다. 아래 2026-11-10 기준으로 작성된 안내는 해당 작업 전의 범위를 설명한다.
 
 ## 현재 적용·확인 기록 (2026-11-10)
 
-- 코드 기준 `2d34077`, [MR !146](https://lab.ssafy.com/s15-final/S15P31A306/-/merge_requests/146), 대상 master. 마지막 확인은 머지 대기·리베이스 필요 상태이며 최신 파이프라인·머지 결과는 MR에서 확인한다.
+- 당시 코드 기준 `2d34077`, [MR !146](https://lab.ssafy.com/s15-final/S15P31A306/-/merge_requests/146), 대상 master. 아래 MR 상태는 2026-11-10 스냅샷이며 현재 상태를 나타내지 않는다.
 - 사용자가 운영 DB에서 두 테이블, `fk_face_registrations_photo_owner`·`ck_face_registrations_status`·`uk_face_registrations_execution`의 convalidated=true와 `uk_face_registrations_registered`의 유효한 부분 유일 인덱스를 확인했다. 해당 DB에는 마이그레이션을 다시 실행하지 않는다.
 - EC2 역할 `mairor-ec2-app`의 `mairor-ec2-app-runtime` 정책에 `mairor-prod-media/*` GetObject·PutObject·DeleteObject가 허용되어 있음을 사용자 제공 JSON으로 확인했다. 정책 수정은 하지 않았다. 앱의 실제 버킷 설정 일치 및 버킷 정책 등 전체 접근 경로는 배포 후 업로드·삭제로 확인한다.
 - 실제 사진 업로드·삭제, 운영 알림 규칙 등록은 아직 완료로 기록하지 않는다. 아래 SQL 절차는 미적용 환경용이다.
@@ -26,7 +26,7 @@ SELECT to_regclass('public.photos') AS photos,
 psql -v ON_ERROR_STOP=1 -d <DB> -f backend/src/main/resources/db/upgrade/396-face-registrations.sql
 ~~~
 
-파일은 BEGIN/COMMIT 안에서 photos → face_registrations 및 인덱스·제약을 생성한다. 새 테이블만 추가하므로 기존 사용자·가이드·파우치 데이터 이관은 없다. execution_id FK는 실행 테이블이 생기는 395에서 추가한다.
+파일은 BEGIN/COMMIT 안에서 photos → face_registrations 및 인덱스·제약을 생성한다. 새 테이블만 추가하므로 기존 사용자·가이드·파우치 데이터 이관은 없다. 실행 테이블과 `execution_id` FK는 395 upgrade에서 추가한다.
 
 적용 후 확인:
 
@@ -54,7 +54,7 @@ SELECT indexname FROM pg_indexes
 - 미연결 REGISTERED 얼굴 사진은 원래 세션 종료까지 유지한다. 고정 30분·1시간 TTL은 없다. 로그아웃·기기/전체 로그아웃·로그인 대체·절대/유휴 만료 시 접근을 막고 파일 삭제를 예약한다.
 - PHOTO_STAGING_TIMEOUT은 업로드가 도메인에 연결되기 전의 원장 복구 시간이다. 얼굴 등록에 연결되면 이 만료 시각은 해제된다.
 - 사라진 세션의 미연결 등록은 FACE_REGISTRATION_ORPHAN_CLEANUP_ENABLED 작업이 복구하고, 파일 삭제는 PHOTO_CLEANUP_ENABLED 작업이 재시도한다. 두 작업의 기본 주기는 각각 1분이다.
-- LINKED/RETAINED 사진은 미연결 정리 작업으로 삭제하지 않는다. 실행 중도 종료·완료 리포트 보관/삭제는 395 및 리포트 도메인과 연결한다.
+- LINKED 사진은 실행 중도 종료 때 정리하고 RETAINED 사진은 리포트 삭제 때 정리한다. 미연결 얼굴 등록 정리 작업은 두 상태를 삭제하지 않는다.
 
 ## Swagger에서 직접 확인
 
@@ -85,7 +85,7 @@ Swagger가 켜진 dev 환경의 /api/swagger-ui/index.html에서 확인한다. �
 6. 새 ID를 DELETE한다. 파일 삭제 완료 시 204, 이후 GET과 같은 DELETE는 404다. 파일 정리가 끝나지 않으면 DELETE가 503 SERVICE_UNAVAILABLE이며 같은 ID로 재시도한다. 정리 대기 중 GET은 404다.
 7. 새 사진을 등록한 뒤 로그아웃한다. 다시 로그인한 세션에서는 이전 미연결 등록을 재사용할 수 없으며 새 얼굴 등록이 필요하다.
 
-사진 메타데이터의 url(/api/v1/users/me/photos/{photoId})은 후속 395가 제공한다. 396만 반영된 시점에 이 URL의 이미지 바이트가 아직 조회되지 않는 것은 이번 등록 API 실패와 구분한다.
+사진 메타데이터의 `url`(`/api/v1/users/me/photos/{photoId}`)은 인증된 사진 바이너리 조회 API다. 얼굴 등록 사진과 실행 단계 사진을 제공하고, 소유자·세션·사진 상태를 검증한다.
 
 ## 실패 응답 확인
 
@@ -108,4 +108,4 @@ Swagger가 켜진 dev 환경의 /api/swagger-ui/index.html에서 확인한다. �
 - 실제 세션 쿠키·로그아웃/유휴 만료 경로, 종료 훅 중복 호출·실패 롤백·다른 세션/연결 사진 보존, 동일 얼굴 등록의 동시 실행 연결 및 실행 트랜잭션 롤백을 확인한다.
 - 운영 upgrade 파일의 생성 성공과 중간 실패 시 전체 롤백을 별도 PostgreSQL 테스트로 확인한다. Swagger는 metadata JSON encoding과 요청/응답·오류 코드를 검사한다.
 - 전체 백엔드 검증 명령은 backend에서 ./gradlew.bat check다. 운영 DB SQL 적용·IAM 변경·실제 사용자 사진 업로드는 자동 테스트 결과에 포함하지 않는다.
-- 후속 395는 FaceRegistrationExecutionService.link/retain/abandon을 실행 저장 트랜잭션에서 호출하고 executions FK를 추가한다. API-GUIDE-008은 얼굴 등록과 단계 사진의 인증된 바이너리 조회를 함께 제공해야 한다.
+- 실행 API는 FaceRegistrationExecutionService.link/retain/abandon을 실행 저장 트랜잭션에서 호출한다. 실행 FK와 API-GUIDE-008 인증 사진 바이너리 조회가 구현되어 있다.

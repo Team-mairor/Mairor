@@ -17,7 +17,13 @@ import {
   type GuideStepModel,
 } from "@/features/guide";
 import { GlassPanel, LiveNote, LiveTag, RoundBack, useLiveState } from "@/features/live";
-import { emptyDraft, ProductSheet, type PouchItem, type ProductDraft } from "@/features/pouch";
+import {
+  emptyDraft,
+  ProductSheet,
+  type PouchItem,
+  type ProductDraft,
+  usePouchSync,
+} from "@/features/pouch";
 import { runHref, useSession, type Choice, type MatchKind } from "@/features/session";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useTimeout } from "@/lib/hooks/use-timeout";
@@ -69,7 +75,9 @@ export function GuideCheck() {
   }, []);
   const { load } = useGuide();
   const run = state.run;
-  const pouch = state.pouch;
+  const pouchSync = usePouchSync();
+  const pouchReady = !state.loggedIn || pouchSync.status === "ready";
+  const pouch = pouchReady ? state.pouch : [];
 
   const [group, setGroup] = useState<MatchKind | null>(null);
   const [swapFor, setSwapFor] = useState<string | null>(null);
@@ -84,9 +92,29 @@ export function GuideCheck() {
   const { note, reason } = useLiveState();
   useHiddenVideo();
   // 제품을 등록·수정·삭제하면 다시 맞춘다. 수정은 ID가 그대로라 항목 값 전체를 기준으로 본다
-  const { load: matching, retry } = useGuideMatch(run.guideId, JSON.stringify(pouch));
+  const { load: matching, retry } = useGuideMatch(
+    pouchReady ? run.guideId : null,
+    JSON.stringify(pouch),
+  );
 
   if (load.status !== "ready") return null;
+  if (state.loggedIn && pouchSync.status === "error")
+    return (
+      <main className="flex flex-1 items-center justify-center px-8 text-center text-white">
+        <div className="flex flex-col items-center gap-4">
+          <p>내 파우치를 불러오지 못했어요. 다시 불러온 뒤 제품을 맞춰 볼게요.</p>
+          <button type="button" onClick={pouchSync.retry} className="font-bold underline">
+            파우치 다시 불러오기
+          </button>
+        </div>
+      </main>
+    );
+  if (state.loggedIn && !pouchReady)
+    return (
+      <main className="flex flex-1 items-center justify-center px-8 text-center text-white">
+        내 파우치를 불러오고 있어요.
+      </main>
+    );
   const rows =
     matching.status === "ready"
       ? checkRows(load.guide.steps, run.choice, pouch, matching.byStep)

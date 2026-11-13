@@ -2,7 +2,7 @@
 
 대상 작업: S15P31A306-395 완료 API ↔ 리포트 담당 API 연동  
 작성일: 2026-11-10  
-상태: 백엔드 완료 경로가 아래 계약으로 기록을 생성한다. 리포트 목록·상세·삭제 API 담당자는 이 테이블과 응답 필드에 맞춰 구현/조정 요청.
+상태: 연동 계약과 코드 기준 기록. 완료 API가 아래 계약으로 기록을 생성하고, 리포트 목록·상세·삭제 API도 구현되어 있다. 현재 구현은 `history/controller/HistoryRecordController`와 `history/service/`를 참조한다.
 
 ## 요청 사항
 
@@ -62,4 +62,4 @@ JSON은 API-REPORT-002 `ReportRecord`와 같다. top-level은 `recordId`, `execu
 - POST `/api/v1/users/me/executions/{executionId}/completion`은 회원 → 실행 행을 잠그고, 처음 완료할 때 `history_records` 한 행 생성, 실행 COMPLETED/recordId/completedAt 기록, 얼굴 등록 RETAINED 전환을 한 DB 트랜잭션에서 커밋한다.
 - 최초 성공은 201, 완료 재시도는 200과 같은 `recordId`·`completedAt`이다. UNIQUE(execution_id)와 실행 행 잠금으로 동시 완료도 한 기록만 만든다.
 - 완료 단계 사진·제품은 선택 사항이다. 마지막 GUIDE 단계 사진만 completedPhoto로 쓴다. 실패하면 기록·실행·얼굴 상태를 함께 롤백해 같은 요청을 재시도할 수 있다.
-- API-GUIDE-006은 기록을 생성한다. REPORT-001/002/003은 별도 담당이 이 원장을 읽고 삭제한다. 삭제·정리 정책은 사진/얼굴 자원까지 완료된 뒤 성공 응답해야 한다.
+- API-GUIDE-006은 기록을 생성한다. 구현된 API-REPORT-001/002/003은 이 원장을 읽고 삭제한다. 삭제는 사진·보관 얼굴 자원 정리가 완료된 뒤 성공 응답한다.

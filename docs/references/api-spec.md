@@ -429,9 +429,10 @@ API-POUCH-008 · GET /api/v1/product-categories
 
 - 회원 GET. Query·Body 없음. 200 \{items:ProductCategory\[\]\}.
 - 9개 카테고리와 types·matchable·shadeSelectable·compatibleParts 포함. BASE/EYE/BROW/CHEEK/LIP만 matchable=true. SKINCARE/FRAGRANCE/TOOL은 shadeSelectable=false, NAIL은 true.
-- FE는 code를 저장하고 label을 표시한다. 세부 type 코드·compatibleParts 값은 데이터 계약 확정 필요. 미정 코드를 예시에서 추측해 하드코딩하지 않는다.
-- <b>임시 제안</b>: 현재 type 코드 38개는 기능명세 POUCH-004 라벨을 옮긴 임시 제안이며 확정 전 바뀔 수 있다(기준: `backend/src/main/resources/db/seed/product-categories.sql`). FE는 코드를 하드코딩하지 말고 이 API 응답을 쓴다. 향수는 하위 종류가 없어 `PERFUME` 하나를 임시로 둔다. compatibleParts는 값 확정 전까지 모든 카테고리에서 \[\]. 확인 필요 2
-- <b>구현</b>: 카테고리는 sort\_order, 같으면 code 순. types는 카테고리 안에서 sort\_order, 같으면 code 순. 종류가 없는 카테고리도 types=\[\]로 포함한다(null 아님). compatibleParts는 DB 값을 문자열 순으로 정렬해 반환하며, 현재 시드에 값이 없어 \[\]다. 401 외 업무 오류 없음.
+- FE는 code를 저장하고 label을 표시한다. 세부 type 코드는 아래 기준값이며 FE는 종류 목록을 이 API 응답에서 받는다.
+- <b>확정된 기준값</b> (시드: `backend/src/main/resources/db/seed/product-categories.sql`): BASE=CUSHION·FOUNDATION·CONCEALER·SUNSCREEN·POWDER·BASE\_STICK, EYE=EYESHADOW\_PALETTE·MASCARA·EYELINER·FALSE\_LASHES, BROW=BROW\_PENCIL, CHEEK=BLUSHER·HIGHLIGHTER·COMPACT, LIP=LIPSTICK·LIP\_GLOSS·LIP\_TINT·LIP\_BALM·LIQUID\_LIP, SKINCARE=TONER·SERUM\_AMPOULE·CREAM·CLEANSING\_FOAM·CLEANSING\_OIL·HAND\_EYE\_CREAM·MASK\_PACK·MIST, NAIL=NAIL\_POLISH·NAIL\_FILE, FRAGRANCE=PERFUME, TOOL=BRUSH·PUFF·SPONGE·EYELASH\_CURLER·HAND\_MIRROR·TWEEZERS·COTTON\_PAD·COTTON\_SWAB. 카테고리·종류 코드는 연동 기준으로 유지하며 label과 표시 순서만 조정한다.
+- <b>호환성</b>: 현재 시드의 compatibleParts는 모든 카테고리에서 \[\]다. API는 저장된 값을 반환하지만 추천 매칭은 카테고리 부위 목록을 사용하지 않고, BE의 `PouchCompatibilityPolicy`가 가이드 화장 종류별 허용 product type을 판정한다.
+- <b>구현</b>: 카테고리는 sort\_order, 같으면 code 순. types는 카테고리 안에서 sort\_order, 같으면 code 순. 종류가 없는 카테고리도 types=\[\]로 포함한다(null 아님). compatibleParts는 DB 값을 문자열 순으로 반환한다. 401 외 업무 오류 없음.
 - <b>코드 유지 원칙</b>: 카테고리·종류 코드는 확정 후 바꾸지 않고 label·순서만 바꾼다. 꼭 바꿔야 하면 모든 참조(product\_types·product\_category\_parts·products의 카테고리·종류 복합 FK, 이후 pouch\_items 등)와 FK 순서를 고려한 별도 이관 SQL로 처리한다. 시드는 행을 지우지 않으므로 코드만 바꾸면 구·신 코드가 함께 노출된다.
 - <b>등록 경로 확정</b>: NAIL은 shadeSelectable=true를 유지한다. NAIL\_FILE처럼 유효 호수가 없는 제품은 CATALOG 등록을 거절하고 MANUAL 등록으로 안내한다(API-POUCH-004). 이 결정으로 분류 응답·시드·공용 카탈로그를 변경하지 않는다.
 </toggle>
@@ -763,7 +764,7 @@ GET /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 - 요청: Path <code>faceRegistrationId</code>
 - 성공 200: FaceRegistration. 이미지 바이너리는 photo.url(API-GUIDE-008)로 조회
 - 오류: 400 <code>VALIDATION_FAILED</code>(UUID 형식 오류) · 404 <code>NOT_FOUND</code>(미존재·타인·원래 세션 불일치·폐기·정리 중). REGISTERED/LINKED는 본인 원래 세션, RETAINED는 본인 계정에서 접근한다. 공통 401 정책을 적용한다.
-- 얼굴 등록 응답에는 저장소 key와 sessionId를 노출하지 않는다. 현재 코드의 photo.url은 후속 API 경로이며 바이너리 GET 구현은 395에 남아 있다.
+- 얼굴 등록 응답에는 저장소 key와 sessionId를 노출하지 않는다. `photo.url`은 인증된 `GET /api/v1/users/me/photos/{photoId}` 경로이며, 본인 사진 바이너리를 제공한다.
 - 용도: 준비 화면 '얼굴 인식 준비' 상태 확인, 등록 이미지 재조회(환경 비교용 로컬 사본이 없을 때)
 
 ### API-CAMERA-003 · 얼굴 등록 삭제
@@ -1000,7 +1001,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | 인기 Top 4 | 확정(11.11, S15P31A306-403): 영상 선택 기록으로 최근 30일 동안 고른 서로 다른 회원 수 순, 10분마다 다시 셈, 1\~4개 200 · 0개 503(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 검수 주체·소요 시간(11.12 확정: 자동 공개, S15P31A306-409), 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |
 | 얼굴 등록 | 미연결 등록은 원래 세션 종료까지 유지하는 것으로 확정. 서버 촬영 조건 재검증 여부·저장소 암호화 등 운영 기준·정면/좌/우 3장 확장(P1)은 별도 결정(확인 필요 7) |
-| 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, 같은 용도/부위 기준·추천 알고리즘·동점·최소 기준, API-POUCH-001 다건 일치 처리, 카테고리·종류 코드명(확인 필요 1·2) |
+| 제품·색상·추천 | 초기 DB 범위(수량)·색 품질 임계값, 직접 입력 색상 확보, API-POUCH-001 다건 일치 처리 |
 | 실행·준비 | 분석/얼굴 추적 준비 시점 차이에 따른 별도 준비 화면·대기 상한(확인 필요 7), 온보딩·튜토리얼 안내를 계정 단위로 바꿀지(확인 필요 9) |
 | 게이지(P0) | 기준 색·진하기, 피부색/조명 영향(등록 이미지 보정), 부위별 방식·표시 단위·임계값, 데이터 표현·기기/서버 분담(확인 필요 8) |
 | 사진·리포트 | 단계 사진 보관 기간(개인정보 처리방침), 미완료 임시 데이터 정리 시점·삭제 완료 기준 |

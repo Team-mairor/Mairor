@@ -146,7 +146,7 @@ describe("checkRows", () => {
       ["s8", "none"],
     ]);
     expect(rows[1].candidates.map((p) => p.id)).toEqual(["p2", "p3"]);
-    expect(swapList(rows[1], pouch).map((p) => p.id)).toEqual(["p2", "p3", "p1"]);
+    expect(swapList(rows[1], pouch).map((p) => p.id)).toEqual(["p2", "p3"]);
     expect(pickCounts(rows)).toEqual({ same: 1, sub: 1, none: 1 });
     expect(rows.map((r) => choiceOf(r.pick))).toEqual([
       { kind: "pouch", id: "p1", auto: true },
@@ -180,40 +180,38 @@ describe("checkRows", () => {
 });
 
 describe("candidatesFor", () => {
-  it("블러셔 단계에는 블러셔만 나온다", () => {
+  it("같은 카테고리의 대표 색상이 있는 제품은 종류가 달라도 수동 선택할 수 있다", () => {
     const pouch = [
-      item("blush"),
-      item("high", { type: "하이라이터" }),
-      item("compact", { type: "컴팩트" }),
+      item("blush", { color: "#EF8E8A" }),
+      item("high", { type: "하이라이터", color: "#F3E3D3" }),
+      item("compact", { type: "컴팩트", color: "#D9B9A0" }),
       item("lip", { cat: "립", type: "립스틱" }),
     ];
-    expect(candidatesFor(step("s1"), pouch).map((p) => p.id)).toEqual(["blush"]);
+    expect(candidatesFor(step("s1"), pouch).map((p) => p.id)).toEqual(["blush", "high", "compact"]);
   });
 
-  it("종류가 없는 제품은 추정하지 않고 뺀다", () => {
-    expect(candidatesFor(step("s1"), [item("old", { type: undefined })])).toEqual([]);
+  it("대표 색상이 없는 제품은 수동 선택 후보에서 제외한다", () => {
+    expect(candidatesFor(step("s1"), [item("old", { color: null })])).toEqual([]);
   });
 
-  it("색이 없어도 후보에 넣고, 기준색이 없으면 파우치 순서를 지킨다", () => {
-    const pouch = [item("a"), item("b", { color: "#EF8E8A" })];
+  it("기준색이 없어도 대표 색상 있는 후보를 파우치 순서로 보여 준다", () => {
+    const pouch = [item("a", { color: "#E0A090" }), item("b", { color: "#EF8E8A" })];
     expect(candidatesFor(step("s1"), pouch).map((p) => p.id)).toEqual(["a", "b"]);
   });
 
-  it("기준색이 있으면 색이 가까운 순이고 색 없는 제품은 뒤로 간다", () => {
+  it("기준색이 있으면 대표 색상으로 유사도 순 정렬한다", () => {
     const pouch = [
-      item("none"),
+      item("none", { color: null }),
       item("far", { color: "#2B2220" }),
       item("near", { color: "#EE8D89" }),
     ];
-    expect(candidatesFor(step("s1"), pouch, "#EF8E8A").map((p) => p.id)).toEqual([
-      "near",
-      "far",
-      "none",
-    ]);
+    expect(candidatesFor(step("s1"), pouch, "#EF8E8A").map((p) => p.id)).toEqual(["near", "far"]);
   });
 
-  it("쉐딩처럼 호환 종류가 정해지지 않은 단계는 후보가 없다", () => {
-    expect(candidatesFor(step("s1", { makeup: "contour" }), [item("blush")])).toEqual([]);
+  it("화장 종류와 무관하게 같은 카테고리의 제품은 수동 선택할 수 있다", () => {
+    expect(
+      candidatesFor(step("s1", { makeup: "contour" }), [item("blush", { color: "#EF8E8A" })]),
+    ).toHaveLength(1);
   });
 
   it("단계의 대분류와 파우치 카테고리가 다르면 뺀다", () => {

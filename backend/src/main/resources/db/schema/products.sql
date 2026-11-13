@@ -23,7 +23,7 @@ CREATE TABLE product_categories (
     CONSTRAINT product_categories_pkey PRIMARY KEY (code)
 );
 
--- 카테고리별 종류. 코드명은 기능명세 POUCH-004 라벨을 옮긴 초안이다. TODO(확인 필요 2)
+-- 카테고리별 종류. 기준 코드는 db/seed/product-categories.sql 및 FE 파우치 계약을 따른다.
 -- uk_product_types_category_code 는 products 의 (category_code, type_code) 복합 FK 가 참조한다.
 CREATE TABLE product_types (
     code          varchar(40) NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE product_types (
 );
 CREATE INDEX idx_product_types_category_order ON product_types (category_code, sort_order);
 
--- 카테고리별 호환 부위. 부위 코드가 정해지지 않아 비워 두고, API 는 빈 목록을 응답한다. TODO(확인 필요 2)
+-- 카테고리 조회용 호환 부위 값. 현재 시드는 비어 있다. 추천 대체 호환성은 PouchCompatibilityPolicy 가 종류 코드 기준으로 관리한다.
 CREATE TABLE product_category_parts (
     category_code varchar(20) NOT NULL,
     part_code     varchar(30) NOT NULL,
@@ -77,7 +77,7 @@ CREATE INDEX idx_products_type_brand_name_compact ON products (type_code, brand_
 
 -- 호수. 정렬은 sort_order, name_normalized 순이다 (제품 안에서 name_normalized 가 유니크라 순서가 하나로 정해진다).
 -- 색상 세 컬럼은 모두 NULL(색상 없음)이거나 모두 값이 있어야 하고, HEX 는 #RRGGBB 대문자만 허용한다.
--- color_source 값 범위는 미정이다. TODO
+-- color_source 는 ColorSource enum 값(SOURCE_VALUE, SWATCH_CHIP, PRODUCT_PHOTO, WEB_PHOTO, LLM_ESTIMATE, SAMPLE)만 저장한다.
 CREATE TABLE product_shades (
     id              uuid                        NOT NULL,
     product_id      uuid                        NOT NULL,

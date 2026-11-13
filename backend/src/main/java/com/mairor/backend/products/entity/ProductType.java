@@ -12,8 +12,8 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 /**
- * 카테고리별 세부 종류. 값은 시드({@code db/seed/product-categories.sql})로만 넣는다. 코드명은 기능명세 POUCH-004 라벨을 옮긴
- * 초안이다. TODO(확인 필요 2): 종류 코드명 확정.
+ * 카테고리별 세부 종류. 값은 시드({@code db/seed/product-categories.sql})로만 넣으며, 코드는 FE 파우치 계약과 추천 매칭의 기준값이므로
+ * 변경하지 않는다.
  *
  * <p>{@value #CATEGORY_CODE_UNIQUE}는 제품의 (카테고리, 종류) 복합 FK가 참조하는 키다.
  */

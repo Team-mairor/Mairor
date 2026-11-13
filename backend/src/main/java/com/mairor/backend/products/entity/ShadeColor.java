@@ -12,8 +12,8 @@ import java.util.regex.Pattern;
  *
  * <p>HEX 는 항상 {@code #RRGGBB} 대문자로 저장한다. 소문자 입력은 여기서 대문자로 바꾸고, DB CHECK 는 대문자만 허용한다.
  *
- * <p>{@code source}는 카탈로그 색상을 어디서 얻었는지 적는 내부 값이다. 값 범위는 미정이고 API 응답에서는 {@code CATALOG}로 내보낸다. TODO:
- * 색상 출처 값 범위 확정.
+ * <p>{@code source}는 {@link ColorSource} enum 값으로 저장하는 내부 색상 출처다. API 응답에서는 내부 출처를 감추고 {@code
+ * CATALOG}로 내보낸다.
  */
 @Embeddable
 public class ShadeColor {

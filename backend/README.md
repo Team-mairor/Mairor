@@ -312,7 +312,7 @@ Google 계정으로 로그인·가입한다(S15P31A306-208). 로그인 시작과
 
 ## 비공개 사진 저장 기반 (S15P31A306-396)
 
-파우치·매칭·얼굴 등록의 구현 범위와 가이드 실행·리포트 후속 작업은 [BE 구현 현황](docs/implementation-status.md)에서 확인한다. 구현·MR·배포·실제 S3 검증은 각각 별도로 기록한다.
+파우치·매칭·얼굴 등록·가이드 실행·리포트의 코드 구현 범위는 [BE 구현 현황](docs/implementation-status.md)에서 확인한다. 구현·MR·배포·실제 S3 검증은 각각 별도로 기록한다.
 
 Swagger 확인·실패 응답·운영 DB 사전 적용 절차는 [얼굴 등록 API 확인·배포 인계](docs/face-registration-operations.md)를 따른다.
 
@@ -360,8 +360,8 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
-| 실행·단계 스냅샷 및 실행/얼굴/사진 소유권 FK | S15P31A306-395 | **운영 DB는 2026-11-11 적용 및 검증 완료. 재실행하지 않는다.** 다른 기존 DB에 배포할 때는 396이 적용되어 `photos`, `face_registrations`, `guide_matches`가 있고 `guide_executions`, `execution_steps`, `history_records`가 없는지 `to_regclass`로 확인한 뒤 MR 머지·배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/395-guide-executions.sql`을 1회 실행한다. 새 테이블·기존 테이블 유일 제약·FK를 한 트랜잭션으로 추가하며 적용 후 세 테이블과 네 제약의 존재/검증 상태를 확인한다. 사전 확인은 아래 실행 모델 항목 참고. |
-| 사진 메타데이터·얼굴 등록 테이블 | S15P31A306-396 | **MR 머지·배포 전** `users`·`videos`·`guides`가 있는 DB에서 `SELECT to_regclass('public.photos'), to_regclass('public.face_registrations');`가 모두 NULL인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/396-face-registrations.sql`. 파일은 한 트랜잭션에서 photos → face_registrations → 인덱스 순서로 생성한다. 새 테이블뿐이므로 기존 데이터 위반 행이나 변환은 없고, 이미 존재하면 재적용하지 않는다. 실행 테이블 FK는 395에서 추가한다. |
+| 실행·단계 스냅샷 및 실행/얼굴/사진 소유권 FK | S15P31A306-395 | **운영 DB는 2026-11-11 적용 및 검증 완료. 재실행하지 않는다.** 다른 기존 DB에 배포할 때는 396이 적용되어 `photos`, `face_registrations`, `guide_matches`가 있고 `guide_executions`, `execution_steps`, `history_records`가 없는지 `to_regclass`로 확인한 뒤 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/395-guide-executions.sql`을 1회 실행한다. 새 테이블·기존 테이블 유일 제약·FK를 한 트랜잭션으로 추가하며 적용 후 세 테이블과 네 제약의 존재/검증 상태를 확인한다. 사전 확인은 아래 실행 모델 항목 참고. |
+| 사진 메타데이터·얼굴 등록 테이블 | S15P31A306-396 | 운영 DB에서 `photos`·`face_registrations` 및 주요 제약을 확인했다. 다른 DB는 `users`·`videos`·`guides`가 있는지 확인하고, 두 테이블이 모두 없을 때만 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/396-face-registrations.sql`을 1회 실행한다. 파일은 한 트랜잭션에서 photos → face_registrations → 인덱스 순서로 생성한다. 이미 존재하면 재적용하지 않는다. 실행 테이블 FK는 395에서 추가한다. |
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
 | 개인 파우치·회원별 버전 기반 | S15P31A306-211 | 먼저 `ALTER TABLE users ADD COLUMN pouch_version bigint NOT NULL DEFAULT 0;` 다음 `pouch.sql` 전체. 기존 회원도 버전 0으로 시작한다. 기존 카탈로그 테이블은 변경·재적재하지 않는다 |
 | 호수별 색 칸: `products.image_url`·`sale_status`, `product_shades.source_option_id`, 테이블 `product_shade_colors`·`product_shade_option_aliases`, 수집 출처 유니크 인덱스 2개 | S15P31A306-294 | `psql -f db/upgrade/294-product-shade-colors.sql` (컬럼·테이블·인덱스 추가뿐이라 옛 버전 앱과 함께 돌아도 깨지지 않는다. 옛 `product_shades.color_*` 는 지우지 않는다). 적용 전에 ① `SELECT source, source_product_id, count(*) FROM products WHERE source IS NOT NULL GROUP BY 1, 2 HAVING count(*) > 1;` 가 0건인지(있으면 새 유니크 인덱스가 만들어지지 않아 파일 전체가 롤백된다) ② `SELECT count(*) FROM product_shades WHERE color_hex IS NOT NULL;` 로 옮길 대표 색이 있는지 센다. ②가 0 이 아니면 **같은 시점에** `psql -f db/upgrade/294-product-shade-colors-data.sql` 로 호수마다 색 칸 1개로 옮긴다(다시 적용해도 된다). 옮기지 않으면 그 호수의 `colors` 는 빈 목록으로 나온다 |
@@ -370,10 +370,10 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | 화장품 카탈로그 테이블 5개 | S15P31A306-209 | `products.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) 다음 `db/seed/product-categories.sql` |
 | 영상·분석 작업·가이드·LLM 호출 테이블 4개 | S15P31A306-307 | `analysis.sql` 전체 (새 테이블뿐이라 기존 DB 에도 그대로 적용된다) |
 | `analysis_job_requests` 테이블 (회원 분석 요청 기록: 합류한 회원의 조회 권한, 회원별 일일 한도) | S15P31A306-362 | `psql -f db/upgrade/362-analysis-job-requests.sql` (새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다) |
-| `video_selections` 테이블 (회원 영상 선택 기록: 인기 Top 4) | S15P31A306-403 | **MR 머지·배포 전** `SELECT to_regclass('public.video_selections');`가 NULL인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/403-video-selections.sql` (새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다. 적용하지 않으면 `validate` 가 `missing table` 로 앱 기동을 막는다) |
-| `execution_steps` 검사 제약 `ck_execution_steps_skipped_photo` 삭제 (제품 없이 넘긴 단계에도 단계 사진 연결) | S15P31A306-400 | **MR 머지·배포 전** `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/400-step-photo-skipped.sql` (제약만 지워 옛 버전 앱과 함께 돌아도 된다. 적용하지 않아도 앱은 뜨지만 건너뛴 단계 사진 저장이 이 제약에 걸려 실패한다) |
-| `guides.reference_version` + `guide_step_product_links` + 제품 색 변경 시 버전 갱신 트리거 | S15P31A306-324 | `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/324-guide-step-product-links.sql` (**MR 병합 및 배포 전에 적용**. 파일은 `guides.reference_version` 추가 → `guide_step_product_links` 테이블·인덱스·제약 생성 → 색 변경 트리거 순서로 실행한다. 기존 가이드 버전은 0으로 시작한다.) |
-| `guide_matches` 추천 결과·색상·파우치 스냅샷 및 생성 버전 | S15P31A306-325 | `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/325-guide-matches.sql` (**MR 병합 및 배포 전에 적용**. 신규 테이블이며 기존 데이터 변환은 없다. `users`·`guides`가 먼저 있어야 하며, 같은 배포에서 324를 적용할 때는 324 후 이 파일을 실행한다.) |
+| `video_selections` 테이블 (회원 영상 선택 기록: 인기 Top 4) | S15P31A306-403 | 대상 DB에 테이블이 없는지 `SELECT to_regclass('public.video_selections');`로 확인한 뒤 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/403-video-selections.sql` (새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다. 적용하지 않으면 `validate` 가 `missing table` 로 앱 기동을 막는다) |
+| `execution_steps` 검사 제약 `ck_execution_steps_skipped_photo` 삭제 (제품 없이 넘긴 단계에도 단계 사진 연결) | S15P31A306-400 | 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/400-step-photo-skipped.sql` (제약만 지워 옛 버전 앱과 함께 돌아도 된다. 적용하지 않아도 앱은 뜨지만 건너뛴 단계 사진 저장이 이 제약에 걸려 실패한다) |
+| `guides.reference_version` + `guide_step_product_links` + 제품 색 변경 시 버전 갱신 트리거 | S15P31A306-324 | 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/324-guide-step-product-links.sql` (파일은 `guides.reference_version` 추가 → `guide_step_product_links` 테이블·인덱스·제약 생성 → 색 변경 트리거 순서로 실행한다. 기존 가이드 버전은 0으로 시작한다.) |
+| `guide_matches` 추천 결과·색상·파우치 스냅샷 및 생성 버전 | S15P31A306-325 | 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/325-guide-matches.sql` (신규 테이블이며 기존 데이터 변환은 없다. `users`·`guides`가 먼저 있어야 하며, 같은 배포에서 324를 적용할 때는 324 후 이 파일을 실행한다.) |
 | `analysis_jobs.processor_lease_until` · `processor_claims` · `processor_request_key` (영상 전처리 노트북 임대) | S15P31A306-357 | `psql -f db/upgrade/357-analysis-jobs-processor.sql` (칸 추가뿐이라 옛 버전 앱과 함께 돌아도 된다) |
 | `analysis_jobs.ai_requested_at` (AI 에 맡긴 시각, 콜백 시간 초과 기준) · `analysis_jobs.ai_progress` (AI 진행 숫자) | S15P31A306-296 | `ALTER TABLE analysis_jobs ADD COLUMN ai_requested_at timestamp(6) with time zone, ADD COLUMN ai_progress jsonb;` 다음 이미 AI 콜백을 기다리던 행의 기준을 채운다: `UPDATE analysis_jobs SET ai_requested_at = updated_at WHERE status = 'RUNNING' AND ai_job_id IS NOT NULL AND ai_requested_at IS NULL;` (둘 다 NULL 허용이라 옛 코드와 함께 돌아도 된다. 그 사이 옛 코드가 맡긴 작업은 첫 진행 알림 때 채워진다) |
 
@@ -424,7 +424,9 @@ SELECT EXISTS (
 - **정규화 컬럼**(`*_normalized`)은 `CatalogTextNormalizer` 로 만든 비교용 키다(NFC → 공백 축약 → 앞뒤 공백 제거 → 소문자화). DB 트리거가 없으므로 SQL 로 직접 넣는 데이터도 같은 규칙으로 계산한 값을 넣는다. 시드 값이 규칙과 어긋나면 `ProductSeedSqlTest` 가 실패한다. 크롤링 적재는 엔티티(`Product`·`ProductShade`)를 거쳐 저장한다.
 - **DB 가 막는 규칙**: 카테고리-종류 불일치(복합 FK `fk_products_category_type`), 제품·호수 중복(정규화 키 유니크), 색상 세 컬럼 일부만 채움, 소문자·잘못된 HEX. 색 칸은 호수 안 순서 중복(`DEFERRABLE` 이라 제약 검사·커밋 시점에 확인), 이름과 이름 근거 불일치, 색 네 컬럼 일부만 채움, 모르는 출처·승인 상태. 수집 출처의 같은 상품 번호·같은 옵션 값 중복(부분 유니크 인덱스, JPA 로 표현할 수 없어 SQL 에만 있다).
 - **앱에서만 막는 규칙**: 호수 선택이 없는 카테고리(SKINCARE·FRAGRANCE·TOOL)의 제품에 호수를 연결하지 않는다(`Product.addShade`). SQL 로 직접 넣으면 막지 못한다. 사진·모델·사이트 색값 출처의 색은 `color_estimated=true` 이다(`ProductShadeColor.assignColor`). 같은 제품의 다른 호수와 옵션 값 별칭이 겹치는지는 적재 코드가 확인한다.
-- 종류 코드명과 호환 부위 값은 확정 전이다(`TODO(확인 필요 2)`). 호환 부위는 비워 두며 API 는 빈 목록을 응답한다.
+- 카테고리·종류 코드는 현재 FE 파우치 등록·일러스트와 BE 추천 매칭이 함께 쓰는 기준값이다. 코드는 변경하지 않고 라벨·표시 순서만 조정한다. `FRAGRANCE` 는 `PERFUME` 한 종류를 제공한다.
+- 현재 시드의 `compatibleParts`는 빈 목록이다. API는 테이블 값을 응답하지만 추천 매칭은 이를 사용하지 않고, 가이드 단계별 허용 종류를 `PouchCompatibilityPolicy`가 별도로 관리한다.
+- 색상 출처 내부값은 `ColorSource` enum으로 제한한다. 카탈로그 API 는 내부 출처 대신 `CATALOG`를 응답한다.
 
 ## 분석 작업 (운영 명령 · worker)
 

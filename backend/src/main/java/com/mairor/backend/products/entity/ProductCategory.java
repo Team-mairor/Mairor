@@ -16,8 +16,8 @@ import java.util.Set;
  * 화장품 카테고리 9개(BASE·EYE·BROW·CHEEK·LIP·SKINCARE·NAIL·FRAGRANCE·TOOL). 값은 시드({@code
  * db/seed/product-categories.sql})로만 넣는다.
  *
- * <p>호환 부위({@code product_category_parts})는 명세상 값이 정해지지 않아 비워 둔다. TODO(확인 필요 2): 부위 코드가 정해지면 시드에
- * 추가한다.
+ * <p>{@code product_category_parts}는 카테고리 조회 응답의 호환 부위 값으로 유지하지만 현재 시드는 비어 있다. 가이드 단계별 대체 가능 종류는
+ * {@code PouchCompatibilityPolicy}에서 별도로 관리한다.
  */
 @Entity
 @Table(name = "product_categories")

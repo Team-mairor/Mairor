@@ -7,7 +7,7 @@
 - POST /api/v1/users/me/executions: 최신 매칭·제품 선택·얼굴 등록을 검증하고 실행/스냅샷을 생성한다.
 - GET /api/v1/users/me/executions/{executionId}: 실행 당시 스냅샷과 현재 유효한 단계 사진 메타데이터를 반환한다.
 - 같은 세션의 새 실행 시작에 의한 이전 실행 포기·사진 삭제 예약도 생성 트랜잭션에 포함한다. 별도 중도 종료 API와 세션 종료 훅도 제공한다.
-- 생성·조회·사진 동의·단계 사진 업로드·사진 바이너리 조회·완료·중도 종료 API, 세션 종료 정리 훅과 유실 세션 복구 스케줄러를 구현했다. 남은 범위는 별도 담당의 리포트 목록·상세·삭제 API다.
+- 생성·조회·사진 동의·단계 사진 업로드·사진 바이너리 조회·완료·중도 종료 API, 세션 종료 정리 훅과 유실 세션 복구 스케줄러를 구현했다. 리포트 목록·상세·삭제도 구현되어 있으며 [리포트 컨트롤러](../src/main/java/com/mairor/backend/history/controller/HistoryRecordController.java)와 [리포트 API 연동 계약](report-api-integration-request.md)을 참고한다.
 
 ## FE 요청 순서
 
@@ -39,7 +39,7 @@ POST 최초 성공은 201, GET은 200과 Cache-Control:no-store다. Execution의
 | 필드 | 의미 |
 |---|---|
 | executionId / guideId / guideVersion / matchId / faceRegistrationId | 확정된 실행과 원본 식별자 |
-| status | 생성 시 IN_PROGRESS. 완료/포기 상태 전이는 각 후속 경로에서 처리 |
+| status | 생성 시 IN_PROGRESS. completion API가 COMPLETED, abandonment API와 세션 종료 처리가 ABANDONED로 전환 |
 | photoConsent / consentPolicyVersion | 생성 시 모두 null. null은 미동의 |
 | createdAt / recordId | 생성 시각 / 생성 시 null |
 | steps | GUIDE 단계만 order·stepId 순으로 확정한 ExecutionStep 목록 |
@@ -69,7 +69,7 @@ POST 최초 성공은 201, GET은 200과 Cache-Control:no-store다. Execution의
 | COMPLETED | 본인 계정 | 새 실행으로 완료 기록/사진을 정리하지 않음 |
 | ABANDONED | 404 | 단계·얼굴 사진 읽기 차단 및 재시도 가능한 삭제 예약 |
 
-조회는 활성 화면의 응답 유실 확인용이며 새로고침·다른 세션에서 이어 하기 기능을 추가하지 않는다. 완료 기록 실제 생성과 리포트 삭제 시 조회 수명은 리포트 저장 계약에 연결해야 한다.
+조회는 활성 화면의 응답 유실 확인용이며 새로고침·다른 세션에서 이어 하기 기능을 제공하지 않는다. 완료 기록은 completion API가 생성하고, 리포트 삭제는 완료 사진·단계 사진·보관 얼굴 사진 정리와 함께 처리한다.
 
 ## 실행 완료와 리포트 기록
 
@@ -104,7 +104,7 @@ GuideExecutionApiTest는 실제 PostgreSQL·JDBC 로그인 세션으로 정상/�
 
 ## 동의·단계 사진 API
 
-후속 사진 단계는 다음 API를 구현한다.
+다음 API를 제공한다.
 
 - `PATCH /api/v1/users/me/executions/{executionId}/photo-consent`: 진행 중인 본인 원래 세션에서 `enabled`를 저장한다. 정책 버전은 `v1`, 서버 시각을 기록하며, 동의하지 않으면 단계 사진 업로드를 거절한다.
 - `PUT /api/v1/users/me/executions/{executionId}/steps/{stepId}/photo`: multipart `image`를 기존 PhotoFileValidator/PhotoUploadService로 검사·저장한다. 실행/단계 검증을 파일 업로드 전후에 다시 하고, 성공적으로 새 사진을 연결한 다음 기존 사진 삭제를 예약한다. 업로드·연결 실패는 이전 사진 참조를 보존한다.

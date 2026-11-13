@@ -2,6 +2,8 @@
 
 확인일: 2026-11-10. 대상: [S15P31A306-395](https://ssafy.atlassian.net/browse/S15P31A306-395). 부모: [GUIDE 에픽 156](https://ssafy.atlassian.net/browse/S15P31A306-156).
 
+> 이 문서는 2026-11-10 착수 시점의 조사 기록이다. 당시의 브랜치·master 상태와 미구현 표는 현재 상태가 아니다. 현재 실행·사진·완료 API는 [실행 API 구현 문서](guide-execution-api.md), 리포트 API는 [리포트 연동 계약](report-api-integration-request.md) 및 코드에서 확인한다.
+
 이번 작업은 채팅에서 정한 **1단계: 브랜치·선행 계약 확인**이다. 실행 모델·SQL 구현은 채팅의 2단계이며 아직 시작하지 않았다. 로컬 `plans/guide-execution-395.md`의 구현 1단계(모델·SQL)와 번호를 구분한다.
 
 ## 점검 결과
@@ -16,7 +18,7 @@
 | 396과 master의 공통 조상 | `ba14326d1afc6c14341f2e5edc6140a34b8e407e` |
 | 396 통합 여부 | master에 camera/photos 구현이 없고 396 고유 커밋 7개가 남아 있음. 확인 시점 master에는 미반영 |
 | 최신 master의 추가 변경 | `57934bd`: 실제 가이드 제품 체크의 FE 매칭 API 연결 |
-| 실행·기록 서버 구현 | 최신 master의 executions/history는 package-info만 있음 |
+| 당시 실행·기록 서버 구현 | 확인 시점 master의 executions/history는 package-info만 있었음. 이후 395 실행·리포트 API 구현 완료 |
 | 기존 변경 보존 | implementation-status.md 변경은 396 브랜치에서 만든 이름 있는 stash에 유지. 이번 작업에서 적용/삭제하지 않음 |
 
 위 SHA는 확인 시점의 기록이며 다음 착수 때 다시 확인한다. Jira의 상태만으로 코드 머지·배포 여부를 판단하지 않는다. MR !146의 리뷰/파이프라인/운영 배포 상태는 이 점검에서 직접 확인하지 않았다.
