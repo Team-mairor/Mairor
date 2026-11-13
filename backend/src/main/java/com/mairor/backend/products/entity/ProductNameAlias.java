@@ -8,8 +8,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * 회원이 쓴 제품 이름의 별칭(S15P31A306-517). (소분류, 정규화 브랜드, 공백 뺀 제품명) → 제품. 행은 네이티브 쿼리로만 넣는다({@code
- * ProductNameAliasRepository#insertIfAbsent}). 검색은 정확 일치·공백 무시 일치가 없을 때 이 표를 본다.
+ * 회원이 쓴 제품 이름의 별칭(S15P31A306-517). (소분류, 정규화 브랜드, 공백 뺀 제품명) → 제품. 시리즈별 상품으로 나뉜 제품은 같은 이름에 상품이 여럿
+ * 연결될 수 있다(S15P31A306-518). 행은 네이티브 쿼리로만 넣는다({@code ProductNameAliasRepository#insertIfAbsent}).
+ * 검색은 정확 일치·공백 무시 일치가 없을 때 이 표를 본다.
  */
 @Entity
 @Table(name = "product_name_aliases")

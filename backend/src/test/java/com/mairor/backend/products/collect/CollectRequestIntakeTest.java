@@ -99,7 +99,7 @@ class CollectRequestIntakeTest {
         .containsEntry("name", "쥬시 래스팅 틴트")
         .containsEntry("shade_name", "01 니어")
         .containsEntry("type_code", TYPE);
-    assertThat((String) request.get("request_key")).endsWith("|쥬시래스팅틴트");
+    assertThat((String) request.get("request_key")).endsWith("|쥬시래스팅틴트|01니어");
     Map<String, Object> requester =
         jdbc.queryForMap(
             "select u.*, p.updated_at as item_updated from catalog_collect_request_users u"
@@ -121,6 +121,15 @@ class CollectRequestIntakeTest {
                 Long.class,
                 request.get("id")))
         .isEqualTo(2);
+  }
+
+  @Test
+  void theSameProductWithAnotherShadeIsASeparateRequest() throws Exception {
+    register(member(), TYPE, "블러 퍼지 틴트", "08 커런트 잼");
+    register(member(), TYPE, "블러퍼지 틴트", "08커런트 잼");
+    register(member(), TYPE, "블러 퍼지 틴트", "01 오리지널");
+
+    assertThat(requestCount()).isEqualTo(2);
   }
 
   @Test
@@ -156,7 +165,7 @@ class CollectRequestIntakeTest {
   }
 
   @Test
-  void aMissingShadeOfAKnownProductIsCollectedAgainFromItsPage() throws Exception {
+  void aMissingShadeOfAKnownProductIsSearchedAgainByNameAndShade() throws Exception {
     UUID product = product("쥬시 래스팅 틴트", "https://shop.example/product/1");
     jdbc.update(
         "insert into product_shades (id, product_id, name, name_normalized, sort_order,"
@@ -166,11 +175,13 @@ class CollectRequestIntakeTest {
 
     register(member(), TYPE, "쥬시 래스팅 틴트", "02 레드");
 
+    // 한 제품이 시리즈별 상품으로 나뉘어 있으면 다른 시리즈에 그 호수가 있을 수 있어서 상품 주소가 아니라 이름과 호수로 찾는다
     assertThat(onlyRequest())
         .containsEntry("status", "QUEUED")
-        .containsEntry("name", null)
-        .containsEntry("product_url", "https://shop.example/product/1")
-        .containsEntry("request_key", "URL|https://shop.example/product/1");
+        .containsEntry("name", "쥬시 래스팅 틴트")
+        .containsEntry("product_url", null)
+        .containsEntry("shade_name", "02 레드");
+    assertThat((String) onlyRequest().get("request_key")).endsWith("|쥬시래스팅틴트|02레드");
   }
 
   @Test

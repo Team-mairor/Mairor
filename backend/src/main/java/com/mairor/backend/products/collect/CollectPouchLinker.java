@@ -98,6 +98,14 @@ public class CollectPouchLinker {
 
     List<Product> candidates =
         completion.productsByName(item.getType(), item.getBrand(), item.getName());
+    if (candidates.size() > 1) {
+      // 시리즈별 상품으로 나뉜 제품이면 회원이 적은 호수가 있는 상품으로 좁힌다
+      List<Product> holders =
+          completion.narrowByShade(candidates, item.getCategory(), item.getShadeName());
+      if (holders.size() == 1) {
+        candidates = holders;
+      }
+    }
     if (candidates.size() != 1) {
       return candidates.isEmpty() ? "PRODUCT_NOT_FOUND" : CollectCompletion.MULTIPLE_CANDIDATES;
     }

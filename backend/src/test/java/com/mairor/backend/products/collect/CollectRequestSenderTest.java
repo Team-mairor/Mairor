@@ -183,6 +183,7 @@ class CollectRequestSenderTest {
             null,
             "https://romand.co.kr/product/1",
             "LIP_TINT",
+            "08 커런트 잼",
             Instant.parse("2026-11-12T00:00:00Z"));
 
     sqs.send(message);
@@ -196,6 +197,7 @@ class CollectRequestSenderTest {
     assertThat(body.get("jobId").asString()).isEqualTo(message.jobId());
     assertThat(body.get("name").isNull()).isTrue();
     assertThat(body.get("url").asString()).isEqualTo("https://romand.co.kr/product/1");
+    assertThat(body.get("shadeName").asString()).isEqualTo("08 커런트 잼");
     assertThat(body.get("requestedAt").asString()).isEqualTo("2026-11-12T00:00:00Z");
   }
 
@@ -207,7 +209,8 @@ class CollectRequestSenderTest {
     SqsCollectJobQueue sqs = new SqsCollectJobQueue(client, "https://sqs.example/q", json);
 
     org.assertj.core.api.Assertions.assertThatThrownBy(
-            () -> sqs.send(new CollectJobMessage(1, "a", "b", "c", null, null, Instant.EPOCH)))
+            () ->
+                sqs.send(new CollectJobMessage(1, "a", "b", "c", null, null, null, Instant.EPOCH)))
         .isInstanceOf(CollectJobQueue.CollectQueueException.class)
         .hasMessageContaining("sqs.example");
   }

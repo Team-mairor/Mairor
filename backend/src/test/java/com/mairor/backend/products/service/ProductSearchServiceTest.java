@@ -172,6 +172,21 @@ class ProductSearchServiceTest {
   }
 
   @Test
+  void aSiteNameThatStartsWithTheBrandIsFoundByTheNameAloneAndTheOtherWayRound() {
+    Product prefixed =
+        new Product(em.getReference(ProductType.class, "LIP_TINT"), BRAND, BRAND + " Juicy Tint");
+    em.persist(prefixed);
+    em.flush();
+
+    assertThat(searchTint(BRAND, "Juicy Tint"))
+        .extracting(ProductResponse::productId)
+        .containsExactly(prefixed.getId().toString());
+    assertThat(searchTint(BRAND, BRAND + " " + NAME))
+        .extracting(ProductResponse::productId)
+        .containsExactly(tint.getId().toString());
+  }
+
+  @Test
   void ambiguousCompactMatchesReturnNoProducts() {
     em.persist(new Product(em.getReference(ProductType.class, "LIP_TINT"), BRAND, "WaterGelTint"));
     em.flush();
@@ -358,12 +373,12 @@ class ProductSearchServiceTest {
   }
 
   @Test
-  void searchWithoutAMatchRunsFourQueries() {
+  void searchWithoutAMatchRunsFiveQueries() {
     long queries =
         countQueries(() -> searchTint(BRAND, "Other Tint"), items -> assertThat(items).isEmpty());
 
-    // 종류·정확 일치·공백 무시 일치·별칭(S15P31A306-517)
-    assertThat(queries).isEqualTo(4);
+    // 종류·정확 일치·공백 무시 일치·브랜드를 붙인 이름·별칭(S15P31A306-517)
+    assertThat(queries).isEqualTo(5);
   }
 
   @Test

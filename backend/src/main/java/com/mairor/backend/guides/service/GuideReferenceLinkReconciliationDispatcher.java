@@ -11,7 +11,10 @@ import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 
-/** 커밋 후 자동 처리와 운영자 재실행을 같은 비동기 경로로 보낸다. */
+/**
+ * 커밋 후 자동 처리와 운영자 재실행을 같은 비동기 경로로 보낸다. 대조가 끝나면 카탈로그에 부족한 제품·호수·색을 수집 요청으로 보낸다 (S15P31A306-518). 수집
+ * 요청이 실패해도 대조 결과는 그대로다.
+ */
 @Service
 public class GuideReferenceLinkReconciliationDispatcher {
 
@@ -21,14 +24,17 @@ public class GuideReferenceLinkReconciliationDispatcher {
   private final TaskExecutor executor;
   private final GuideRepository guides;
   private final GuideStepProductLinkReconciler reconciler;
+  private final GuideCatalogGapCollector gapCollector;
 
   GuideReferenceLinkReconciliationDispatcher(
       @Qualifier("guideReferenceTaskExecutor") TaskExecutor executor,
       GuideRepository guides,
-      GuideStepProductLinkReconciler reconciler) {
+      GuideStepProductLinkReconciler reconciler,
+      GuideCatalogGapCollector gapCollector) {
     this.executor = executor;
     this.guides = guides;
     this.reconciler = reconciler;
+    this.gapCollector = gapCollector;
   }
 
   /** AI 콜백 뒤 예약 실패는 이미 커밋된 분석 응답에 영향을 주지 않는다. */
@@ -57,6 +63,12 @@ public class GuideReferenceLinkReconciliationDispatcher {
               log.info("가이드 원본 제품 대조 완료 guideId={} changedSteps={}", guideId, changed);
             } catch (RuntimeException e) {
               log.error("가이드 원본 제품 대조 실패 guideId={}", guideId, e);
+              return;
+            }
+            try {
+              gapCollector.collect(guideId);
+            } catch (RuntimeException e) {
+              log.error("가이드 부족분 수집 요청 실패(대조 결과는 그대로) guideId={}", guideId, e);
             }
           });
     } catch (TaskRejectedException e) {

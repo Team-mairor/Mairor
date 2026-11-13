@@ -6,6 +6,7 @@ import com.mairor.backend.products.dto.request.CollectJobResultRequest;
 import com.mairor.backend.products.dto.request.CollectJobResultRequest.Collected;
 import com.mairor.backend.products.dto.request.CollectJobResultRequest.Status;
 import com.mairor.backend.products.entity.CatalogCollectRequest;
+import com.mairor.backend.products.entity.CollectGap;
 import com.mairor.backend.products.entity.CollectRequestStatus;
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.repository.CatalogCollectRequestRepository;
@@ -137,14 +138,17 @@ public class CollectResultService {
   }
 
   private Outcome judgeCollected(CatalogCollectRequest request, List<Collected> collected) {
+    if (request.getGap() != null) {
+      return judgeGuideCollected(request, collected);
+    }
     boolean byName = request.getName() != null && request.getTypeCode() != null;
     List<Product> candidates =
         byName
             ? completion.productsByName(
                 request.getTypeCode(), request.getBrand(), request.getName())
             : productsFrom(request, collected);
-    if (byName && candidates.isEmpty()) {
-      candidates = rememberCollectedName(request, collected);
+    if (byName) {
+      candidates = withCollectedSeries(request, candidates, collected);
     }
     CollectCompletion.Judgment judgment =
         completion.judge(candidates, request.getCategoryCode(), request.getShadeName());
@@ -155,29 +159,61 @@ public class CollectResultService {
   }
 
   /**
-   * 회원이 쓴 이름으로는 못 찾았지만 워커가 그 브랜드 공식 홈에서 제품 하나를 확실히 찾아 적재했으면, 회원이 쓴 이름을 그 제품의 별칭으로 남긴다. 워커가 후보를 여럿
-   * 수집했거나(이름만으로 하나를 고르지 못함) 그 제품의 소분류가 요청과 다르면 남기지 않는다. 이후 검색·자동 연결이 이 별칭으로 같은 제품을 찾는다.
+   * 회원이 쓴 이름(또는 영상의 이름)으로 찾은 제품들에 이번에 수집한 상품을 더한다.
+   *
+   * <p>수집한 상품이 하나이고 요청과 같은 종류(영상 요청은 같은 카테고리)이며 아직 후보에 없을 때, 후보가 비었거나 후보 중 요청한 호수가 있는 상품이 없으면(이름이
+   * 같은 다른 시리즈를 수집한 경우) 그 상품을 이 이름의 별칭으로 남기고 후보에 더한다. 후보에 호수가 있는 상품이 이미 있으면 더하지 않는다. 워커가 후보를 여럿
+   * 수집했으면 이름만으로 하나를 고를 수 없어 더하지 않는다.
    */
-  private List<Product> rememberCollectedName(
-      CatalogCollectRequest request, List<Collected> collected) {
+  private List<Product> withCollectedSeries(
+      CatalogCollectRequest request, List<Product> candidates, List<Collected> collected) {
     if (collected.size() != 1) {
-      return List.of();
+      return candidates;
     }
     Collected only = collected.getFirst();
     Product product =
         products.findBySourceAndSourceProductId(only.source(), only.sourceProductId()).orElse(null);
-    if (product == null || !request.getTypeCode().equals(product.getType().getCode())) {
-      return List.of();
+    if (product == null
+        || !sameKind(request, product)
+        || candidates.stream().anyMatch(c -> c.getId().equals(product.getId()))) {
+      return candidates;
+    }
+    if (!candidates.isEmpty()
+        && completion.anyHasShade(candidates, request.getCategoryCode(), request.getShadeName())) {
+      return candidates;
     }
     aliases.remember(
-        request.getTypeCode(),
+        product.getType().getCode(),
         request.getBrand(),
         request.getName(),
         product.getId(),
         request.getId(),
         clock.instant());
     log.info("수집 요청 이름을 제품 별칭으로 남김: request={} product={}", request.getId(), product.getId());
-    return List.of(product);
+    List<Product> joined = new ArrayList<>(candidates);
+    joined.add(product);
+    return joined;
+  }
+
+  /** 회원 요청은 같은 소분류, 영상 요청(소분류 모름)은 같은 카테고리의 제품이어야 별칭으로 잇는다. */
+  private static boolean sameKind(CatalogCollectRequest request, Product product) {
+    return request.getTypeCode() != null
+        ? request.getTypeCode().equals(product.getType().getCode())
+        : request.getCategoryCode() != null
+            && request.getCategoryCode().equals(product.getCategory().getCode());
+  }
+
+  /** 영상 분석 요청은 부족 유형별 완료 조건으로 판정한다. 제품 없음은 카테고리 단위로 찾고, 못 찾으면 회원 요청처럼 별칭을 남긴다. */
+  private Outcome judgeGuideCollected(CatalogCollectRequest request, List<Collected> collected) {
+    List<Product> candidates = List.of();
+    if (request.getGap() == CollectGap.PRODUCT_MISSING) {
+      candidates =
+          completion.productsInCategory(
+              request.getCategoryCode(), request.getBrand(), request.getName());
+      candidates = withCollectedSeries(request, candidates, collected);
+    }
+    CollectCompletion.Judgment judgment = completion.judgeGuide(request, candidates);
+    return new Outcome(judgment.status(), judgment.reason());
   }
 
   /** 상품 주소 요청: 요청한 주소의 상품을 먼저, 없으면 결과 상품 전부를 출처 번호로 찾는다. */

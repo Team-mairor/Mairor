@@ -37,6 +37,7 @@ class FindResult:
     candidate: Candidate | None = None
     alternatives: tuple[Candidate, ...] = ()
     tried: tuple[str, ...] = ()
+    pool: tuple[Candidate, ...] = ()
 
 
 async def resolve_platform(client: PoliteClient, site: BrandSite) -> Platform:
@@ -48,6 +49,11 @@ async def resolve_platform(client: PoliteClient, site: BrandSite) -> Platform:
         return site.platform
     detected = detect_platform(decode_html(response)).platform
     return detected if detected is not Platform.UNKNOWN else site.platform
+
+
+def site_brands(site: BrandSite) -> tuple[str, ...]:
+    """사이트가 상품명 앞에 붙일 수 있는 브랜드 표기들(브랜드 이름과 별칭)."""
+    return tuple(name for name in (site.brand, *site.aliases) if name)
 
 
 async def _category_candidates(
@@ -63,7 +69,7 @@ async def _category_candidates(
             client, platform, category, max_pages=FIND_MAX_PAGES, rules=site.url_rules
         ):
             found.setdefault(candidate.product_id, candidate)
-        if pick(query, list(found.values())).status is not PickStatus.NOT_FOUND:
+        if pick(query, list(found.values()), site_brands(site)).status is not PickStatus.NOT_FOUND:
             break
     return list(found.values())
 
@@ -89,10 +95,19 @@ async def find_product(client: PoliteClient, site: BrandSite, query: str) -> Fin
         except HttpFailure as error:
             tried.append(f"{name}:{error.code}")
             continue
-        picked = pick(query, candidates)
+        picked = pick(query, candidates, site_brands(site))
         tried.append(f"{name}:{picked.status.value if candidates else 'EMPTY'}")
         if picked.status is PickStatus.FOUND:
-            return FindResult(FindStatus.FOUND, platform, picked.candidate, (), tuple(tried))
+            return FindResult(
+                FindStatus.FOUND, platform, picked.candidate, (), tuple(tried), tuple(candidates)
+            )
         if picked.status is PickStatus.AMBIGUOUS:
-            return FindResult(FindStatus.AMBIGUOUS, platform, None, picked.runners_up, tuple(tried))
+            return FindResult(
+                FindStatus.AMBIGUOUS,
+                platform,
+                None,
+                picked.runners_up,
+                tuple(tried),
+                tuple(candidates),
+            )
     return FindResult(FindStatus.NOT_FOUND, platform, tried=tuple(tried))

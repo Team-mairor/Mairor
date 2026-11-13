@@ -38,6 +38,11 @@ public class CatalogCollectRequest implements Persistable<UUID> {
   public static final String FINISHED_CHECK = "ck_catalog_collect_requests_finished";
   public static final String SENT_CHECK = "ck_catalog_collect_requests_sent";
   public static final String ATTEMPTS_CHECK = "ck_catalog_collect_requests_attempts";
+  public static final String GAP_CHECK = "ck_catalog_collect_requests_gap";
+  public static final String TRIGGER_GAP_CHECK = "ck_catalog_collect_requests_trigger_gap";
+  public static final String TARGET_PRODUCT_FK = "fk_catalog_collect_requests_target_product";
+  public static final String TARGET_SHADE_FK = "fk_catalog_collect_requests_target_shade";
+  public static final String TARGET_COLOR_FK = "fk_catalog_collect_requests_target_color";
 
   public static final int REQUEST_KEY_MAX_LENGTH = 800;
   public static final int BRAND_MAX_LENGTH = 100;
@@ -47,6 +52,7 @@ public class CatalogCollectRequest implements Persistable<UUID> {
   public static final int REASON_MAX_LENGTH = 200;
   public static final int RESULT_STATUS_MAX_LENGTH = 30;
   public static final int RESULT_FILE_MAX_LENGTH = 200;
+  public static final int SLOT_LABEL_MAX_LENGTH = 100;
 
   @Id private UUID id;
 
@@ -98,6 +104,24 @@ public class CatalogCollectRequest implements Persistable<UUID> {
   @Column(name = "import_run_id")
   private UUID importRunId;
 
+  /** 영상 분석 요청(GUIDE)이 채우려는 것. 회원 요청(USER)은 없다. */
+  @Enumerated(EnumType.STRING)
+  @Column(length = 20)
+  private CollectGap gap;
+
+  @Column(name = "target_product_id")
+  private UUID targetProductId;
+
+  @Column(name = "target_shade_id")
+  private UUID targetShadeId;
+
+  @Column(name = "target_color_id")
+  private UUID targetColorId;
+
+  /** 칸 행이 없던 팔레트에서 영상이 적은 칸 이름·번호. 생긴 칸 중 이것과 맞는 칸을 본다. */
+  @Column(name = "target_slot_label", length = SLOT_LABEL_MAX_LENGTH)
+  private String targetSlotLabel;
+
   @Column(name = "finished_at")
   private Instant finishedAt;
 
@@ -129,6 +153,22 @@ public class CatalogCollectRequest implements Persistable<UUID> {
       String name,
       String productUrl,
       String shadeName) {
+    this(trigger, requestKey, categoryCode, typeCode, brand, name, productUrl, shadeName, null);
+    if (trigger == CollectTrigger.GUIDE) {
+      throw new IllegalArgumentException("영상 분석 요청은 forGuide 로 만든다");
+    }
+  }
+
+  private CatalogCollectRequest(
+      CollectTrigger trigger,
+      String requestKey,
+      String categoryCode,
+      String typeCode,
+      String brand,
+      String name,
+      String productUrl,
+      String shadeName,
+      CollectGap gap) {
     if ((name == null) == (productUrl == null)) {
       throw new IllegalArgumentException("name 과 productUrl 중 하나만 준다");
     }
@@ -141,7 +181,52 @@ public class CatalogCollectRequest implements Persistable<UUID> {
     this.name = name == null ? null : require(name, "name", NAME_MAX_LENGTH);
     this.productUrl = productUrl == null ? null : require(productUrl, "productUrl", URL_MAX_LENGTH);
     this.shadeName = optional(shadeName, "shadeName", SHADE_NAME_MAX_LENGTH);
+    this.gap = gap;
     this.status = CollectRequestStatus.QUEUED;
+  }
+
+  /**
+   * 영상 분석 부족분 요청을 만든다(S15P31A306-518).
+   *
+   * @param target 대상 제품·호수·칸과 칸 이름. 제품 없음이면 모두 비어 있다
+   * @throws IllegalArgumentException 제품 없음이 아닌데 대상 제품이 없으면
+   */
+  public static CatalogCollectRequest forGuide(
+      CollectGap gap,
+      String requestKey,
+      String categoryCode,
+      String typeCode,
+      String brand,
+      String name,
+      String productUrl,
+      String shadeName,
+      Target target) {
+    Objects.requireNonNull(gap, "gap");
+    Objects.requireNonNull(target, "target");
+    if (gap != CollectGap.PRODUCT_MISSING && target.productId() == null) {
+      throw new IllegalArgumentException(gap + " 는 대상 제품이 필요하다");
+    }
+    CatalogCollectRequest request =
+        new CatalogCollectRequest(
+            CollectTrigger.GUIDE,
+            requestKey,
+            categoryCode,
+            typeCode,
+            brand,
+            name,
+            productUrl,
+            shadeName,
+            gap);
+    request.targetProductId = target.productId();
+    request.targetShadeId = target.shadeId();
+    request.targetColorId = target.colorId();
+    request.targetSlotLabel = optional(target.slotLabel(), "slotLabel", SLOT_LABEL_MAX_LENGTH);
+    return request;
+  }
+
+  /** 영상 분석 요청의 대상. */
+  public record Target(UUID productId, UUID shadeId, UUID colorId, String slotLabel) {
+    public static final Target NONE = new Target(null, null, null, null);
   }
 
   /** 큐에 보냈다. 다시 보내면 보낸 시각을 새로 적는다(같은 jobId 는 워커가 한 번만 반영한다). */
@@ -282,6 +367,14 @@ public class CatalogCollectRequest implements Persistable<UUID> {
 
   public UUID getImportRunId() {
     return importRunId;
+  }
+
+  public CollectGap getGap() {
+    return gap;
+  }
+
+  public Target getTarget() {
+    return new Target(targetProductId, targetShadeId, targetColorId, targetSlotLabel);
   }
 
   public Instant getFinishedAt() {

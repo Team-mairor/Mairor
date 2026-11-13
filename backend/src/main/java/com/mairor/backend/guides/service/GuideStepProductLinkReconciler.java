@@ -8,6 +8,7 @@ import com.mairor.backend.guides.entity.ReferenceMatchLevel;
 import com.mairor.backend.guides.entity.ReferenceMatchReason;
 import com.mairor.backend.guides.repository.GuideRepository;
 import com.mairor.backend.guides.repository.GuideStepProductLinkRepository;
+import com.mairor.backend.products.collect.CollectCompletion;
 import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.entity.ProductShade;
 import com.mairor.backend.products.entity.ProductShadeColor;
@@ -126,7 +127,7 @@ public class GuideStepProductLinkReconciler {
 
     ProductMatch productMatch;
     try {
-      productMatch = findProduct(categoryCode, brand, name);
+      productMatch = findProduct(categoryCode, brand, name, text(sourceProduct.path("shade")));
     } catch (IllegalArgumentException e) {
       return Candidate.none(ReferenceMatchReason.PRODUCT_DATA_INCOMPLETE);
     }
@@ -151,6 +152,15 @@ public class GuideStepProductLinkReconciler {
         productShades.stream()
             .filter(shade -> normalizedShade.equals(shade.getNameNormalized()))
             .toList();
+    if (shadeMatches.isEmpty()) {
+      // 영상 표기와 띄어쓰기만 다른 호수("02누카다미아" → "02 누카다미아")
+      String compactShade = normalizedShade.replace(" ", "");
+      shadeMatches =
+          productShades.stream()
+              .filter(shade -> shade.getNameNormalized() != null)
+              .filter(shade -> compactShade.equals(shade.getNameNormalized().replace(" ", "")))
+              .toList();
+    }
     if (shadeMatches.size() != 1) {
       return Candidate.of(
           product,
@@ -182,7 +192,12 @@ public class GuideStepProductLinkReconciler {
     return Candidate.of(product, shade, selected, null);
   }
 
-  private ProductMatch findProduct(String categoryCode, String brand, String name) {
+  /**
+   * 브랜드·제품명으로 카탈로그 제품을 찾는다. 후보가 여럿이면 영상의 호수가 있는 상품으로 좁힌다(시리즈별 상품으로 나뉜 제품, S15P31A306-518). 호수가 있는
+   * 상품이 하나일 때만 고르고, 아니면 모호한 것으로 둔다.
+   */
+  private ProductMatch findProduct(
+      String categoryCode, String brand, String name, String shadeName) {
     List<ProductType> allowedTypes =
         types.findByCategoryCodeOrderBySortOrderAscCodeAsc(categoryCode);
     List<String> typeCodes = allowedTypes.stream().map(ProductType::getCode).toList();
@@ -191,20 +206,41 @@ public class GuideStepProductLinkReconciler {
       return ProductMatch.found(exact.getFirst());
     }
     if (exact.size() > 1) {
-      return ProductMatch.none(ReferenceMatchReason.PRODUCT_AMBIGUOUS);
+      return byShade(exact, shadeName);
     }
 
     List<Product> compact = products.findCompact(typeCodes, brand, name);
+    if (compact.isEmpty()) {
+      compact = products.findWithBrandPrefix(typeCodes, brand, name);
+    }
     if (compact.isEmpty()) {
       compact = products.findByAlias(typeCodes, brand, name);
     }
     if (compact.size() == 1) {
       return ProductMatch.found(compact.getFirst());
     }
-    return ProductMatch.none(
-        compact.isEmpty()
-            ? ReferenceMatchReason.PRODUCT_NOT_FOUND
-            : ReferenceMatchReason.PRODUCT_AMBIGUOUS);
+    return compact.isEmpty()
+        ? ProductMatch.none(ReferenceMatchReason.PRODUCT_NOT_FOUND)
+        : byShade(compact, shadeName);
+  }
+
+  /** 후보 상품 중 영상의 호수가 있는 상품이 정확히 하나면 그 상품, 아니면 모호하다. */
+  private ProductMatch byShade(List<Product> candidates, String shadeName) {
+    if (shadeName != null) {
+      List<Product> holders =
+          candidates.stream()
+              .filter(
+                  p ->
+                      CollectCompletion.matchShade(
+                              shades.findByProductIdOrderBySortOrderAscNameNormalizedAsc(p.getId()),
+                              shadeName)
+                          != null)
+              .toList();
+      if (holders.size() == 1) {
+        return ProductMatch.found(holders.getFirst());
+      }
+    }
+    return ProductMatch.none(ReferenceMatchReason.PRODUCT_AMBIGUOUS);
   }
 
   /** palette.color 는 설명 텍스트이므로 사용하지 않는다. 명시적 slotName/slotNumber 만 인정한다. */

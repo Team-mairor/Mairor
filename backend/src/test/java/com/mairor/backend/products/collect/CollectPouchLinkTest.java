@@ -207,6 +207,20 @@ class CollectPouchLinkTest {
   }
 
   @Test
+  void aBrandPrefixedSiteNameAndASpacelessShadeLinkRightAtRegistration() throws Exception {
+    UUID product = sourcedProduct(brand, brand + " 더 쥬시 래스팅 틴트", "88");
+    UUID shade = shade(product, "02 누카다미아", "#AA3344");
+
+    UUID item = register(user, "더 쥬시 래스팅 틴트", "02누카다미아", null);
+
+    assertThat(item(item))
+        .containsEntry("registration_mode", "CATALOG")
+        .containsEntry("product_id", product)
+        .containsEntry("shade_id", shade)
+        .containsEntry("shade_name", "02 누카다미아");
+  }
+
+  @Test
   void severalCollectedProductsLeaveNoAlias() throws Exception {
     UUID item = register(user, "쥬시 래스팅 틴트", "01 니어", null);
     UUID request = sendRequest();
@@ -276,6 +290,55 @@ class CollectPouchLinkTest {
             .header(InternalTokenFilter.HEADER, TOKEN)
             .contentType(MediaType.APPLICATION_JSON)
             .content(body));
+  }
+
+  @Test
+  void aNameSharedBySeriesProductsLinksToTheSeriesThatHasTheShade() throws Exception {
+    UUID original = sourcedProduct(brand, brand + " 블러 퍼지 틴트 #오리지널", "91");
+    UUID black = sourcedProduct(brand, brand + " 블러 퍼지 틴트 #블랙", "92");
+    shade(original, "01 오리지널", "#BE5953");
+    UUID blackShade = shade(black, "03 블랙", "#222222");
+    aliasFor(original);
+    aliasFor(black);
+
+    UUID item = register(user, "블러 퍼지 틴트", "03블랙", null);
+
+    assertThat(item(item))
+        .containsEntry("registration_mode", "CATALOG")
+        .containsEntry("product_id", black)
+        .containsEntry("shade_id", blackShade);
+  }
+
+  @Test
+  void aSecondSeriesCollectedForTheSameNameIsAddedAsAnAliasAndLinked() throws Exception {
+    UUID original = sourcedProduct(brand, brand + " 블러 퍼지 틴트 #오리지널", "91");
+    shade(original, "01 오리지널", "#BE5953");
+    aliasFor(original);
+    UUID item = register(user, "블러 퍼지 틴트", "03 블랙", null);
+    UUID request = sendRequest();
+    UUID black = sourcedProduct(brand, brand + " 블러 퍼지 틴트 #블랙", "92");
+    UUID blackShade = shade(black, "03 블랙", "#222222");
+
+    collectedSource(request, "92").andExpect(jsonPath("$.status").value("RESOLVED"));
+
+    assertThat(item(item)).containsEntry("product_id", black).containsEntry("shade_id", blackShade);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from product_name_aliases where product_id in (?, ?)",
+                Long.class,
+                original,
+                black))
+        .isEqualTo(2);
+  }
+
+  private void aliasFor(UUID product) {
+    jdbc.update(
+        "insert into product_name_aliases (id, type_code, brand_normalized, name_compact,"
+            + " product_id, created_at) values (gen_random_uuid(), ?, lower(?), ?, ?, now())",
+        TYPE,
+        brand,
+        "블러퍼지틴트",
+        product);
   }
 
   private UUID register(UUID member, String name, String shadeName, String colorHex)

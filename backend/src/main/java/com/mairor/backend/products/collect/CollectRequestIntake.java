@@ -6,7 +6,6 @@ import com.mairor.backend.pouch.repository.PouchItemRepository;
 import com.mairor.backend.products.entity.CatalogCollectRequest;
 import com.mairor.backend.products.entity.CollectRequestStatus;
 import com.mairor.backend.products.entity.CollectTrigger;
-import com.mairor.backend.products.entity.Product;
 import com.mairor.backend.products.repository.CatalogCollectRequestRepository;
 import com.mairor.backend.products.repository.CatalogCollectRequestUserRepository;
 import com.mairor.backend.products.support.CatalogTextNormalizer;
@@ -28,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  * <ol>
  *   <li>자동 수집 소분류가 아니거나 회원의 최근 24시간 요청이 한도를 넘으면 만들지 않는다.
  *   <li>카탈로그를 먼저 다시 본다. 그 사이 다른 요청으로 제품이 들어왔으면 수집하지 않고 바로 끝난 요청으로 남긴다. 제품은 있는데 회원이 적은 호수가 없으면 그 제품의
- *       상품 주소로 다시 수집한다.
+ *       이름과 호수로 다시 찾는다(시리즈별 상품이면 호수가 있는 상품을 워커가 고른다).
  *   <li>같은 제품이 최근에 찾은 제품 없음·부족 정보 미해결로 끝났으면 다시 요청하지 않는다.
  *   <li>같은 제품의 진행 중 요청이 있으면 회원만 붙이고, 없으면 새 요청을 QUEUED 로 넣는다. 새 요청은 커밋된 뒤 큐에 보낸다 ({@link
  *       CollectRequestQueued}).
@@ -115,10 +114,10 @@ public class CollectRequestIntake {
     if (judgment == null) {
       return new Target(key, item.getName(), null, null, null);
     }
-    Product product = judgment.product();
-    if (CollectCompletion.SHADE_NOT_FOUND.equals(judgment.reason())
-        && product.getSourceUrl() != null) {
-      return new Target(urlKey(product.getSourceUrl()), null, product.getSourceUrl(), null, null);
+    if (CollectCompletion.SHADE_NOT_FOUND.equals(judgment.reason())) {
+      // 제품은 알지만 적은 호수가 없다. 한 제품이 시리즈별 상품으로 나뉘어 있으면 다른 시리즈에 있을 수 있어서 그 상품 주소가 아니라
+      // 이름과 호수로 다시 찾는다(워커가 호수가 있는 시리즈를 고른다)
+      return new Target(key, item.getName(), null, null, null);
     }
     return new Target(key, item.getName(), null, judgment.status(), judgment.reason());
   }
@@ -138,18 +137,7 @@ public class CollectRequestIntake {
 
   private Intake queueOrJoin(PouchItem item, Target target, Instant now) {
     CatalogCollectRequest draft = newRequest(item, target);
-    int inserted =
-        requests.insertIfNoneOpen(
-            draft.getId(),
-            draft.getTrigger().name(),
-            draft.getRequestKey(),
-            draft.getCategoryCode(),
-            draft.getTypeCode(),
-            draft.getBrand(),
-            draft.getName(),
-            draft.getProductUrl(),
-            draft.getShadeName(),
-            now);
+    int inserted = requests.insertIfNoneOpen(draft, now);
     UUID requestId =
         inserted == 1
             ? draft.getId()
@@ -180,18 +168,20 @@ public class CollectRequestIntake {
     requesters.attach(requestId, item.getUserId(), item.getId(), item.getUpdatedAt(), now);
   }
 
-  /** 이름으로 찾는 요청의 키. 소분류·브랜드·공백을 뺀 제품명이 같으면 같은 제품이다. */
+  /**
+   * 이름으로 찾는 요청의 키. 소분류·브랜드·공백을 뺀 제품명·공백을 뺀 호수명이 같으면 같은 요청이다. 호수가 다르면 다른 요청이다(한 제품이 시리즈별 상품으로 나뉘어
+   * 있으면 호수마다 수집할 상품이 다르다).
+   */
   static String nameKey(PouchItem item) {
+    String shade =
+        item.getShadeName() == null ? "" : CatalogTextNormalizer.compact(item.getShadeName());
     return "NAME|"
         + item.getType()
         + "|"
         + CatalogTextNormalizer.normalize(item.getBrand())
         + "|"
-        + CatalogTextNormalizer.compact(item.getName());
-  }
-
-  /** 상품 주소로 다시 수집하는 요청의 키. */
-  static String urlKey(String url) {
-    return "URL|" + url;
+        + CatalogTextNormalizer.compact(item.getName())
+        + "|"
+        + shade;
   }
 }

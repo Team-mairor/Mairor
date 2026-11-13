@@ -34,11 +34,31 @@ class Pick:
     runners_up: tuple[Candidate, ...] = ()
 
 
-def score(query: str, title: str) -> float:
+def strip_brand(title: str, brands: tuple[str, ...]) -> str:
+    """사이트가 상품명 앞에 붙인 브랜드를 뗀다("롬앤 블러 퍼지 틴트" → "블러 퍼지 틴트").
+
+    브랜드만 있는 이름이거나 브랜드로 시작하지 않으면 그대로 둔다.
+    """
+    title_key = compact_key(title)
+    for brand in brands:
+        key = compact_key(brand)
+        if key and title_key.startswith(key) and len(title_key) > len(key):
+            rest = title.strip()
+            for length in range(1, len(rest) + 1):
+                if compact_key(rest[:length]) == key:
+                    return rest[length:].lstrip(" -_·:").strip() or title
+            break
+    return title
+
+
+def score(query: str, title: str, brands: tuple[str, ...] = ()) -> float:
     """0~1. 이름이 같으면 1, 한쪽이 다른 쪽을 충분히 담고 있으면 길이 비율.
 
-    단어가 많이 겹치면 겹침 비율이다.
+    단어가 많이 겹치면 겹침 비율이다. brands를 주면 요청 이름과 사이트 이름 양쪽 앞의 브랜드를
+    떼고 비교한다.
     """
+    if brands:
+        query, title = strip_brand(query, brands), strip_brand(title, brands)
     query_key, title_key = compact_key(query), compact_key(title)
     if not query_key or not title_key:
         return 0.0
@@ -60,14 +80,14 @@ def score(query: str, title: str) -> float:
     return best
 
 
-def pick(query: str, candidates: list[Candidate]) -> Pick:
+def pick(query: str, candidates: list[Candidate], brands: tuple[str, ...] = ()) -> Pick:
     """가장 비슷한 후보 하나.
 
     기준 미달이면 NOT_FOUND, 서로 다른 상품이 비슷하게 맞으면 AMBIGUOUS다.
     """
     scored: dict[str, tuple[float, Candidate]] = {}
     for candidate in candidates:
-        value = score(query, candidate.title)
+        value = score(query, candidate.title, brands)
         current = scored.get(candidate.product_id)
         if value >= MIN_SCORE and (current is None or value > current[0]):
             scored[candidate.product_id] = (value, candidate)

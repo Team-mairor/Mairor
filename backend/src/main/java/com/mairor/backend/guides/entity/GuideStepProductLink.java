@@ -177,8 +177,10 @@ public class GuideStepProductLink {
             || matchLevel != nextLevel
             || reasonCode != nextReason;
     if (changed) {
-      setReferences(nextProduct, nextShade, nextColor);
+      // 연결 수준을 먼저 바꾼다. setReferences 가 연결 수준과 ID 가 맞는지 확인하므로, 옛 수준으로 확인하면 연결이 좋아질 때마다 실패한다
+      // (예: 제품 없음 → 수집 뒤 제품 연결, S15P31A306-518)
       matchLevel = nextLevel;
+      setReferences(nextProduct, nextShade, nextColor);
       reasonCode = nextReason;
     }
     return changed;

@@ -9,6 +9,7 @@ import java.util.UUID;
  * collect_job.v1.schema.json}이다. {@code jobId}는 요청 id 이고, 같은 jobId 는 워커가 한 번만 반영한다.
  *
  * @param typeHint 소분류 코드. 주면 워커가 모델로 종류를 고르지 않는다
+ * @param shadeName 요청한 호수. 한 제품이 시리즈별 상품으로 나뉘어 있으면 워커가 그 호수가 있는 상품을 고른다
  */
 public record CollectJobMessage(
     int contractVersion,
@@ -17,6 +18,7 @@ public record CollectJobMessage(
     String name,
     String url,
     String typeHint,
+    String shadeName,
     Instant requestedAt) {
 
   public static final int CONTRACT_VERSION = 1;
@@ -30,6 +32,7 @@ public record CollectJobMessage(
         request.getName(),
         request.getProductUrl(),
         request.getTypeCode(),
+        request.getShadeName(),
         request.getCreatedAt());
   }
 }

@@ -16,6 +16,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param queueUrl 수집 큐(SQS) 주소. 비우면 큐에 보내지 않고 요청은 QUEUED 로 남는다(로컬·테스트)
  * @param queueRegion 수집 큐 리전
  * @param maxSendAttempts 큐에 보내기를 이만큼 실패하면 요청을 FAILED({@code SEND_FAILED})로 끝낸다
+ * @param guideLimit 가이드 하나가 최근 24시간에 기다릴 수 있는 수집 요청 수(영상 분석 부족분, S15P31A306-518)
  * @param resultTimeout 큐에 보낸 뒤 이 시간 안에 워커 결과가 없으면 FAILED({@code RESULT_TIMEOUT})로 끝낸다. 워커 재시도(받은 횟수
  *     3번)와 태스크가 뜨는 시간까지 넉넉히 둔다
  */
@@ -44,7 +45,8 @@ public record CatalogCollectProperties(
     @DefaultValue("") String queueUrl,
     @DefaultValue("ap-northeast-2") String queueRegion,
     @DefaultValue("20") int maxSendAttempts,
-    @DefaultValue("6h") Duration resultTimeout) {
+    @DefaultValue("6h") Duration resultTimeout,
+    @DefaultValue("10") int guideLimit) {
 
   public CatalogCollectProperties {
     types = List.copyOf(types);

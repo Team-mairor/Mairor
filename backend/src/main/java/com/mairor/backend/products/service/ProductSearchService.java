@@ -30,8 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  * S15P31A306-517)을 본다. (종류, 브랜드, 제품명)이 유니크라 결과는 0~1건이다. 비슷한 이름의 다른 제품에 연결하지 않는다.
  *
  * <p>호수와 색 칸은 컬렉션을 건드리지 않고 정렬 조회로 따로 읽는다. 색 칸은 호수 ID 목록으로 한 번에 읽는다. 쿼리는 검색 1건 4번(종류·제품·호수·색 칸), 0건
- * 4번(종류·정확 일치·공백 무시 일치·별칭), 상세 3번(제품·호수·색 칸)이다. 호수가 없으면 색 칸 쿼리는 나가지 않는다(호수 없는 제품 검색 3번, 상세 2번). 코드가
- * 틀린 요청에만 카테고리 존재 확인 쿼리가 1번 더 나간다.
+ * 5번(종류·정확 일치·공백 무시 일치·브랜드를 붙인 이름·별칭), 상세 3번(제품·호수·색 칸)이다. 호수가 없으면 색 칸 쿼리는 나가지 않는다(호수 없는 제품 검색 3번,
+ * 상세 2번). 코드가 틀린 요청에만 카테고리 존재 확인 쿼리가 1번 더 나간다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -76,6 +76,10 @@ public class ProductSearchService {
 
     List<Product> compactMatches =
         productRepository.findCompact(query.type(), query.brand(), query.name());
+    if (compactMatches.isEmpty()) {
+      compactMatches =
+          productRepository.findWithBrandPrefix(List.of(query.type()), query.brand(), query.name());
+    }
     if (compactMatches.isEmpty()) {
       compactMatches =
           productRepository.findByAlias(List.of(query.type()), query.brand(), query.name());

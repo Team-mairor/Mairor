@@ -85,4 +85,43 @@ class CatalogCollectRequestTest {
             () -> new CatalogCollectRequestUser(UUID.randomUUID(), UUID.randomUUID(), null, NOW))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  void guideRequestsAreMadeOnlyThroughTheirFactoryAndNeedATargetBeyondProducts() {
+    assertThatThrownBy(
+            () ->
+                new CatalogCollectRequest(
+                    CollectTrigger.GUIDE, "k", "LIP", null, "롬앤", "틴트", null, null))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(
+            () ->
+                CatalogCollectRequest.forGuide(
+                    CollectGap.SHADE_MISSING,
+                    "k",
+                    "LIP",
+                    null,
+                    "롬앤",
+                    "틴트",
+                    null,
+                    "02",
+                    CatalogCollectRequest.Target.NONE))
+        .isInstanceOf(IllegalArgumentException.class);
+
+    UUID product = UUID.randomUUID();
+    CatalogCollectRequest request =
+        CatalogCollectRequest.forGuide(
+            CollectGap.COLOR_MISSING,
+            "k",
+            "LIP",
+            "LIP_TINT",
+            "롬앤",
+            null,
+            "https://a.example/p/1",
+            "01",
+            new CatalogCollectRequest.Target(product, UUID.randomUUID(), null, "3"));
+
+    assertThat(request.getTrigger()).isEqualTo(CollectTrigger.GUIDE);
+    assertThat(request.getTarget().productId()).isEqualTo(product);
+    assertThat(request.getTarget().slotLabel()).isEqualTo("3");
+  }
 }

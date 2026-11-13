@@ -11,14 +11,14 @@ import org.springframework.data.repository.query.Param;
 
 public interface ProductNameAliasRepository extends JpaRepository<ProductNameAlias, UUID> {
 
-  /** 별칭을 남긴다. 같은 키가 이미 있으면 처음 것을 둔다(0건). */
+  /** 별칭을 남긴다. 같은 이름·같은 상품이 이미 있으면 그대로 둔다(0건). 같은 이름에 다른 상품(시리즈)은 따로 남는다. */
   @Modifying
   @Query(
       value =
           "insert into product_name_aliases (id, type_code, brand_normalized, name_compact,"
               + " product_id, request_id, created_at) values (gen_random_uuid(), :type, :brand,"
               + " :name, :product, :request, :now)"
-              + " on conflict (type_code, brand_normalized, name_compact) do nothing",
+              + " on conflict (type_code, brand_normalized, name_compact, product_id) do nothing",
       nativeQuery = true)
   int insertIfAbsent(
       @Param("type") String typeCode,

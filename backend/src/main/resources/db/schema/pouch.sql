@@ -48,7 +48,8 @@ CREATE INDEX idx_pouch_items_user_created ON pouch_items (user_id, created_at DE
 
 -- 화장품 수집 요청 (S15P31A306-517). DB 에 없는 제품을 수집 큐(SQS)로 보내고 결과를 받는다.
 -- id 가 수집 워커의 jobId 다. 같은 제품의 진행 중 요청은 하나뿐이고(request_key 부분 유니크), 요청한 회원·파우치 항목은
--- catalog_collect_request_users 에 붙인다. trigger GUIDE(영상 분석 부족분)는 S15P31A306-518 이 쓴다.
+-- catalog_collect_request_users 에 붙인다. trigger GUIDE(영상 분석 부족분, S15P31A306-518)는 gap 과 대상(target_*)이 있고
+-- 기다리는 가이드 단계를 catalog_collect_request_guides 에 붙인다.
 CREATE TABLE catalog_collect_requests (
     id               uuid                        NOT NULL,
     trigger          varchar(10)                 NOT NULL,
@@ -66,12 +67,26 @@ CREATE TABLE catalog_collect_requests (
     result_status    varchar(30),
     result_file      varchar(200),
     import_run_id    uuid,
+    gap              varchar(20),
+    target_product_id uuid,
+    target_shade_id  uuid,
+    target_color_id  uuid,
+    target_slot_label varchar(100),
     finished_at      timestamp(6) with time zone,
     created_at       timestamp(6) with time zone NOT NULL,
     updated_at       timestamp(6) with time zone NOT NULL,
     CONSTRAINT catalog_collect_requests_pkey PRIMARY KEY (id),
     CONSTRAINT fk_catalog_collect_requests_import_run FOREIGN KEY (import_run_id)
         REFERENCES catalog_import_runs (id),
+    CONSTRAINT fk_catalog_collect_requests_target_product FOREIGN KEY (target_product_id)
+        REFERENCES products (id) ON DELETE SET NULL,
+    CONSTRAINT fk_catalog_collect_requests_target_shade FOREIGN KEY (target_shade_id)
+        REFERENCES product_shades (id) ON DELETE SET NULL,
+    CONSTRAINT fk_catalog_collect_requests_target_color FOREIGN KEY (target_color_id)
+        REFERENCES product_shade_colors (id) ON DELETE SET NULL,
+    CONSTRAINT ck_catalog_collect_requests_gap CHECK (
+        gap IS NULL OR gap IN ('PRODUCT_MISSING', 'SHADE_MISSING', 'COLOR_MISSING')),
+    CONSTRAINT ck_catalog_collect_requests_trigger_gap CHECK ((trigger = 'GUIDE') = (gap IS NOT NULL)),
     CONSTRAINT ck_catalog_collect_requests_trigger CHECK (trigger IN ('USER', 'GUIDE')),
     CONSTRAINT ck_catalog_collect_requests_status CHECK (
         status IN ('QUEUED', 'SENT', 'RESOLVED', 'UNRESOLVED', 'NOT_FOUND', 'FAILED')),
@@ -107,3 +122,20 @@ CREATE TABLE catalog_collect_request_users (
 );
 CREATE INDEX idx_catalog_collect_request_users_user_created ON catalog_collect_request_users (user_id, created_at);
 CREATE INDEX idx_catalog_collect_request_users_pouch_item ON catalog_collect_request_users (pouch_item_id);
+
+-- 영상 분석 부족분 수집 요청을 기다리는 가이드 단계(S15P31A306-518). 같은 요청에 여러 가이드·단계가 붙는다.
+-- 요청이 끝나면 붙은 가이드를 다시 대조한다. 가이드가 지워지면 함께 지운다.
+CREATE TABLE catalog_collect_request_guides (
+    id          uuid                        NOT NULL,
+    request_id  uuid                        NOT NULL,
+    guide_id    uuid                        NOT NULL,
+    step_id     varchar(200)                NOT NULL,
+    created_at  timestamp(6) with time zone NOT NULL,
+    CONSTRAINT catalog_collect_request_guides_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_catalog_collect_request_guides_request FOREIGN KEY (request_id)
+        REFERENCES catalog_collect_requests (id) ON DELETE CASCADE,
+    CONSTRAINT fk_catalog_collect_request_guides_guide FOREIGN KEY (guide_id)
+        REFERENCES guides (id) ON DELETE CASCADE,
+    CONSTRAINT uk_catalog_collect_request_guides_request_step UNIQUE (request_id, guide_id, step_id)
+);
+CREATE INDEX idx_catalog_collect_request_guides_guide_created ON catalog_collect_request_guides (guide_id, created_at);

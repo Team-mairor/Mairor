@@ -33,7 +33,11 @@ def _aware(value: datetime) -> datetime:
 
 
 class CollectJob(CamelModel):
-    """큐 메시지 하나. 이름으로 찾거나(name) 상품 주소로 다시 수집한다(url). 둘 중 하나만 준다."""
+    """큐 메시지 하나. 이름으로 찾거나(name) 상품 주소로 다시 수집한다(url). 둘 중 하나만 준다.
+
+    shadeName 은 요청한 호수다. 이름으로 찾을 때 한 제품이 시리즈별 상품으로 나뉘어 있으면
+    그 호수가 있는 상품을 고른다.
+    """
 
     contract_version: Literal[1] = JOB_CONTRACT_VERSION
     job_id: str = Field(pattern=JOB_ID_PATTERN)
@@ -41,6 +45,7 @@ class CollectJob(CamelModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     url: str | None = Field(default=None, pattern=URL_PATTERN, max_length=2000)
     type_hint: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]{0,49}$")
+    shade_name: str | None = Field(default=None, min_length=1, max_length=100)
     requested_at: datetime
 
     @field_validator("requested_at")

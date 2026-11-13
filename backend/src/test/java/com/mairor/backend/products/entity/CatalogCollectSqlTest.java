@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.mairor.backend.TestcontainersConfiguration;
+import com.mairor.backend.products.repository.CatalogCollectRequestGuideRepository;
 import com.mairor.backend.products.repository.CatalogCollectRequestRepository;
 import com.mairor.backend.products.repository.CatalogCollectRequestUserRepository;
 import jakarta.persistence.EntityManager;
@@ -49,6 +50,7 @@ class CatalogCollectSqlTest {
   @Autowired private EntityManager em;
   @Autowired private CatalogCollectRequestRepository requests;
   @Autowired private CatalogCollectRequestUserRepository requestUsers;
+  @Autowired private CatalogCollectRequestGuideRepository requestGuides;
 
   private UUID userId;
 
@@ -191,6 +193,80 @@ class CatalogCollectSqlTest {
 
     jdbc.update("delete from catalog_collect_requests where id = ?", request.getId());
     assertThat(requestUsers.findByRequestId(request.getId())).isEmpty();
+  }
+
+  @Test
+  void guideRequestsCarryAGapAndTheirWaitingSteps() {
+    assertThat(constraints("catalog_collect_requests"))
+        .contains(
+            CatalogCollectRequest.GAP_CHECK,
+            CatalogCollectRequest.TRIGGER_GAP_CHECK,
+            CatalogCollectRequest.TARGET_PRODUCT_FK,
+            CatalogCollectRequest.TARGET_SHADE_FK,
+            CatalogCollectRequest.TARGET_COLOR_FK);
+    assertThat(constraints("catalog_collect_request_guides"))
+        .contains(
+            "catalog_collect_request_guides_pkey",
+            CatalogCollectRequestGuide.REQUEST_FK,
+            CatalogCollectRequestGuide.GUIDE_FK,
+            CatalogCollectRequestGuide.REQUEST_STEP_UNIQUE);
+    assertThat(indexColumns("catalog_collect_request_guides"))
+        .containsEntry(
+            CatalogCollectRequestGuide.GUIDE_CREATED_INDEX, List.of("guide_id", "created_at"));
+
+    assertThatThrownBy(() -> update(INSERT_REQUEST, "GUIDE", KEY, "쥬시", null, "QUEUED", null, null))
+        .hasMessageContaining(CatalogCollectRequest.TRIGGER_GAP_CHECK);
+
+    CatalogCollectRequest request =
+        CatalogCollectRequest.forGuide(
+            CollectGap.PRODUCT_MISSING,
+            "GUIDE|" + KEY,
+            "LIP",
+            null,
+            "롬앤",
+            "쥬시 틴트",
+            null,
+            "01 니어",
+            CatalogCollectRequest.Target.NONE);
+    requests.saveAndFlush(request);
+    UUID guideId = guide();
+    Instant now = Instant.now();
+
+    assertThat(requestGuides.attach(request.getId(), guideId, "s1", now)).isEqualTo(1);
+    assertThat(requestGuides.attach(request.getId(), guideId, "s1", now)).isZero();
+    assertThat(requestGuides.attach(request.getId(), guideId, "s2", now)).isEqualTo(1);
+    assertThat(requestGuides.countByGuideIdAndCreatedAtGreaterThanEqual(guideId, now)).isEqualTo(2);
+
+    em.clear();
+    assertThat(requests.findById(request.getId()).orElseThrow().getGap())
+        .isEqualTo(CollectGap.PRODUCT_MISSING);
+    jdbc.update("delete from guides where id = ?", guideId);
+    assertThat(requestGuides.findByRequestId(request.getId())).isEmpty();
+  }
+
+  private UUID guide() {
+    UUID video = UUID.randomUUID();
+    UUID job = UUID.randomUUID();
+    UUID guide = UUID.randomUUID();
+    jdbc.update(
+        "insert into videos (id, youtube_video_id, title, channel_title, duration_seconds,"
+            + " chapters, meta_refreshed_at, created_at, updated_at)"
+            + " values (?, ?, '영상', '채널', 60, '[]'::jsonb, now(), now(), now())",
+        video,
+        video.toString().substring(0, 11));
+    jdbc.update(
+        "insert into analysis_jobs (id, video_id, status, progress_stage, retryable, attempt,"
+            + " created_at, updated_at) values (?, ?, 'FAILED', 'EXTRACTING_STEPS', false, 1,"
+            + " now(), now())",
+        job,
+        video);
+    jdbc.update(
+        "insert into guides (id, video_id, analysis_job_id, version, review_status, guide_input,"
+            + " created_at, updated_at) values (?, ?, ?, 1, 'APPROVED', '{}'::jsonb, now(), now())",
+        guide,
+        video,
+        job);
+    return guide;
   }
 
   private void update(String sql, Object... args) {

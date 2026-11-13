@@ -244,6 +244,50 @@ def test_an_ambiguous_search_collects_up_to_the_candidate_limit(
     assert f"{HOST}/product/juicy/3/" not in site.paths()
 
 
+def found_in_pool(status: FindStatus, picked: Candidate, *pool: Candidate):
+    async def fake(_client, _site, _name):
+        rest = () if status is FindStatus.FOUND else pool
+        first = picked if status is FindStatus.FOUND else None
+        return FindResult(
+            status, "CAFE24", candidate=first, alternatives=rest, pool=(picked, *pool)
+        )
+
+    return fake
+
+
+def test_a_requested_shade_picks_the_series_that_has_it_over_the_best_name_match(
+    tmp_path: Path, monkeypatch
+) -> None:
+    best_name = Candidate(f"https://{HOST}/product/juicy/1/", "테스트 쥬시 틴트 #오리지널", "1")
+    other = Candidate(f"https://{HOST}/product/juicy/1170/", "테스트 쥬시 틴트 #블랙", "1170")
+    monkeypatch.setattr(
+        job_runner, "find_product", found_in_pool(FindStatus.FOUND, best_name, other)
+    )
+    s3 = FakeS3()
+
+    # 이름이 가장 맞는 시리즈(1)에는 그 호수가 없고, 1170 시리즈에 있다
+    def series_page(names):
+        options = "".join(f'<option value="C{i}">{n}</option>' for i, n in enumerate(names))
+        return page(f'<select name="option1"><option value="*">- 선택 -</option>{options}</select>')
+
+    site = chips_site(
+        {
+            f"{HOST}/product/juicy/1/": series_page(["01 오리지널"]),
+            f"{HOST}/product/juicy/1170/": chips_site().routes[f"{HOST}/product/juicy/1170/"],
+        }
+    )
+    built = deps(tmp_path, s3, RunIdsFromS3(s3), site)
+
+    result = run(
+        process_job(
+            job(url=None, name="쥬시 틴트", shade_name="02 레드", type_hint="LIP_TINT"), built
+        )
+    )
+
+    assert result.status is JobStatus.COLLECTED
+    assert [ref.source_product_id for ref in result.products] == ["1170"]
+
+
 def test_fail_job_reports_failed_once_and_keeps_an_earlier_result(tmp_path: Path) -> None:
     s3 = FakeS3()
     backend = FakeBackend()

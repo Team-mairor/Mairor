@@ -69,6 +69,31 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   List<Product> findAllByTypeCodeInAndBrandNormalizedAndNameCompact(
       Collection<String> typeCodes, String brandNormalized, String nameCompact);
 
+  /**
+   * 사이트가 상품명 앞에 브랜드를 붙여 둔 제품을 찾는다("롬앤 더 쥬시 래스팅 틴트"를 "더 쥬시 래스팅 틴트"로). 반대로 입력이 브랜드로 시작하면 브랜드를 뗀 이름으로도
+   * 찾는다. 둘 다 공백을 무시해 비교한다. 정확 일치·공백 무시 일치가 없을 때만 쓴다.
+   */
+  default List<Product> findWithBrandPrefix(
+      Collection<String> typeCodes, String brand, String name) {
+    if (typeCodes.isEmpty()) {
+      return List.of();
+    }
+    String brandCompact = CatalogTextNormalizer.compact(brand);
+    String nameCompact = CatalogTextNormalizer.compact(name);
+    String brandNormalized = CatalogTextNormalizer.normalize(brand);
+    List<Product> found =
+        findAllByTypeCodeInAndBrandNormalizedAndNameCompact(
+            typeCodes, brandNormalized, brandCompact + nameCompact);
+    if (found.isEmpty()
+        && nameCompact.startsWith(brandCompact)
+        && nameCompact.length() > brandCompact.length()) {
+      found =
+          findAllByTypeCodeInAndBrandNormalizedAndNameCompact(
+              typeCodes, brandNormalized, nameCompact.substring(brandCompact.length()));
+    }
+    return found;
+  }
+
   /** 회원이 쓴 이름의 별칭으로 찾는다(S15P31A306-517). 정확 일치·공백 무시 일치가 없을 때만 쓴다. */
   @EntityGraph(attributePaths = {"category", "type"})
   @Query(

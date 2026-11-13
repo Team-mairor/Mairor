@@ -74,6 +74,7 @@ BE 가 수집 큐(SQS)에 작업 메시지(`CollectJob`)를 넣으면, 수집 �
 | `brand` | 브랜드 이름. 목록에 없는 브랜드는 워커가 공식 홈을 찾는다 | ✅ |
 | `name` · `url` | 제품 이름으로 찾거나(`name`), 상품 상세 주소로 다시 수집한다(`url`). **둘 중 하나만** 준다 | ✅ |
 | `typeHint` | 소분류 코드. 주면 모델 분류를 하지 않는다 | |
+| `shadeName` | 요청한 호수 이름. 이름으로 찾을 때 한 제품이 시리즈별 상품 페이지로 나뉘어 있으면(예: `롬앤 블러 퍼지 틴트 #오리지널`·`#블랙스펙트럼`) 그 호수가 있는 상품을 고른다 | |
 | `requestedAt` | 요청 시각(시간대 포함) | ✅ |
 
 `CollectJobResult`(BE 내부 API `POST /v1/internal/catalog/collect-jobs/{jobId}/result` 본문, `X-Internal-Token`):

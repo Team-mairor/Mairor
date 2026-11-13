@@ -29,7 +29,8 @@ from app.tasks.catalog.checkpoint import Checkpoint, checkpoint_path_for
 from app.tasks.catalog.discover.registry import BrandSite, Platform, SiteRegistry
 from app.tasks.catalog.discover.resolve import resolve_site
 from app.tasks.catalog.discover.site_store import SiteStore, StoreError
-from app.tasks.catalog.find.finder import FindStatus, find_product, resolve_platform
+from app.tasks.catalog.find.finder import FindStatus, find_product, resolve_platform, site_brands
+from app.tasks.catalog.find.series import pick_by_shade, series_candidates
 from app.tasks.catalog.find.urls import Candidate, is_supported, product_id
 from app.tasks.catalog.http import BlockedError, HttpFailure, PoliteClient
 from app.tasks.catalog.jobs import (
@@ -247,6 +248,11 @@ async def _candidates(
     found = await find_product(deps.client, site, job.name or "")
     if found.status is FindStatus.UNSUPPORTED:
         return [], JobStatus.UNSUPPORTED_SOURCE, "UNSUPPORTED_PLATFORM"
+    if job.shade_name is not None and found.pool:
+        chosen = await _series_by_shade(job, deps, site, platform, found.pool)
+        if chosen is not None:
+            hinted = [Candidate(chosen.url, chosen.title, chosen.product_id, job.type_hint)]
+            return hinted, JobStatus.COLLECTED, ""
     if found.status is FindStatus.FOUND and found.candidate is not None:
         picked = [found.candidate]
     else:
@@ -255,6 +261,25 @@ async def _candidates(
         return [], JobStatus.SEARCH_EMPTY, "NOT_FOUND"
     hinted = [Candidate(c.url, c.title, c.product_id, job.type_hint or c.type_hint) for c in picked]
     return hinted, JobStatus.COLLECTED, ""
+
+
+async def _series_by_shade(
+    job: CollectJob,
+    deps: JobDeps,
+    site: BrandSite,
+    platform: Platform,
+    pool: tuple[Candidate, ...],
+) -> Candidate | None:
+    """이름이 맞는 후보가 둘 이상이면(시리즈별 상품) 요청한 호수가 있는 상품 하나를 고른다.
+
+    하나뿐이면 None이고 기존 방식 그대로다.
+    """
+    named = series_candidates(job.name or "", list(pool), site_brands(site))
+    if len(named) < 2:
+        return None
+    result = await pick_by_shade(deps.client, site, platform, named, job.shade_name or "")
+    logger.info("시리즈 후보 %d개 중 호수로 고르기: %s", len(named), result.reason or "FOUND")
+    return result.candidate
 
 
 def _on_site(url: str, site: BrandSite) -> bool:

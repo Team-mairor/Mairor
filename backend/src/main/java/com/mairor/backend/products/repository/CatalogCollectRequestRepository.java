@@ -60,9 +60,11 @@ public interface CatalogCollectRequestRepository
   @Query(
       value =
           "insert into catalog_collect_requests (id, trigger, request_key, category_code,"
-              + " type_code, brand, name, product_url, shade_name, status, send_attempts,"
+              + " type_code, brand, name, product_url, shade_name, gap, target_product_id,"
+              + " target_shade_id, target_color_id, target_slot_label, status, send_attempts,"
               + " created_at, updated_at) values (:id, :trigger, :key, :category, :type, :brand,"
-              + " :name, :url, :shade, 'QUEUED', 0, :now, :now)"
+              + " :name, :url, :shade, :gap, :targetProduct, :targetShade, :targetColor,"
+              + " :slotLabel, 'QUEUED', 0, :now, :now)"
               + " on conflict (request_key) where status in ('QUEUED', 'SENT') do nothing",
       nativeQuery = true)
   int insertIfNoneOpen(
@@ -75,7 +77,33 @@ public interface CatalogCollectRequestRepository
       @Param("name") String name,
       @Param("url") String productUrl,
       @Param("shade") String shadeName,
+      @Param("gap") String gap,
+      @Param("targetProduct") UUID targetProductId,
+      @Param("targetShade") UUID targetShadeId,
+      @Param("targetColor") UUID targetColorId,
+      @Param("slotLabel") String targetSlotLabel,
       @Param("now") Instant now);
+
+  /** 엔티티 그대로 넣는다. 진행 중 요청이 이미 있으면 0건이다. */
+  default int insertIfNoneOpen(CatalogCollectRequest draft, Instant now) {
+    CatalogCollectRequest.Target target = draft.getTarget();
+    return insertIfNoneOpen(
+        draft.getId(),
+        draft.getTrigger().name(),
+        draft.getRequestKey(),
+        draft.getCategoryCode(),
+        draft.getTypeCode(),
+        draft.getBrand(),
+        draft.getName(),
+        draft.getProductUrl(),
+        draft.getShadeName(),
+        draft.getGap() == null ? null : draft.getGap().name(),
+        target.productId(),
+        target.shadeId(),
+        target.colorId(),
+        target.slotLabel(),
+        now);
+  }
 
   /**
    * 이 시각 뒤에 같은 제품으로 끝난 요청 중 다시 요청하지 않을 것이 있는가. 찾은 제품이 없음({@code NOT_FOUND}, 사유 {@code
@@ -89,4 +117,13 @@ public interface CatalogCollectRequestRepository
           + " or (r.status = com.mairor.backend.products.entity.CollectRequestStatus.NOT_FOUND"
           + " and r.reason = 'SEARCH_EMPTY'))")
   boolean existsRecentDeadEnd(@Param("key") String requestKey, @Param("since") Instant since);
+
+  /**
+   * 이 시각 뒤에 같은 키로 끝난 요청이 있는가(상태 상관없음). 영상 분석 요청은 끝나면 가이드를 다시 대조하고, 그때 같은 부족분이 또 보이므로 이것으로 같은 요청을
+   * 되풀이하지 않는다.
+   */
+  @Query(
+      "select count(r) > 0 from CatalogCollectRequest r where r.requestKey = :key"
+          + " and r.finishedAt >= :since")
+  boolean existsFinishedSince(@Param("key") String requestKey, @Param("since") Instant since);
 }

@@ -1,5 +1,5 @@
 {
-  "description": "큐 메시지 하나. 이름으로 찾거나(name) 상품 주소로 다시 수집한다(url). 둘 중 하나만 준다.",
+  "description": "큐 메시지 하나. 이름으로 찾거나(name) 상품 주소로 다시 수집한다(url). 둘 중 하나만 준다.\n\nshadeName 은 요청한 호수다. 이름으로 찾을 때 한 제품이 시리즈별 상품으로 나뉘어 있으면\n그 호수가 있는 상품을 고른다.",
   "properties": {
     "contractVersion": {
       "const": 1,
@@ -58,6 +58,20 @@
       ],
       "default": null,
       "title": "Typehint"
+    },
+    "shadeName": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Shadename"
     },
     "requestedAt": {
       "format": "date-time",

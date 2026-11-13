@@ -81,6 +81,68 @@ class GuideStepProductLinkReconcilerTest extends AnalysisIntegrationTest {
   }
 
   @Test
+  void aProductThatArrivesLaterUpgradesTheLinkStepByStep() {
+    UUID guideId = guide("브랜드 나중", "나중 제품", "01", null);
+    reconciler.reconcile(guideId);
+    assertThat(links.findByGuideIdAndStepId(guideId, "s1").orElseThrow().getMatchLevel())
+        .isEqualTo(ReferenceMatchLevel.NONE);
+
+    CatalogProduct catalog = product("TEST_LIP_LATER", "브랜드 나중", "나중 제품", "01", "Rose");
+
+    assertThat(reconciler.reconcile(guideId)).isOne();
+    GuideStepProductLink link = links.findByGuideIdAndStepId(guideId, "s1").orElseThrow();
+    assertThat(link.getMatchLevel()).isEqualTo(ReferenceMatchLevel.SLOT);
+    assertThat(link.getProduct().getId()).isEqualTo(catalog.product().getId());
+    assertThat(link.getColor().getId()).isEqualTo(catalog.color().getId());
+  }
+
+  @Test
+  void aBrandPrefixedSiteNameAndASpacelessVideoShadeStillLink() {
+    CatalogProduct catalog = product("TEST_LIP_PREFIX", "브랜드 앞", "브랜드 앞 쥬시 틴트", "02 누카다미아", "Rose");
+    UUID guideId = guide("브랜드 앞", "쥬시 틴트", "02누카다미아", null);
+
+    reconciler.reconcile(guideId);
+
+    GuideStepProductLink link = links.findByGuideIdAndStepId(guideId, "s1").orElseThrow();
+    assertThat(link.getProduct().getId()).isEqualTo(catalog.product().getId());
+    assertThat(link.getShade().getId()).isEqualTo(catalog.shade().getId());
+  }
+
+  @Test
+  void aVideoShadeChoosesTheSeriesProductThatHasIt() {
+    product("TEST_LIP_SER_A", "브랜드 시리즈", "블러 퍼지 틴트 #오리지널", "01 오리지널", "Rose");
+    CatalogProduct black = product("TEST_LIP_SER_B", "브랜드 시리즈", "블러 퍼지 틴트 #블랙", "03 블랙", "Black");
+    jdbc.update(
+        "insert into product_name_aliases (id, type_code, brand_normalized, name_compact,"
+            + " product_id, created_at) select gen_random_uuid(), p.type_code, p.brand_normalized,"
+            + " '블러퍼지틴트', p.id, now() from products p where p.brand = '브랜드 시리즈'");
+    UUID guideId = guide("브랜드 시리즈", "블러 퍼지 틴트", "03블랙", null);
+
+    reconciler.reconcile(guideId);
+
+    GuideStepProductLink link = links.findByGuideIdAndStepId(guideId, "s1").orElseThrow();
+    assertThat(link.getProduct().getId()).isEqualTo(black.product().getId());
+    assertThat(link.getShade().getId()).isEqualTo(black.shade().getId());
+  }
+
+  @Test
+  void aVideoShadeInNoSeriesProductStaysAmbiguous() {
+    product("TEST_LIP_SER_C", "브랜드 시리즈둘", "블러 퍼지 틴트 #오리지널", "01 오리지널", "Rose");
+    product("TEST_LIP_SER_D", "브랜드 시리즈둘", "블러 퍼지 틴트 #블랙", "03 블랙", "Black");
+    jdbc.update(
+        "insert into product_name_aliases (id, type_code, brand_normalized, name_compact,"
+            + " product_id, created_at) select gen_random_uuid(), p.type_code, p.brand_normalized,"
+            + " '블러퍼지틴트', p.id, now() from products p where p.brand = '브랜드 시리즈둘'");
+    UUID guideId = guide("브랜드 시리즈둘", "블러 퍼지 틴트", "99 없는 호수", null);
+
+    reconciler.reconcile(guideId);
+
+    GuideStepProductLink link = links.findByGuideIdAndStepId(guideId, "s1").orElseThrow();
+    assertThat(link.getMatchLevel()).isEqualTo(ReferenceMatchLevel.NONE);
+    assertThat(link.getReasonCode()).isEqualTo(ReferenceMatchReason.PRODUCT_AMBIGUOUS);
+  }
+
+  @Test
   void ambiguousProductCandidatesAreNotLinked() {
     product("TEST_LIP_AMBIGUOUS_A", "브랜드 둘", "같은 제품", null);
     product("TEST_LIP_AMBIGUOUS_B", "브랜드 둘", "같은 제품", null);

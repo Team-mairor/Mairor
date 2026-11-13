@@ -1,7 +1,9 @@
 package com.mairor.backend.products.dto.response;
 
 import com.mairor.backend.products.entity.CatalogCollectRequest;
+import com.mairor.backend.products.entity.CatalogCollectRequestGuide;
 import com.mairor.backend.products.entity.CatalogCollectRequestUser;
+import com.mairor.backend.products.entity.CollectGap;
 import com.mairor.backend.products.entity.CollectRequestStatus;
 import com.mairor.backend.products.entity.CollectTrigger;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -14,6 +16,12 @@ public record CollectRequestResponse(
     @Schema(description = "요청 ID(수집 워커 작업 ID)") UUID requestId,
     @Schema(description = "계기: USER(직접 입력 등록)·GUIDE(영상 분석)", example = "USER")
         CollectTrigger trigger,
+    @Schema(
+            description =
+                "영상 분석 요청이 채우려는 것: PRODUCT_MISSING·SHADE_MISSING·COLOR_MISSING. 회원 요청은 없다",
+            example = "SHADE_MISSING",
+            nullable = true)
+        CollectGap gap,
     @Schema(
             description = "상태: QUEUED·SENT·RESOLVED·UNRESOLVED·NOT_FOUND·FAILED",
             example = "RESOLVED")
@@ -31,7 +39,17 @@ public record CollectRequestResponse(
     @Schema(description = "요청을 만든 시각") Instant createdAt,
     @Schema(description = "큐에 보낸 시각", nullable = true) Instant sentAt,
     @Schema(description = "끝난 시각", nullable = true) Instant finishedAt,
-    @Schema(description = "요청한 회원과 자동 연결 결과") List<Requester> requesters) {
+    @Schema(description = "요청한 회원과 자동 연결 결과") List<Requester> requesters,
+    @Schema(description = "이 요청을 기다리는 가이드 단계(영상 분석 요청)") List<WaitingStep> waitingSteps) {
+
+  public record WaitingStep(
+      @Schema(description = "가이드 ID") UUID guideId,
+      @Schema(description = "단계 ID", example = "s3") String stepId) {
+
+    static WaitingStep from(CatalogCollectRequestGuide row) {
+      return new WaitingStep(row.getGuideId(), row.getStepId());
+    }
+  }
 
   public record Requester(
       @Schema(description = "회원 ID") UUID userId,
@@ -48,10 +66,13 @@ public record CollectRequestResponse(
   }
 
   public static CollectRequestResponse of(
-      CatalogCollectRequest request, List<CatalogCollectRequestUser> requesters) {
+      CatalogCollectRequest request,
+      List<CatalogCollectRequestUser> requesters,
+      List<CatalogCollectRequestGuide> waitingSteps) {
     return new CollectRequestResponse(
         request.getId(),
         request.getTrigger(),
+        request.getGap(),
         request.getStatus(),
         request.getReason(),
         request.getBrand(),
@@ -64,6 +85,7 @@ public record CollectRequestResponse(
         request.getCreatedAt(),
         request.getSentAt(),
         request.getFinishedAt(),
-        requesters.stream().map(Requester::from).toList());
+        requesters.stream().map(Requester::from).toList(),
+        waitingSteps.stream().map(WaitingStep::from).toList());
   }
 }

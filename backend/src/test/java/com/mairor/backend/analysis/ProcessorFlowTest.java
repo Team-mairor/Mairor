@@ -270,9 +270,13 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
             .jobId();
     service.register(
         new AnalysisJobRequest("procStlNew1", "videos/procStlNew1/source.mp4", "제목", "채널", 600));
+    // 서비스는 자바 시계로 경과 시간을 잰다. DB 시계(now())로 넣으면 두 시계 차이만큼 6분에 못 미칠 수 있다
+    java.sql.Timestamp sixMinutesAgo =
+        java.sql.Timestamp.from(java.time.Instant.now().minus(Duration.ofMinutes(6)));
     jdbc.update(
-        "update analysis_jobs set created_at = now() - interval '6 minutes',"
-            + " updated_at = now() - interval '6 minutes' where id = ?",
+        "update analysis_jobs set created_at = ?, updated_at = ? where id = ?",
+        sixMinutesAgo,
+        sixMinutesAgo,
         waiting);
 
     ProcessorJobService.Stall stall = processorJobs.stalled().orElseThrow();

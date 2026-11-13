@@ -990,7 +990,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 | --- | --- |
 | AnalysisJob.status | PENDING → RUNNING → COMPLETED / FAILED(멈춘 progressStage 유지). FAILED+retryable → API-VIDEO-006 → PENDING·RUNNING |
 | AnalysisJob.reviewStatus | NOT\_READY → (COMPLETED 후) PENDING → APPROVED(guideId 발급) / REJECTED. APPROVED 전에는 guideAvailable=false |
-| GuideMatch | 생성(API-RECOMMEND-001) → <b>로컬 수정 -325</b>: pouchVersion·guideVersion·referenceVersion·승인 상태·내부 호환 정책 중 하나가 달라지면 stale=true → 새 매칭 생성. 조회는 이전 스냅샷을 반환하고, 실행 시작 후에는 실행 스냅샷만 사용 |
+| GuideMatch | 생성(API-RECOMMEND-001) → <b>로컬 수정 -325</b>: pouchVersion·guideVersion·referenceVersion·승인 상태·내부 호환 정책 중 하나가 달라지면 stale=true → 새 매칭 생성. 조회는 이전 스냅샷을 반환하고, 실행 시작 후에는 실행 스냅샷만 사용. <b>로컬 수정 -518</b>: 영상 분석 부족분 자동 수집이 끝나 가이드 재대조로 연결이 좋아지면 referenceVersion이 올라 기존 매칭이 stale이 된다 |
 | FaceRegistration.status | REGISTERED(API-CAMERA-001) → LINKED(API-GUIDE-001) → RETAINED(API-GUIDE-006). REGISTERED는 재촬영·API-CAMERA-003으로 폐기, LINKED는 실행 ABANDONED 시 정리, RETAINED는 API-REPORT-003으로만 삭제 |
 | Execution.status | IN\_PROGRESS(API-GUIDE-001) → COMPLETED(API-GUIDE-006, recordId 발급) / ABANDONED(API-GUIDE-007 · 로그아웃·기기 로그아웃(API-USERS-003·015·016)·로그인으로 세션 대체·세션 만료(절대·유휴)는 세션 종료 훅으로 연결, 구현은 GUIDE-011 · 같은 세션의 새 실행 시작). 종료 상태의 변경 요청은 409 GUIDE\_EXECUTION\_NOT\_ACTIVE |
 
