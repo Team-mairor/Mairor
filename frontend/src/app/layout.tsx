@@ -7,7 +7,6 @@ import { Suspense } from "react";
 import { RunGuideProvider } from "@/features/guide";
 import { SessionProvider } from "@/features/session";
 import { MIRROR_SCRIPT } from "@/lib/mirror";
-import { DEFAULT_POUCH, DEFAULT_REPORTS } from "@/mocks/mock-data";
 
 import "./globals.css";
 
@@ -79,24 +78,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: VIEWPORT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col">
-        {/* 샘플 파우치·리포트. API가 붙으면 seed를 지운다 */}
-        <SessionProvider seed={{ pouch: DEFAULT_POUCH, reports: DEFAULT_REPORTS }}>
-          {/* 800px 세로 화면 칸. 폭 대응 규칙은 globals.css */}
-          <div
-            id="app"
-            className="relative mx-auto flex min-h-(--screen-h) w-full max-w-[800px] flex-1 flex-col bg-white"
-          >
-            <div id="app-body" className="flex min-h-0 flex-1 flex-col">
-              <RunGuideProvider>{children}</RunGuideProvider>
-            </div>
-          </div>
-          {/* 칸을 가리지 않게 칸 밖에 둔다. useSearchParams 경계라 여기만 감싼다 */}
-          {DevNav && (
-            <Suspense>
-              <DevNav />
-            </Suspense>
-          )}
-        </SessionProvider>
+        {/* 800px 세로 화면 칸. 폭 대응 규칙은 globals.css */}
+        <div
+          id="app"
+          className="relative mx-auto flex min-h-dvh w-full max-w-[800px] flex-1 flex-col bg-white"
+        >
+          <SessionProvider>
+            <RunGuideProvider>{children}</RunGuideProvider>
+            {/* DevNav의 useSearchParams 경계. 화면 전체를 감싸면 정적 HTML이 비므로 여기만 감싼다 */}
+            {DevNav && (
+              <Suspense>
+                <DevNav />
+              </Suspense>
+            )}
+          </SessionProvider>
+        </div>
       </body>
     </html>
   );

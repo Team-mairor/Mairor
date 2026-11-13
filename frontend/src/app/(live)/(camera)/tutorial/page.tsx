@@ -13,7 +13,6 @@ import {
   groupSteps,
   TutorialViewport,
   loadDefaultGuideSet,
-  loadGuideArea,
   resolveStep,
   toGuideArea,
   useGuide,
@@ -56,10 +55,8 @@ import {
   type StepProduct,
 } from "@/features/tutorial";
 import { ApiError, errorMessage } from "@/lib/api";
-import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
-import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 
-/** 튜토리얼 한 단계에 필요한 것. 샘플과 가이드 조회 응답을 같은 모양으로 맞춘다 */
+/** 튜토리얼 한 단계에 필요한 실제 가이드 조회 응답 */
 interface TutorialStep {
   stepId: string;
   makeup: Makeup;
@@ -75,28 +72,6 @@ interface TutorialStep {
   /** 샘플 매칭용 제품. 가이드 조회 응답은 아직 내 파우치와 맞춰 보지 않아 null */
   ref: RefProduct | null;
 }
-
-const SAMPLE_STEPS: TutorialStep[] = GUIDE_STEPS.map((s, i) => {
-  const r = REF_PRODUCTS[i];
-  return {
-    stepId: s.stepId,
-    makeup: s.makeup,
-    category: categoryOfPart(s.makeup),
-    short: s.short,
-    title: s.title,
-    acts: s.acts,
-    doneWhen: s.doneWhen,
-    target: s.target,
-    product: {
-      name: r.name,
-      full: `${r.brand} ${r.name}`,
-      shade: r.shade,
-      color: r.color,
-      state: r.refState ?? null,
-    },
-    ref: r,
-  };
-});
 
 /** 가이드 조회 응답의 단계. 동작이 비면 요약 한 줄을 동작처럼 보여 준다 */
 function stepsOf(guide: GuideModel): TutorialStep[] {
@@ -141,28 +116,17 @@ function photoRegionsOf(s: TutorialStep, area: GuideArea | null, defaults: Guide
 
 /**
  * 10 튜토리얼.
- * ?guideId=승인된 가이드 ID 면 가이드 조회 API의 단계·설명·영역으로, 없으면 샘플 영상으로 돈다.
- * ?area=경로 는 샘플일 때만 다른 영역 파일을 본다. ?alert=cover 등은 측정 불가 상태 확인용.
+ * 승인된 가이드 조회 API가 제공하는 단계·설명·영역으로 실행한다.
  */
 export default function TutorialPage() {
   const query = useQuery();
   const { state } = useSession();
-  if (!query) return null;
-  return state.run.mode === "guide" ? (
-    <GuideTutorial />
-  ) : (
-    <SampleTutorial area={query.get("area")} />
-  );
-}
-
-function SampleTutorial({ area: areaUrl }: { area: string | null }) {
-  const [area, setArea] = useState<GuideArea | null>(null);
+  const router = useRouter();
   useEffect(() => {
-    loadGuideArea(areaUrl ?? MOCK_GUIDE_AREA_URL)
-      .then(setArea)
-      .catch((e) => console.warn("가이드 영역을 불러오지 못해 기본 가이드로 보여 줍니다", e));
-  }, [areaUrl]);
-  return <TutorialRun steps={SAMPLE_STEPS} area={area} />;
+    if (state.run.mode !== "guide") router.replace("/select");
+  }, [router, state.run.mode]);
+  if (!query) return null;
+  return state.run.mode === "guide" ? <GuideTutorial /> : null;
 }
 
 function GuideTutorial() {
@@ -254,7 +218,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
   // 나가기로 실행을 끝낸 뒤에는 동의 카드로 보내지 않는다 (홈으로 가는 중)
   const leaving = useRef(false);
-  // 동의 없이 들어오면(샘플 실행을 주소로 바로 연 경우 등) 사진을 찍지 않도록 동의 카드로 보낸다
+  // 사진 촬영 동의가 없으면 촬영하지 않도록 동의 카드로 보낸다
   useEffect(() => {
     if (run.id && !run.photoOk && !leaving.current)
       router.replace(runHref("/tutorial/guide", run.guideId));
@@ -581,7 +545,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
             </span>
           )}
         </div>
-        {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. 제품 없는 샘플 단계는 동작 전부 */}
+        {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. */}
         <div className="flex flex-col gap-2">
           {shownActs.map((i) => (
             <ActCard

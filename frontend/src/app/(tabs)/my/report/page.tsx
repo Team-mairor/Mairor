@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
-import { categoryOfPart, groupSteps } from "@/features/guide";
+import { groupSteps } from "@/features/guide";
 import {
   captureTiles,
   deleteReport,
@@ -15,32 +15,15 @@ import {
   SHOW_STEP_PHOTOS,
   StepPhotoImg,
   useReport,
-  type ReportRow,
   type ReportRowPhoto,
 } from "@/features/report";
-import {
-  deleteStepPhotos,
-  matchFor,
-  stepPhoto,
-  useSession,
-  type MatchResult,
-  type ReportStep,
-  type ReportSummary,
-  type SessionState,
-} from "@/features/session";
+import { useSession } from "@/features/session";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
-import { useTimeout } from "@/lib/hooks/use-timeout";
-import { GUIDE_STEPS, REF_PRODUCTS } from "@/mocks/mock-data";
 
 type DelState = null | "ask" | "busy" | "fail";
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
-
-const snapOf = (m: MatchResult): ReportStep => ({
-  kind: m.kind,
-  used: m.p ? { brand: m.p.brand, name: m.p.name } : null,
-});
 
 /** 단계 사진 자리. 이 기기에서 찍은 사진, 없으면 서버 기록의 사진 주소, 둘 다 없으면 값마다 한 가지 모양 */
 function StepPhoto({ row, url }: { row: ReportRowPhoto; url?: string | null }): ReactElement {
@@ -61,75 +44,22 @@ function StepPhoto({ row, url }: { row: ReportRowPhoto; url?: string | null }): 
         </div>
       );
     case "bare":
-      return (
-        <img
-          src="/images/sample-face-bare.png"
-          alt=""
-          className="absolute top-0 h-auto w-[193.9%] max-w-none"
-          style={{ left: "-73.6%", marginTop: "-72.7%" }}
-        />
-      );
     case "sample":
       return (
-        <img
-          src="/images/sample-face.png"
-          alt=""
-          className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
-          style={{ marginTop: "-86.7%" }}
-        />
+        <div className="absolute inset-0 flex items-center justify-center bg-cream text-[16px] font-bold text-mute">
+          사진 없음
+        </div>
       );
   }
 }
 
-/** 샘플 기록: 저장 당시 items가 있으면 그것을, 없으면 지금 파우치로 매칭한다 */
-function sampleRows(
-  rep: ReportSummary | undefined,
-  { run, pouch }: Pick<SessionState, "run" | "pouch">,
-): ReportRow[] {
-  return (rep ? GUIDE_STEPS.slice(0, rep.steps) : []).map((x, i) => {
-    const m = rep?.items?.[i] ?? snapOf(matchFor(REF_PRODUCTS[i], run, pouch));
-    const used = m.used;
-    const r = REF_PRODUCTS[i];
-    // 단계 사진: captures가 없는 샘플 기록은 전부 있음으로 본다
-    const noPhoto = !!rep?.noPhoto || (rep?.captures ? !rep.captures.includes(i) : false);
-    // 실행으로 만든 기록은 그 실행의 사진을 단계 id로 찾는다
-    const shot = !noPhoto && rep?.runId ? stepPhoto(rep.runId, x.stepId) : null;
-    return {
-      no: i + 1,
-      title: x.title,
-      category: categoryOfPart(x.makeup),
-      guide: x.guide,
-      ref: `${r.brand} ${r.name}`,
-      usedKind:
-        m.kind === "same"
-          ? "내가 쓴 제품 · 동일 제품"
-          : m.kind === "sub"
-            ? "내가 쓴 제품 · 대체"
-            : "내가 쓴 제품",
-      used: !used ? "없음 · 설명만" : `${used.brand} ${used.name}`,
-      ...(shot
-        ? { photo: "shot" as const, shot }
-        : {
-            photo: noPhoto
-              ? "none"
-              : rep?.runId
-                ? "slot"
-                : x.makeup === "foundation"
-                  ? "bare"
-                  : "sample",
-          }),
-    };
-  });
-}
-
-/** 리포트 상세·삭제. ?id=<리포트 id>. 로그인했으면 서버 기록, 아니면 기기에 저장한 샘플 기록 */
+/** 리포트 상세·삭제. ?id=<리포트 id>. 로그인한 계정의 서버 기록을 표시한다. */
 export default function ReportPage() {
   const router = useRouter();
   const query = useQuery();
   const { state, storageLoaded, sessionChecked, update } = useSession();
   const [expanded, setExpanded] = useState(true);
   const [del, setDel] = useState<DelState>(null);
-  const timer = useTimeout();
 
   // 정확한 id로만 찾는다. 저장값 · 로그인 확인 전에는 판단을 미룬다
   const id = query?.get("id") ?? null;
@@ -140,9 +70,7 @@ export default function ReportPage() {
     ? remote.load.status === "ready"
       ? fromRecord(remote.load.data)
       : undefined
-    : storageLoaded && id
-      ? state.reports.find((r) => r.id === id)
-      : undefined;
+    : undefined;
   // 없는 기록(404)은 목록으로 보낸다
   const missing = state.loggedIn
     ? (!!query && !id) || (remoteError instanceof ApiError && remoteError.status === 404)
@@ -153,7 +81,7 @@ export default function ReportPage() {
   const waiting =
     state.loggedIn && !missing && (!sessionChecked || remote.load.status === "loading");
 
-  const steps = rep?.guide ? guideReportRows(rep.guide, rep.runId) : sampleRows(rep, state);
+  const steps = rep?.guide ? guideReportRows(rep.guide, rep.runId) : [];
   const tiles = captureTiles(steps);
   // 부위를 아는 묶음의 첫 단계 앞에 부위 이름을 띄운다
   const heads = new Map(
@@ -161,8 +89,8 @@ export default function ReportPage() {
       .filter((g) => g.category)
       .map((g) => [g.start, g.label]),
   );
-  // 최종 사진: 샘플 기록은 있음으로 본다. 실행으로 만든 기록은 마지막 단계 사진
-  const hasFinal = !!rep && !rep.noPhoto && (rep.finalPhoto ?? true);
+  const hasFinal =
+    !!rep && !rep.noPhoto && (rep.finalPhoto ?? Boolean(rep.photoUrl || rep.runId || rep.guide));
   const last = steps.at(-1);
   const finalShot = last?.photo === "shot" ? last.shot : null;
   // 단계 사진 목록. 실제 가이드 기록은 보여 줄지를 따로 정한다
@@ -189,26 +117,22 @@ export default function ReportPage() {
 
   const remove = async () => {
     if (del === "busy") return;
-    setDel("busy");
-    if (account) {
-      // 이미 지운 기록(404)도 지운 것으로 본다
-      try {
-        await deleteReport(rep.id);
-      } catch (e) {
-        if (!(e instanceof ApiError && e.status === 404)) {
-          setDel("fail");
-          return;
-        }
-      }
-      update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
-      router.replace("/my/reports");
+    if (!account) {
+      router.replace("/login");
       return;
     }
-    timer.set(() => {
-      update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
-      if (rep.runId) deleteStepPhotos(rep.runId);
-      router.replace("/my/reports");
-    }, 700);
+    setDel("busy");
+    // 이미 지운 기록(404)도 지운 것으로 본다
+    try {
+      await deleteReport(rep.id);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 404)) {
+        setDel("fail");
+        return;
+      }
+    }
+    update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
+    router.replace("/my/reports");
   };
 
   return (
@@ -260,12 +184,7 @@ export default function ReportPage() {
           ) : rep.guide ? (
             <PhotoSlot label="마지막 단계 사진" />
           ) : (
-            <img
-              src="/images/sample-face.png"
-              alt="완성 사진"
-              className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
-              style={{ marginTop: "-104.8%" }}
-            />
+            <PhotoSlot label="사진을 불러오지 못했어요" />
           )}
           <span className="absolute top-[18px] left-[18px] rounded-full bg-white px-[18px] py-2.5 font-label text-[15px] font-semibold tracking-[.14em] text-ink">
             FINAL LOOK

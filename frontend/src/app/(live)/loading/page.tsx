@@ -28,7 +28,7 @@ import {
   useAnalysisJob,
 } from "@/features/loading";
 import { emptyDraft, ProductSheet, type PouchCat, type ProductDraft } from "@/features/pouch";
-import { faceReady, hasSame, isGuideId, runHref, useSession } from "@/features/session";
+import { faceReady, isGuideId, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
 import {
   ApiError,
@@ -36,7 +36,6 @@ import {
   type AnalysisJobStatus,
   type FaceRegistrationRequest,
 } from "@/lib/api";
-import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
 const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composing"];
 
@@ -82,11 +81,8 @@ function pouchCategory(part?: string): PouchCat {
   return "도구";
 }
 
-/** i번째 제품을 찾았다고 보여 줄 진행률. 단계 수와 상관없이 6~90% 사이에 고르게 나눈다 */
-const foundAt = (i: number) => 6 + (i * 84) / REF_PRODUCTS.length;
-
-/** timeout·failed는 샘플, stopped는 실제 작업 FAILED, missing은 열 수 없는 작업 */
-type Fail = null | "timeout" | "failed" | "stopped" | "missing";
+/** 실제 작업 FAILED와 조회할 수 없는 작업 */
+type Fail = null | "stopped" | "missing";
 type Review = null | "pending" | "rejected";
 
 /** 로그인 만료(401)가 아닌 오류는 열 수 없는 작업으로 본다 */
@@ -97,37 +93,37 @@ function jobFail(error: ApiError | null, job: AnalysisJobStatus | null): Fail {
 }
 
 /**
- * 04 로딩 · 준비. ?jobId=면 그 분석 작업 상태를 받고, 없으면 샘플로 움직인다.
- * 샘플 상태: ?joined=1 · ?fail=timeout|failed · ?review=pending|rejected
+ * 04 로딩 · 준비. 분석 작업 또는 승인된 실제 가이드의 상태를 표시한다.
  */
 export default function LoadingPage() {
   const query = useQuery();
   // 주소를 읽은 뒤 그린다. jobId가 바뀌면 이전 작업의 진행률·모달 상태를 버리고 새로 시작한다
   if (!query) return null;
   const jobId = query.get("jobId");
-  return <LoadingScreen key={jobId ?? ""} query={query} jobId={jobId} />;
+  return <LoadingScreen key={jobId ?? ""} jobId={jobId} />;
 }
 
-function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string | null }) {
+function LoadingScreen({ jobId }: { jobId: string | null }) {
   const router = useRouter();
   const { state, update, updateRun, isCurrentRun, expireSession } = useSession();
   const camera = useCamera();
   const { load } = useGuide();
   const run = state.run;
+  const activeJobId = jobId ?? run.jobId;
+  const invalidEntry = !activeJobId && run.mode !== "guide";
+  useEffect(() => {
+    if (invalidEntry) router.replace("/select");
+  }, [invalidEntry, router]);
   // 실제 작업에는 이전 실행의 '분석 없이 시작'이 섞이지 않게 한다
-  const replay = !jobId && !!run.replay;
-  const sample = !jobId;
+  const replay = !activeJobId && !!run.replay;
   // 상태 응답에 영상 정보가 없어, 이 작업으로 시작한 실행의 영상만 쓰고 모르면 비워 둔다
-  const picked = jobId ? (run.jobId === jobId ? run.picked : null) : (run.picked ?? VIDEOS[0]);
+  const picked = activeJobId ? (run.jobId === activeJobId ? run.picked : null) : run.picked;
   const href = (path: string) => runHref(path, run.guideId);
   // 새로고침하면 메모리 사진이 사라지므로 다시 등록한다.
   const faceOk = faceReady(run) && facePhoto(run.id) !== null;
   const faceCaptured = run.faceReg && facePhoto(run.id) !== null;
 
-  const [demoPct, setDemoPct] = useState(0);
-  const [joined, setJoined] = useState(false);
-  const [demoFail, setDemoFail] = useState<Fail>(null);
-  const [demoReview, setDemoReview] = useState<Review>(null);
+  // 다시 따라 하기는 들어오자마자 등록부터 한다. 미리보기에서 돌아왔을 때처럼 이미 등록했으면 띄우지 않는다
   const [faceModal, setFaceModal] = useState(replay && !faceCaptured && !run.facePrompted);
   const [faceShown, setFaceShown] = useState(replay || run.facePrompted);
   const [pouchModal, setPouchModal] = useState(false);
@@ -141,32 +137,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const [faceSaveError, setFaceSaveError] = useState<string | null>(null);
   const faceSaving = useRef(false);
 
-  useEffect(() => {
-    if (run.mode === "guide") return;
-    if (query.get("joined")) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 상태를 한 번 반영한다
-      setJoined(true);
-      setDemoPct(46);
-    }
-    const f = query.get("fail");
-    if (f === "timeout" || f === "failed") {
-      setDemoFail(f);
-      setDemoPct(38);
-      setFaceShown(true);
-    }
-    const r = query.get("review");
-    if (r === "pending" || r === "rejected") {
-      setDemoReview(r);
-      setDemoPct(100);
-      setFaceShown(true);
-    }
-  }, [query, run.mode]);
-
-  const live = useAnalysisJob(jobId);
-  const job = jobId ? live.job : null;
-  const pct = jobId ? live.pct : replay ? 100 : demoPct;
-  const fail = jobId ? jobFail(live.error, job) : demoFail;
-  const review: Review = job ? jobReview(job) : demoReview;
+  const live = useAnalysisJob(activeJobId);
+  const job = activeJobId ? live.job : null;
+  const pct = activeJobId ? live.pct : replay ? 100 : 0;
+  const fail = activeJobId ? jobFail(live.error, job) : null;
+  const review: Review = job ? jobReview(job) : null;
   // 분석이 끝나 공개되면 그 가이드로 바로 넘어간다. 옛 검수 대기 작업은 상태를 계속 받다가 승인되면 넘어간다
   const approvedGuide =
     job?.status === "COMPLETED" && job.reviewStatus === "APPROVED" && isGuideId(job.guideId)
@@ -180,24 +155,18 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     }
   }, [live.error, expireSession, router]);
 
-  // 샘플 진행률 타이머
-  const running = !replay && !fail && pct < 100;
-  useEffect(() => {
-    if (!running || !sample) return;
-    const t = setInterval(() => setDemoPct((p) => Math.min(100, p + 1)), 600);
-    return () => clearInterval(t);
-  }, [running, sample]);
+  const running = !!activeJobId && !fail && pct < 100;
 
   // 실제 분석은 대기열부터, 샘플은 4%부터 준비한다.
   useEffect(() => {
-    const preparing = jobId ? job && ["PENDING", "RUNNING"].includes(job.status) : pct >= 4;
+    const preparing = activeJobId ? job && ["PENDING", "RUNNING"].includes(job.status) : false;
     if (preparing && !faceShown && !faceCaptured && !fail && !review) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 준비를 처음 권하는 순간 한 번만
       setFaceShown(true);
       setFaceModal(true);
       updateRun({ facePrompted: true }, run.id);
     }
-  }, [pct, jobId, job, faceShown, faceCaptured, fail, review, updateRun, run.id]);
+  }, [pct, activeJobId, job, faceShown, faceCaptured, fail, review, updateRun, run.id]);
 
   // 카메라 영상은 등록 모달 안에서만 보여 준다.
   useHiddenVideo();
@@ -216,57 +185,33 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
         : review === "rejected"
           ? "이용할 수 없음"
           : "분석이 끝났어요"
-      : jobId
+      : activeJobId
         ? (stageText(job?.stageProgress ?? null) ?? phaseName)
-        : `${phaseName} 중…`;
+        : replay
+          ? "분석이 끝났어요"
+          : "가이드 준비";
   const phaseEn = fail ? "Stopped." : done ? (review ? "In review." : "Ready.") : PHASE_EN[pi];
   // 실제 작업은 남은 시간을 받지 못한다(estimatedRemainingSeconds가 늘 null)
-  const eta = fail
-    ? "멈춤"
-    : done
-      ? "완료"
-      : jobId
-        ? "처리 중"
-        : `약 ${Math.ceil((100 - pct) * 0.6)}초 남음`;
+  const eta = fail ? "멈춤" : done ? "완료" : activeJobId ? "처리 중" : "준비 완료";
   const scanSec = Math.floor(pct * 7.5);
   const scanTime = `${Math.floor(scanSec / 60)}:${String(scanSec % 60).padStart(2, "0")}`;
 
   // 실제 작업은 상태 응답의 단계별 제품 결과를 표시한다
-  const rows =
-    sample && run.mode !== "guide"
-      ? REF_PRODUCTS.map((r, i) => ({
-          ...r,
-          found: pct >= foundAt(i),
-          next: pct < foundAt(i) && (i === 0 || pct >= foundAt(i - 1)),
-          have: r.have || hasSame(r, state.pouch),
-        }))
-      : (job?.foundProducts ?? []).map((product, i) => ({
-          id: `${product.stepId ?? "product"}-${i}`,
-          cat: partLabel(product.part),
-          color: "#EADDE0",
-          found: true,
-          next: false,
-          have: product.ownership === "OWNED",
-          name: product.referenceProduct.name,
-          productName: product.referenceProduct.name,
-        }));
+  const rows = (job?.foundProducts ?? []).map((product, i) => ({
+    id: `${product.stepId ?? "product"}-${i}`,
+    cat: partLabel(product.part),
+    color: "#EADDE0",
+    found: true,
+    next: false,
+    have: product.ownership === "OWNED",
+    name: product.referenceProduct.name,
+    productName: product.referenceProduct.name,
+  }));
   const foundCount = rows.filter((r) => r.found).length;
   const haveCount = rows.filter((r) => r.have).length;
 
   const notice = fail
     ? {
-        timeout: {
-          tag: "STOPPED · TIMEOUT",
-          title: "분석이 너무 오래 걸려 멈췄어요",
-          sub: `${phaseName} 단계에서 멈췄어요. 다시 시도하면 이 단계부터 이어서 분석해요.`,
-          retry: true,
-        },
-        failed: {
-          tag: "STOPPED · FAILED",
-          title: "이 영상은 분석할 수 없어요",
-          sub: `${phaseName} 단계에서 메이크업 장면을 찾지 못했어요. 다른 영상을 골라 주세요.`,
-          retry: false,
-        },
         stopped: job
           ? jobFailure(retryRefused ? { ...job, retryable: false } : job, phaseName)
           : {
@@ -330,7 +275,10 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   if (approvedGuide) {
     ctaLabel = "가이드로 따라 하기";
     // 실행 전환은 주소 변경 뒤 Provider가 처리한다.
-    ctaGo = () => router.push(runHref("/loading", approvedGuide, jobId ? { jobId } : undefined));
+    ctaGo = () =>
+      router.push(
+        runHref("/loading", approvedGuide, activeJobId ? { jobId: activeJobId } : undefined),
+      );
   } else if (review === "pending") {
     ctaLabel = "홈으로";
     ctaGo = () => {
@@ -344,9 +292,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     ctaGo = () => router.push("/select");
   } else if (!guideOk) ctaLabel = "분석이 끝나면 미리보기를 열 수 있어요";
   else if (!faceCaptured) {
-    // 실제 가이드는 색상 정보가 없어 입혀 볼 수 없다
-    const tryOn = replay && run.mode !== "guide";
-    ctaLabel = tryOn ? "얼굴 등록하고 입혀보기" : "얼굴 등록하고 미리보기";
+    ctaLabel = "얼굴 등록하고 미리보기";
     ctaGo = () => {
       setFaceShown(true);
       updateRun({ facePrompted: true }, run.id);
@@ -364,7 +310,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           void savePreparedFace();
         };
   } else {
-    ctaLabel = replay && run.mode !== "guide" ? "입혀보기" : "미리보기 보기";
+    ctaLabel = "미리보기 보기";
     ctaGo = () => router.push(href("/preview"));
   }
 
@@ -416,12 +362,12 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   };
 
   const retryJob = async () => {
-    if (!jobId || retrying) return;
+    if (!activeJobId || retrying) return;
     setRetrying(true);
     setRetryError(null);
     try {
-      const next = await retryAnalysisJob(jobId);
-      if (next.jobId === jobId) {
+      const next = await retryAnalysisJob(activeJobId);
+      if (next.jobId === activeJobId) {
         live.restart(next);
         return;
       }
@@ -452,6 +398,13 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     if (replay && faceOk) router.push(href("/preview"));
   };
 
+  if (invalidEntry)
+    return (
+      <main className="flex flex-1 items-center justify-center px-8 text-center text-[18px] text-mute">
+        분석 또는 가이드 정보가 없어요. 영상을 다시 골라 주세요.
+      </main>
+    );
+
   return (
     <main className="relative flex min-h-(--screen-h) flex-1 flex-col bg-white text-ink">
       <header className="flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-8">
@@ -469,9 +422,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             ? run.replay === "guide"
               ? "바로 따라 하기 준비"
               : "다시 따라 하기 준비"
-            : joined
-              ? "진행 중인 분석에 합류했어요"
-              : "영상 분석 중"}
+            : "영상 분석 중"}
         </span>
       </header>
 
@@ -558,7 +509,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             {faceSaveError}
           </p>
         )}
-        {jobId && !fail && !review && (
+        {activeJobId && !fail && !review && (
           <PillButton variant="line" size="hero" onClick={() => setPouchModal(true)}>
             내 파우치 확인 / 추가
           </PillButton>
@@ -568,14 +519,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             {notice?.retry && (
               <PillButton
                 size="hero"
-                onClick={() => {
-                  if (jobId) {
-                    void retryJob();
-                    return;
-                  }
-                  setDemoFail(null);
-                  router.replace("/loading");
-                }}
+                onClick={() => void retryJob()}
                 disabled={retrying}
                 className="flex-1"
               >
@@ -619,12 +563,12 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           onDone={async () => {
             let faceRegistrationId: string | null = null;
             const metadata =
-              jobId && job
+              activeJobId && job
                 ? faceRegistrationRequest(job.videoId, null)
                 : run.mode === "guide" && load.status === "ready"
                   ? faceRegistrationRequest(load.guide.videoId, load.guide.guideId)
                   : null;
-            if (jobId || run.mode === "guide") {
+            if (activeJobId || run.mode === "guide") {
               const photo = facePhoto(run.id);
               if (!metadata || !photo) throw new Error("영상이나 얼굴 사진이 없다");
               faceRegistrationId = (await saveFace(photo, metadata)).faceRegistrationId;
