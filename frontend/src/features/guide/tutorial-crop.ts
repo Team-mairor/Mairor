@@ -9,11 +9,15 @@ export const TUTORIAL_BOTTOM = 372;
 export const CROP_KEY = "mairor:tutorial-crop:v1";
 const BASE_AREA_HEIGHT = TABLET_HEIGHT - TUTORIAL_TOP - TUTORIAL_BOTTOM;
 
+/** globals.css의 PC 칸(800×1280) 조건 */
+export const PC_FRAME_QUERY = "(orientation: landscape) and (pointer: fine)";
+
 /**
  * 앱 화면의 레이아웃 높이. globals.css의 zoom(min(1, 폭/800, 높이/1200))을 되돌린 값이다.
- * 줄어든 화면(주소창 있는 크롬 등)은 1200, 세로가 남는 전체 화면(800×1280)은 그 높이 그대로다
+ * 주소창 있는 크롬은 1200, 전체 화면(800×1280)과 PC 칸은 1280이다
  */
-export function layoutHeight(viewport: { width: number; height: number }): number {
+export function layoutHeight(viewport: { width: number; height: number }, pcFrame = false): number {
+  if (pcFrame) return 1280;
   const zoom = Math.min(1, viewport.width / TABLET_WIDTH, viewport.height / TABLET_HEIGHT);
   return viewport.height / zoom;
 }

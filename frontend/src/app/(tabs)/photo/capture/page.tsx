@@ -241,7 +241,7 @@ export default function PhotoCapturePage() {
       <section className="mx-auto flex min-h-0 w-full max-w-[680px] flex-1 flex-col gap-4">
         <div className="relative flex min-h-[360px] flex-1 items-center justify-center overflow-hidden">
           <div
-            className="relative w-[min(100%,56dvh,640px)] overflow-hidden rounded-2xl bg-black md:w-[min(100%,60dvh,640px)]"
+            className="relative w-[min(100%,calc(var(--screen-h)*0.56),640px)] overflow-hidden rounded-2xl bg-black md:w-[min(100%,calc(var(--screen-h)*0.6),640px)]"
             style={{
               aspectRatio: `${PHOTO_SLOT.width}/${PHOTO_SLOT.height}`,
             }}

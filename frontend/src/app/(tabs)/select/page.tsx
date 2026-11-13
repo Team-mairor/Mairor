@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
-import { IconButton } from "@/components/ui/icon-button";
 import { Notice } from "@/components/ui/notice";
 import {
   GuideBadge,
@@ -49,6 +48,14 @@ export default function SelectPage() {
 
   // 영상을 한 번 시작하면 화면을 떠날 때까지 다시 시작하지 않는다(연타로 분석이 두 번 요청되지 않게)
   const started = useRef(false);
+  // 분석 요청 중에 탭으로 떠났으면 응답이 와도 로딩 화면으로 가지 않는다
+  const left = useRef(false);
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+    };
+  }, []);
 
   /**
    * 고른 영상으로 시작한다. 이미 정해진 곳(승인 가이드 · 내 진행 중 작업)이 없으면 분석을 요청해 받은 곳으로 간다.
@@ -61,6 +68,7 @@ export default function SelectPage() {
       const target = known ?? targetOfReceipt(await requestAnalysis(videoId));
       // 계약상 비지 않지만, 비면 어디로도 가지 않고 다시 누를 수 있게 둔다
       if (!target) throw new Error("분석 요청 응답에 시작할 ID가 없다");
+      if (left.current) return;
       if (target.kind === "guide") {
         startRun({ kind: "guide", guideId: target.guideId });
         router.push(runHref("/loading", target.guideId));
@@ -94,9 +102,8 @@ export default function SelectPage() {
   const openPicker = (q = "") => setPicker(q);
 
   return (
-    <main className="relative flex min-h-dvh flex-1 flex-col bg-white">
-      <header className="flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-8">
-        <IconButton size={44} onClick={() => router.push("/home")} title="홈" aria-label="홈" />
+    <main className="relative flex min-h-0 flex-1 flex-col bg-white">
+      <header className="flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-10">
         <span className="font-serif text-[28px] leading-none text-navy italic">New look</span>
         <span className="text-[17px] text-mute">레퍼런스 영상 가져오기</span>
       </header>

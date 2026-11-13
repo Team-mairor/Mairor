@@ -7,10 +7,7 @@ import { BASIC_PHOTO_FRAME } from "@/features/photo-booth";
 export default function PhotoBoothPage() {
   return (
     <main className="flex min-h-0 flex-1 flex-col px-8 pt-8 pb-10">
-      <header className="flex items-center justify-between">
-        <Link href="/home" className="text-[17px] font-semibold text-navy">
-          홈으로
-        </Link>
+      <header className="flex items-center justify-end">
         <span className="font-label text-[14px] font-semibold tracking-[.16em] text-mute">
           PHOTO BOOTH
         </span>

@@ -453,7 +453,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   };
 
   return (
-    <main className="relative flex min-h-dvh flex-1 flex-col bg-white text-ink">
+    <main className="relative flex min-h-(--screen-h) flex-1 flex-col bg-white text-ink">
       <header className="flex h-16 shrink-0 items-center gap-3.5 border-b border-line px-8">
         <IconButton
           size={44}

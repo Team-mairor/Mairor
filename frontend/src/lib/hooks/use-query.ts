@@ -13,13 +13,15 @@ export function useQuery() {
   useEffect(() => {
     const read = () => setSearch(window.location.search);
     read();
+    // 라우터가 렌더 중에 주소를 바꾸므로 렌더가 끝난 뒤에 읽는다
+    const later = () => queueMicrotask(read);
     // Navigation API는 TS 기본 타입에 아직 없다. 없는 브라우저에서는 popstate(뒤로·앞으로)만 따라간다
     const nav = (window as { navigation?: EventTarget }).navigation;
-    nav?.addEventListener("currententrychange", read);
-    window.addEventListener("popstate", read);
+    nav?.addEventListener("currententrychange", later);
+    window.addEventListener("popstate", later);
     return () => {
-      nav?.removeEventListener("currententrychange", read);
-      window.removeEventListener("popstate", read);
+      nav?.removeEventListener("currententrychange", later);
+      window.removeEventListener("popstate", later);
     };
   }, []);
   return useMemo(() => (search === null ? null : new URLSearchParams(search)), [search]);

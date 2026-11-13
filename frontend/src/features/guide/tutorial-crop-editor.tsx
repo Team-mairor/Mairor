@@ -7,6 +7,7 @@ import { useCamera, type NormalizedRect } from "@/features/face";
 import {
   TABLET_WIDTH,
   layoutHeight,
+  PC_FRAME_QUERY,
   tutorialAreaHeight,
   TUTORIAL_BOTTOM,
   TUTORIAL_TOP,
@@ -35,6 +36,7 @@ export function TutorialCropEditor({
   const [rect, setRect] = useState<NormalizedRect>(saved ?? { x0: 0.1, y0: 0.3, x1: 0.9, y1: 0.7 });
   const [imageRatio, setImageRatio] = useState<number | null>(null);
   const [screen, setScreen] = useState({ width: 1, height: 1 });
+  const [pcFrame, setPcFrame] = useState(false);
   const [preview, setPreview] = useState(false);
   const [message, setMessage] = useState("");
   const box = useRef<HTMLDivElement>(null);
@@ -44,7 +46,9 @@ export function TutorialCropEditor({
   useEffect(() => {
     const update = () => {
       const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const pc = matchMedia(PC_FRAME_QUERY).matches;
       setScreen(viewport);
+      setPcFrame(pc);
       const v = videoRef.current;
       const ratio = tutorialVideoRatio(v);
       setImageRatio(ratio);
@@ -54,7 +58,7 @@ export function TutorialCropEditor({
         setRect(
           (initializedRatio.current === null || savedChanged) && saved
             ? saved
-            : centeredTutorialCrop(ratio, tutorialAreaHeight(layoutHeight(viewport))),
+            : centeredTutorialCrop(ratio, tutorialAreaHeight(layoutHeight(viewport, pc))),
         );
         initializedRatio.current = ratio;
         drag.current = null;
@@ -75,7 +79,7 @@ export function TutorialCropEditor({
   }, [videoRef, saved, status]);
   const cameraReady = status === "ready" && imageRatio !== null;
   // 이 기기에서 실제 tutorial이 쓰는 높이로 영역 비율을 잡는다
-  const appHeight = layoutHeight(screen);
+  const appHeight = layoutHeight(screen, pcFrame);
   const areaHeight = tutorialAreaHeight(appHeight);
   const previewScale = tabletPreviewScale(screen, appHeight);
   const center = () => {

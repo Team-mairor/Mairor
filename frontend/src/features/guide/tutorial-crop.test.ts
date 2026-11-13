@@ -70,6 +70,7 @@ describe("tutorial crop", () => {
     expect(layoutHeight({ width: 800, height: 1160 })).toBeCloseTo(1200);
     expect(layoutHeight({ width: 1920, height: 1080 })).toBeCloseTo(1200);
     expect(layoutHeight({ width: 800, height: 1280 })).toBe(1280);
+    expect(layoutHeight({ width: 1920, height: 1080 }, true)).toBe(1280);
     expect(tutorialAreaHeight(1280)).toBe(768);
   });
   it("전체 화면에서는 실제 tutorial 높이(800×768) 비율로 영역을 잡는다", () => {

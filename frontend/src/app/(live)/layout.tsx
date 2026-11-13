@@ -5,7 +5,7 @@ import { CameraProvider } from "@/features/face";
 // errorView="none"이라 각 화면이 카메라 오류를 직접 보여 준다.
 export default function LiveLayout({ children }: LayoutProps<"/">) {
   return (
-    <div className="relative flex min-h-dvh flex-1 flex-col bg-night text-white">
+    <div className="relative flex min-h-(--screen-h) flex-1 flex-col bg-night text-white">
       <CameraProvider autoStart={false} errorView="none">
         {children}
       </CameraProvider>

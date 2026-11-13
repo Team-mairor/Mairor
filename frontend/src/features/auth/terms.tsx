@@ -177,7 +177,7 @@ export function TermsModal({
       label={termsTitle(doc)}
       // 가입 화면이 스크롤돼 있어도 보이는 화면 가운데에 뜨게 fixed
       overlayClassName="fixed z-30 animate-fade"
-      className="flex max-h-[80dvh] flex-col gap-5"
+      className="flex max-h-[calc(var(--screen-h)*0.8)] flex-col gap-5"
     >
       <div className="flex shrink-0 items-center justify-between">
         <h2 className="text-[22px] font-bold text-ink">{termsTitle(doc)}</h2>

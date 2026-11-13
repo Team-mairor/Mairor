@@ -57,7 +57,7 @@ export function DoneView({
   onReport,
 }: DoneViewProps) {
   return (
-    <main className="flex min-h-dvh flex-1 flex-col gap-6 bg-white px-10 pt-9 pb-8 text-ink">
+    <main className="flex min-h-(--screen-h) flex-1 flex-col gap-6 bg-white px-10 pt-9 pb-8 text-ink">
       <div className="flex flex-col gap-3">
         <span className="font-label text-[16px] font-semibold tracking-[.16em] text-navy">
           LOOK COMPLETE · {total} / {total}

@@ -9,7 +9,12 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { href: "/home", label: "홈", Icon: Home, match: (p: string) => p === "/home" },
   { href: "/photo", label: "촬영", Icon: Camera, match: (p: string) => p.startsWith("/photo") },
-  { href: "/select", label: "튜토리얼", Icon: PlaySquare, match: () => false },
+  {
+    href: "/select",
+    label: "튜토리얼",
+    Icon: PlaySquare,
+    match: (p: string) => p.startsWith("/select"),
+  },
   {
     href: "/my/pouch",
     label: "파우치",
@@ -24,7 +29,7 @@ const TABS = [
   },
 ] as const;
 
-/** 하단 탭 5개. 홈·촬영·마이페이지·리포트 상세에서만 보인다 */
+/** 하단 탭 5개. (tabs) 화면에서 보인다 */
 export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
   const pathname = usePathname();
   if (hidden) return null;

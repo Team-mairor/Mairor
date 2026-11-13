@@ -196,7 +196,7 @@ export function PhotoEditPreview({
             <canvas
               ref={canvasRef}
               aria-label="네 장의 사진이 들어간 합성 미리보기"
-              className="h-auto max-h-[min(78dvh,900px)] w-auto max-w-full object-contain"
+              className="h-auto max-h-[min(calc(var(--screen-h)*0.78),900px)] w-auto max-w-full object-contain"
             />
             {!images && <p className="absolute text-mute">사진을 합치고 있어요</p>}
           </div>

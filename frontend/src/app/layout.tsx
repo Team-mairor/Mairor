@@ -17,6 +17,9 @@ const DevNav =
     ? dynamic(() => import("@/components/dev-nav").then((m) => m.DevNav))
     : null;
 
+// 창 크기를 --vw·--vh로 넣는다(globals.css). 전체 화면을 빠져나오는 중엔 값이 늦게 바뀌어 0.3초 뒤 한 번 더 잰다
+const VIEWPORT_SCRIPT = `(function(){var r=document.documentElement,t;function s(){r.style.setProperty("--vw",innerWidth+"px");r.style.setProperty("--vh",innerHeight+"px")}function l(){s();clearTimeout(t);t=setTimeout(s,300)}s();addEventListener("resize",l);document.addEventListener("fullscreenchange",l)})()`;
+
 // Pretendard (SIL OFL 1.1, fonts/Pretendard-LICENSE.txt)
 const pretendard = localFont({
   src: "./fonts/PretendardVariable.woff2",
@@ -73,24 +76,27 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         {/* 저장된 미러필름 모드를 그리기 전에 붙여 깜빡임을 막는다 */}
         <script dangerouslySetInnerHTML={{ __html: MIRROR_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: VIEWPORT_SCRIPT }} />
       </head>
       <body className="flex min-h-full flex-col">
-        {/* 800px 세로 화면 칸. 폭 대응 규칙은 globals.css */}
-        <div
-          id="app"
-          className="relative mx-auto flex min-h-dvh w-full max-w-[800px] flex-1 flex-col bg-white"
-        >
-          {/* 샘플 파우치·리포트. API가 붙으면 seed를 지운다 */}
-          <SessionProvider seed={{ pouch: DEFAULT_POUCH, reports: DEFAULT_REPORTS }}>
-            <RunGuideProvider>{children}</RunGuideProvider>
-            {/* DevNav의 useSearchParams 경계. 화면 전체를 감싸면 정적 HTML이 비므로 여기만 감싼다 */}
-            {DevNav && (
-              <Suspense>
-                <DevNav />
-              </Suspense>
-            )}
-          </SessionProvider>
-        </div>
+        {/* 샘플 파우치·리포트. API가 붙으면 seed를 지운다 */}
+        <SessionProvider seed={{ pouch: DEFAULT_POUCH, reports: DEFAULT_REPORTS }}>
+          {/* 800px 세로 화면 칸. 폭 대응 규칙은 globals.css */}
+          <div
+            id="app"
+            className="relative mx-auto flex min-h-(--screen-h) w-full max-w-[800px] flex-1 flex-col bg-white"
+          >
+            <div id="app-body" className="flex min-h-0 flex-1 flex-col">
+              <RunGuideProvider>{children}</RunGuideProvider>
+            </div>
+          </div>
+          {/* 칸을 가리지 않게 칸 밖에 둔다. useSearchParams 경계라 여기만 감싼다 */}
+          {DevNav && (
+            <Suspense>
+              <DevNav />
+            </Suspense>
+          )}
+        </SessionProvider>
       </body>
     </html>
   );
