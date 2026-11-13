@@ -53,6 +53,8 @@ export interface FaceFrame {
   /** 픽셀 */
   iod: number;
   pose: Pose;
+  /** MediaPipe 얼굴 변환 행렬(4×4, 열 우선, cm). 정면 표준 얼굴을 지금 머리 위치·방향으로 옮긴다 */
+  transform?: number[];
   eyes: { left: EyeState; right: EyeState };
   regions: Record<RegionName, RegionInfo>;
   regionVisibility: Record<RegionName, RegionVisibility>;

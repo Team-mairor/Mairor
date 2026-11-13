@@ -251,7 +251,7 @@
 .mirror [class*="backdrop-blur"] {
   backdrop-filter: none;
 }
-/* 비친 얼굴과 영상 속 얼굴이 겹치고 위치도 어긋나므로, 필름 위에서는 카메라 영상을 그리지 않는다 (추적은 그대로) */
+/* 필름 위에서는 비친 얼굴과 겹치지 않게 카메라 영상을 숨긴다 (추적은 그대로) */
 .mirror video {
   visibility: hidden;
 }
@@ -328,8 +328,18 @@
     @apply font-sans;
     /* 두 번 탭 확대 방지 */
     touch-action: manipulation;
+    /* 글씨를 길게 누르면 뜨는 복사·검색 창 방지. 입력칸은 아래에서 다시 켠다 */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
     word-break: keep-all;
     -webkit-font-smoothing: antialiased;
+  }
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
   }
   input {
     font-family: inherit;

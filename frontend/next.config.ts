@@ -31,6 +31,8 @@ const nextConfig = (phase: string): NextConfig => {
       (phase === PHASE_DEVELOPMENT_SERVER && process.env.GUIDE_EXPERIMENTS !== "0"));
   return {
     output: "export",
+    // 왼쪽 아래는 개발용 바로가기(DevNav) 열기 버튼 자리라, 개발 표시가 덮어 버튼이 눌리지 않는다
+    devIndicators: { position: "bottom-right" },
     env: { DEV_TOOLS: devTools ? "1" : "", GUIDE_EXPERIMENTS: guideExperiments ? "1" : "" },
     // debug 화면은 *.dev.tsx로 두어 개발 도구가 꺼지면 라우트에서 빠진다.
     pageExtensions: [

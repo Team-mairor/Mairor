@@ -24,8 +24,8 @@ export {
   eyesClosed,
   faceBox,
   clearFacePhoto,
+  faceBoxIn,
   facePhoto,
-  MIN_DISTANCE_RATIO,
   NO_CHECK,
   saveFacePhoto,
   snapMirrored,
@@ -82,9 +82,27 @@ export {
   MIN_FACE_WIDTH_RATIO,
   TRACKING_ISSUE_TEXT,
   trackingIssue,
+  trackingIssueText,
   useTrackingIssue,
   type TrackingIssue,
 } from "./tracking-issue";
+export {
+  eyeDistanceMm,
+  EyeHold,
+  fitMirror,
+  halfMirror,
+  type EyeSide,
+  type MirrorFace,
+  hasMirrorFit,
+  loadMirrorFit,
+  openEye,
+  mirrorScreen,
+  saveMirrorFit,
+  viewingEye,
+  type MirrorFit,
+  type MirrorScreen,
+} from "./half-mirror";
+export { LEFT_IRIS_CENTER, RIGHT_IRIS_CENTER } from "./regions";
 export {
   containTransform,
   coverTransform,

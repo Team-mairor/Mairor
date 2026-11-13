@@ -50,8 +50,9 @@ const frame = (extra: Partial<FaceFrame> = {}, lipsOut = false): FaceFrame => {
 let shot: ReturnType<typeof useStepShot>;
 const onShot = vi.fn();
 let probeRegions: RegionName[] = ["lipsOuter"];
+let probeWhole = false;
 function Probe() {
-  const value = useStepShot(probeRegions, onShot);
+  const value = useStepShot(probeRegions, onShot, probeWhole);
   useLayoutEffect(() => {
     shot = value;
   });
@@ -75,6 +76,7 @@ beforeEach(async () => {
   await act(async () => root.render(<Probe />));
 });
 afterEach(async () => {
+  probeWhole = false;
   await act(async () => root.unmount());
   vi.useRealTimers();
 });
@@ -90,6 +92,23 @@ describe("useStepShot", () => {
     expect(onShot.mock.calls[0][0]).toMatchObject({ url: "data:image/jpeg;base64,x" });
     expect(onShot.mock.calls[0][0].box).not.toBeNull();
     expect(shot.state).toBe("idle");
+  });
+
+  it("마지막 사진은 부위가 보여도 턱까지 얼굴 전체가 들어와야 찍는다", async () => {
+    probeWhole = true;
+    await act(async () => root.render(<Probe />));
+    const chinCut = frame({
+      regionVisibility: {
+        ...front.regionVisibility,
+        faceOval: { ...front.regionVisibility.faceOval, inFrameRatio: 0.7 },
+      },
+    });
+    await act(async () => shot.start());
+    for (let t = 0; t < STILL_MAX_WAIT_MS * 2; t += 200) await feed(chinCut, 200);
+    expect(onShot).not.toHaveBeenCalled();
+    expect(shot.state).toBe("outOfView");
+    for (let t = 0; t <= STILL_MS + 200; t += 100) await feed(frame(), 100);
+    expect(onShot).toHaveBeenCalledTimes(1);
   });
 
   it("찍을 부위가 화면 밖이면 찍지 않고 기다리며, 촬영 취소로 대기를 접는다", async () => {

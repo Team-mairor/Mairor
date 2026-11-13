@@ -84,62 +84,66 @@ export default function TutorialPage() {
   const item = list[index] ?? null;
 
   return (
-    <main className="relative flex flex-1 flex-col gap-4 bg-background p-6">
-      <header className="relative rounded-lg bg-black/50 px-4 py-3 text-white">
-        {item ? (
-          <>
-            <p className="text-sm opacity-80">
-              {index + 1} / {list.length} · {item.detail}
-            </p>
-            <h1 className="text-lg font-semibold">{item.title}</h1>
-          </>
-        ) : (
-          <h1 className="text-lg font-semibold">
-            {error ?? (items ? "이 영상에는 가이드가 없어요" : "가이드를 불러오는 중")}
-          </h1>
-        )}
+    // 스크롤 없이 한 화면에 맞춘다
+    <main className="relative flex min-h-0 flex-1 flex-col gap-2 overflow-hidden bg-background p-3">
+      <header className="relative shrink-0 rounded-lg bg-black/50 px-3 py-2 text-white">
+        <h1 className="truncate text-base font-semibold">
+          {item ? (
+            <>
+              {index + 1} / {list.length} · {item.title}
+              <span className="ml-2 text-xs font-normal opacity-80">{item.detail}</span>
+            </>
+          ) : (
+            (error ?? (items ? "이 영상에는 가이드가 없어요" : "가이드를 불러오는 중"))
+          )}
+        </h1>
       </header>
 
       <TutorialCropEditor
         step={item?.step ?? null}
         predictionStrength={prediction}
         showStats={showStats}
+        footer={(reset) => (
+          // 아래 양쪽 개발용 버튼을 피한다
+          <nav className="relative flex shrink-0 items-center justify-between gap-3 px-14">
+            <label className="rounded bg-black/70 p-2 text-sm text-white">
+              예측 {prediction.toFixed(1)}
+              <input
+                aria-label="위치 예측 강도"
+                type="range"
+                min="0"
+                max="1"
+                step="0.1"
+                value={prediction}
+                onChange={(event) => setPrediction(Number(event.target.value))}
+              />
+            </label>
+            <div className="flex gap-3">
+              <Button size="lg" variant="outline" asChild>
+                <Link href="/debug/preview">처음으로</Link>
+              </Button>
+              {reset}
+            </div>
+            <div className="flex gap-3">
+              <Button
+                size="lg"
+                variant="secondary"
+                disabled={index === 0}
+                onClick={() => setIndex((i) => Math.max(0, i - 1))}
+              >
+                이전
+              </Button>
+              <Button
+                size="lg"
+                disabled={index >= list.length - 1}
+                onClick={() => setIndex((i) => Math.min(list.length - 1, i + 1))}
+              >
+                다음
+              </Button>
+            </div>
+          </nav>
+        )}
       />
-
-      <nav className="relative flex items-center justify-between gap-3">
-        <label className="rounded bg-black/70 p-2 text-sm text-white">
-          예측 {prediction.toFixed(1)}
-          <input
-            aria-label="위치 예측 강도"
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={prediction}
-            onChange={(event) => setPrediction(Number(event.target.value))}
-          />
-        </label>
-        <Button size="lg" variant="outline" asChild>
-          <Link href="/debug/preview">처음으로</Link>
-        </Button>
-        <div className="flex gap-3">
-          <Button
-            size="lg"
-            variant="secondary"
-            disabled={index === 0}
-            onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          >
-            이전
-          </Button>
-          <Button
-            size="lg"
-            disabled={index >= list.length - 1}
-            onClick={() => setIndex((i) => Math.min(list.length - 1, i + 1))}
-          >
-            다음
-          </Button>
-        </div>
-      </nav>
     </main>
   );
 }

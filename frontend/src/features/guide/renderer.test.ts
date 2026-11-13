@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FaceFrame } from "@/features/face";
 import type { FaceMesh } from "@/features/overlay";
 
-import { GuideRenderer, leftNormal } from "./renderer";
+import { GuideRenderer, hiddenSideFor, leftNormal } from "./renderer";
 import type { GuideStep } from "./types";
 import data from "../../../public/fixtures/faces/front.json";
 
@@ -173,5 +173,16 @@ describe("영상 대신 까는 얼굴 윤곽", () => {
     });
     expect(ctx.bezierCurveTo).not.toHaveBeenCalled();
     expect(ctx.fill).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("미러필름 먼 쪽 숨김", () => {
+  it("10° 넘게 돌리면 먼 쪽을 숨기고 5° 안으로 돌아와야 양쪽을 다시 그린다", () => {
+    const deg = (d: number) => (d * Math.PI) / 180;
+    expect(hiddenSideFor(null, deg(8))).toBe(null);
+    expect(hiddenSideFor(null, deg(12))).toBe("left");
+    expect(hiddenSideFor("left", deg(7))).toBe("left");
+    expect(hiddenSideFor("left", deg(3))).toBe(null);
+    expect(hiddenSideFor(null, deg(-12))).toBe("right");
   });
 });

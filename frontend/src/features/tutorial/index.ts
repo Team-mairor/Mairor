@@ -6,4 +6,5 @@ export { ProductChip } from "./product-chip";
 export { ActCard, PrepCard, type StepProduct } from "./step-cards";
 export { templateOf, withStepTemplate } from "./template";
 export { TutorialTopBar } from "./top-bar";
+export { SelfiePreview } from "./selfie-preview";
 export { reachableStep, useStepShot, type ShotState } from "./use-step-shot";

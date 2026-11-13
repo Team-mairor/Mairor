@@ -1,6 +1,9 @@
 "use client";
 
-import { isRetryable, TRACKING_ISSUE_TEXT, useCamera, type TrackingIssue } from "@/features/face";
+import { useSyncExternalStore } from "react";
+
+import { isRetryable, trackingIssueText, useCamera, type TrackingIssue } from "@/features/face";
+import { isMirror, subscribeMirror } from "@/lib/mirror";
 
 import { useFaceState } from "./face-state";
 import { ALERT, CAMERA_ERROR_TEXT, type LiveAlert } from "./messages";
@@ -59,6 +62,7 @@ export function useLiveState(
 ): LiveState {
   const { status } = useCamera();
   const { face, issue: trackIssue } = useFaceState();
+  const mirror = useSyncExternalStore(subscribeMirror, isMirror, () => false);
   const issue = trackingOverride ? trackingOverride.issue : (trackIssue ?? extraIssue ?? null);
   const err = useCameraErrorNote(face);
   const off = { canRender: false, canMeasure: false };
@@ -79,7 +83,7 @@ export function useLiveState(
     };
   if (issue)
     return {
-      note: { ...TRACKING_ISSUE_TEXT[issue], live: true, face },
+      note: { ...trackingIssueText(issue, mirror), live: true, face },
       // 너무 멀 때만 그리고, 나머지는 가이드·화장을 숨긴 상태다
       canRender: issue === "far",
       canMeasure: false,

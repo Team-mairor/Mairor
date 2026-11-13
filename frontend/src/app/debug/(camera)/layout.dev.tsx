@@ -7,11 +7,8 @@ import { CameraProvider } from "@/features/face";
 export default function CameraLayout({ children }: { children: ReactNode }) {
   return (
     <CameraProvider>
-      <header className="relative z-10 flex flex-wrap items-center gap-3 bg-background p-3">
+      <header className="relative z-10 flex shrink-0 items-center bg-background px-3 pt-2">
         <MirrorToggle />
-        <span className="text-sm">
-          끄면 카메라 영상 · 켜면 미러필름용 화면 (카메라 추적은 유지)
-        </span>
       </header>
       {children}
     </CameraProvider>

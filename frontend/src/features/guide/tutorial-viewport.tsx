@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 import { useCamera, useFaceRender, type NormalizedRect } from "@/features/face";
+import { isMirror, subscribeMirror } from "@/lib/mirror";
 
 import { GuideOverlay } from "./guide-overlay";
 import {
@@ -126,18 +127,30 @@ export function CropView({
   );
 }
 
-export function TutorialViewport({ step, face }: { step: GuideStep | null; face: boolean }) {
+/**
+ * 튜토리얼 화면의 얼굴 자리.
+ * - 미러필름: 거울에 비친 얼굴 자리에 가이드만 그린다
+ * - 일반: 카메라 영상 위 같은 자리에 가이드를 그린다. 크롭이 있으면 크롭한 영상과 가이드를 함께 그린다
+ */
+export function TutorialViewport({ step }: { step: GuideStep | null }) {
   const { crop } = useTutorialCrop();
+  const mirror = useSyncExternalStore(subscribeMirror, isMirror, () => false);
+  const { setShowVideo } = useCamera();
+  // 크롭은 따로 그린 영상을 보여 주므로 전체 카메라 영상을 숨긴다. 미러필름에서는 CSS가 영상을 숨긴다
+  useEffect(() => {
+    setShowVideo(!crop);
+    return () => setShowVideo(true);
+  }, [crop, setShowVideo]);
+
+  // 일반은 전체 카메라 영상과 같은 칸에 그려야 위치가 맞는다.
+  // 미러필름은 위·아래 패널도 거울이라 띠로 자르면 그 뒤에 비친 눈썹·입술 가이드가 잘린다
+  if (mirror || !crop) return <GuideOverlay step={step} />;
   return (
     <div
       className="absolute inset-x-0 overflow-hidden"
       style={{ top: TUTORIAL_TOP, bottom: TUTORIAL_BOTTOM }}
     >
-      {crop ? (
-        <CropView crop={crop} step={step} video={false} face={face} />
-      ) : (
-        <GuideOverlay step={step} fit face={face} />
-      )}
+      <CropView crop={crop} step={step} />
     </div>
   );
 }

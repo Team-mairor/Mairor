@@ -106,7 +106,7 @@ export function isStepInCrop(
         return sum + p.x * next.y - next.x * p.y;
       }, 0),
     ) / 2;
-  // 고개 돌림은 부위 표시 진하기(guideRegionAlpha)가 서서히 숨기므로 여기서는 크롭과 겹치는지만 본다
+  // 고개 돌림은 부위 표시 진하기(guideRegionAlpha)가 숨기므로 여기서는 크롭과 겹치는지만 본다
   return regions.some((name) => {
     const points = frame.regions[name].indices.map((i) => ({
       x: 1 - frame.landmarks[i].x,

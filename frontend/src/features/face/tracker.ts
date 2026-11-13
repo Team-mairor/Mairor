@@ -669,6 +669,7 @@ export class FaceTracker {
       landmarks,
       iod,
       pose,
+      transform: matrix ? Array.from(matrix.data) : undefined,
       eyes: {
         left: eyeStateFromBlendshape(blinkLeft, closedBlink, blinkThreshold),
         right: eyeStateFromBlendshape(blinkRight, closedBlink, blinkThreshold),

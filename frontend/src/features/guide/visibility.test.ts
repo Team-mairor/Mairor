@@ -36,15 +36,16 @@ describe("현재 단계의 부위별 표시", () => {
     expect(visibility.alpha("leftEye")).toBe(0);
     expect(visibility.update(step, sample, 0, { x0: 0, x1: 0.01, y0: 0, y1: 0.01 })).toBe(false);
   });
-  it("크롭을 써도 먼 쪽 눈은 크롭이 없을 때와 같이 서서히 숨긴다", () => {
-    const turned = frame({ pose: { yaw: 0.65, pitch: 0, roll: 0 } });
-    turned.regionVisibility.leftEye.facing = false;
-    const visibility = new GuideVisibility();
-    visibility.update(step, turned, 0, { x0: 0, x1: 1, y0: 0, y1: 1 });
-    const fading = guideRegionAlpha(turned, "leftEye");
-    expect(fading).toBeGreaterThan(0);
-    expect(fading).toBeLessThan(1);
-    expect(visibility.alpha("leftEye")).toBe(fading);
+  it("먼 쪽 눈은 숨길 각도까지 진하게 두고 넘으면 숨긴다. 크롭을 써도 같다", () => {
+    const at = (yaw: number) => {
+      const turned = frame({ pose: { yaw, pitch: 0, roll: 0 } });
+      const visibility = new GuideVisibility();
+      visibility.update(step, turned, 0, { x0: 0, x1: 1, y0: 0, y1: 1 });
+      expect(visibility.alpha("leftEye")).toBe(guideRegionAlpha(turned, "leftEye"));
+      return visibility.alpha("leftEye");
+    };
+    expect(at(0.65)).toBe(1);
+    expect(at(0.8)).toBe(0);
   });
   it("시각이 같은 정적 픽스처로 바꿔도 다시 판정한다", () => {
     const visibility = new GuideVisibility();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,8 @@ vi.mock("@/features/face", () => ({
   allPassed: (check: Record<string, boolean>) => Object.values(check).every(Boolean),
   captureFace: mocks.capture,
   eyesClosed: () => false,
+  hasMirrorFit: () => true,
+  loadMirrorFit: () => null,
   saveFacePhoto: mocks.save,
   useCamera: () => mocks.camera,
   useFaceCheck: (active: boolean) => ({
@@ -28,7 +30,11 @@ vi.mock("@/features/face", () => ({
     passedNow: mocks.passedNow,
   }),
 }));
-vi.mock("@/features/live", () => ({ useCameraErrorNote: () => null }));
+vi.mock("@/features/live", () => ({
+  FaceStateProvider: ({ children }: { children: ReactNode }) => children,
+  useCameraErrorNote: () => null,
+}));
+vi.mock("@/features/mirror-fit", () => ({ MirrorFitView: () => null }));
 vi.mock("./face-demo", () => ({ FaceDemo: () => null }));
 vi.mock("./face-position", () => ({ FacePosition: () => null }));
 

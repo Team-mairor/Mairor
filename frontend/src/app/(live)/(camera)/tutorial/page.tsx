@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
 import { pickOf } from "@/features/check";
-import { useHiddenVideo, type RegionName } from "@/features/face";
+import { type RegionName } from "@/features/face";
 import {
   categoryOfPart,
   checkGuideArea,
@@ -35,6 +35,7 @@ import {
   matchFor,
   runHref,
   saveStepPhoto,
+  type StepPhoto,
   stepPhoto,
   useSession,
   type GuideAction,
@@ -53,8 +54,10 @@ import {
   useStepShot,
   withStepTemplate,
   type StepProduct,
+  SelfiePreview,
 } from "@/features/tutorial";
 import { ApiError, errorMessage } from "@/lib/api";
+import { isMirror, subscribeMirror } from "@/lib/mirror";
 
 /** 튜토리얼 한 단계에 필요한 실제 가이드 조회 응답 */
 interface TutorialStep {
@@ -213,6 +216,11 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const [gauge, setGauge] = useState(10);
   const [exitAsk, setExitAsk] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  // 미러필름에서 마지막 사진 전에 카메라 화면을 띄우고 자세를 맞추는 중인지
+  const [posing, setPosing] = useState(false);
+  const [review, setReview] = useState<StepPhoto | null>(null);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState<unknown>(null);
   const countdownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownActive = useRef(false);
 
@@ -235,9 +243,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       });
   }, []);
   useEffect(loadDefaults, [loadDefaults]);
-
-  // 카메라는 추적에만 쓰고 영상은 보여 주지 않는다. 얼굴 자리에는 가이드만 뜬다
-  useHiddenVideo();
 
   const info = steps[step];
   const groups = useMemo(() => groupSteps(steps), [steps]);
@@ -278,9 +283,11 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   );
   // 가이드가 있는 단계는 지금 단계 부위의 판정(놓침·고개 돌림·잘림·너무 멂)으로 안내하고 측정을 멈춘다
   const { crop } = useTutorialCrop();
-  const guideIssue = useGuideTrackingIssue(guideStep, crop);
+  // 미러필름은 크롭 없이 그리므로 판정도 크롭 없이 한다
+  const mirror = useSyncExternalStore(subscribeMirror, isMirror, () => false);
+  const guideIssue = useGuideTrackingIssue(guideStep, mirror ? null : crop);
   // 가이드가 없는 단계(해당 없음·실패)는 공통 얼굴 판정으로 안내하고 측정을 막는다
-  const { note, canRender, canMeasure } = useLiveState(
+  const { note, canRender, canMeasure, reason } = useLiveState(
     alert,
     null,
     guideStep ? { issue: guideIssue } : undefined,
@@ -291,7 +298,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
   // 실제 가이드는 단계 사진을 서버에 저장한 뒤 화면 상태를 확정하고 다음으로 간다.
   // 업로드에 실패하면 이전 사진과 단계 상태를 유지해 재시도할 수 있게 한다.
-  const shot = useStepShot(photoRegions, async (photo) => {
+  const savePhoto = async (photo: StepPhoto) => {
     if (!isCurrentRun(run.id)) return;
     if (run.mode === "guide") {
       if (!run.executionId) throw new Error("실행 정보가 없습니다.");
@@ -319,8 +326,36 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       completeRun(run.id);
       router.push(runHref("/done", run.guideId));
     } else goStep(step + 1);
-  });
+  };
+  // 마지막 사진은 리포트 대표 사진이라 얼굴 전체가 보일 때 찍고, 저장 전에 다시 찍을 수 있게 한다
+  const shot = useStepShot(
+    photoRegions,
+    async (photo) => {
+      if (!last) return savePhoto(photo);
+      setReviewError(null);
+      setReview(photo);
+    },
+    last,
+  );
+  const confirmReview = async () => {
+    if (!review || reviewSaving) return;
+    setReviewSaving(true);
+    setReviewError(null);
+    try {
+      await savePhoto(review);
+    } catch (e) {
+      setReviewError(e);
+    } finally {
+      setReviewSaving(false);
+    }
+  };
+  const retake = () => {
+    if (reviewSaving) return;
+    setReview(null);
+    setReviewError(null);
+  };
   const { cancel: cancelShot } = shot;
+  const selfie = mirror && last && (posing || countdown !== null || shot.shooting || shot.saving);
 
   const cancelCountdown = () => {
     if (!countdownActive.current) return;
@@ -420,6 +455,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   function goStep(i: number, prep = true) {
     cancelCountdown();
     cancelShot();
+    setPosing(false);
+    setReview(null);
+    setReviewError(null);
     setStep(i);
     setAct(0);
     setReady(!prep);
@@ -438,8 +476,10 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       setDefaultsFailed(false);
       return loadDefaults();
     }
-    if (last) startFinalCountdown();
-    else shot.start();
+    if (!last) return shot.start();
+    // 미러필름은 카메라 화면을 먼저 띄우고, 자세를 맞춘 뒤 한 번 더 눌러야 카운트다운을 시작한다
+    if (mirror && !posing) return setPosing(true);
+    startFinalCountdown();
   };
   const quit = () => {
     leaving.current = true;
@@ -463,24 +503,26 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         ? "화면에 보이면 찍어요"
         : shot.state === "waiting"
           ? "잠시 멈춰 주세요…"
-          : lastAct && reloadRegions
-            ? "다시 불러오기"
-            : shot.state === "failed"
-              ? "다시 찍기"
-              : !lastAct
-                ? "했어요 · 다음 할 일"
-                : last
-                  ? "완성하기"
-                  : paced
-                    ? "다음 스텝"
-                    : "건너뛰기";
+          : selfie && shot.state === "idle"
+            ? "촬영하기"
+            : lastAct && reloadRegions
+              ? "다시 불러오기"
+              : shot.state === "failed"
+                ? "다시 찍기"
+                : !lastAct
+                  ? "했어요 · 다음 할 일"
+                  : last
+                    ? "완성하기"
+                    : paced
+                      ? "다음 스텝"
+                      : "건너뛰기";
 
   return (
     <main className="relative flex flex-1 flex-col">
-      <TutorialViewport step={canRender ? guideStep : null} face={canRender} />
-      <div className="flex-1" />
+      <TutorialViewport step={canRender && !selfie ? guideStep : null} />
+      {!selfie && <div className="flex-1" />}
 
-      {countdown !== null && (
+      {countdown !== null && !selfie && (
         <div
           className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-night/55 px-8 text-center text-white"
           role="status"
@@ -504,14 +546,17 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           // 촬영을 기다리는 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 접는다
           cancelCountdown();
           cancelShot();
+          setPosing(false);
           setExitAsk(true);
         }}
-        reachable={shot.saving ? -1 : reachable}
-        onGoGroup={(i) => !shot.saving && i <= reachable && goStep(groups[i].start, i > g)}
+        reachable={shot.saving || reviewSaving ? -1 : reachable}
+        onGoGroup={(i) =>
+          !shot.saving && !reviewSaving && i <= reachable && goStep(groups[i].start, i > g)
+        }
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
       {/* 영상 제품 정보가 없어도 고른 제품이 있으면 보여 준다 */}
-      {!note && (info.product || pick?.kind === "picked") && (
+      {!note && !selfie && (info.product || pick?.kind === "picked") && (
         <ProductChip
           refProduct={info.product}
           mine={hasProduct ? pr.p : null}
@@ -519,58 +564,93 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           pick={pick}
         />
       )}
-      <LiveNote note={note} />
+      {/* 셀카 화면에서는 카메라 오류·켜는 중 안내만 띄운다 */}
+      <LiveNote note={selfie && reason !== "error" && reason !== "starting" ? null : note} />
 
       {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
-      <div className="relative flex flex-col gap-3.5 px-7 pt-2 pb-[18px]">
-        <div className="flex items-end gap-3">
-          <span className="shrink-0 font-serif text-[34px] leading-[.9] text-blush italic tabular">
-            {String(g + 1).padStart(2, "0")}
-          </span>
-          <h1 className="font-display text-[26px] leading-[1.15] text-white">{info.title}</h1>
-          {groupDetail && (
-            <span className="shrink-0 text-[15px] text-line-2 tabular">{groupDetail}</span>
-          )}
-          {paced && info.acts.length > 1 && (
-            <span className="shrink-0 text-[15px] text-line-2 tabular">
-              할 일 {act + 1}/{info.acts.length}
-            </span>
-          )}
-          {target !== null && !blocked && (
-            <span
-              className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
-              style={{ color: meterColor }}
-            >
-              {gaugeLabel}
-            </span>
-          )}
-        </div>
-        {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. */}
-        <div className="flex flex-col gap-2">
-          {shownActs.map((i) => (
-            <ActCard
-              key={info.acts[i].text}
-              n={i + 1}
-              act={info.acts[i]}
-              doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
-            />
-          ))}
-          {paced && act < info.acts.length - 1 && (
-            <span className="truncate px-2 text-[16px] text-ash">
-              다음 {act + 2}. {info.acts[act + 1].text}
-            </span>
-          )}
-        </div>
+      {/* 셀카 화면은 카메라 가까이 위쪽에 모으되, 떠 있는 상단 바(top-5 + h-12) 아래에서 시작한다 */}
+      <div
+        className={`relative flex flex-col gap-3.5 px-7 pb-[18px] ${selfie ? "pt-[84px]" : "pt-2"}`}
+      >
+        {selfie && (
+          <SelfiePreview className="mx-auto aspect-[3/4] w-[70%]">
+            {countdown !== null && (
+              <span
+                role="status"
+                aria-live="assertive"
+                aria-label={`마지막 사진 촬영까지 ${countdown}초`}
+                className="font-serif text-[clamp(96px,22vw,180px)] leading-none tabular-nums"
+              >
+                {countdown}
+              </span>
+            )}
+          </SelfiePreview>
+        )}
+        {!selfie && (
+          <>
+            <div className="flex items-end gap-3">
+              <span className="shrink-0 font-serif text-[34px] leading-[.9] text-blush italic tabular">
+                {String(g + 1).padStart(2, "0")}
+              </span>
+              <h1 className="font-display text-[26px] leading-[1.15] text-white">{info.title}</h1>
+              {groupDetail && (
+                <span className="shrink-0 text-[15px] text-line-2 tabular">{groupDetail}</span>
+              )}
+              {paced && info.acts.length > 1 && (
+                <span className="shrink-0 text-[15px] text-line-2 tabular">
+                  할 일 {act + 1}/{info.acts.length}
+                </span>
+              )}
+              {target !== null && !blocked && (
+                <span
+                  className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
+                  style={{ color: meterColor }}
+                >
+                  {gaugeLabel}
+                </span>
+              )}
+            </div>
+            {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. */}
+            <div className="flex flex-col gap-2">
+              {shownActs.map((i) => (
+                <ActCard
+                  key={info.acts[i].text}
+                  n={i + 1}
+                  act={info.acts[i]}
+                  doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
+                />
+              ))}
+              {paced && act < info.acts.length - 1 && (
+                <span className="truncate px-2 text-[16px] text-ash">
+                  다음 {act + 2}. {info.acts[act + 1].text}
+                </span>
+              )}
+            </div>
 
-        {target !== null && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
+            {target !== null && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
+          </>
+        )}
 
+        {selfie && countdown === null && shot.state === "idle" && (
+          <p
+            role="status"
+            className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-ink"
+          >
+            얼굴 전체가 화면에 들어오게 맞춘 뒤 촬영하기를 눌러 주세요.
+          </p>
+        )}
+        {selfie && countdown !== null && (
+          <p className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-ink">
+            잠시 후 마지막 사진을 촬영해요. 아래 버튼을 누르면 취소할 수 있어요.
+          </p>
+        )}
         {shot.state === "outOfView" && (
           <p
             role="status"
             className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-ink"
           >
-            이 단계 부위가 화면에 다 보이게 조금 뒤로 가 주세요. 촬영을 그만두려면 왼쪽 버튼을 눌러
-            주세요.
+            {last ? "얼굴 전체가" : "이 단계 부위가"} 화면에 다 보이게 조금 뒤로 가 주세요. 촬영을
+            그만두려면 왼쪽 버튼을 눌러 주세요.
           </p>
         )}
         {shot.saving && (
@@ -589,7 +669,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
             촬영할 부위 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 불러와 주세요.
           </p>
         )}
-        {shot.state === "failed" && !reloadRegions && (
+        {shot.state === "failed" && countdown === null && !reloadRegions && (
           <p
             role="alert"
             className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
@@ -607,6 +687,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
               if (shot.saving) return;
               // 촬영을 기다리는 중이면(부위가 계속 화면 밖 등) 대기만 접고 지금 단계에 머문다
               if (shot.shooting) return cancelShot();
+              if (posing) return setPosing(false);
               if (act > 0) {
                 // 마지막 할 일에서 촬영에 실패한 채 돌아가면 실패 안내·다시 찍기 라벨을 지운다
                 cancelShot();
@@ -648,6 +729,50 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           pick={pick}
           onStart={() => setReady(true)}
         />
+      )}
+
+      {/* 준비 카드처럼 상단 바(z-[5]) 아래에 깔아, 저장이 계속 실패해도 나가기를 누를 수 있게 한다 */}
+      {review && (
+        <div className="absolute inset-0 z-[4] flex flex-col items-center gap-3.5 bg-night px-7 pt-[84px] pb-[18px]">
+          <div className="relative aspect-[3/4] w-[70%] overflow-hidden rounded-[24px] bg-black">
+            {/* eslint-disable-next-line @next/next/no-img-element -- 메모리의 data URL이라 next/image가 필요 없다 */}
+            <img
+              src={review.url}
+              alt="방금 찍은 마지막 사진"
+              className="absolute inset-0 size-full object-contain"
+            />
+          </div>
+          <p className="text-[19px] font-bold text-white">이 사진으로 완성할까요?</p>
+          {reviewError !== null && (
+            <p
+              role="alert"
+              className="w-full rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
+            >
+              사진을 저장하지 못했어요. {errorMessage(reviewError)} 다시 시도하거나 다시 찍어
+              주세요.
+            </p>
+          )}
+          <div className="flex w-full items-center gap-3">
+            <PillButton
+              variant="line"
+              size="cta"
+              onClick={retake}
+              disabled={reviewSaving}
+              className="text-white"
+            >
+              다시 찍기
+            </PillButton>
+            <PillButton
+              size="cta"
+              trailing
+              onClick={confirmReview}
+              disabled={reviewSaving}
+              className="min-w-0 flex-1"
+            >
+              {reviewSaving ? "저장 중…" : "이 사진으로 완성"}
+            </PillButton>
+          </div>
+        </div>
       )}
 
       <ExitModal open={exitAsk} onQuit={quit} onClose={() => setExitAsk(false)} />

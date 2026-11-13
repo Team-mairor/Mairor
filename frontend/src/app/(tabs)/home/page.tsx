@@ -1,9 +1,9 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Crosshair, LogOut, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { MirrorToggle } from "@/components/mirror-toggle";
 import { Modal } from "@/components/ui/modal";
@@ -16,6 +16,7 @@ import { fromSummary, useReports } from "@/features/report";
 import { displayName, isGuideId, runHref, useSession } from "@/features/session";
 import { videoThumb } from "@/features/video";
 import { useQuery } from "@/lib/hooks/use-query";
+import { isMirror, subscribeMirror } from "@/lib/mirror";
 
 const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
 const MIN_POUCH_STICKER_HEIGHT = 260;
@@ -44,7 +45,9 @@ export default function HomePage() {
   const { state, sessionChecked, startRun } = useSession();
   // 로그인했으면 파우치 보드를 서버 목록으로 맞춘다
   const sync = usePouchSync();
+  const [menu, setMenu] = useState(false);
   const [account, setAccount] = useState(false);
+  const mirror = useSyncExternalStore(subscribeMirror, isMirror, () => false);
   const { logout, pending: logoutPending, error: logoutError } = useLogout();
   const query = useQuery();
   // ?empty=1: 리포트·파우치 빈 상태 확인용 (데이터는 지우지 않는다)
@@ -135,17 +138,51 @@ export default function HomePage() {
         <span className="font-serif text-[40px] leading-none tracking-[-.02em] text-navy italic">
           mairor
         </span>
-        <button
-          type="button"
-          onClick={() => setAccount(true)}
-          className="ml-auto flex size-11 items-center justify-center rounded-full bg-mint font-serif text-[22px] text-ink italic"
-          aria-label="계정 · 로그아웃"
-        >
-          {(displayName(state).trim()[0] ?? "m").toUpperCase()}
-        </button>
+        <div className="relative ml-auto">
+          <button
+            type="button"
+            onClick={() => setMenu((v) => !v)}
+            className="flex size-11 items-center justify-center rounded-full bg-mint font-serif text-[22px] text-ink italic"
+            aria-label="내 메뉴"
+            aria-expanded={menu}
+          >
+            {(displayName(state).trim()[0] ?? "m").toUpperCase()}
+          </button>
+          {menu && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setMenu(false)} aria-hidden />
+              <div className="absolute top-14 right-0 z-40 flex w-[340px] animate-fade flex-col gap-1 rounded-3xl border border-line-2 bg-white p-3 shadow-modal">
+                {state.email && (
+                  <p className="truncate px-3 pt-2 pb-3 text-[16px] text-mute">{state.email}</p>
+                )}
+                <MirrorToggle fitFirst className="justify-between border-0 px-3" />
+                {mirror && (
+                  <Link
+                    href="/mirror-fit"
+                    className="flex h-12 items-center justify-between rounded-2xl px-3 text-[17px] font-semibold text-ink hover:bg-cream"
+                  >
+                    거울 맞추기
+                    <Crosshair className="size-5 text-mute" aria-hidden />
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenu(false);
+                    setAccount(true);
+                  }}
+                  className="flex h-12 items-center justify-between rounded-2xl px-3 text-[17px] font-semibold text-error hover:bg-cream"
+                >
+                  로그아웃
+                  <LogOut className="size-5" aria-hidden />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
-      {/* 잘못 눌러 바로 로그아웃되지 않게 한 번 묻는다. 로그인 뒤 미러필름 모드를 바꿀 곳도 여기다 */}
+      {/* 잘못 눌러 바로 로그아웃되지 않게 한 번 묻는다 */}
       <Modal
         open={account}
         onClose={() => !logoutPending && setAccount(false)}
@@ -160,7 +197,6 @@ export default function HomePage() {
           </h2>
           <p className="text-[17px] text-mute">{state.email}</p>
         </div>
-        <MirrorToggle className="justify-between" />
         {logoutError && <FieldError>{logoutError}</FieldError>}
         <div className="flex gap-2.5">
           <button

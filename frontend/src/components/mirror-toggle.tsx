@@ -1,21 +1,26 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 
-import { MIRROR_KEY, setMirror } from "@/lib/mirror";
+import { hasMirrorFit } from "@/features/face";
+import { isMirror, MIRROR_KEY, setMirror, subscribeMirror } from "@/lib/mirror";
 import { cn } from "@/lib/utils";
 
-/** <html>의 mirror 클래스를 구독해, 화면에 토글이 여러 개 있어도 같은 상태를 보여 준다 */
-function subscribe(onChange: () => void) {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-  return () => observer.disconnect();
-}
-const isMirror = () => document.documentElement.classList.contains("mirror");
-
-/** 일반 / 미러필름 모드 전환. 색 규칙은 globals.css의 .mirror */
-export function MirrorToggle({ className }: { className?: string }) {
-  const on = useSyncExternalStore(subscribe, isMirror, () => false);
+/**
+ * 일반 / 미러필름 모드 전환. 색 규칙은 globals.css의 .mirror.
+ * fitFirst면 거울 맞추기를 한 적 없이 켤 때 거울 맞추기 화면으로 보낸다. 확인 화면에서는 그 자리에서 바꾸기만 한다
+ */
+export function MirrorToggle({
+  className,
+  fitFirst = false,
+}: {
+  className?: string;
+  fitFirst?: boolean;
+}) {
+  const router = useRouter();
+  // <html>의 mirror 클래스를 구독해, 화면에 토글이 여러 개 있어도 같은 상태를 보여 준다
+  const on = useSyncExternalStore(subscribeMirror, isMirror, () => false);
 
   const toggle = () => {
     const next = !on;
@@ -25,6 +30,7 @@ export function MirrorToggle({ className }: { className?: string }) {
     } catch {
       // 저장에 실패해도 지금 화면에는 적용된다
     }
+    if (fitFirst && next && !hasMirrorFit()) router.push("/mirror-fit?first=1");
   };
 
   return (

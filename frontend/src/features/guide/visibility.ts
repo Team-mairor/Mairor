@@ -11,24 +11,21 @@ import {
 import { isStepInCrop } from "./tutorial-crop";
 import type { GuideStep } from "./types";
 
-export const GUIDE_TURN = { fadeStart: 0.45, hidden: 0.75, max: 1.05 } as const;
+/** 먼 쪽 부위를 숨기는 고개 각도(hidden)와 모두 숨기는 각도(max). 라디안 */
+export const GUIDE_TURN = { hidden: 0.75, max: 1.05 } as const;
 /** 얼굴 윤곽처럼 양쪽에 걸친 도형의 먼 쪽. 볼 뒤로 넘어간 윤곽이 얼굴 위에 그려지지 않게 일찍 숨긴다 */
-export const FAR_SIDE_TURN = { ...GUIDE_TURN, fadeStart: 0.17, hidden: 0.3 } as const;
+export const FAR_SIDE_TURN = { ...GUIDE_TURN, hidden: 0.3 } as const;
 export const GUIDE_STALE_MS = FRAME_STALE_MS;
 
-const smoothstep = (lo: number, hi: number, value: number) => {
-  const t = Math.max(0, Math.min(1, (value - lo) / (hi - lo)));
-  return t * t * (3 - 2 * t);
-};
-
+/** 고개 돌림에 따른 진하기. 반쪽만 옅으면 어색해 숨길 각도까지는 그대로 두고 넘으면 숨긴다 */
 export function turnAlpha(
   yaw: number,
   side: "left" | "right" | "center",
-  turn: { fadeStart: number; hidden: number; max: number } = GUIDE_TURN,
+  turn: { hidden: number; max: number } = GUIDE_TURN,
 ) {
   if (!Number.isFinite(yaw) || Math.abs(yaw) >= turn.max) return 0;
   const away = side === "left" ? yaw : side === "right" ? -yaw : Math.abs(yaw);
-  return 1 - smoothstep(turn.fadeStart, turn.hidden, away);
+  return away < turn.hidden ? 1 : 0;
 }
 
 export function guideRegionAlpha(

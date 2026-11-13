@@ -39,6 +39,8 @@ const FACE_PARTS: RegionName[] = [
   "leftEye",
   "lipsOuter",
 ];
+/** 코끝 점 번호. 코는 부위(regions.v1.json)에 없어 직접 쓴다 */
+const NOSE_TIP = 1;
 
 const STYLE = {
   alpha: 0.98,
@@ -47,8 +49,8 @@ const STYLE = {
     { alpha: 0.1, extra: 12 },
     { alpha: 0.22, extra: 5 },
   ],
-  /** 얼굴 윤곽 선의 진하기와 두께 */
-  face: { alpha: 0.2, size: 0.012, min: 1.5 },
+  /** 얼굴 윤곽 선의 진하기와 두께. 영상 없이도 윤곽이 보이게 진하고 굵게 둔다 */
+  face: { alpha: 0.5, size: 0.02, min: 2.5 },
   /** 점선의 점 지름, 점 사이 간격(점 지름 대비) */
   dot: { size: 0.032, min: 3, gap: 0.8 },
   /** 얇은 띠 영역(isThinArea)의 점 지름(점 지름 대비). 멀어져도 dot.min은 지킨다 */
@@ -92,6 +94,8 @@ export class GuideRenderer {
     between: boolean;
   }[] = [];
   visibleRegions: RegionName[] = [];
+  /** 미러필름에서 고개를 돌렸을 때 숨기는 먼 쪽 */
+  private hiddenSide: "left" | "right" | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -124,8 +128,10 @@ export class GuideRenderer {
     now: number;
     /** 영상 대신 옅은 얼굴 윤곽을 깐다 */
     face?: boolean;
+    /** 고개를 돌리면 거울 쪽으로 향한 쪽만 그린다(미러필름). 두 눈으로 볼 때 겹쳐 보이는 그림을 줄인다 */
+    nearSideOnly?: boolean;
   }) {
-    const { frame, step, mesh, projection, now, face = false } = options;
+    const { frame, step, mesh, projection, now, face = false, nearSideOnly = false } = options;
     this.clear();
     // 단계가 바뀌면 이전 단계의 판정으로 새 단계 가이드를 그리지 않는다.
     if ((step?.stepId ?? null) !== this.stepId) {
@@ -186,6 +192,8 @@ export class GuideRenderer {
       step.regions.every((region) => region === "rightBrow" || region === "leftBrow");
     const brushMin = this.brushMin ?? (brow ? STYLE.browBrushMin : STYLE.brushMin);
     const yaw = frame.pose.yaw;
+    this.hiddenSide = nearSideOnly ? hiddenSideFor(this.hiddenSide, yaw) : null;
+    const hidden = this.hiddenSide;
     const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
     for (const { guide, wide, thin, region, side, between } of this.prepared) {
       const areaDot = thin ? Math.max(STYLE.dot.min, dot * STYLE.thinDot.scale) : dot;
@@ -203,9 +211,11 @@ export class GuideRenderer {
           toPx(RIGHT_EDGE),
           toPx(LEFT_EDGE),
           yaw,
+          hidden,
         );
         continue;
       }
+      if (hidden && side === hidden) continue;
       // 얼굴 윤곽 단계의 한쪽 도형(볼 화살표 등)도 윤곽의 먼 쪽과 함께 숨긴다
       const farSide =
         region === "faceOval" && side !== "center" ? turnAlpha(yaw, side, FAR_SIDE_TURN) : 1;
@@ -220,6 +230,8 @@ export class GuideRenderer {
   /** 얼굴 윤곽·눈·눈썹·입술 테두리를 옅게 그어, 가이드가 얼굴 어디에 있는지 알 수 있게 한다 */
   private drawFace(frame: FaceFrame, projection: Projection) {
     const ctx = this.ctx;
+    const ink = `rgba(${FACE_INK}, ${STYLE.face.alpha})`;
+    const width = sized(projection.unit, STYLE.face);
     ctx.beginPath();
     for (const part of FACE_PARTS) {
       traceSmooth(
@@ -230,9 +242,15 @@ export class GuideRenderer {
       );
     }
     ctx.setLineDash([]);
-    ctx.strokeStyle = `rgba(${FACE_INK}, ${STYLE.face.alpha})`;
-    ctx.lineWidth = sized(projection.unit, STYLE.face);
+    ctx.strokeStyle = ink;
+    ctx.lineWidth = width;
     ctx.stroke();
+    // 코는 코끝 점만 찍는다. 콧방울은 볼과 색 차이가 적어 점이 실제 코 폭과 어긋나 선으로 그리지 않는다
+    const tip = projection.toPx(frame.landmarks[NOSE_TIP]);
+    ctx.beginPath();
+    ctx.arc(tip.x, tip.y, width * 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = ink;
+    ctx.fill();
   }
 
   /** 얼굴 가운데 선(top → bottom)으로 나눠 반쪽마다 고개 각도에 맞는 진하기로 그린다 */
@@ -243,6 +261,7 @@ export class GuideRenderer {
     rightEdge: Px,
     leftEdge: Px,
     yaw: number,
+    hidden: "left" | "right" | null = null,
   ) {
     const ctx = this.ctx;
     const len = Math.hypot(bottom.x - top.x, bottom.y - top.y) || 1;
@@ -250,7 +269,8 @@ export class GuideRenderer {
     const n = leftNormal(d, rightEdge, leftEdge);
     const far = HALF_PLANE;
     for (const side of [1, -1]) {
-      const alpha = turnAlpha(yaw, side === 1 ? "left" : "right", FAR_SIDE_TURN);
+      const name = side === 1 ? "left" : "right";
+      const alpha = name === hidden ? 0 : turnAlpha(yaw, name, FAR_SIDE_TURN);
       if (alpha <= 0) continue;
       const a = { x: top.x - d.x * far, y: top.y - d.y * far };
       const b = { x: bottom.x + d.x * far, y: bottom.y + d.y * far };
@@ -426,6 +446,20 @@ const RIGHT_EDGE = 234;
 const LEFT_EDGE = 454;
 /** 반쪽 영역을 화면 밖까지 덮는 길이 (px) */
 const HALF_PLANE = 10000;
+
+/** 먼 쪽을 숨기기 시작하는 고개 각도와 다시 양쪽을 그리는 각도(라디안). 경계에서 깜빡이지 않게 다르게 둔다 */
+const NEAR_SIDE = { enter: 0.175, exit: 0.087 } as const;
+
+/**
+ * 미러필름에서 숨길 먼 쪽. 본인 기준 왼쪽으로 돌리면(yaw +) 왼쪽이 멀어진다.
+ * 약 10° 넘게 돌리면 먼 쪽을 숨기고, 약 5° 안으로 돌아오면 양쪽을 다시 그린다
+ */
+export function hiddenSideFor(prev: "left" | "right" | null, yaw: number): "left" | "right" | null {
+  if (!Number.isFinite(yaw)) return null;
+  if (Math.abs(yaw) >= NEAR_SIDE.enter) return yaw > 0 ? "left" : "right";
+  if (Math.abs(yaw) < NEAR_SIDE.exit) return null;
+  return prev;
+}
 
 function anchorsOf(guide: GuideShape) {
   switch (guide.type) {

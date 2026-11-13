@@ -1,7 +1,7 @@
 "use client";
 
-import { Check } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Check, Crosshair } from "lucide-react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
@@ -11,13 +11,17 @@ import {
   CHECKS,
   DISTANCE_HINT_TEXT,
   eyesClosed,
+  hasMirrorFit,
+  loadMirrorFit,
   saveFacePhoto,
   useCamera,
   useFaceCheck,
   type CheckName,
 } from "@/features/face";
-import { useCameraErrorNote } from "@/features/live";
+import { FaceStateProvider, useCameraErrorNote } from "@/features/live";
+import { MirrorFitView } from "@/features/mirror-fit";
 import { errorMessage } from "@/lib/api";
+import { isMirror } from "@/lib/mirror";
 import { cn } from "@/lib/utils";
 
 import { FaceDemo } from "./face-demo";
@@ -36,6 +40,66 @@ const TIPS = ["밝고 고른 조명", "정면 · 이마 드러내기", "맨얼�
 const HOLD_MS = 1500;
 
 type Stage = "ready" | "scan" | "done";
+
+/** 마지막 거울 맞추기 시각. 오늘이면 시각만, 아니면 날짜도 붙인다 */
+function fitTime(at: number) {
+  const d = new Date(at);
+  const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return d.toDateString() === new Date().toDateString()
+    ? `오늘 ${time}`
+    : `${d.getMonth() + 1}월 ${d.getDate()}일 ${time}`;
+}
+
+/** 미러필름에서 얼굴 등록 전에 거울 맞추기를 묻는다. 사람마다 보는 눈·눈 간격이 달라 기기에 남은 값이 다른 사람 것일 수 있다 */
+function FitAsk({
+  pct,
+  barText,
+  onFit,
+  onSkip,
+}: {
+  pct: number;
+  barText: string;
+  onFit: () => void;
+  onSkip: () => void;
+}) {
+  const fit = hasMirrorFit() ? loadMirrorFit() : null;
+  return (
+    <>
+      <ProgressBar pct={pct} text={barText} />
+      <div className="flex flex-col items-center gap-6 px-12 pt-12 pb-10 text-center">
+        <span className="flex size-[72px] items-center justify-center rounded-full bg-ice-pale text-navy">
+          <Crosshair className="size-9" strokeWidth={1.8} aria-hidden />
+        </span>
+        <h2 className="font-display text-[30px] leading-[1.35] text-ink">
+          거울에 비친 얼굴에
+          <br />
+          가이드를 맞출까요?
+        </h2>
+        <p className="max-w-[600px] text-[18px] leading-[1.6] text-mute">
+          사람마다 주로 쓰는 눈과 눈 간격이 달라요.
+          <br />
+          처음 쓰는 분은 한 번 맞춰야 가이드가 정확히 겹쳐요 · 약 30초
+        </p>
+        {fit?.savedAt && (
+          <span className="flex h-10 items-center rounded-full bg-cream px-4 text-[16px] font-semibold text-ink tabular">
+            마지막 맞춤
+            {fit.eye ? ` · ${fit.eye === "left" ? "왼눈" : "오른눈"}` : ""} · {fitTime(fit.savedAt)}
+          </span>
+        )}
+        <div className="flex flex-wrap justify-center gap-3 pt-2">
+          <PillButton size="hero" trailing onClick={onFit}>
+            <span className="text-[23px] font-bold">거울 맞추기</span>
+          </PillButton>
+          {fit && (
+            <PillButton variant="outline" size="hero" onClick={onSkip}>
+              <span className="text-[21px] font-bold">이미 맞췄어요</span>
+            </PillButton>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
 
 /**
  * 얼굴 등록 모달. 안내 → 카메라 → 실시간 조건 체크 → 조건을 유지하면 자동 촬영.
@@ -63,7 +127,9 @@ export function FaceRegisterModal({
 }) {
   const camera = useCamera();
   const cameraError = useCameraErrorNote(false);
-  const [step, setStep] = useState<"intro" | "cam">("intro");
+  const [step, setStep] = useState<"fit" | "fitting" | "intro" | "cam">(() =>
+    typeof document !== "undefined" && isMirror() ? "fit" : "intro",
+  );
   const [done, setDone] = useState(false);
   const [scan, setScan] = useState(0);
   /** 마지막 촬영을 다시 하는 이유 */
@@ -72,8 +138,11 @@ export function FaceRegisterModal({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
   const cameraReady = camera.status === "ready";
+  // 미러필름 위에서는 비친 얼굴이 이 원 안에 있는지로 위치를 본다
+  const circleRef = useRef<HTMLDivElement>(null);
   const { check, found, hint, frame, passedNow } = useFaceCheck(
     step === "cam" && cameraReady && !done,
+    circleRef,
   );
   const passed = allPassed(check);
   const ok = CHECKS.filter((name) => check[name]).length;
@@ -182,7 +251,7 @@ export function FaceRegisterModal({
               : passed
                 ? "필수 조건 4가지를 통과했어요"
                 : found && !check.distance
-                  ? "실선 얼굴이 점선 타원을 채우고 원 가운데에 오면 돼요"
+                  ? "실선 얼굴이 원 가운데에 오면 돼요"
                   : "";
   const cta =
     stage === "ready"
@@ -210,18 +279,37 @@ export function FaceRegisterModal({
                 : CONDITIONS[firstFailed ?? "distance"][1],
           };
 
+  if (step === "fitting") {
+    // 분석 화면을 떠나지 않도록 그 위에 덮어 맞춘다. 맞추든 미루든 얼굴 등록 안내로 넘어간다
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-night text-white">
+        {/* 카메라 오류 안내가 얼굴 상태를 읽는다. 로딩 화면은 카메라 화면 묶음 밖이라 따로 둔다 */}
+        <FaceStateProvider>
+          <MirrorFitView first onClose={() => setStep("intro")} />
+        </FaceStateProvider>
+      </div>
+    );
+  }
+
   return (
     <Modal
       open
       label="얼굴 등록"
       overlayClassName="z-[4] animate-fade p-8"
       className={
-        step === "intro"
+        step === "intro" || step === "fit"
           ? "flex max-w-none animate-none flex-col overflow-hidden rounded-[32px] p-0"
           : "relative flex max-w-none animate-[mr-rise_320ms_cubic-bezier(.2,.8,.2,1)_both] flex-col items-center gap-[18px] overflow-hidden rounded-[36px] px-9 pt-6 pb-8"
       }
     >
-      {step === "intro" ? (
+      {step === "fit" ? (
+        <FitAsk
+          pct={pct}
+          barText={barText}
+          onFit={() => setStep("fitting")}
+          onSkip={() => setStep("intro")}
+        />
+      ) : step === "intro" ? (
         <>
           <ProgressBar pct={pct} text={barText} />
           <div className="grid grid-cols-[minmax(0,.85fr)_minmax(0,1fr)] items-stretch gap-9 p-7">
@@ -284,7 +372,14 @@ export function FaceRegisterModal({
             </span>
           </div>
 
-          <FaceRing stage={stage} pct={scan} live={cameraReady} face={found} alert={alert} />
+          <FaceRing
+            circleRef={circleRef}
+            stage={stage}
+            pct={scan}
+            live={cameraReady}
+            face={found}
+            alert={alert}
+          />
 
           <div className="flex flex-col items-center gap-2 text-center">
             <span className="font-display text-[30px] leading-[1.3] text-ink">{title}</span>
@@ -372,12 +467,14 @@ const TICK_R = RING / 2 - 8;
 
 /** 눈금 링 + 얼굴 원 */
 function FaceRing({
+  circleRef,
   stage,
   pct,
   live,
   face,
   alert,
 }: {
+  circleRef: RefObject<HTMLDivElement | null>;
   stage: Stage;
   pct: number;
   /** 카메라가 켜져 영상을 보여 줄 수 있음 */
@@ -431,13 +528,14 @@ function FaceRing({
         </div>
       )}
       <div
+        ref={circleRef}
         className="absolute top-[50px] left-[50px] overflow-hidden rounded-full bg-cream"
         style={{ width: FACE, height: FACE }}
       >
         {live && <FaceVideo />}
         {stage === "ready" && !face && <FaceDemo />}
         {/* 촬영하는 동안에도 자리를 지키도록 위치를 계속 보여 준다 */}
-        {stage !== "done" && <FacePosition size={FACE} />}
+        {stage !== "done" && <FacePosition />}
         {stage === "scan" && (
           <div
             className="absolute inset-x-0 h-0.5 bg-blush shadow-[0_0_12px_2px_color-mix(in_srgb,var(--color-blush)_60%,transparent)]"

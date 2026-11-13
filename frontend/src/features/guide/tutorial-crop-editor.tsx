@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
 import { useCamera, type NormalizedRect } from "@/features/face";
 
@@ -26,10 +26,13 @@ export function TutorialCropEditor({
   step,
   predictionStrength,
   showStats,
+  footer,
 }: {
   step: GuideStep | null;
   predictionStrength?: number;
   showStats?: boolean;
+  /** 영상 아래 줄. 초기화 버튼을 받아 원하는 자리에 둔다. 없으면 위 버튼 줄에 둔다 */
+  footer?: (reset: ReactNode) => ReactNode;
 }) {
   const { crop: saved, save } = useTutorialCrop();
   const { videoRef, status } = useCamera();
@@ -120,11 +123,25 @@ export function TutorialCropEditor({
     setRect({ x0: x, y0: y, x1: x + w, y1: y + h });
     setMessage("");
   };
+  const reset = (
+    <button
+      onClick={() => {
+        if (save(null)) {
+          if (imageRatio === null) initializedRatio.current = null;
+          center();
+          setMessage("기존 얼굴 맞춤으로 초기화했습니다");
+        } else setMessage("저장하지 못했습니다");
+      }}
+    >
+      초기화
+    </button>
+  );
+  const arrow = "border-white/40! bg-black/50 text-white";
   return (
-    <section className="relative z-20 rounded-lg border bg-background p-3 text-foreground [&_button]:min-h-10 [&_button]:rounded-lg [&_button]:border [&_button]:px-3 [&_button]:py-2 [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50">
+    <section className="relative z-20 flex min-h-0 flex-1 flex-col gap-2 rounded-lg border bg-background p-2 text-foreground [&_button]:min-h-10 [&_button]:rounded-lg [&_button]:border [&_button]:px-3 [&_button]:py-2 [&_button:disabled]:cursor-not-allowed [&_button:disabled]:opacity-50">
       <div className="flex flex-wrap items-center gap-2">
         <strong>
-          tutorial 표시 영역 · {TABLET_WIDTH}×{Math.round(areaHeight)} (레이아웃 기준)
+          표시 영역 {TABLET_WIDTH}×{Math.round(areaHeight)}
         </strong>
         <button disabled={!cameraReady} onClick={center}>
           tutorial 비율로 맞추기
@@ -140,81 +157,78 @@ export function TutorialCropEditor({
         >
           tutorial에 적용
         </button>
-        <button
-          onClick={() => {
-            if (save(null)) {
-              if (imageRatio === null) initializedRatio.current = null;
-              center();
-              setMessage("기존 얼굴 맞춤으로 초기화했습니다");
-            } else setMessage("저장하지 못했습니다");
-          }}
-        >
-          초기화
-        </button>
+        {!footer && reset}
       </div>
-      <p className="my-2 text-sm">
-        점선을 움직이고 오른쪽 아래를 드래그해 크기를 조절하세요. 얼굴 인식은 전체 영상에서
-        유지됩니다.
-      </p>
       {!cameraReady && (
         <p role="status">카메라 준비 중 · 영상이 준비되면 영역을 조정할 수 있습니다.</p>
       )}
-      <div
-        className="relative mx-auto w-full max-w-3xl bg-black"
-        ref={box}
-        style={{ aspectRatio: imageRatio ?? 4 / 3 }}
-      >
-        <CropView
-          crop={FULL}
-          step={step}
-          predictionStrength={predictionStrength}
-          showStats={showStats}
-        />
-        {cameraReady && (
-          <div
-            role="group"
-            aria-label="tutorial 영역"
-            className="absolute touch-none border-2 border-dashed border-yellow-300"
-            style={{
-              left: `${rect.x0 * 100}%`,
-              top: `${rect.y0 * 100}%`,
-              width: `${(rect.x1 - rect.x0) * 100}%`,
-              height: `${(rect.y1 - rect.y0) * 100}%`,
-            }}
-            onPointerDown={(e) => down(e, false)}
-            onPointerMove={move}
-            onPointerUp={() => {
-              drag.current = null;
-            }}
-            onPointerCancel={() => {
-              drag.current = null;
-            }}
-          >
+      <div className="relative min-h-0 flex-1">
+        <div
+          className="absolute inset-y-0 left-1/2 max-w-full -translate-x-1/2 bg-black"
+          ref={box}
+          style={{ aspectRatio: imageRatio ?? 4 / 3 }}
+        >
+          <CropView
+            crop={FULL}
+            step={step}
+            predictionStrength={predictionStrength}
+            showStats={showStats}
+          />
+          {cameraReady && (
             <div
-              role="button"
-              tabIndex={0}
-              aria-label="영역 크기 조절"
-              className="absolute -right-2 -bottom-2 h-8 w-8 touch-none border-2 border-yellow-300 bg-black/60"
-              onPointerDown={(e) => down(e, true)}
-            />
+              role="group"
+              aria-label="tutorial 영역"
+              className="absolute touch-none border-2 border-dashed border-yellow-300"
+              style={{
+                left: `${rect.x0 * 100}%`,
+                top: `${rect.y0 * 100}%`,
+                width: `${(rect.x1 - rect.x0) * 100}%`,
+                height: `${(rect.y1 - rect.y0) * 100}%`,
+              }}
+              onPointerDown={(e) => down(e, false)}
+              onPointerMove={move}
+              onPointerUp={() => {
+                drag.current = null;
+              }}
+              onPointerCancel={() => {
+                drag.current = null;
+              }}
+            >
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label="영역 크기 조절"
+                className="absolute -right-2 -bottom-2 h-8 w-8 touch-none border-2 border-yellow-300 bg-black/60"
+                onPointerDown={(e) => down(e, true)}
+              />
+            </div>
+          )}
+          {/* 영상 칸을 크게 쓰려고 이동 버튼과 안내는 영상 위에 겹쳐 둔다 */}
+          <div className="absolute bottom-2 left-2 flex gap-1" aria-label="영역 이동">
+            <button className={arrow} disabled={!cameraReady} onClick={() => nudge(-0.01, 0)}>
+              ←
+            </button>
+            <button className={arrow} disabled={!cameraReady} onClick={() => nudge(0.01, 0)}>
+              →
+            </button>
+            <button className={arrow} disabled={!cameraReady} onClick={() => nudge(0, -0.01)}>
+              ↑
+            </button>
+            <button className={arrow} disabled={!cameraReady} onClick={() => nudge(0, 0.01)}>
+              ↓
+            </button>
           </div>
-        )}
+          {message && (
+            <span
+              role="status"
+              className="absolute top-2 left-2 rounded bg-black/60 px-2 py-1 text-sm text-white"
+            >
+              {message}
+            </span>
+          )}
+        </div>
       </div>
-      <div className="mt-2 flex flex-wrap gap-3" aria-label="영역 이동">
-        <button disabled={!cameraReady} onClick={() => nudge(-0.01, 0)}>
-          ←
-        </button>
-        <button disabled={!cameraReady} onClick={() => nudge(0.01, 0)}>
-          →
-        </button>
-        <button disabled={!cameraReady} onClick={() => nudge(0, -0.01)}>
-          ↑
-        </button>
-        <button disabled={!cameraReady} onClick={() => nudge(0, 0.01)}>
-          ↓
-        </button>
-        <span role="status">{message}</span>
-      </div>
+      {footer?.(reset)}
       {previewScale <= 0 && <p>미리보기를 볼 공간이 없습니다. 창을 키워 주세요.</p>}
       {preview && cameraReady && previewScale > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 text-white">

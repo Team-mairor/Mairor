@@ -8,6 +8,9 @@ import {
   faceFitTransform,
   faceWidthRatio,
   MIN_FACE_WIDTH_RATIO,
+  halfMirror,
+  loadMirrorFit,
+  mirrorScreen,
   rescaleAround,
   regionNamesError,
   REGIONS,
@@ -23,6 +26,7 @@ import {
 } from "@/features/face";
 import { anchorError, loadFaceMesh, MESH_VERSION, type FaceMesh } from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
+import { isMirror } from "@/lib/mirror";
 
 import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer } from "./renderer";
@@ -206,6 +210,7 @@ export function useGuideTrackingIssue(
       now - (frame.detectedAt ?? frame.timestamp) > GUIDE_STALE_MS
     )
       next = "lost";
+    // 미러필름에서도 지금 단계 부위만 본다. 턱이 잘려도 눈 단계면 가이드를 그린다
     else if (current && !visibility.current.update(current, frame, now, cropRef.current)) {
       next = Math.abs(frame.pose.yaw) >= GUIDE_TURN.hidden ? "turned" : "out-of-frame";
     } else if (faceWidthRatio(frame) < MIN_FACE_WIDTH_RATIO) next = "far";
@@ -308,7 +313,7 @@ export function GuideOverlay({
       predictedStep.current = stepRef.current;
     }
     predictor.current.sample(observed);
-    const frame = predictor.current.predict(now, {
+    let frame = predictor.current.predict(now, {
       ...DEFAULT_PREDICTION,
       strength: predictionStrength ?? strength.current,
     });
@@ -317,16 +322,21 @@ export function GuideOverlay({
     const canvas = canvasRef.current;
     const crop = cropRef.current;
     let view = viewRef.current;
-    if (crop && frame && canvas) {
+    const mirror = isMirror();
+    // 미러필름 위에서는 비친 얼굴 위치에 그리고 크롭·확대하지 않는다
+    if (mirror && frame && canvas) {
+      ({ frame, view } = halfMirror(frame, mirrorScreen(canvas), loadMirrorFit()));
+    } else if (crop && frame && canvas) {
       view = cropTransform(
         frame.imageSize,
         { width: canvas.clientWidth, height: canvas.clientHeight },
         crop,
       );
     } else if (fit && frame && canvas) {
+      const { landmarks } = frame;
       const size = { width: canvas.clientWidth, height: canvas.clientHeight };
       const target = faceFitTransform(
-        REGIONS.faceOval.indices.map((i) => frame.landmarks[i]),
+        REGIONS.faceOval.indices.map((i) => landmarks[i]),
         frame.imageSize,
         size,
         FACE_FILL,
@@ -348,7 +358,7 @@ export function GuideOverlay({
         : goal;
     }
     if (canvas) {
-      if (crop && frame && view) {
+      if (!mirror && crop && frame && view) {
         const x = crop.x0 * frame.imageSize.width * view.scale + view.offsetX;
         const y = crop.y0 * frame.imageSize.height * view.scale + view.offsetY;
         const right =
@@ -367,11 +377,11 @@ export function GuideOverlay({
     rendererRef.current?.render({
       frame,
       observedFrame: frame ? observed : null,
-      crop: cropRef.current,
+      crop: mirror ? undefined : cropRef.current,
       step: stepRef.current,
       mesh: meshRef.current,
       face: faceRef.current,
-      // 지금은 카메라 화면 기준. 하프미러는 거울에 비친 상 위치로 바꿔 넘긴다.
+      nearSideOnly: mirror,
       projection:
         frame && view
           ? { toPx: (p) => toScreen(p, frame.imageSize, view), unit: iod * view.scale }

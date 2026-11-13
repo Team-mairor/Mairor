@@ -144,7 +144,7 @@ export default function LoginPage() {
         <span className="absolute bottom-7 left-10 rounded-full bg-white px-4 py-[9px] font-label text-[15px] font-semibold tracking-[.16em] text-ink">
           AI MAKEUP MIRROR
         </span>
-        <MirrorToggle className="absolute top-7 right-10" />
+        <MirrorToggle fitFirst className="absolute top-7 right-10" />
       </div>
 
       <div className="flex shrink-0 flex-col gap-8 px-10 py-8">

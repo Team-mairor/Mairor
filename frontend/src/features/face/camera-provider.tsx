@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from "react";
 
+import { isMirror, subscribeMirror } from "@/lib/mirror";
 import { cn } from "@/lib/utils";
 
 import { CameraError, openCamera } from "./camera";
@@ -91,7 +92,8 @@ export function CameraProvider({
     const view = containTransform(image, size, true);
     setViewTransform(view);
     // 화면에 안 보이는 부위(패널 뒤 포함)는 추적기가 화면 밖으로 판정한다.
-    const panel = coverPanelRef.current;
+    // 미러필름 위에서는 어두운 패널도 거울이라 그 뒤 얼굴이 비쳐 보이므로 가리지 않은 것으로 본다
+    const panel = isMirror() ? null : coverPanelRef.current;
     const covered = panel
       ? Math.max(0, container.getBoundingClientRect().bottom - panel.getBoundingClientRect().top)
       : 0;
@@ -304,7 +306,11 @@ export function CameraProvider({
     if (!container) return;
     const observer = new ResizeObserver(updateTransform);
     observer.observe(container);
-    return () => observer.disconnect();
+    const unsubscribe = subscribeMirror(updateTransform);
+    return () => {
+      observer.disconnect();
+      unsubscribe();
+    };
   }, [updateTransform]);
 
   useEffect(() => {

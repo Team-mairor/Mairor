@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+
+import { isMirror } from "@/lib/mirror";
 
 import { useCamera, useFaceFrame } from "./camera-provider";
+import { halfMirror, loadMirrorFit, mirrorScreen } from "./half-mirror";
 import { faceWidthRatio, MIN_FACE_WIDTH_RATIO } from "./tracking-issue";
 import { KEY_REGIONS } from "./tracking-rules";
 import type { FaceFrame, RegionName } from "./types";
+import { toScreen } from "./view-transform";
 import { MIN_IN_FRAME_RATIO } from "./visibility";
 
 /** 얼굴 등록 필수 촬영 조건. 모달에 표시하는 순서와 같다 */
@@ -16,10 +20,19 @@ export type FaceCheck = Record<CheckName, boolean>;
 export const NO_CHECK: FaceCheck = { light: false, distance: false, front: false, clear: false };
 const ALL_PASSED: FaceCheck = { light: true, distance: true, front: true, clear: true };
 
-// 거리·가운데·위아래 기준은 원 표시 방식과 하프미러 보정이 정해지면 확정할 임시값이다.
+// 거리·가운데·위아래 기준은 하프미러 실측 전 임시값이다.
 /** 얼굴 폭 / 영상 폭이 이 범위면 적정 거리. 너무 멀면 색이 부정확하고, 너무 가까우면 얼굴이 잘린다 */
 const DISTANCE = { min: MIN_FACE_WIDTH_RATIO, max: 0.9 };
-/** 얼굴 중심이 영상 가운데에서 이 비율 안에 있어야 원 안으로 본다 */
+/**
+ * 미러필름 위 최소 비율. 비친 얼굴을 원에 맞추면 얼굴이 카메라보다 아래에 와서, 가까이 갈수록 카메라에 잘린다.
+ * 조금 물러나도 등록 사진으로 조명·색을 재기에는 충분하다
+ */
+const MIRROR_MIN_RATIO = 0.3;
+const minRatio = () => (isMirror() ? MIRROR_MIN_RATIO : DISTANCE.min);
+/**
+ * 얼굴 중심이 가운데에서 이 비율 안에 있어야 원 안으로 본다.
+ * 원이 있으면 원 지름, 없으면 영상 크기 대비 (faceOffset)
+ */
 const CENTER_TOLERANCE = 0.15;
 /** 정면으로 보는 좌우·위아래 각도 (라디안, 약 11도). 평소 3도 안팎, 살짝 돌리면 17도 이상 */
 const MAX_FRONT_ANGLE = 0.2;
@@ -37,31 +50,39 @@ const PASS_GRACE_MS = 300;
 /** 가림 판정에 쓰는 부위. 핵심 부위와 얼굴 윤곽이 모두 보여야 한다 */
 const CLEAR_REGIONS: readonly RegionName[] = [...KEY_REGIONS, "faceOval"];
 
-/** 지금 프레임이 필수 촬영 조건을 각각 만족하는지. 밝기를 아직 못 쟀으면 null */
-export function checkFace(frame: FaceFrame | null, brightness: number | null): FaceCheck {
+/**
+ * 지금 프레임이 필수 촬영 조건을 각각 만족하는지. 밝기를 아직 못 쟀으면 null.
+ * circle은 얼굴 원 요소로, 미러필름 위에서 비친 얼굴이 원 안에 있는지 볼 때 쓴다
+ */
+export function checkFace(
+  frame: FaceFrame | null,
+  brightness: number | null,
+  circle: HTMLElement | null = null,
+): FaceCheck {
   if (!frame || frame.trackingState === "lost" || frame.trackingState === "hold") return NO_CHECK;
-  const box = faceBox(frame);
-  const centerX = (box.minX + box.maxX) / 2;
-  const centerY = (box.minY + box.maxY) / 2;
+  const offset = faceOffset(frame, circle);
   const ratio = faceWidthRatio(frame);
   return {
     light: brightness !== null && brightness >= BRIGHTNESS.min && brightness <= BRIGHTNESS.max,
     distance:
-      ratio >= DISTANCE.min &&
+      ratio >= minRatio() &&
       ratio <= DISTANCE.max &&
-      Math.abs(centerX - 0.5) <= CENTER_TOLERANCE &&
-      Math.abs(centerY - 0.5) <= CENTER_TOLERANCE,
+      Math.abs(offset.x) <= CENTER_TOLERANCE &&
+      Math.abs(offset.y) <= CENTER_TOLERANCE,
     front:
       Math.abs(frame.pose.yaw) <= MAX_FRONT_ANGLE &&
       Math.abs(frame.pose.pitch) <= MAX_FRONT_ANGLE &&
       Math.abs(frame.pose.roll) <= MAX_ROLL,
-    // 손 같은 가림은 랜드마크만으로는 알 수 없어, 부위가 모두 화면 안에 정면으로 보이는지만 본다
+    // 손 같은 가림은 랜드마크만으로는 알 수 없어, 부위가 모두 화면 안에 정면으로 보이는지만 본다.
+    // 미러필름 위에서는 화장할 때와 같은 자리에서 찍도록 튜토리얼처럼 추적이 안정적인지만 본다.
+    // 비친 얼굴을 원에 맞추면 얼굴이 카메라보다 아래에 와 턱이 잘리기 쉬운데, 거울로는 보이지 않는다
     clear:
       frame.trackingState === "tracking" &&
-      CLEAR_REGIONS.every((name) => {
-        const v = frame.regionVisibility[name];
-        return v.facing && v.inFrameRatio >= MIN_IN_FRAME_RATIO;
-      }),
+      (isMirror() ||
+        CLEAR_REGIONS.every((name) => {
+          const v = frame.regionVisibility[name];
+          return v.facing && v.inFrameRatio >= MIN_IN_FRAME_RATIO;
+        })),
   };
 }
 
@@ -77,25 +98,69 @@ export const DISTANCE_HINT_TEXT: Record<DistanceHint, string> = {
   down: "얼굴을 조금 아래로 내려 주세요",
 };
 
-/** 적정 거리 조건(checkFace의 distance)을 어떻게 맞추면 되는지. 맞거나 얼굴이 없으면 null */
-export function distanceHint(frame: FaceFrame | null): DistanceHint | null {
+/**
+ * 적정 거리 조건(checkFace의 distance)을 어떻게 맞추면 되는지. 맞거나 얼굴이 없으면 null.
+ * 비친 얼굴은 거리와 상관없이 실제 크기의 절반이라, 미러필름 위에서도 가까이·뒤로는 카메라 영상으로 본다
+ */
+export function distanceHint(
+  frame: FaceFrame | null,
+  circle: HTMLElement | null = null,
+): DistanceHint | null {
   if (!frame || frame.trackingState === "lost" || frame.trackingState === "hold") return null;
   const ratio = faceWidthRatio(frame);
-  if (ratio < DISTANCE.min) return "closer";
+  if (ratio < minRatio()) return "closer";
   if (ratio > DISTANCE.max) return "back";
-  const box = faceBox(frame);
-  // 영상은 원본 좌표라, 거울처럼 뒤집어 보여 주는 화면에서는 x를 뒤집어 본다
-  const x = 1 - (box.minX + box.maxX) / 2;
-  const y = (box.minY + box.maxY) / 2;
-  if (x - 0.5 > CENTER_TOLERANCE) return "left";
-  if (0.5 - x > CENTER_TOLERANCE) return "right";
-  if (y - 0.5 > CENTER_TOLERANCE) return "up";
-  if (0.5 - y > CENTER_TOLERANCE) return "down";
+  const { x, y } = faceOffset(frame, circle);
+  if (x > CENTER_TOLERANCE) return "left";
+  if (-x > CENTER_TOLERANCE) return "right";
+  if (y > CENTER_TOLERANCE) return "up";
+  if (-y > CENTER_TOLERANCE) return "down";
   return null;
 }
 
-/** 적정 거리의 최소 얼굴 폭 비율 (얼굴 폭 / 영상 폭). 원 안에 목표 크기를 그릴 때 쓴다 */
-export const MIN_DISTANCE_RATIO = DISTANCE.min;
+/**
+ * 얼굴 중심이 가운데에서 벗어난 정도. 거울처럼 보는 화면 기준으로 x는 오른쪽, y는 아래가 +다.
+ * 원이 있으면 원 안에 그리는 얼굴(faceBoxIn)이 원 가운데에서 원 지름의 몇 배, 없으면 영상 가운데에서 영상 크기의 몇 배
+ */
+function faceOffset(frame: FaceFrame, circle: HTMLElement | null) {
+  if (circle) {
+    const box = faceBoxIn(frame, circle);
+    const size = circle.clientWidth || 1;
+    return { x: (box.minX + box.maxX) / 2 / size - 0.5, y: (box.minY + box.maxY) / 2 / size - 0.5 };
+  }
+  const box = faceBox(frame);
+  // 영상은 원본 좌표라 x를 뒤집어 본다
+  return { x: 0.5 - (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 - 0.5 };
+}
+
+/**
+ * 정사각형 얼굴 원(circle) 안 px로 본 얼굴 상자. 미러필름 위에서는 가이드·화장과 같은 변환(halfMirror)으로
+ * 거울에 비친 얼굴 자리, 아니면 원 안 영상(가운데 정사각형을 좌우 반전) 자리다
+ */
+export function faceBoxIn(frame: FaceFrame, circle: HTMLElement): Box {
+  const size = circle.clientWidth;
+  const { width: w, height: h } = frame.imageSize;
+  const side = Math.min(w, h);
+  let toPx = (p: FaceFrame["landmarks"][number]) => ({
+    x: size - ((p.x * w - (w - side) / 2) / side) * size,
+    y: ((p.y * h - (h - side) / 2) / side) * size,
+  });
+  let { landmarks } = frame;
+  if (isMirror()) {
+    const reflected = halfMirror(frame, mirrorScreen(circle), loadMirrorFit());
+    landmarks = reflected.frame.landmarks;
+    toPx = (p) => toScreen(p, frame.imageSize, reflected.view);
+  }
+  const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  for (const p of landmarks) {
+    const { x, y } = toPx(p);
+    box.minX = Math.min(box.minX, x);
+    box.minY = Math.min(box.minY, y);
+    box.maxX = Math.max(box.maxX, x);
+    box.maxY = Math.max(box.maxY, y);
+  }
+  return box;
+}
 
 export function allPassed(check: FaceCheck) {
   return CHECKS.every((name) => check[name]);
@@ -110,7 +175,7 @@ export function eyesClosed(frame: FaceFrame | null) {
  * 얼굴 등록 화면이 열려 있는 동안 촬영 조건을 실시간으로 판정한다. 결과가 바뀔 때만 다시 그린다.
  * frame은 마지막 프레임, passedNow는 유예 없이 마지막 프레임이 조건을 모두 통과하는지로, 찍는 순간에 쓴다
  */
-export function useFaceCheck(enabled: boolean) {
+export function useFaceCheck(enabled: boolean, circleRef?: RefObject<HTMLElement | null>) {
   const { videoRef } = useCamera();
   const [check, setCheck] = useState(NO_CHECK);
   /** 얼굴이 잡혔는지. 바뀔 때만 다시 그린다 */
@@ -150,16 +215,17 @@ export function useFaceCheck(enabled: boolean) {
       brightness.current = faceBrightness(video, frame, canvasRef.current);
     }
     setFound(tracked);
-    setHint(distanceHint(frame));
-    let next = checkFace(frame, brightness.current);
+    const circle = circleRef?.current ?? null;
+    setHint(distanceHint(frame, circle));
+    let next = checkFace(frame, brightness.current, circle);
     if (allPassed(next)) passedAt.current = now;
     else if (now - passedAt.current < PASS_GRACE_MS) next = ALL_PASSED;
     setCheck((prev) => (CHECKS.every((name) => prev[name] === next[name]) ? prev : next));
   });
 
   const passedNow = useCallback(
-    () => allPassed(checkFace(frameRef.current, brightness.current)),
-    [],
+    () => allPassed(checkFace(frameRef.current, brightness.current, circleRef?.current ?? null)),
+    [circleRef],
   );
 
   return { check, found, hint, frame: frameRef, passedNow };
