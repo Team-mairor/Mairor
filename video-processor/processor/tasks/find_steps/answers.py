@@ -1,17 +1,8 @@
 """GMS 답(조각 기준 MM:SS)을 영상 기준 시각의 단계로 바꾼다."""
 
 from processor.tasks.find_steps.clock import parse_clock
+from processor.tasks.find_steps.product import label, split_product
 from processor.tasks.guide_request.makeup import ai_makeup, derive
-
-
-def product_name(text: str | None) -> str | None:
-    """모델이 빈칸 대신 넣는 'null'·'없음' 같은 글자는 이름이 없는 것으로 본다.
-
-    도구 단계 이름 칸에 종류 이름('tool')을 그대로 쓴 답도 있다(정답표 #23: 아이라인을 펴 바르는 단계가 따로 남아
-    끝이 19:35에서 끊김).
-    """
-    name = (text or "").strip()
-    return None if name.casefold() in {"", "null", "none", "n/a", "-", "없음", "모름", "tool", "도구"} else name
 
 
 def span(item: dict, start: float) -> tuple[float, float]:
@@ -44,8 +35,10 @@ def to_steps(rows: list[dict], start: float, index: int) -> list[dict]:
         if not pieces:
             pieces = [{"absStart": first, "absEnd": last, "faceArea": row.get("faceArea"),
                        "area": row.get("area") or row.get("faceArea"), "summary": row["summary"]}]
+        product = split_product(row.get("product"))
         base = {
-            "productName": product_name(row.get("product")),
+            "product": product,
+            "productName": label(product),
             "productType": None,
             "productKind": None if tool else row["productKind"],
             "areaSource": "explicit",

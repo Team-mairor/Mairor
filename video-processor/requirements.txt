@@ -10,3 +10,5 @@ onnxruntime>=1.31.1
 opencv-contrib-python>=5.0.0.93
 pydantic>=2.0
 fastapi>=0.156.4
+# 브랜드 별칭 목록(ai/app/resources/brand_sites.yaml)으로 영상 속 브랜드를 대표 이름에 맞춘다(find_steps/product.py)
+pyyaml>=6.0.3

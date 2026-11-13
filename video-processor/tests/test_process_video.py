@@ -20,6 +20,11 @@ def row(first, last, kind="blush", product="Dear.A 블러쉬", area="볼"):
             "partLabel": "블러셔", "summary": "볼에 바르기", "firstTouch": first, "lastTouch": last}
 
 
+def shadow(shade):
+    """GMS가 세 칸으로 나눠 준 제품. 브랜드는 영문으로 읽었다."""
+    return {"brand": "hince", "name": "아이섀도우", "shade": shade}
+
+
 class VideoPipelineTests(unittest.TestCase):
     """합성 영상과 가짜 GMS 답으로 전체 흐름을 돌린다. 프레임은 단계 시작·끝의 AI 구간만 올라가야 한다."""
 
@@ -71,19 +76,19 @@ class VideoPipelineTests(unittest.TestCase):
                 check=True, capture_output=True,
             )
             steps = merge_same_product(to_steps([
-                row("00:05", "00:10", kind="eyeshadow", product="hince 22", area="윗눈두덩"),
-                row("00:14", "00:16", kind="eyeshadow", product="hince 07", area="윗눈두덩"),
+                row("00:05", "00:10", kind="eyeshadow", product=shadow("22"), area="윗눈두덩"),
+                row("00:14", "00:16", kind="eyeshadow", product=shadow("07"), area="윗눈두덩"),
                 row("00:25", "00:27", kind="lip", product="립 A", area="입술"),
             ], 0, 0))
             seen = {}
 
             def gap_checker(steps):
                 seen["gap"] = [s["productName"] for s in steps]
-                return [s | {"absEnd": 18.0} if s["productName"] == "hince 07" else s for s in steps]
+                return [s | {"absEnd": 18.0} if s["productName"] == "힌스 아이섀도우 07" else s for s in steps]
 
             def caption_reader(steps):
                 seen["caption"] = [s["productName"] for s in steps]
-                return {1: "hince 22"}
+                return {1: shadow("22")}
 
             request = run_video_pipeline(
                 "https://www.youtube.com/watch?v=test0000000", 2, s3_client=LocalS3(tmp / "s3"),
@@ -93,11 +98,12 @@ class VideoPipelineTests(unittest.TestCase):
                 decoder_factory=ThreadPoolExecutor, work_dir=tmp / "work",
             )
         guide = request["guideInput"]["steps"]
-        self.assertEqual(seen["gap"], ["hince 22", "hince 07", "립 A"])
+        self.assertEqual(seen["gap"], ["힌스 아이섀도우 22", "힌스 아이섀도우 07", "립 A"])
         self.assertEqual(seen["caption"], seen["gap"])
         self.assertEqual([(s["makeup"], s["startSeconds"], s["endSeconds"]) for s in guide],
                          [("eyeshadow", 5, 18), ("lip", 25, 28)])
-        self.assertEqual(guide[0]["product"]["name"], "hince 22")
+        self.assertEqual(guide[0]["product"], {"brand": "힌스", "name": "아이섀도우", "shade": "22", "palette": None})
+        self.assertEqual(guide[1]["product"], {"brand": None, "name": "립 A", "shade": None, "palette": None})
 
     def test_connection_warmer_stops_before_the_first_frame_upload(self):
         from tests.local_s3 import LocalS3

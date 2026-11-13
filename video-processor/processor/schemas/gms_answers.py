@@ -2,6 +2,14 @@
 
 from processor.schemas.makeup import FACE_AREAS, PRODUCT_KINDS
 
+# 영상 속 제품 글자. BE 대조가 브랜드·제품명·호수를 따로 읽어서 따로 묻는다(find_steps/product.py).
+PRODUCT = {
+    "type": "OBJECT",
+    "nullable": True,
+    "properties": {field: {"type": "STRING", "nullable": True} for field in ("brand", "name", "shade")},
+    "required": ["brand", "name", "shade"],
+}
+
 
 STEP_LIST = {
     "type": "OBJECT",
@@ -11,7 +19,7 @@ STEP_LIST = {
             "items": {
                 "type": "OBJECT",
                 "properties": {
-                    "product": {"type": "STRING", "nullable": True},
+                    "product": PRODUCT,
                     "productKind": {"type": "STRING", "enum": PRODUCT_KINDS + ["tool"]},
                     "faceArea": {"type": "STRING", "enum": list(FACE_AREAS), "nullable": True},
                     "area": {"type": "STRING"},

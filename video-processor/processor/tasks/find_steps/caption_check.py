@@ -6,10 +6,14 @@
    상자들을 합친 범위를 아래로 상자 높이만큼 더 넓혀 쓴다(모델이 브랜드·제품명 줄까지만 잡아 색 번호 줄이
    잘린 적이 있다). 합친 범위가 화면 절반을 넘으면(자리가 들쭉날쭉) 화면 전체를 쓴다.
    제품 글자가 없는 영상이면 다시 읽기를 건너뛴다.
-2. 다시 읽기: 바르는 단계마다 가운데 시각의 1080p 사진을 그 범위로 잘라 한 번에 읽는다.
+2. 다시 읽기: 바르는 단계마다 가운데 시각의 1080p 사진을 그 범위로 잘라 한 번에 읽는다. 브랜드·제품명·호수를
+   따로 받는다(find_steps/product.py).
 3. 바꾸기: 읽은 글자가 받은 이름과 같은 제품으로 보일 때만(단어가 하나 이상 겹치거나 글자가 절반 이상 같음) 바꾼다.
    채널 로고 같은 다른 글자를 읽어도 이름이 바뀌지 않게 한다. 받은 이름에 있던 숫자(색 번호)가 읽은 글자에 하나도
    없으면 바꾸지 않는다. 잘려 읽힌 글자로 색이 다른 제품들이 같은 이름이 되어 한 단계로 합쳐지는 것을 막는다.
+   읽은 글자가 받은 이름의 앞부분뿐이어도 바꾸지 않는다. 상자가 오른쪽 글자를 자르면 "Triple Pot Concealer"를
+   "Triple Pot Conc", "01 라이트 브라운"을 "01 라이"로 읽는다(tiAQfOhz_GQ). 받은 이름의 가격 숫자가 그동안 이를
+   우연히 막고 있었는데, 가격을 지우면서 잘린 글자가 이름을 덮게 되었다.
 """
 
 import base64
@@ -27,7 +31,8 @@ from PIL import Image
 
 from processor.clients.gms import DEFAULT_MODEL, RateLimitBudgetExceeded, generate_content, response_json
 from processor.core.paths import PROMPTS_DIR
-from processor.schemas.gms_answers import id_items
+from processor.schemas.gms_answers import PRODUCT, id_items
+from processor.tasks.find_steps.product import label, split_product
 from processor.tasks.find_steps.step_rules import merge_same_product
 
 LOCATE_FRAMES = 8
@@ -122,8 +127,8 @@ def crop(jpeg: bytes, box) -> bytes:
 
 
 def read_captions(steps: list[dict], video: Path, box, *, api_key, model=DEFAULT_MODEL, recorder=None,
-                  output_dir) -> dict[int, str]:
-    """바르는 단계의 가운데 시각 글자를 읽어 {단계 순번: 제품 글자}를 돌려준다. 자리를 모르거나 실패하면 빈 결과다."""
+                  output_dir) -> dict[int, dict]:
+    """바르는 단계의 가운데 시각 글자를 읽어 {단계 순번: {brand, name, shade}}를 돌려준다. 자리를 모르거나 실패하면 빈 결과다."""
     wanted = [i for i, s in enumerate(steps) if s.get("isCosmeticApplication")]
     if not wanted or box is None:
         return {}
@@ -139,9 +144,10 @@ def read_captions(steps: list[dict], video: Path, box, *, api_key, model=DEFAULT
     for image_id, image in zip(ids, crops):
         parts += [{"text": f"imageId={image_id}"},
                   {"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(image).decode()}}]
-    rows = _ask(parts, id_items("text", {"type": "STRING", "nullable": True}, ids), ids, phase="caption_read",
+    rows = _ask(parts, id_items("product", PRODUCT, ids), ids, phase="caption_read",
                 api_key=api_key, model=model, recorder=recorder)
-    captions = {int(k[1:]): " ".join(r["text"].split()) for k, r in rows.items() if (r.get("text") or "").strip()}
+    read = {int(k[1:]): split_product(r.get("product")) for k, r in rows.items()}
+    captions = {i: product for i, product in read.items() if product}
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     (Path(output_dir) / "captions.json").write_text(
         json.dumps({str(i): captions.get(i) for i in wanted}, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -153,29 +159,45 @@ def _words(name: str) -> set[str]:
     return {w for w in re.split(r"[\W_]+", name.casefold()) if len(w) >= 2 and not w.isdigit()}
 
 
+def _squeeze(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text.casefold())
+
+
+def cut_short(old: str | None, new: str | None) -> bool:
+    """읽은 글자가 받은 글자의 앞부분뿐인가(상자가 오른쪽 글자를 잘랐다)."""
+    return bool(old) and len(_squeeze(new or "")) < len(_squeeze(old)) and _squeeze(old).startswith(_squeeze(new or ""))
+
+
 def looks_same(old: str | None, new: str) -> bool:
     """다시 읽은 글자가 받은 이름과 같은 제품을 가리키는가. 받은 이름이 없으면 그대로 쓴다."""
     if not old:
         return True
     if re.search(r"\d", old) and not re.search(r"\d", new):
         return False
-    squeeze = lambda s: re.sub(r"[\W_]+", "", s.casefold())
-    return bool(_words(old) & _words(new)) or SequenceMatcher(None, squeeze(old), squeeze(new)).ratio() >= 0.5
+    if cut_short(old, new):
+        return False
+    return bool(_words(old) & _words(new)) or SequenceMatcher(None, _squeeze(old), _squeeze(new)).ratio() >= 0.5
 
 
 def apply_captions(checked, captions):
     """다시 읽은 제품 글자로 이름을 바로잡고(받은 이름과 같은 제품으로 보일 때만), 같은 제품이 된 이웃 단계를 묶는다.
 
-    checked는 앞뒤 빈 구간 확인을 마친 단계, captions는 같은 순서의 {단계 순번: 글자}다.
+    checked는 앞뒤 빈 구간 확인을 마친 단계, captions는 같은 순서의 {단계 순번: {brand, name, shade}}다.
+    한 줄 글자도 받는다. 비교와 묶기는 세 칸을 이은 이름으로 하고, 단계에는 세 칸을 함께 남긴다.
     """
-    adopted = {i: name for i, name in captions.items() if looks_same(checked[i].get("productName"), name)}
-    renames = {checked[i]["productName"]: name for i, name in adopted.items() if checked[i].get("productName")}
+    read = {i: split_product(c) for i, c in captions.items()}
+    read = {i: product for i, product in read.items() if product}
+    adopted = {i: p for i, p in read.items() if looks_same(checked[i].get("productName"), label(p))
+               and not cut_short((checked[i].get("product") or {}).get("shade"), p["shade"])}
+    renames = {checked[i]["productName"]: p for i, p in adopted.items() if checked[i].get("productName")}
     named = []
     for i, step in enumerate(checked):
-        name = adopted.get(i) or renames.get(step.get("productName"))
-        if name and name != step.get("productName"):
-            step = step | {"productName": name, "videoProductName": step.get("productName")}
+        product = adopted.get(i) or renames.get(step.get("productName"))
+        if product and product != step.get("product"):
+            step = step | {"product": product, "productName": label(product)}
+            if label(product) != checked[i].get("productName"):
+                step["videoProductName"] = checked[i].get("productName")
         named.append(step)
-    rejected = [{"name": checked[i].get("productName"), "caption": name}
-                for i, name in captions.items() if i not in adopted]
+    rejected = [{"name": checked[i].get("productName"), "caption": label(p)}
+                for i, p in read.items() if i not in adopted]
     return merge_same_product(named), {"captionsRead": len(captions), "rejectedCaptions": rejected}

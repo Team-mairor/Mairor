@@ -94,6 +94,36 @@ class FixStepsTests(unittest.TestCase):
         fixed, _ = apply_captions(steps, {i: "hince 싱글 아이섀도우" for i in range(3)})
         self.assertEqual(len(fixed), 3)
 
+    def test_caption_cut_at_the_right_edge_is_not_adopted(self):
+        # tiAQfOhz_GQ: 상자가 오른쪽 글자를 잘라 받은 이름의 앞부분만 읽혔다
+        self.assertFalse(looks_same("더샘 Cover Perfection Triple Pot Concealer", "더샘 Cover Perfection Triple Pot Conc"))
+        self.assertFalse(looks_same("2AN ART SKETCH BROW PENCIL 01 라이트 브라운", "2AN Art Sketch Brow Pencil 01 라이"))
+        self.assertFalse(looks_same("클리오 Glass & Highlighter 4 레몬별 사탕", "클리오 Glass & Highlighter 4. 레몬별 사"))
+        self.assertTrue(looks_same("네이밍 Fluffy Powder Blush", "네이밍 Fluffy Powder Blush Toast"))
+
+    def test_shade_cut_short_is_not_adopted_even_with_a_typo_in_the_name(self):
+        from processor.tasks.find_steps.caption_check import apply_captions
+
+        product = {"brand": "HERA", "name": "Sensual Powder Matte Liquide", "shade": "400 데어베어"}
+        steps = [{"absStart": 0, "absEnd": 5, "product": product, "makeup": "lip", "events": [],
+                  "productName": "HERA Sensual Powder Matte Liquide 400 데어베어"}]
+        caption = {"brand": "HERA", "name": "Sensual Powder Matte Liqude", "shade": "4"}
+        fixed, report = apply_captions(steps, {0: caption})
+        self.assertEqual(fixed[0]["product"], product)
+        self.assertEqual(len(report["rejectedCaptions"]), 1)
+
+    def test_caption_read_in_three_parts_is_kept_on_the_step(self):
+        from processor.tasks.find_steps.caption_check import apply_captions
+
+        steps = [{"absStart": 0, "absEnd": 5, "productName": "ESPOIR 비글로우 파운데이션 W 32,000",
+                  "makeup": "foundation", "events": []}]
+        caption = {"brand": "ESPOIR", "name": "비글로우 파운데이션", "shade": "AD 3C 웨딩피치"}
+        fixed, report = apply_captions(steps, {0: caption})
+        self.assertEqual(fixed[0]["product"], {"brand": "에스쁘아", "name": "비글로우 파운데이션", "shade": "AD 3C 웨딩피치"})
+        self.assertEqual(fixed[0]["productName"], "에스쁘아 비글로우 파운데이션 AD 3C 웨딩피치")
+        self.assertEqual(fixed[0]["videoProductName"], "ESPOIR 비글로우 파운데이션 W 32,000")
+        self.assertEqual(report["rejectedCaptions"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

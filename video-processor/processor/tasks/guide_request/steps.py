@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 from processor.schemas.makeup import EYE_MAKEUPS, EYE_ZONES
+from processor.tasks.find_steps.product import split_product
 from processor.tasks.guide_request.makeup import derive, guide_value, needs_area, union_zone
 
 
@@ -25,7 +26,7 @@ def normalize_steps(raw_steps: list[dict]) -> list[dict]:
             if makeup in EYE_MAKEUPS
             else None
         )
-        name = step.get("productName")
+        product = step.get("product") or split_product(step.get("productName"))
         details = list(
             dict.fromkeys(
                 event["summary"]
@@ -48,9 +49,7 @@ def normalize_steps(raw_steps: list[dict]) -> list[dict]:
                 "partLabel": "부위 미확정" if unresolved and not tool else step["partLabel"],
                 "summary": summary,
                 "isCosmeticApplication": step["isCosmeticApplication"],
-                "product": {"brand": None, "name": name, "palette": None}
-                if name
-                else None,
+                "product": {**product, "palette": None} if product else None,
                 "facts": {
                     "area": {
                         "value": "부위 미확정" if unresolved else area,
