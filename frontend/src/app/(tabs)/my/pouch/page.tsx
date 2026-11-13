@@ -40,13 +40,13 @@ export default function MyPouchPage() {
   }, []);
 
   useEffect(() => {
-    if (!query) return;
+    if (!query || !sessionChecked) return;
     if (query.get("add")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 등록 요청을 한 번 반영한다
       if (state.loggedIn) setForm(emptyDraft());
       else router.replace("/login");
     }
-  }, [query, router, state.loggedIn]);
+  }, [query, router, sessionChecked, state.loggedIn]);
 
   // ?edit=<id>: 로그인했으면 서버의 최신 항목(API-POUCH-005)으로, 아니면 저장된 파우치에서 연다
   const edit = query?.get("edit") ?? null;
