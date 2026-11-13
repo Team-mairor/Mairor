@@ -19,7 +19,7 @@ video-processor/
 │   │   └── backend_job/         가져온 작업 하나 처리(service.py), 진행 알림(progress.py), 실패 코드(failure.py)
 │   └── tasks/
 │       ├── find_steps/          단계 찾기: 조각 자르기·GMS에 묻기·답을 단계로·묶기 규칙, 앞뒤 확인, 글자 다시 읽기
-│       ├── frames/              AI 사진 구간 계산(windows.py), 프레임 뽑기(extract.py)
+│       ├── frames/              AI 사진 구간 계산(windows.py), 프레임 뽑기(extract.py), 사진 자리 맞추기(photo_fit.py)
 │       └── guide_request/       AI 요청: makeup 값 계산, guideInput 단계 형식, 조립·검증·게시
 ├── tests/                       단위 테스트, golden/ 정답표
 ├── tools/                       정답표 채점, 시험 영상 목록
@@ -36,8 +36,9 @@ video-processor/
    └ 받자마자 제품 글자 자리 찾기 (GMS 1번)          │
                                                     ▼
         앞뒤 빈 구간 확인 (단계마다 GMS) ‖ 제품 글자 다시 읽기 (GMS 1번)   ← 1080p
+                                   ‖ 사진 미리 판정 (프로세스 6개)
                                                     ▼
-          같은 제품 다시 묶기 → AI 사진 구간 프레임 추출·S3 업로드 → 요청 JSON
+          같은 제품 다시 묶기 → 사진 자리 맞추기 → AI 사진 구간 프레임 추출·S3 업로드 → 요청 JSON
 ```
 
 31분 영상 한 편이 약 110초, 7~26분 영상 7편이 38~116초 걸렸습니다.
@@ -106,6 +107,22 @@ video-processor/
 구간 안은 BE `FramePlan`과 같은 번호 규칙(`n % round(fps/10) == 0`)으로 뽑고, 겹친 번호는 한 번만 뽑습니다.
 나온 장수가 계획과 다르면 실패시킵니다. 사진의 `stepId`는 그 시각을 포함하는 단계이고 없으면 `null`입니다.
 
+### 사진 자리 맞추기 (`photo_fit.py`)
+
+유튜브 영상은 단계 경계에 제품 화면·확대 컷·손 가림·눈 감음이 많아, 바르기 직전·직후 창의 사진을 AI가 못 쓰는 일이
+많습니다. 그래서 프레임을 뽑기 전에 분석 단계마다 시작 앞·끝 뒤 최대 15초를 1초 4장으로 보고, AI와 같은 기준
+(얼굴 하나·각도·크기, 부위가 화면 안, 눈 화장이면 눈 뜸, 부위 가림 20% 이하)으로 쓸 사진이 좌우 부위마다 2장 이상이고
+전·후 얼굴 폭 비가 0.8~1.25인 가장 가까운 창을 찾습니다. AI에 넘길 시작·끝을 그 창에 맞추고, 바르는 시각은
+`{videoId}_video_steps.json`에 남습니다. 앞 단계의 바른 뒤 사진은 다음 단계의 바르기 전 사진으로 같이 쓰고,
+이웃 단계를 바르는 동안의 사진은 쓰지 않습니다. 맞는 창이 없으면 받은 시각을 둡니다.
+
+- 판정은 AI 서버 코드(`ai/app`)를 그대로 불러 씁니다. 기준이 어긋나면 처리기가 고른 사진을 AI가 다시 버리기 때문입니다.
+- 단계 고치기가 GMS 응답을 기다리는 동안 고치기 전 단계로 프로세스 6개가 미리 판정해 둡니다.
+- 시험 영상 4편(r7v6V2WfBkc·RBm4rzufBV0·mi4SYsE8H_s·tDzHIsH683E)에서 AI가 영역을 찾은 분석 단계가 11개에서 19개로
+  늘었고(71개 중) 나빠진 단계는 없었습니다. 처리 시간은 영상당 0.1~8.1초 늘었습니다
+  (운영과 같은 Python 3.14, 60fps 영상이 가장 김).
+- 남은 실패는 대부분 단계 사이에 다음 제품을 얼굴 앞에 들고 보여 주는 장면만 있어서 영상에 쓸 사진이 없는 경우입니다.
+
 ## 판단 기준: 정답표
 
 `tests/golden/answer_key_VxAXD6PP76I.json`은 31분 영상의 단계마다 첫·마지막 닿음을 1080p 장면으로 확인해 적은 것입니다.
@@ -125,6 +142,9 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
+사진 자리 맞추기가 쓰는 가림 모델(`ai/app/weights/occlusion_bisenet.v1.onnx`)은 Git LFS 파일입니다.
+포인터만 받았다면 저장소에서 `git lfs pull`로 받습니다.
+
 ```ini
 GMS_API_KEY=S15P32A306-...
 AWS_REGION=ap-northeast-2
@@ -142,6 +162,7 @@ PROCESSOR_API_TOKEN=...                                            # --serve 만
 python pipeline.py --url "https://www.youtube.com/watch?v=VxAXD6PP76I"
 python pipeline.py --url <주소> --work-dir temp/run1 --artifact-id test-run1   # 결과를 따로 둘 때
 python pipeline.py --no-step-check                                              # 앞뒤 확인·글자 다시 읽기 끄기
+python pipeline.py --no-photo-fit                                               # 사진 자리 맞추기 끄기
 python -m unittest discover -s tests -t .
 python -m tools.score_answer_key tests/golden/answer_key_VxAXD6PP76I.json temp/run1 --detail
 ```

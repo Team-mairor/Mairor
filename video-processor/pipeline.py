@@ -36,6 +36,8 @@ def main():
                         help="단계 찾기 때 GMS가 보는 해상도. low가 빠르고, 틀린 답은 default로 다시 묻는다")
     parser.add_argument("--no-step-check", action="store_true",
                         help="앞뒤 빈 구간 확인과 제품 글자 다시 읽기를 끈다")
+    parser.add_argument("--no-photo-fit", action="store_true",
+                        help="AI가 쓸 사진이 있는 자리로 단계 시작·끝을 옮기는 것을 끈다")
     parser.add_argument("--serve", action="store_true",
                         help="BE에서 분석 작업을 가져가 처리하고 결과를 알린다. --url·--work-dir·--artifact-id는 쓰지 않는다")
     parser.add_argument("--poll-seconds", type=float, default=5.0, help="--serve에서 할 일이 없을 때 다시 묻는 간격")
@@ -52,7 +54,8 @@ def main():
             logger.info("[연결 모드] .env에 DISCORD_WEBHOOK_URL이 없어 디스코드 알림을 보내지 않습니다")
         try:
             poll_jobs(api, poll_seconds=args.poll_seconds, num_workers=args.workers, model=args.model,
-                      low_resolution=args.media_resolution == "low", step_check=not args.no_step_check)
+                      low_resolution=args.media_resolution == "low", step_check=not args.no_step_check,
+                      photo_fit=not args.no_photo_fit)
         except KeyboardInterrupt:
             logger.info("[연결 모드] 멈춤")
         except Exception:
@@ -63,7 +66,7 @@ def main():
         return
     run_video_pipeline(args.url, args.workers, model=args.model, work_dir=args.work_dir,
                        artifact_id=args.artifact_id, low_resolution=args.media_resolution == "low",
-                       step_check=not args.no_step_check)
+                       step_check=not args.no_step_check, photo_fit=not args.no_photo_fit)
 
 
 if __name__ == "__main__":
