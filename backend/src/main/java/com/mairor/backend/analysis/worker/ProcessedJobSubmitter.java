@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,6 +40,9 @@ public class ProcessedJobSubmitter {
 
   private static final Logger log = LoggerFactory.getLogger(ProcessedJobSubmitter.class);
 
+  /** 노트북 응답 없음 경고를 다시 남기는 간격. Grafana 규칙은 15분 창에서 세어 경고 사이에 알림이 풀리지 않는다. */
+  static final Duration STALL_WARN_REPEAT = Duration.ofMinutes(10);
+
   private final AnalysisJobStore store;
   private final ProcessorJobService processorJobs;
   private final ObjectStorage storage;
@@ -47,6 +52,8 @@ public class ProcessedJobSubmitter {
   private final WorkerProperties worker;
   private final ObjectMapper objectMapper;
   private final AiFrameDelivery frameDelivery;
+  // 스케줄 스레드 하나에서만 바뀐다
+  private Instant lastStallWarning;
 
   public ProcessedJobSubmitter(
       AnalysisJobStore store,
@@ -77,12 +84,32 @@ public class ProcessedJobSubmitter {
       if (expired > 0) {
         log.warn("노트북을 기다리다 끝낸 작업 {}개", expired);
       }
+      processorJobs.stalled().ifPresent(this::warnStalled);
       while (submitNext()) {
         // 밀린 작업을 이어서 맡긴다
       }
     } catch (RuntimeException e) {
       log.error("노트북 결과를 AI 에 맡기지 못했습니다. 다음 주기에 다시 시도합니다.", e);
     }
+  }
+
+  /**
+   * 노트북 응답 없음 경고. Grafana 알림이 이 줄을 세므로(S15P31A306-406) 같은 상태가 이어지면 {@link #STALL_WARN_REPEAT}에 한 번만
+   * 남긴다.
+   */
+  void warnStalled(ProcessorJobService.Stall stall) {
+    if (lastStallWarning != null
+        && Duration.between(lastStallWarning, stall.checkedAt()).compareTo(STALL_WARN_REPEAT) < 0) {
+      return;
+    }
+    lastStallWarning = stall.checkedAt();
+    log.atWarn()
+        .setMessage("노트북이 작업을 가져가지 않음 waiting={} oldestWaitMs={}")
+        .addArgument(stall.waiting())
+        .addArgument(stall.oldestWait().toMillis())
+        .addKeyValue("waiting", stall.waiting())
+        .addKeyValue("oldest_wait_ms", stall.oldestWait().toMillis())
+        .log();
   }
 
   /**

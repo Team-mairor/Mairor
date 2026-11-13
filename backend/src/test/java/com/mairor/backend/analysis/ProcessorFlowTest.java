@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -256,6 +257,34 @@ class ProcessorFlowTest extends AnalysisIntegrationTest {
     AnalysisJob stalled = jobs.findById(fresh).orElseThrow();
     assertThat(stalled.getFailureCode()).isEqualTo("PROCESSOR_TIMEOUT");
     assertThat(stalled.getProgressStage().name()).isEqualTo("LOADING_VIDEO");
+  }
+
+  /** 노트북 응답 없음(S15P31A306-406): 5분 넘게 아무 작업도 안 만졌는데 그보다 오래 기다린 작업이 있으면 알린다. 시간 초과(30분)보다 먼저다. */
+  @Test
+  void aWaitingJobWithoutTheNotebookForFiveMinutesIsAStall() throws Exception {
+    UUID waiting =
+        service
+            .register(
+                new AnalysisJobRequest(
+                    "procStlWait", "videos/procStlWait/source.mp4", "제목", "채널", 600))
+            .jobId();
+    service.register(
+        new AnalysisJobRequest("procStlNew1", "videos/procStlNew1/source.mp4", "제목", "채널", 600));
+    jdbc.update(
+        "update analysis_jobs set created_at = now() - interval '6 minutes',"
+            + " updated_at = now() - interval '6 minutes' where id = ?",
+        waiting);
+
+    ProcessorJobService.Stall stall = processorJobs.stalled().orElseThrow();
+    assertThat(stall.waiting()).as("방금 들어온 작업은 아직 세지 않는다").isEqualTo(1);
+    assertThat(stall.oldestWait()).isGreaterThanOrEqualTo(Duration.ofMinutes(6));
+    assertThat(processorJobs.expireWaiting()).as("시간 초과는 아직").isZero();
+
+    // 노트북이 작업을 가져가면(만지면) 응답 없음이 아니다
+    mockMvc
+        .perform(post(JOBS + "/claim").header("X-Processor-Token", PROCESSOR_TOKEN))
+        .andExpect(status().isOk());
+    assertThat(processorJobs.stalled()).isEmpty();
   }
 
   /** 노트북은 한 번에 하나씩 처리한다. 앞 작업을 하는 동안 줄 선 작업은 기다리는 것이지 노트북이 꺼진 것이 아니다(S15P31A306-408). */

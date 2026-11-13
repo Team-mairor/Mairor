@@ -19,6 +19,7 @@ SSAFY가 준 EC2 `k15a306.p.ssafy.io`(앱 서버와 다른 AWS 계정). 앱 서�
 | `caddy/Caddyfile` | 인프라 서버 | HTTPS 인증서 자동 발급, alloy가 보내는 주소는 앱 서버 Elastic IP만(phoenix로 가는 기록엔 키를 붙임), `/phoenix`는 phoenix, 나머지는 grafana |
 | `grafana/datasources.yml` | 인프라 서버 | 로그의 `traceId` → Tempo, trace → 같은 `traceId` 로그 |
 | `grafana/dashboards/` | 인프라 서버 | 대시보드 JSON(서버 · 컨테이너, 로그, 호출 흐름). Grafana 화면에서 고친 것은 저장되지 않는다 |
+| `grafana/alerting/` | 인프라 서버 | 알림 규칙 7개(아래 "알림"). 메신저로 보내지 않고 Grafana 알림 화면에서 본다. 화면에서 고친 것은 저장되지 않는다 |
 | `deploy.sh` | 인프라 서버 | 설정 검사 → 이미지 받기 → 이미지 · 설정 파일이 바뀐 것만 다시 띄우기 → 모두 준비될 때까지 확인 |
 | `alloy/config.alloy` | **앱 서버** | 로그 · 지표 · trace 수집. `mairor-deploy` 이미지에 담겨 앱 배포 때 함께 바뀐다 |
 
@@ -56,6 +57,24 @@ chmod 600 /opt/mairor-infra/.env
 ### 앱 서버
 
 EC2 `mairor-app`에 Elastic IP를 붙인다. `caddy/Caddyfile`의 `remote_ip`와 같아야 하고, IP가 바뀌면 앱 서버가 보내는 것이 모두 403으로 막힌다.
+
+## 알림 (S15P31A306-406)
+
+Grafana가 1분마다 규칙을 보고, 걸리면 **Grafana → Alerting → Alert rules**(폴더 "MAIROR 알림")에서 그 규칙이 **Firing**(빨강)으로 바뀐다. 메신저로는 보내지 않는다(받는 곳을 두지 않기로 함, 11.12). 시연 · QA 중에는 실시간 로그와 함께 이 화면을 본다. 규칙은 `grafana/alerting/rules.yml`.
+
+| 규칙 | 데이터 | 걸리는 조건 | 보는 곳 |
+|---|---|---|---|
+| 노트북 응답 없음 | 로그 | worker 경고 "노트북이 작업을 가져가지 않음" 15분 안 1건 이상. worker는 노트북이 5분(`ANALYSIS_PROCESSOR_WARN_AFTER`) 넘게 아무 작업도 안 만졌는데 그보다 오래 기다린 작업이 있을 때 10분에 한 번 남긴다. 30분이면 `PROCESSOR_TIMEOUT` 실패 | 노트북 `--serve` |
+| 분석 실패 잦음 | 로그 | "분석 작업 끝" 중 `analysis_status="FAILED"` 30분 안 2건 이상 | 로그 `failure_code` |
+| 노트북 · AI 시간 초과 | 로그 | `failure_code`가 `PROCESSOR_TIMEOUT` · `ANALYSIS_TIMEOUT` 10분 안 1건 이상 | 노트북 · AI 서버 |
+| CPU 높음 | 지표 | 서버(app · ai)별 CPU 85% 위 10분 | 대시보드 "서버 · 컨테이너" |
+| 메모리 높음 | 지표 | 서버별 메모리 90% 위 5분 | 같은 곳 |
+| 디스크 참 | 지표 | 서버별 가장 찬 디스크(ext4 · xfs) 85% 위 10분 | 같은 곳 |
+| 서버 지표 끊김 | 지표 | app · ai 서버 node 지표가 5분 동안 없음(서버 · alloy 꺼짐) | EC2 · `docker compose ps` |
+
+- 작업이 하나도 없으면 노트북이 꺼져 있어도 알리지 않는다(아무도 기다리지 않음).
+- 받는 곳이 없어 Grafana는 기본 받는 곳(이메일, 메일 서버 없음)으로 보내려다 실패한 로그를 남길 수 있다. 화면 표시에는 상관없다. 메신저로 받고 싶어지면 `grafana/alerting/`에 contact point · 정책 파일을 더한다.
+- 규칙 시험은 화면에서 규칙을 복사(Duplicate)해 임계치만 바꾼 임시 규칙으로 한다(파일 규칙은 화면에서 못 고친다). 끝나면 지운다.
 
 ## 접속
 

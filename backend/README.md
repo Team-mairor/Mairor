@@ -86,7 +86,7 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `LOGIN_MAX_CONCURRENT_HASHES` | `4` | 서버 전체에서 동시에 처리하는 로그인 수. 사용자 조회부터 BCrypt 비교까지를 한 번에 묶어 센다(DB 연결 대기가 쌓이는 것도 막는다). 넘으면 DB 에 가지 않고 기다리지 않고 429 로 거절한다. 서버 코어 수에 맞춰 조정한다 |
 | `DB_CONNECTION_TIMEOUT_MS` | `5000` | DB 연결을 얻기까지 기다리는 최대 시간(ms). 넘으면 요청이 `503 SERVICE_UNAVAILABLE` 로 끝난다. 쿼리 실행 시간 제한은 두지 않았다(아래 "운영 전 확인") |
 | `PROCESSOR_API_TOKEN` | (없음) | 영상 전처리 노트북 API(`/api/v1/internal/processor/**`)의 토큰. `X-Processor-Token` 헤더와 비교한다. 운영자 토큰과 다른 값. **비우면 노트북 API 는 모두 401**(앱은 뜬다). 계약 `docs/references/processor-api.md` |
-| `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` · `ANALYSIS_PROCESSOR_WAIT_TIMEOUT` | `false` · `900s` · `30m` | 노트북 연결 모드, 임대 시간, 노트북을 기다리는 최대 시간. 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않으며, 노트북이 끝낸 작업을 worker 가 AI 에 맡긴다(S15P31A306-358). 끄면 지금처럼 worker 가 운영자가 올린 영상으로 처리한다 |
+| `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` · `ANALYSIS_PROCESSOR_WAIT_TIMEOUT` · `ANALYSIS_PROCESSOR_WARN_AFTER` | `false` · `900s` · `30m` · `5m` | 노트북 연결 모드, 임대 시간, 노트북을 기다리는 최대 시간, 그 전에 "노트북이 작업을 가져가지 않음" 경고를 남기는 시간(Grafana 알림, S15P31A306-406). 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않으며, 노트북이 끝낸 작업을 worker 가 AI 에 맡긴다(S15P31A306-358). 끄면 지금처럼 worker 가 운영자가 올린 영상으로 처리한다 |
 | `INTERNAL_API_TOKEN` | (없음) | 내부 API(`/api/v1/internal/**`: 운영자 분석 명령, AI 콜백)의 공유 토큰. `X-Internal-Token` 헤더와 비교한다. **비우면 내부 API 는 모두 401**(앱은 뜬다). 코드·문서에 적지 않는다 ([분석 작업](#분석-작업-운영-명령--worker)) |
 | `APP_STORAGE_TYPE` | dev `local` / prod `s3` | 객체 저장소. `local` 은 아래 폴더, `s3` 는 버킷(자격 증명은 AWS 기본 공급자 체인, 운영은 EC2 역할) |
 | `APP_STORAGE_LOCAL_ROOT` | `<임시 폴더>/mairor-storage` | `local` 저장소의 뿌리 폴더. 저장소 키가 이 아래 상대 경로다 |
@@ -562,6 +562,7 @@ curl -X POST https://mairor.co.kr/api/v1/internal/guides/<guideId>/review -H "X-
 
 - 넣는 법: `try (var ignored = AnalysisLogContext.of(job))`(트랜잭션 안) 또는 `AnalysisLogContext.of(analysisJobId, youtubeVideoId, aiJobId)`. 닫으면 넣기 전 값으로 되돌린다. 실행기로 넘기는 일은 `MdcTaskDecorator`로 칸을 넘긴다(`guideReferenceTaskExecutor`, 프레임 업로드 풀).
 - 작업이 완료 · 실패로 끝나 커밋되면 한 줄 요약을 남긴다(`AnalysisJobFinishLog`, 메시지 "분석 작업 끝"): `analysis_status` · `progress_stage` · `failure_code` · `retryable` · `attempt` · `processor_claims` · `wait_ms`(요청 → 시작) · `processing_ms`(시작 → AI에 맡김. AI에 맡기기 전에 끝났으면 시작 → 끝) · `ai_ms`(AI에 맡김 → 끝, 맡기기 전에 끝났으면 없음) · `total_ms`(처음 요청 → 끝, 재시도해도 처음부터 셈). 단계 수 · 프레임 수 · 요청 크기는 AI에 맡길 때의 줄(`steps` · `frames` · `request_bytes`), Claude 토큰 · 비용은 AI 로그와 Phoenix에 있다.
+- 노트북 응답 없음(S15P31A306-406): 연결 모드에서 노트북이 `app.analysis.processor.warn-after`(기본 5분) 넘게 아무 작업도 만지지 않았는데 그보다 오래 기다린 작업이 있으면 worker가 WARN "노트북이 작업을 가져가지 않음"(`waiting` · `oldest_wait_ms`)을 10분에 한 번 남긴다. Grafana 알림 "노트북 응답 없음"이 이 줄을 센다(`infra/README.md` "알림"). 30분(`wait-timeout`)이면 `PROCESSOR_TIMEOUT`으로 끝난다.
 - Grafana Explore(Loki)에서 작업 하나 찾기: `{service_name=~"api|worker"} | analysis_job_id="<ID>"` → 거기 찍힌 `job_id`로 `{service_name="ai"} | job_id="<AI ID>"`. 영상 하나는 `| video_id="<YouTube ID>"`. alloy가 새 칸을 아직 꺼내지 않았으면(설정 반영 전) `| json | analysis_job_id="<ID>"`로 찾는다.
 - 로그에 비밀번호 · 세션 쿠키 · CSRF 토큰 · 이메일 · API 키 · 노트북 토큰을 넣지 않는다(개발용 메일 발송기는 운영에서 만들어지지 않고 받는 사람 주소를 가린다).
 

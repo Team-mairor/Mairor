@@ -63,6 +63,8 @@ services:
       - ./grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
       - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      # 알림 규칙(S15P31A306-406). 메신저로 보내지 않고 Grafana 알림 화면에서 본다
+      - ./grafana/alerting:/etc/grafana/provisioning/alerting:ro
       - grafana-data:/var/lib/grafana
     ports:
       - "127.0.0.1:3000:3000"

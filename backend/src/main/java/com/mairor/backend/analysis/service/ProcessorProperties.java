@@ -14,13 +14,16 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *     끝낸다
  * @param waitTimeout 아무 노트북도 가져가지 않은 대기 작업, 임대가 지나고 아무도 다시 가져가지 않은 작업을 이만큼 기다린 뒤 {@code
  *     PROCESSOR_TIMEOUT}으로 끝낸다(노트북 꺼짐)
+ * @param warnAfter 같은 기준(노트북이 아무 작업도 만지지 않음)으로 이만큼 지나면 끝내기 전에 "노트북이 작업을 가져가지 않음" 경고를 남긴다
+ *     (S15P31A306-406, Grafana 알림이 센다)
  */
 @ConfigurationProperties(prefix = "app.analysis.processor")
 public record ProcessorProperties(
     @DefaultValue("false") boolean enabled,
     @DefaultValue("900s") Duration lease,
     @DefaultValue("2") int maxClaims,
-    @DefaultValue("30m") Duration waitTimeout) {
+    @DefaultValue("30m") Duration waitTimeout,
+    @DefaultValue("5m") Duration warnAfter) {
 
   public ProcessorProperties {
     if (lease.isNegative() || lease.isZero()) {
@@ -31,6 +34,9 @@ public record ProcessorProperties(
     }
     if (waitTimeout.isNegative() || waitTimeout.isZero()) {
       throw new IllegalArgumentException("app.analysis.processor.wait-timeout 은 0 보다 커야 합니다.");
+    }
+    if (warnAfter.isNegative() || warnAfter.isZero()) {
+      throw new IllegalArgumentException("app.analysis.processor.warn-after 는 0 보다 커야 합니다.");
     }
   }
 }

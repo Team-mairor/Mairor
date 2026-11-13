@@ -12,7 +12,9 @@ import com.mairor.backend.common.error.ErrorCode;
 import com.mairor.backend.common.error.ErrorResponse;
 import com.mairor.backend.common.storage.ObjectStorage;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -264,6 +266,41 @@ public class ProcessorJobService {
       }
     }
     return expired;
+  }
+
+  /**
+   * 노트북 응답 없음(S15P31A306-406).
+   *
+   * @param waiting 노트북을 기다리는 작업 수
+   * @param oldestWait 그중 가장 오래 기다린 시간(마지막으로 바뀐 때부터)
+   * @param checkedAt 본 시각
+   */
+  public record Stall(int waiting, Duration oldestWait, Instant checkedAt) {}
+
+  /**
+   * 노트북이 {@code warn-after} 동안 아무 작업도 만지지 않았는데 그보다 오래 기다린 작업이 있으면 돌려준다. {@link #expireWaiting()}과
+   * 같은 기준을 더 짧게 봐서, 시간 초과로 실패하기 전에 알 수 있게 한다. 연결 모드가 꺼져 있으면 빈 값.
+   */
+  @Transactional(readOnly = true)
+  public Optional<Stall> stalled() {
+    if (!properties.enabled()) {
+      return Optional.empty();
+    }
+    Instant now = clock.instant();
+    Instant before = now.minus(properties.warnAfter());
+    if (jobs.existsTouchedByProcessorSince(before)) {
+      return Optional.empty();
+    }
+    List<UUID> ids = jobs.findIdsWaitingForProcessorSince(before);
+    if (ids.isEmpty()) {
+      return Optional.empty();
+    }
+    Instant oldest =
+        jobs.findAllById(ids).stream()
+            .map(AnalysisJob::getUpdatedAt)
+            .min(Comparator.naturalOrder())
+            .orElse(now);
+    return Optional.of(new Stall(ids.size(), Duration.between(oldest, now), now));
   }
 
   /** 노트북이 이 작업의 파일을 두는 자리. 같은 영상을 다시 분석해도 이전 결과를 덮지 않게 작업마다 나눈다. */
