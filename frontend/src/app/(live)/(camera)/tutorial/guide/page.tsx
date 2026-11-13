@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
@@ -12,7 +12,6 @@ import { runHref, useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { GUIDE_STEPS } from "@/mocks/mock-data";
 
 /**
  * 09 튜토리얼 안내 · 사진 저장 동의. 리포트에 단계 사진이 꼭 남도록 동의해야 시작할 수 있다.
@@ -24,8 +23,7 @@ export default function TutorialGuidePage() {
   const { state, update, enterTutorial, isCurrentRun } = useSession();
   const { load, retry } = useGuide();
   const run = state.run;
-  const n =
-    run.mode === "guide" && load.status === "ready" ? load.guide.steps.length : GUIDE_STEPS.length;
+  const n = run.mode === "guide" && load.status === "ready" ? load.guide.steps.length : 0;
   const consentRows = [
     ["저장 항목", `스텝별 얼굴 사진 (최대 ${n}장)`],
     ["쓰는 곳", "내 리포트의 과정 사진 · 비교"],
@@ -37,6 +35,10 @@ export default function TutorialGuidePage() {
   const showSlides = review || query?.get("force") === "1" || !state.tutSeen;
   const phase = showSlides ? slide : 3;
   useHiddenVideo();
+
+  useEffect(() => {
+    if (run.mode !== "guide") router.replace("/select");
+  }, [router, run.mode]);
 
   const endSlides = () => {
     if (review) return router.push(href("/tutorial"));
@@ -52,15 +54,13 @@ export default function TutorialGuidePage() {
     consenting.current = true;
     setConsentError(null);
     try {
-      if (run.mode === "guide" && !(await retry())) return;
+      if (!(await retry())) return;
       // 실제 가이드는 동의 여부를 서버 실행에 저장한다
-      if (run.mode === "guide") {
-        if (!run.executionId) {
-          setConsentError("실행 정보가 없어요. 제품 확인에서 다시 시작해 주세요.");
-          return;
-        }
-        await setPhotoConsent(run.executionId, true);
+      if (!run.executionId) {
+        setConsentError("실행 정보가 없어요. 제품 확인에서 다시 시작해 주세요.");
+        return;
       }
+      await setPhotoConsent(run.executionId, true);
       if (!isCurrentRun(run.id)) return;
       enterTutorial(run.id, true);
       router.push(href("/tutorial"));
@@ -71,7 +71,7 @@ export default function TutorialGuidePage() {
     }
   };
 
-  if (!query) return null;
+  if (!query || run.mode !== "guide") return null;
 
   return (
     <main className="relative flex flex-1 flex-col">

@@ -16,17 +16,11 @@ import { useSession } from "@/features/session";
 import { errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 
-const PHOTO_POS = [
-  { mt: "-62%", ml: "-40%", w: "180%" },
-  { mt: "-112%", ml: "-55%", w: "210%" },
-  { mt: "-150%", ml: "-60%", w: "220%" },
-  { mt: "-86%", ml: "-70%", w: "240%" },
-];
 const ROT = [-1.6, 1.4, 1.2, -1.2];
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
 
-/** 마이페이지 · 리포트 목록. 로그인했으면 서버 기록만, 아니면 기기에 저장한 샘플 기록(같은 기록이 두 번 보이지 않게 섞지 않는다) */
+/** 마이페이지 · 로그인 계정의 서버 리포트 목록 */
 export default function MyReportsPage() {
   const { state, sessionChecked } = useSession();
   const query = useQuery();
@@ -42,7 +36,7 @@ export default function MyReportsPage() {
         ? server.load.status === "ready"
           ? server.load.data.items.map(fromSummary)
           : []
-        : state.reports;
+        : [];
   const [top, ...rest] = reports;
 
   return (
@@ -99,12 +93,9 @@ export default function MyReportsPage() {
                 ) : top.guide ? (
                   <PhotoSlot label="마지막 단계 사진" />
                 ) : (
-                  <img
-                    src="/images/sample-face.png"
-                    alt=""
-                    className="absolute top-0 left-0 h-auto w-[140%] max-w-none"
-                    style={{ marginTop: "-58%", marginLeft: "-20%" }}
-                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-cream font-display text-[26px] text-ink">
+                    사진 없음
+                  </div>
                 )}
                 <span className="absolute top-5 left-5 flex h-9 items-center rounded-full bg-mint px-4 font-label text-[14px] font-bold tracking-[.12em] text-ink">
                   {top.isNew ? "NEW · 방금 완료" : "LATEST LOOK"}
@@ -167,18 +158,9 @@ export default function MyReportsPage() {
                       ) : r.guide ? (
                         <PhotoSlot label="마지막 단계 사진" />
                       ) : (
-                        <img
-                          src="/images/sample-face.png"
-                          alt=""
-                          className="absolute top-0 left-0 h-auto max-w-none"
-                          style={
-                            PHOTO_POS[i % 4] && {
-                              marginTop: PHOTO_POS[i % 4].mt,
-                              marginLeft: PHOTO_POS[i % 4].ml,
-                              width: PHOTO_POS[i % 4].w,
-                            }
-                          }
-                        />
+                        <div className="absolute inset-0 flex items-center justify-center text-[16px] font-bold text-mute">
+                          사진 없음
+                        </div>
                       )}
                     </div>
                     <div className="flex min-w-0 flex-col gap-1 px-1.5">

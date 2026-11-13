@@ -49,7 +49,7 @@ export default function HomePage() {
   const query = useQuery();
   // ?empty=1: 리포트·파우치 빈 상태 확인용 (데이터는 지우지 않는다)
   const empty = query?.get("empty") === "1";
-  // 로그인했으면 서버 기록, 아니면 기기에 저장한 샘플 기록
+  // 서버 기록은 로그인한 계정에서만 표시한다
   const myReports = useReports(sessionChecked && state.loggedIn ? state.email : null);
   const reports = empty
     ? []
@@ -57,7 +57,7 @@ export default function HomePage() {
       ? myReports.load.status === "ready"
         ? myReports.load.data.items.map(fromSummary)
         : []
-      : state.reports;
+      : [];
   // 서버 기록을 받는 중 · 받지 못했으면 빈 상태 대신 그대로 알린다
   const reportsWaiting =
     !empty && state.loggedIn && (!sessionChecked || myReports.load.status === "loading");
@@ -75,7 +75,7 @@ export default function HomePage() {
   // 로그인했으면 서버 목록을 받기 전·받지 못했을 때 저장된(지난) 파우치를 보여 주지 않는다 (내 파우치와 같다)
   const waiting = sync.status === "loading" || (state.loggedIn && !sessionChecked);
   const hidden = waiting || sync.status === "error";
-  const pouch = empty || hidden ? [] : state.pouch;
+  const pouch = empty || hidden || !state.loggedIn ? [] : state.pouch;
   const d = new Date();
   const today = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
   const last = reports[0];
@@ -94,7 +94,9 @@ export default function HomePage() {
         ? latest
           ? toPendingGuide(latest)
           : null
-        : state.pendingGuide;
+        : state.loggedIn
+          ? state.pendingGuide
+          : null;
   const approved = pg?.status === "approved";
   // 승인됐어도 guideId가 올바르지 않으면 시작하지 않고 다시 확인을 안내한다
   const ready = approved && isGuideId(pg?.guideId);
@@ -376,7 +378,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3">
-              {reports.slice(0, 3).map((r, i) => (
+              {reports.slice(0, 3).map((r) => (
                 <Link
                   key={r.id}
                   href={`/my/report?id=${r.id}`}
@@ -390,12 +392,9 @@ export default function HomePage() {
                         className="absolute inset-0 h-full w-full object-cover"
                       />
                     ) : (
-                      <img
-                        src="/images/login-editorial.png"
-                        alt=""
-                        className="absolute inset-0 h-full w-full scale-[1.6] object-cover"
-                        style={{ objectPosition: ["50% 40%", "45% 60%", "55% 30%"][i] }}
-                      />
+                      <div className="absolute inset-0 flex items-center justify-center bg-cream text-[14px] font-bold text-mute">
+                        사진 없음
+                      </div>
                     )}
                   </span>
                   <span className="flex min-w-0 flex-col gap-1 px-1.5">

@@ -23,7 +23,7 @@ import { ApiError, errorMessage, isAbortError } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
 
-/** 마이페이지 · 내 파우치. 로그인 전에는 샘플 파우치. ?add=1 등록, ?edit=<id> 수정 시트 */
+/** 마이페이지 · 내 파우치. ?add=1 등록, ?edit=<id> 수정 시트 */
 export default function MyPouchPage() {
   const { state, sessionChecked, expireSession } = useSession();
   const router = useRouter();
@@ -41,18 +41,22 @@ export default function MyPouchPage() {
 
   useEffect(() => {
     if (!query) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 요청을 한 번 반영한다
-    if (query.get("add")) setForm(emptyDraft());
-  }, [query]);
+    if (query.get("add")) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 등록 요청을 한 번 반영한다
+      if (state.loggedIn) setForm(emptyDraft());
+      else router.replace("/login");
+    }
+  }, [query, router, state.loggedIn]);
 
   // ?edit=<id>: 로그인했으면 서버의 최신 항목(API-POUCH-005)으로, 아니면 저장된 파우치에서 연다
   const edit = query?.get("edit") ?? null;
   useEffect(() => {
     if (!edit || !sessionChecked) return;
     if (!state.loggedIn) {
-      const item = state.pouch.find((p) => p.id === edit);
+      const item = state.loggedIn ? state.pouch.find((p) => p.id === edit) : undefined;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 요청을 한 번 반영한다
       if (item) setForm({ ...item });
+      else if (!state.loggedIn) router.replace("/login");
       return;
     }
     const controller = new AbortController();
@@ -72,10 +76,11 @@ export default function MyPouchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 주소·로그인 상태가 정해질 때 한 번만 연다
   }, [edit, sessionChecked, state.loggedIn]);
 
-  const list = cat === "전체" ? state.pouch : state.pouch.filter((p) => p.cat === cat);
+  const pouchItems = state.loggedIn ? state.pouch : [];
+  const list = cat === "전체" ? pouchItems : pouchItems.filter((p) => p.cat === cat);
   // 로그인했으면 서버 목록을 받기 전까지 저장된(지난) 파우치를 보여 주지 않는다
   const waiting = sync.status === "loading" || (state.loggedIn && !sessionChecked);
-  const empty = state.pouch.length === 0 || query?.get("empty") === "1";
+  const empty = pouchItems.length === 0 || query?.get("empty") === "1";
 
   // 목록에서 다시 고르면 지난 안내를 지운다
   const open = (d: ProductDraft) => {
@@ -117,7 +122,11 @@ export default function MyPouchPage() {
             <span className="text-[18px] leading-[1.55] text-pretty text-mute">
               가진 제품을 등록하면 영상 속 제품과 맞춰 보유·대체를 찾아 드려요.
             </span>
-            <PillButton size="xl" onClick={() => open(emptyDraft())} className="mt-1.5">
+            <PillButton
+              size="xl"
+              onClick={() => (state.loggedIn ? open(emptyDraft()) : router.push("/login"))}
+              className="mt-1.5"
+            >
               <Plus className="size-[18px]" strokeWidth={2.2} aria-hidden />
               제품 등록
             </PillButton>
@@ -125,7 +134,7 @@ export default function MyPouchPage() {
         ) : (
           <>
             <PouchBoard
-              items={state.pouch}
+              items={pouchItems}
               scale={0.66}
               className="h-[340px] shrink-0"
               onEdit={(p) => open({ ...p })}
@@ -136,12 +145,12 @@ export default function MyPouchPage() {
                     My pouch
                   </span>
                   <span className="text-[16px] text-mute">
-                    내 파우치 · {state.pouch.length}개 · 탭해서 수정
+                    내 파우치 · {pouchItems.length}개 · 탭해서 수정
                   </span>
                 </span>
                 <button
                   type="button"
-                  onClick={() => open(emptyDraft())}
+                  onClick={() => (state.loggedIn ? open(emptyDraft()) : router.push("/login"))}
                   className="flex h-11 items-center gap-2 rounded-full bg-ink px-[18px] text-[17px] font-semibold text-white"
                 >
                   <Plus className="size-4" strokeWidth={2} aria-hidden />
@@ -163,9 +172,7 @@ export default function MyPouchPage() {
                 {["전체", ...POUCH_CATS].map((k) => {
                   const on = cat === k;
                   const n =
-                    k === "전체"
-                      ? state.pouch.length
-                      : state.pouch.filter((p) => p.cat === k).length;
+                    k === "전체" ? pouchItems.length : pouchItems.filter((p) => p.cat === k).length;
                   return (
                     <button
                       key={k}

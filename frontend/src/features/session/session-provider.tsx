@@ -105,10 +105,7 @@ export function SessionProvider({
   seed,
 }: {
   children: ReactNode;
-  /**
-   * 저장값이 없는 기기에서 처음 보여 줄 파우치·리포트. API가 붙기 전 샘플을 넣는 자리다 (app/layout.tsx).
-   * layout에서 한 번만 넘기므로 처음 값으로 고정한다
-   */
+  /** 앱 화면에서는 쓰지 않는다. 테스트가 명시적으로 초기 데이터를 넣을 때만 사용한다. */
   seed?: Pick<SessionState, "pouch" | "reports">;
 }) {
   const [initial] = useState<SessionState>(() => ({ ...EMPTY_STATE, ...seed }));
@@ -138,10 +135,11 @@ export function SessionProvider({
       nickname: user.nickname ?? "",
       sessionExpired: false,
       pouch: prev.loggedIn && prev.email === user.email ? prev.pouch : [],
+      reports: prev.loggedIn && prev.email === user.email ? prev.reports : [],
     }));
   }, []);
 
-  // 로그아웃·만료 때는 이전 계정 목록을 지우고 처음 샘플로 돌린다
+  // 로그아웃·만료 때는 이전 계정의 데이터를 비운다
   const signOut = useCallback(() => {
     activeRunId.current = "";
     clearFacePhoto();
@@ -153,9 +151,10 @@ export function SessionProvider({
       email: "",
       nickname: "",
       sessionExpired: false,
-      pouch: initial.pouch,
+      pouch: [],
+      reports: [],
     }));
-  }, [initial]);
+  }, []);
 
   const expireSession = useCallback(() => {
     activeRunId.current = "";
@@ -168,16 +167,25 @@ export function SessionProvider({
       email: "",
       nickname: "",
       sessionExpired: prev.loggedIn || prev.sessionExpired,
-      pouch: initial.pouch,
+      pouch: [],
+      reports: [],
     }));
-  }, [initial]);
+  }, []);
 
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
       if (saved && typeof saved === "object" && !Array.isArray(saved)) {
+        const pouch = Array.isArray(saved.pouch)
+          ? saved.pouch.filter((item: { id?: unknown }) => !/^p\d+$/.test(String(item?.id ?? "")))
+          : [];
+        const reports = Array.isArray(saved.reports)
+          ? saved.reports.filter(
+              (report: { id?: unknown }) => !/^rp[1-4]$/.test(String(report?.id ?? "")),
+            )
+          : [];
         // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소는 브라우저에서만 읽을 수 있다
-        setState({ ...initial, ...saved, run: EMPTY_RUN });
+        setState({ ...initial, ...saved, pouch, reports, run: EMPTY_RUN });
       }
     } catch {
       // 깨진 저장값은 기본값으로 시작한다

@@ -12,13 +12,18 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
   // 로그인했으면 서버 목록 수(받은 만큼, 더 있으면 +)
   const reports = useReports(sessionChecked && state.loggedIn ? state.email : null);
   const reportCount = !state.loggedIn
-    ? `${state.reports.length}`
+    ? "0"
     : reports.load.status === "ready"
       ? `${reports.load.data.items.length}${reports.load.data.hasNext ? "+" : ""}`
       : "";
 
   const tabs = [
-    { key: "pouch", href: "/my/pouch", en: "My pouch", ko: `파우치 ${state.pouch.length}` },
+    {
+      key: "pouch",
+      href: "/my/pouch",
+      en: "My pouch",
+      ko: `파우치 ${state.loggedIn ? state.pouch.length : 0}`,
+    },
     { key: "reports", href: "/my/reports", en: "Reports", ko: `리포트 ${reportCount}`.trim() },
   ] as const;
   const name = displayName(state);

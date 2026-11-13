@@ -1,9 +1,8 @@
-// 프로토타입 v11의 샘플 데이터. API 연동 전까지 화면을 채우는 용도이며 서버 응답 규격이 아니다.
-// ponytail: 하드코딩 샘플. API 클라이언트가 붙으면 이 파일을 지운다. 타입·고정값은 features/session·features/pouch에 있다.
+// 개발·테스트용 샘플 데이터. 제품 사용자의 파우치·리포트 기록을 대신하는 데 쓰지 않는다.
 
 import type { Makeup } from "@/features/guide";
 import type { PouchCat, PouchItem } from "@/features/pouch";
-import type { GuideStepInfo, RefProduct, RefState, ReportSummary } from "@/features/session";
+import type { GuideStepInfo, RefProduct, RefState } from "@/features/session";
 import type { Chapter, VideoItem, VideoState } from "@/features/video";
 
 import { MOCK_GUIDE_STEPS, type MockGuideStep } from "./mock-guide";
@@ -181,13 +180,6 @@ export const DEFAULT_POUCH: PouchItem[] = [
     r.sub ? [{ cat: r.matchCat, type: POUCH_TYPE[PLAY_STEPS[i].makeup], ...r.sub }] : [],
   ),
 ].map((p, i) => ({ id: `p${i + 1}`, ...p }));
-
-export const DEFAULT_REPORTS: ReportSummary[] = [
-  { id: "rp1", title: "면접용 내추럴 룩", date: "10월 16일", steps: 7, subs: 1 },
-  { id: "rp2", title: "글로시 립 포인트", date: "10월 12일", steps: 5, subs: 0 },
-  { id: "rp3", title: "봄 웜 코랄 데일리", date: "10월 8일", steps: 6, subs: 2 },
-  { id: "rp4", title: "음영 섀도 연습", date: "10월 3일", steps: 4, subs: 1 },
-];
 
 /** 영상 상태 샘플. y2 가이드 있음 · y3 분석 중 · y5 재생 불가 · y6 일일 한도 */
 export function videoState(v: VideoItem | null): VideoState {
