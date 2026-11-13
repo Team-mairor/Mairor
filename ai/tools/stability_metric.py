@@ -45,6 +45,7 @@ from tools.metric_settings import (
     PARTS_USAGE,
     TAG_USAGE,
     selected_parts,
+    shifted_reference,
     split_parts,
     split_tag,
     tagged_dir,
@@ -55,6 +56,7 @@ from tools.output_area import (
     Area,
     Zones,
     found_side,
+    not_analyzed_steps,
     not_found_reason,
     output_area,
     reused_previous,
@@ -284,7 +286,7 @@ def main() -> None:
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
         sys.exit(1)
 
-    reference = load_reference_input(folder)
+    reference = shifted_reference(load_reference_input(folder))
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     occlusion = table_finder(folder, occlusion_name)
@@ -296,6 +298,7 @@ def main() -> None:
     out = []
     bounds = step_bounds(reference.manifest.steps)
     zones = step_zones(folder)
+    skipped = not_analyzed_steps(folder)
     for part in selected_parts(PARTS, part_names):
         drawn = None
         for step in sorted(reference.manifest.steps, key=lambda s: s.order):
@@ -312,6 +315,8 @@ def main() -> None:
                 )
             for side, measured in zip(part.sides, rows, strict=True):
                 row = {"part": part.name, "stepId": step.step_id, "side": side} | measured
+                if step.step_id in skipped:
+                    row["notAnalyzed"] = True
                 out.append(row)
                 output = row["output"]
                 print(

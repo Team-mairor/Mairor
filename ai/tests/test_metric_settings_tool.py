@@ -10,6 +10,7 @@ from app.tasks.area.parts import blush_area, brow_area, eyeshadow_area
 from tools import run_metric
 from tools.metric_settings import (
     apply_settings,
+    converted,
     merge_results,
     selected_parts,
     split_parts,
@@ -251,3 +252,10 @@ def test_write_result_uses_the_one_format_of_the_tools(tmp_path):
 
     expected = json.dumps(doc, ensure_ascii=False, indent=1)
     assert (tmp_path / "x" / "r.json").read_text(encoding="utf-8") == expected
+
+
+def test_a_text_constant_takes_only_text():
+    """방식 이름처럼 글자로 적힌 상수에는 글자만 받고, 숫자 상수에 글자를 주면 받지 않는다."""
+    assert converted("each", "copy") == "copy"
+    assert converted("each", 3) is None
+    assert converted(3, "copy") is None

@@ -1,95 +1,52 @@
-from app.schemas.manifest import Manifest
+import json
+
+import pytest
+
 from tools import guide_scorecard
 
-BROW_S8 = {
-    "foundRatio": 1.0,
-    "shiftRatio": 0.033,
-    "cover": 0.84,
-    "overflow": 0.191,
-    "outsideRatio": 0.105,
-    "keepRatio": 0.949,
-    "t50": 0.419,
-    "strongShare": 0.774,
-}
-LIP_S27 = {
-    "foundRatio": 1.0,
-    "shiftRatio": 0.044,
-    "cover": 0.999,
-    "overflow": 0.155,
-    "outsideRatio": 0.018,
-    "keepRatio": 0.815,
-    "t50": 0.815,
-    "strongShare": 0.758,
-}
+TIMING = {"outsideRatio": 0.105, "keepRatio": 0.949, "t50": 0.419, "strongShare": 0.774}
 
 
-def by_name(checks):
-    return {c["name"]: c for c in checks}
-
-
-def test_check_compares_upper_and_lower_lines_and_reports_how_far_the_value_is():
-    upper = guide_scorecard.Line("x", "x", 0.05, True, ("brow",))
-    lower = guide_scorecard.Line("y", "y", 0.7, False, ("brow",))
-
-    assert guide_scorecard.check(upper, 0.27) | {"value": None} == {
-        "name": "x",
-        "limit": 0.05,
-        "value": None,
-        "passed": False,
-        "gap": 5.4,
-    }
-    assert (
-        guide_scorecard.check(upper, -0.1)["passed"]
-        and guide_scorecard.check(upper, -0.1)["gap"] == 0.0
-    )
-    assert guide_scorecard.check(lower, 0.35)["gap"] == 2.0
-    assert not guide_scorecard.check(lower, None)["passed"]
-
-
-def test_reference_cases_pass_every_line_with_some_room():
-    for part, values in (("brow", BROW_S8), ("lip", LIP_S27)):
-        passed, checks = guide_scorecard.judge(part, values, guide_scorecard.STEP_LINES)
-
-        assert passed
-        assert all(c["name"] == "foundRatio" or c["gap"] is None or c["gap"] < 1 for c in checks)
-
-
-def test_a_moment_only_eyeliner_area_fails_on_how_long_the_change_stays():
-    values = {
-        "foundRatio": 1.0,
-        "shiftRatio": 0.058,
-        "intrude": 0.069,
-        "outsideRatio": 0.0,
-        "keepRatio": 0.333,
-        "t50": 1.065,
+def stability(part, step_id, side, base_found, shift=0.03, found=9, **more):
+    return {
+        "part": part,
+        "stepId": step_id,
+        "side": side,
+        "found": found,
+        "total": 9,
+        "baseFound": base_found,
+        "shiftRatio": shift,
+        **more,
     }
 
-    passed, checks = guide_scorecard.judge("eyeliner", values, guide_scorecard.STEP_LINES)
 
-    names = by_name(checks)
-    assert not passed
-    assert not names["keepRatio"]["passed"] and names["keepRatio"]["gap"] == 2.1
-    assert "t50Max" not in names and "cover" not in names
+def brow_docs(false_positives=2, steps=None, boundary=None, timing=None):
+    """눈썹 왼쪽 한 쪽짜리 결과 파일 네 개. 잡음은 100쌍이다."""
+    return {
+        "noise.json": {
+            "summary": [
+                {
+                    "part": "brow",
+                    "side": "leftBrow",
+                    "pairs": 100,
+                    "falsePositives": false_positives,
+                }
+            ]
+        },
+        "stability.json": {"steps": steps or []},
+        "boundary.json": {"steps": boundary or []},
+        "timing.json": {"steps": timing or []},
+    }
 
 
-def test_lines_apply_only_to_parts_that_have_the_metric():
-    _, blush = guide_scorecard.judge("blush", {}, guide_scorecard.STEP_LINES)
-    _, shadow = guide_scorecard.judge("eyeshadow", {}, guide_scorecard.STEP_LINES)
-
-    assert {"cover", "overflow", "intrude"}.isdisjoint(by_name(blush))
-    assert "t50Min" in by_name(blush)
-    assert "intrude" in by_name(shadow) and "t50Min" not in by_name(shadow)
-    _, liner = guide_scorecard.judge("eyeliner", {}, guide_scorecard.STEP_LINES)
-    assert "strongShare" in by_name(shadow) and "strongShare" not in by_name(liner)
+def part(result, name):
+    return next(p for p in result["parts"] if p["part"] == name)
 
 
-def test_an_area_mostly_made_of_faint_cells_fails_as_too_wide():
-    values = BROW_S8 | {"strongShare": 0.415}
-
-    passed, checks = guide_scorecard.judge("blush", values, guide_scorecard.STEP_LINES)
-
-    assert not passed
-    assert [c["name"] for c in checks if not c["passed"]] == ["strongShare"]
+def test_no_fixed_pass_line_is_left_in_the_tool():
+    """사람이 정한 합격선과 단계마다 눈으로 적은 자리 표는 두지 않는다."""
+    for name in ("NOISE_LINE", "STEP_LINES", "STEP_ZONES", "Line", "judge"):
+        assert not hasattr(guide_scorecard, name)
 
 
 def test_noise_rates_add_up_every_gap_for_each_side():
@@ -107,97 +64,126 @@ def test_noise_rates_add_up_every_gap_for_each_side():
     assert rates[("lip", "lipsOuter")] is None
 
 
-def test_score_counts_not_found_steps_apart_and_needs_every_step_and_noise_to_pass():
-    def stability(step_id, base_found, shift):
-        return {
-            "part": "brow",
-            "stepId": step_id,
-            "side": "leftBrow",
-            "found": 9,
-            "total": 9,
-            "baseFound": base_found,
-            "shiftRatio": shift,
-        }
+def test_step_values_keep_only_the_metrics_of_the_part():
+    """경계 지표는 분할 모델이 있는 눈썹·립에만, 눈 침범은 섀도·아이라인에만 적는다.
 
-    timing = {k: BROW_S8[k] for k in ("outsideRatio", "keepRatio", "t50", "strongShare")}
-    docs = {
-        "noise.json": {
-            "summary": [{"part": "brow", "side": "leftBrow", "pairs": 100, "falsePositives": 2}]
-        },
-        "stability.json": {"steps": [stability("s8", True, 0.033), stability("s23", False, None)]},
-        "boundary.json": {
-            "steps": [
-                {
-                    "part": "brow",
-                    "stepId": "s8",
-                    "side": "leftBrow",
-                    "cover": 0.84,
-                    "overflow": 0.19,
-                }
-            ]
-        },
-        "timing.json": {"steps": [{"part": "brow", "stepId": "s8", "side": "leftBrow", **timing}]},
+    아이라인 색 값은 바뀜/안 바뀜 두 값이라 진한 칸 비율을 적지 않는다.
+    """
+    row = stability("x", "s1", "side", True)
+    names = {
+        name: set(guide_scorecard.step_values(name, row, {}, {})) for name in guide_scorecard.PARTS
     }
+
+    assert {"cover", "overflow"} <= names["brow"] and {"cover", "overflow"} <= names["lip"]
+    assert "cover" not in names["blush"] and "intrude" not in names["blush"]
+    assert "intrude" in names["eyeshadow"] and "intrude" in names["eyeliner"]
+    assert "strongShare" in names["eyeshadow"] and "strongShare" not in names["eyeliner"]
+
+
+def test_a_metric_that_could_not_be_measured_has_no_value():
+    """조심할 구간이라 잴 시각이 없던 유지 비(notMeasured)는 값을 적지 않는다."""
+    timing = {**TIMING, "keepRatio": 0.1, "notMeasured": ["keepRatio"]}
+
+    values = guide_scorecard.step_values("blush", stability("blush", "s22", "c", True), {}, timing)
+
+    assert values["keepRatio"] is None and values["outsideRatio"] == 0.105
+
+
+def test_score_separates_found_not_found_and_reused_steps():
+    """못 찾은 쪽은 notFound, 앞 눈썹 단계 영역을 그대로 보낸 쪽은 reused이고 둘 다 값이 없다."""
+    reused = stability(
+        "brow",
+        "s23",
+        "leftBrow",
+        False,
+        found=0,
+        output={"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.0, "reusedArea": True},
+    )
+    docs = brow_docs(
+        steps=[
+            stability("brow", "s8", "leftBrow", True),
+            stability("brow", "s9", "leftBrow", False, None),
+            reused,
+        ],
+        boundary=[
+            {"part": "brow", "stepId": "s8", "side": "leftBrow", "cover": 0.84, "overflow": 0.19}
+        ],
+        timing=[{"part": "brow", "stepId": "s8", "side": "leftBrow", **TIMING}],
+    )
 
     result = guide_scorecard.score(docs)
 
-    assert [r["status"] for r in result["steps"]] == ["passed", "notFound"]
-    brow = next(p for p in result["parts"] if p["part"] == "brow")
-    assert brow["noisePassed"] is True
-    assert brow["steps"] == {"passed": 1, "failed": 0, "notFound": 1, "reused": 0}
-    assert brow["passed"] is False
-    lip = next(p for p in result["parts"] if p["part"] == "lip")
-    assert lip["noisePassed"] is False and lip["passed"] is False
+    assert [r["status"] for r in result["steps"]] == ["found", "notFound", "reused"]
+    assert result["steps"][0]["values"]["cover"] == 0.84
+    assert result["steps"][1]["values"] == {} and result["steps"][2]["values"] == {}
+    assert result["steps"][2]["sideStatus"] == "notFound"
+    assert part(result, "brow")["steps"] == {"found": 1, "notFound": 1, "reused": 1}
 
 
-def test_score_counts_steps_that_reuse_the_earlier_brow_area_apart_without_lines():
-    """못 찾아 앞 눈썹 단계 영역을 그대로 보낸 단계(나가는 영역 reusedArea)는 reused로 세고
-    선은 재지 않는다. 찾은 것이 아니라서 부위 합격으로는 치지 않는다.
+def test_separation_is_found_share_minus_false_positive_ratio():
+    """가름 = 단계·쪽마다 창 조합 중 찾은 비율의 평균 − 안 바른 쌍 중 영역이 나간 비율."""
+    docs = brow_docs(
+        false_positives=10,
+        steps=[
+            stability("brow", "s8", "leftBrow", True, found=9),
+            stability("brow", "s9", "leftBrow", False, None, found=3),
+        ],
+    )
 
-    쪽마다 찾은 영역 판정은 못 찾음 그대로다.
-    """
-    timing = {k: BROW_S8[k] for k in ("outsideRatio", "keepRatio", "t50", "strongShare")}
-    side = {"part": "brow", "side": "leftBrow", "found": 0, "total": 9, "baseFound": False}
-    output = {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.0, "reusedArea": True}
-    docs = {
-        "noise.json": {
-            "summary": [{"part": "brow", "side": "leftBrow", "pairs": 100, "falsePositives": 2}]
-        },
-        "stability.json": {"steps": [{"stepId": "s23", **side, "output": output}]},
-        "boundary.json": {"steps": []},
-        "timing.json": {
-            "steps": [
-                {"part": "brow", "stepId": "s23", "side": "leftBrow", "output": timing},
-            ]
-        },
-    }
+    brow = part(guide_scorecard.score(docs), "brow")
 
-    result = guide_scorecard.score(docs)
-
-    row = result["steps"][0]
-    assert (row["status"], row["checks"], row["sideStatus"]) == ("reused", [], "notFound")
-    brow = next(p for p in result["parts"] if p["part"] == "brow")
-    assert brow["steps"] == {"passed": 0, "failed": 0, "notFound": 0, "reused": 1}
-    assert brow["passed"] is False
+    assert brow["foundShare"] == pytest.approx((1 + 3 / 9) / 2, abs=1e-4)
+    assert brow["falsePositiveRatio"] == 0.1
+    assert brow["separation"] == pytest.approx((1 + 3 / 9) / 2 - 0.1, abs=1e-4)
 
 
-def test_score_judges_the_drawn_area_and_keeps_the_side_result_for_reference():
-    """사용자는 나가는 영역을 보므로 판정은 output 값으로 하고, 쪽마다 판정은 참고로 남긴다.
+def test_separation_counts_a_step_found_in_only_some_windows_as_partly_found():
+    """서비스 그대로의 창에서는 찾아도 창을 옮긴 조합 절반에서 못 찾으면 찾은 비율은 절반이다."""
+    steps = [{"status": "found", "foundRatio": 4 / 9}]
 
-    쪽마다는 못 찾았지만 반대쪽을 뒤집어 그린 쪽(섀도 s10, 아이라인 s13에서 실제로 있던 경우)과,
-    쪽마다는 헛것이 없지만 화면에는 헛것이 나간 잡음 줄을 골랐다.
-    """
-    timing = {k: BROW_S8[k] for k in ("outsideRatio", "keepRatio", "t50", "strongShare")}
-    stability = {
-        "part": "brow",
-        "stepId": "s8",
-        "side": "rightBrow",
-        "found": 0,
-        "total": 9,
-        "baseFound": False,
-        "shiftRatio": None,
-        "output": {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.033},
-    }
+    result = guide_scorecard.separation(steps, [{"falsePositiveRatio": 0.0}])
+
+    assert result["foundShare"] == pytest.approx(0.4444)
+
+
+def test_separation_takes_the_worse_side_and_leaves_out_reused_and_not_analyzed_steps():
+    """앞 단계 영역을 다시 쓴 단계와 서비스가 색으로 찾지 않는 단계(코 블러셔)는 세지 않는다."""
+    steps = [
+        {"status": "found", "foundRatio": 1.0},
+        {"status": "reused", "foundRatio": 1.0},
+        {"status": "notFound", "foundRatio": 0.2, "notAnalyzed": True},
+    ]
+    noise = [{"falsePositiveRatio": 0.02}, {"falsePositiveRatio": 0.2}]
+
+    result = guide_scorecard.separation(steps, noise)
+
+    assert result == {"foundShare": 1.0, "falsePositiveRatio": 0.2, "separation": 0.8}
+
+
+def test_score_marks_a_step_the_service_does_not_analyze():
+    row = {**stability("blush", "s22b", "leftCheek", False, None, found=2), "notAnalyzed": True}
+    docs = brow_docs(steps=[row])
+
+    step = guide_scorecard.score(docs)["steps"][0]
+
+    assert step["notAnalyzed"] is True and step["foundRatio"] == pytest.approx(0.2222)
+
+
+def test_separation_is_empty_for_a_part_with_no_rows():
+    assert guide_scorecard.separation([], [])["separation"] is None
+
+
+def test_score_reads_the_drawn_area_and_keeps_the_side_result_for_reference():
+    """사용자는 나가는 영역을 보므로 값은 output 것이고, 쪽마다 값은 참고로 남긴다."""
+    row = stability(
+        "brow",
+        "s8",
+        "rightBrow",
+        False,
+        None,
+        found=0,
+        output={"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.033},
+    )
     docs = {
         "noise.json": {
             "summary": [
@@ -206,141 +192,122 @@ def test_score_judges_the_drawn_area_and_keeps_the_side_result_for_reference():
                     "side": "rightBrow",
                     "pairs": 100,
                     "falsePositives": 0,
-                    "outputFalsePositives": 20,
+                    "outputFalsePositives": 7,
                 }
             ]
         },
-        "stability.json": {"steps": [stability]},
-        "boundary.json": {
-            "steps": [
-                {
-                    "part": "brow",
-                    "stepId": "s8",
-                    "side": "rightBrow",
-                    "found": False,
-                    "output": {"found": True, "cover": 0.84, "overflow": 0.19},
-                }
-            ]
-        },
+        "stability.json": {"steps": [row]},
+        "boundary.json": {"steps": []},
         "timing.json": {
-            "steps": [
-                {
-                    "part": "brow",
-                    "stepId": "s8",
-                    "side": "rightBrow",
-                    "found": False,
-                    "output": {"found": True, **timing},
-                }
-            ]
+            "steps": [{"part": "brow", "stepId": "s8", "side": "rightBrow", "output": TIMING}]
         },
     }
 
     result = guide_scorecard.score(docs)
 
-    (noise,) = result["noise"]
-    assert noise["passed"] is False and noise["sidePassed"] is True
-    (step,) = result["steps"]
-    assert (step["status"], step["sideStatus"]) == ("passed", "notFound")
-    assert step["sideChecks"] == []
+    step = result["steps"][0]
+    assert (step["status"], step["sideStatus"]) == ("found", "notFound")
+    assert step["values"]["shiftRatio"] == 0.033 and step["sideValues"] == {}
+    noise = result["noise"][0]
+    assert (noise["falsePositiveRatio"], noise["sideFalsePositiveRatio"]) == (0.07, 0.0)
 
 
-def test_a_line_that_could_not_be_measured_is_left_out_but_a_missing_value_still_fails():
-    """조심할 구간 때문에 잴 시각이 없던 유지 비는 못 잼으로 두고 판정에서 뺀다(시험 영상 립 s27).
+def test_score_lists_noise_for_each_zone_when_the_noise_rows_have_zone_counts():
+    docs = brow_docs()
+    docs["noise.json"]["summary"] = [
+        {
+            "part": "eyeshadow",
+            "side": "leftEye",
+            "pairs": 50,
+            "falsePositives": 1,
+            "outputFalsePositives": 2,
+            "outputUpperFalsePositives": 5,
+            "outputUnderFalsePositives": 0,
+        }
+    ]
 
-    같은 빈 값이라도 못 잼으로 적히지 않았으면 지금처럼 불합격이어야 찾기 실패 같은 진짜 문제를
-    놓치지 않는다. 시간 결과의 notMeasured가 판정까지 이어지는지 step_status로 본다.
-    """
-    stability = {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.044}
-    boundary = {"cover": 0.999, "overflow": 0.155}
-    timing = {"outsideRatio": 0.018, "keepRatio": None, "t50": 0.815, "strongShare": 0.758}
+    row = guide_scorecard.score(docs)["noise"][0]
 
-    status, checks = guide_scorecard.step_status(
-        "lip", stability, boundary, timing | {"notMeasured": ["keepRatio"]}
-    )
-
-    assert status == "passed"
-    assert by_name(checks)["keepRatio"]["passed"] is None
-    assert "keepRatio 못 잼" in guide_scorecard.describe(checks)
-    assert guide_scorecard.step_status("lip", stability, boundary, timing)[0] == "failed"
-
-
-def test_every_analysed_step_of_the_test_video_has_a_zone():
-    """시험 영상의 섀도·아이라인·블러셔·립 단계는 모두 자리 이름표가 있다.
-
-    단계표를 다시 나누면서 이름표를 빠뜨리면 그 단계가 자리 요약에서 조용히 빠지므로 막는다.
-    """
-    manifest = Manifest.model_validate_json(
-        (guide_scorecard.AI_ROOT / "samples" / "local_03_seq" / "manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    zoned = {"eyeshadow", "eyeliner", "blush", "lip"}
-    steps = {step.step_id for step in manifest.steps if step.makeup in zoned}
-
-    assert steps and steps == set(guide_scorecard.STEP_ZONES)
+    assert row["zones"] == [
+        {"zone": "upper", "falsePositiveRatio": 0.1},
+        {"zone": "under", "falsePositiveRatio": 0.0},
+    ]
 
 
-def test_score_judges_noise_and_counts_steps_for_each_zone():
-    """섀도가 불합격이어도 윗눈두덩·눈 밑 중 어디가 문제인지 자리마다 보이는지 본다.
-
-    헛것 10% 중 9%가 선 위에 난 잡음 줄과, 윗눈두덩 단계는 합격·눈 밑 단계는 못 찾음인 경우를
-    골랐다.
-    """
-    stability = {"found": 9, "total": 9, "baseFound": True, "shiftRatio": 0.03}
-    timing = {"outsideRatio": 0.1, "keepRatio": 0.9, "strongShare": 0.8}
-
-    def step(step_id, base_found):
-        key = {"part": "eyeshadow", "stepId": step_id, "side": "leftEye"}
-        return key | stability | {"baseFound": base_found}
-
-    docs = {
-        "noise.json": {
-            "summary": [
-                {
-                    "part": "eyeshadow",
-                    "side": "leftEye",
-                    "pairs": 100,
-                    "falsePositives": 10,
-                    "outputFalsePositives": 10,
-                    "outputUpperFalsePositives": 9,
-                    "outputUnderFalsePositives": 1,
-                },
-                {"part": "brow", "side": "leftBrow", "pairs": 100, "falsePositives": 0},
-            ]
-        },
-        "stability.json": {"steps": [step("s10a", True), step("s10b", False)]},
-        "boundary.json": {
-            "steps": [{"part": "eyeshadow", "stepId": "s10a", "side": "leftEye", "intrude": 0.01}]
-        },
-        "timing.json": {
-            "steps": [{"part": "eyeshadow", "stepId": "s10a", "side": "leftEye", **timing}]
-        },
+def scored(shift, cover, status="found"):
+    values = {} if status != "found" else {"shiftRatio": shift, "cover": cover, "t50": 0.5}
+    return {
+        "steps": [
+            {"part": "brow", "stepId": "s8", "side": "leftBrow", "status": status, "values": values}
+        ],
+        "parts": [
+            {
+                "part": "brow",
+                "steps": {"found": int(status == "found"), "notFound": 0, "reused": 0},
+                "falsePositiveRatio": 0.02,
+                "separation": 0.9,
+            }
+        ],
     }
 
-    result = guide_scorecard.score(docs)
 
-    shadow_noise = next(r for r in result["noise"] if r["part"] == "eyeshadow")
-    assert shadow_noise["passed"] is False
-    assert [(z["zone"], z["passed"]) for z in shadow_noise["zones"]] == [
-        ("upper", False),
-        ("under", True),
-    ]
-    assert "zones" not in next(r for r in result["noise"] if r["part"] == "brow")
-    assert [(r["stepId"], r["zone"], r["status"]) for r in result["steps"]] == [
-        ("s10a", "upper", "passed"),
-        ("s10b", "under", "notFound"),
-    ]
-    shadow = next(p for p in result["parts"] if p["part"] == "eyeshadow")
-    assert shadow["zones"] == [
+def test_bands_are_the_middle_gap_between_two_runs_of_the_same_code():
+    """측정 흔들림은 같은 코드로 창만 옮겨 잰 두 결과의 단계·쪽 차이 가운데 값이다."""
+
+    def rows(values):
+        return {
+            "steps": [
+                {"part": "brow", "stepId": f"s{i}", "side": "leftBrow", "values": {"cover": v}}
+                for i, v in enumerate(values)
+            ]
+        }
+
+    band = guide_scorecard.bands(rows([0.80, 0.50, 0.90]), rows([0.82, 0.60, 0.89]))
+
+    assert band["cover"] == pytest.approx(0.02)
+    assert band["shiftRatio"] == 0.0
+
+
+def test_compare_calls_a_change_inside_the_band_the_same():
+    result = guide_scorecard.compare(
+        scored(0.030, 0.80), scored(0.034, 0.90), {"shiftRatio": 0.005, "cover": 0.02}
+    )
+
+    verdicts = {c["metric"]: c["verdict"] for c in result["changes"]}
+    assert verdicts == {"shiftRatio": "same", "cover": "better"}
+    assert (result["parts"][0]["better"], result["parts"][0]["same"]) == (1, 1)
+
+
+def test_compare_knows_which_way_is_better_for_each_metric():
+    """흔들림은 작을수록, 덮음은 클수록 좋다. 좋은 방향이 없는 t50은 견주지 않는다."""
+    result = guide_scorecard.compare(scored(0.03, 0.80), scored(0.09, 0.60), {})
+
+    verdicts = {c["metric"]: c["verdict"] for c in result["changes"]}
+    assert verdicts == {"shiftRatio": "worse", "cover": "worse"}
+    assert result["parts"][0]["worse"] == 2
+
+
+def test_compare_lists_a_step_whose_status_changed_apart():
+    result = guide_scorecard.compare(scored(0.03, 0.8), scored(None, None, "notFound"), {})
+
+    assert result["changes"] == []
+    assert result["statusChanges"] == [
         {
-            "zone": "upper",
-            "noisePassed": False,
-            "steps": {"passed": 1, "failed": 0, "notFound": 0, "reused": 0},
-        },
-        {
-            "zone": "under",
-            "noisePassed": True,
-            "steps": {"passed": 0, "failed": 0, "notFound": 1, "reused": 0},
-        },
+            "part": "brow",
+            "stepId": "s8",
+            "side": "leftBrow",
+            "before": "found",
+            "after": "notFound",
+        }
     ]
-    assert next(p for p in result["parts"] if p["part"] == "brow")["zones"] == []
+
+
+def test_load_score_needs_all_four_result_files(tmp_path):
+    docs = brow_docs(steps=[stability("brow", "s8", "leftBrow", True)])
+    for name, doc in list(docs.items())[:3]:
+        (tmp_path / name).write_text(json.dumps(doc), encoding="utf-8")
+
+    assert guide_scorecard.load_score(tmp_path) is None
+
+    (tmp_path / "timing.json").write_text(json.dumps(docs["timing.json"]), encoding="utf-8")
+    assert part(guide_scorecard.load_score(tmp_path), "brow")["steps"]["found"] == 1

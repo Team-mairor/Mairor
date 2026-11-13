@@ -237,7 +237,7 @@ def _sub_step(
 ) -> AreaSubStep:
     """단계의 하위 단계 하나. 분석 중 오류가 나면 이 단계만 failed로 적고 로그를 남긴다.
 
-    단계 글이 코에만 바른 블러셔이면(_nose_blush) 색으로 찾지 않고 notAnalyzed 이유로
+    단계 글이 코에만 바른 블러셔이면(nose_blush) 색으로 찾지 않고 notAnalyzed 이유로
     코 블러셔 기본 가이드(blushNose)를 쓴다. 코는 고개를 조금만 돌려도 그림자·반사가 크게 바뀌어
     바르지 않은 시간의 변화와 블러셔를 가를 수 없었고, 볼을 찾으면 코 단계가 볼에 그려진다.
     """
@@ -245,7 +245,7 @@ def _sub_step(
     fixed = _fixed_sub_step(step.makeup, sub_step_id)
     if fixed is not None:
         return fixed
-    if step.makeup == "blush" and _nose_blush(step):
+    if step.makeup == "blush" and nose_blush(step):
         return template_sub_step(sub_step_id, "blushNose", [NOT_ANALYZED])
     finder = AREA_FINDERS[step.makeup]
     try:
@@ -297,7 +297,7 @@ def eyeshadow_zones(step: Step | GuideInputStep) -> tuple[Zone, ...] | None:
     return None
 
 
-def _nose_blush(step: Step | GuideInputStep) -> bool:
+def nose_blush(step: Step | GuideInputStep) -> bool:
     """블러셔 단계 글(partLabel·facts.area)이 코에만 바른다고 하는지.
 
     띄어쓰기를 지운 글에 코 낱말(NOSE_WORDS)이 있고, 코 낱말을 지운 글에 볼 낱말(CHEEK_WORDS)이

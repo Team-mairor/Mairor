@@ -35,6 +35,7 @@ TOOLS = {
     "stability": "stability_metric",
     "timing": "timing_metric",
     "boundary": "boundary_metric",
+    "outline": "outline_metric",
     "scorecard": "guide_scorecard",
 }
 USAGE = (

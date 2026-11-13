@@ -64,7 +64,7 @@ EYE_BROWS: dict[RegionName, RegionName] = {"leftEye": "leftBrow", "rightEye": "r
 
 Zone = Literal["upper", "under"]
 ZONES: tuple[Zone, Zone] = ("upper", "under")
-FOUND_TOP_MIN: dict[Zone, float] = {"upper": 2.2, "under": 1.6}
+FOUND_TOP_MIN: dict[Zone, float] = {"upper": 2.0, "under": 1.4}
 UNKNOWN_ZONE_TOP_MIN: dict[Zone, float] = {"upper": 3.6, "under": 1.9}
 MERGE_AGREE_MIN = 0.5
 FILL_REACH_CELLS = 16

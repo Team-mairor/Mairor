@@ -1,11 +1,13 @@
 """부위를 안 건드린 시간의 사진으로 잡음 분포와 헛것 비율을 재 output/noise.json에 둔다 (개발용).
 
-부위마다 그 부위를 안 건드린 시간(UNTOUCHED_SECONDS) 안에서, 실제 분석과 같은 직전·직후 구간으로
+부위마다 그 부위를 안 건드린 시간(untouched_ranges) 안에서, 실제 분석과 같은 직전·직후 구간으로
 사진 쌍을 만들고 두 사진 사이를 GAPS_SECONDS만큼 띄운다.
-안 건드린 시간은 단계표를 바른 시간으로 나누기 전의 유튜브 챕터 단위 구간이다. 말하거나 제품을
-보여 주는 시간도 그 부위를 건드리지 않은 시간이라 넣고, 단계를 나눈 뒤에도 같은 구간으로 재서
-앞선 잡음 결과와 견줄 수 있게 한다. 쌍마다 부위 코드와 같은 계산을 해서
-나온 값은 모두 잡음이다. 립도 다른 부위처럼 맨입술 시간의 직전·직후 쌍으로 잰다.
+안 건드린 시간은 사람이 적지 않고 단계표에서 계산한다. 영상 처음부터 끝까지에서, 그 부위를 건드릴
+수 있는 단계를 앞뒤 STEP_PAD_SECONDS씩 넓혀 뺀 나머지다. 건드릴 수 있는 단계는 살펴볼 범위가 이
+부위 범위와 겹치거나 NEAR_CELLS칸 안으로 가까운 부위의 단계(touching_parts)와, 살펴볼 범위가
+없어 어디를 바르는지 모르는 화장(베이스·쉐딩·하이라이트·마스카라·기타)의 단계다. 말하는 시간과
+먼 부위를 바르는 시간은 그 부위를 건드리지 않은 시간이라 들어간다. 쌍마다 부위 코드와 같은 계산을
+해서 나온 값은 모두 잡음이다. 립도 다른 부위처럼 맨입술 시간의 직전·직후 쌍으로 잰다.
 조심할 구간(caution_ranges.json)에 걸치는 쌍은 뺀다.
 사진은 서비스 부위 찾기와 같이 고른다. 직전·직후 묶음의 얼굴 크기를 맞추고(match_sizes),
 맞출 사진이 없는 쌍은 서비스에서 기본 가이드(faceSizeMismatch)로 가므로
@@ -41,6 +43,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import cv2
 import numpy as np
 
 AI_ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +52,7 @@ sys.path.insert(0, str(AI_ROOT))
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Step
+from app.tasks.area.common.face_map import MAP_SIZE
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
@@ -66,6 +70,7 @@ from tools.metric_settings import (
     PARTS_USAGE,
     TAG_USAGE,
     selected_parts,
+    shifted_reference,
     split_parts,
     split_tag,
     tagged_dir,
@@ -91,13 +96,8 @@ FACE_MAP_KEEP = 300
 MEDIAN_KEEP = 512
 HIST_EDGES = np.arange(-40.0, 40.0001, 0.05)
 PERCENTILES = (50, 95, 99, 99.9)
-UNTOUCHED_SECONDS: dict[str, tuple[tuple[float, float], ...]] = {
-    "brow": ((548, 640), (782, 966), (1402, 1470), (1632, 1782)),
-    "eyeshadow": ((548, 640), (1402, 1470), (1692, 1782)),
-    "eyeliner": ((548, 640), (1402, 1470), (1692, 1782)),
-    "blush": ((455, 548), (640, 1183), (1692, 1782)),
-    "lip": ((455, 1223),),
-}
+STEP_PAD_SECONDS = 5
+NEAR_CELLS = 32
 ZONES = ("upper", "under")
 ZONED_PARTS = ("eyeshadow", "eyeliner")
 
@@ -181,6 +181,62 @@ def untouched_spans(ranges: Sequence[tuple[float, float]]) -> list[Span]:
         else:
             merged.append((start, end))
     return merged
+
+
+def near(a: np.ndarray, b: np.ndarray, cells: int) -> bool:
+    """두 범위(지도 크기 표)가 겹치거나 가장 가까운 칸 사이가 cells칸 안인지."""
+    if not a.any() or not b.any():
+        return False
+    distance = cv2.distanceTransform((~a).astype(np.uint8), cv2.DIST_L2, 5)
+    return float(distance[b].min()) <= cells
+
+
+def touching_parts(reaches: Mapping[str, np.ndarray]) -> dict[str, frozenset[str]]:
+    """부위마다 그 부위 범위를 건드릴 수 있는 부위 이름들(자기 포함).
+
+    reaches는 부위 이름 → 두 쪽을 합친 살펴볼 범위다. 범위가 겹치거나 NEAR_CELLS칸 안이면 서로
+    건드릴 수 있다고 본다. 시험 영상에서 눈썹과 눈 범위는 15~19칸, 그다음 가까운 눈썹과 볼은
+    63칸 떨어져 있다.
+    """
+    return {
+        name: frozenset(
+            other for other, reach in reaches.items() if near(reaches[name], reach, NEAR_CELLS)
+        )
+        for name in reaches
+    }
+
+
+def untouched_ranges(
+    steps: Sequence[Step], touching: frozenset[str], zoned: frozenset[str], end_seconds: float
+) -> list[tuple[float, float]]:
+    """단계표에서 한 부위를 안 건드린 시간(초 구간)을 낸다.
+
+    0초부터 end_seconds까지에서, 화장 종류가 touching에 들거나 zoned(살펴볼 범위가 있는 부위)에
+    없는 단계를 앞뒤 STEP_PAD_SECONDS씩 넓혀 뺀 나머지다.
+    """
+    busy = sorted(
+        (step.start_seconds - STEP_PAD_SECONDS, step.end_seconds + STEP_PAD_SECONDS)
+        for step in steps
+        if step.makeup in touching or step.makeup not in zoned
+    )
+    out: list[tuple[float, float]] = []
+    cursor = 0.0
+    for start, end in busy:
+        if start > cursor:
+            out.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < end_seconds:
+        out.append((cursor, end_seconds))
+    return out
+
+
+def part_reach(part: "Part") -> np.ndarray:
+    """부위의 두 쪽 살펴볼 범위를 합친 표. 범위가 없는 부위는 빈 표다."""
+    reach = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+    for zone in part_zones(part).values():
+        if zone is not None:
+            reach |= zone
+    return reach
 
 
 def caution_spans(doc: dict) -> list[Span]:
@@ -697,7 +753,7 @@ def main() -> None:
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
         sys.exit(1)
 
-    reference = load_reference_input(folder)
+    reference = shifted_reference(load_reference_input(folder))
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     rows_by_index = {row.frame_index: row for row in result.frames}
@@ -728,6 +784,10 @@ def main() -> None:
         return drawn_before(timeline, start_ms)
 
     keep_sharp = sharp_filter(photos, occlusion)
+    steps = reference.manifest.steps
+    touching = touching_parts({part.name: part_reach(part) for part in PARTS})
+    zoned = frozenset(touching)
+    end_seconds = max(frame.timestamp_ms for frame in reference.manifest.frames) / 1000
     summary, records = [], []
     for part in selected_parts(PARTS, part_names):
         zones = part_zones(part)
@@ -740,7 +800,7 @@ def main() -> None:
         tallies, part_records = measure_part(
             part,
             result,
-            untouched_spans(UNTOUCHED_SECONDS[part.name]),
+            untouched_spans(untouched_ranges(steps, touching[part.name], zoned, end_seconds)),
             cautions,
             load_map,
             eyeliner_drawn_at if part.name == "eyeliner" else None,

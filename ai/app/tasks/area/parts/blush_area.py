@@ -44,7 +44,7 @@ LIGHT_MARGIN_RATIO = 0.5
 BLUR_SIGMA = 32
 EDGE_RATIO = 0.4
 PEAK_MIN = 2.9
-OUTLINE_SMOOTH_CELLS = 4
+OUTLINE_SMOOTH_CELLS = 12
 CHEEKS: tuple[RegionName, RegionName] = ("leftCheek", "rightCheek")
 CHEEK_EYES: dict[RegionName, RegionName] = {"leftCheek": "leftEye", "rightCheek": "rightEye"}
 

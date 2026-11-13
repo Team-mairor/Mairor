@@ -20,9 +20,10 @@ settings.json에 적는다. 대표 지도 저장(tools/face_map_store.py)은 이
 import ast
 import importlib
 import json
+import os
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ TAG_USAGE = f"[{TAG_OPTION} <이름>]"
 SETTINGS_FILE = "settings.json"
 CONSTANT_NAME = re.compile(r"[A-Z][A-Z0-9_]*")
 TAG_NAME = re.compile(r"[A-Za-z0-9_-]+")
+SHIFT_ENV = "GUIDE_METRIC_STEP_SHIFT_MS"
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,28 @@ class Setting:
     name: str
     value: Any
     before: Any
+
+
+def shifted_reference(reference: Any) -> Any:
+    """환경 변수 GUIDE_METRIC_STEP_SHIFT_MS만큼 모든 단계의 시작·끝을 옮긴 입력을 돌려준다.
+
+    값이 없거나 0이면 받은 입력 그대로다. 같은 코드로 사진 창만 조금 옮겨 다시 재서
+    지표가 얼마나 흔들리는지(측정 흔들림) 볼 때 쓴다. 환경 변수라 tools/run_metrics.py가 띄우는
+    일거리에도 그대로 전해진다.
+    """
+    shift = int(os.environ.get(SHIFT_ENV, "0")) / 1000
+    if not shift:
+        return reference
+    steps = [
+        step.model_copy(
+            update={
+                "start_seconds": step.start_seconds + shift,
+                "end_seconds": step.end_seconds + shift,
+            }
+        )
+        for step in reference.manifest.steps
+    ]
+    return replace(reference, manifest=reference.manifest.model_copy(update={"steps": steps}))
 
 
 def take_option(args: Sequence[str], option: str) -> tuple[list[str], list[str]]:
@@ -96,9 +120,12 @@ def converted(before: Any, value: Any) -> Any:
 
     숫자끼리는 서로 받는다. 소수 자리의 정수는 소수로, 정수 자리의 딱 떨어지는 소수는 정수로 바꾼다.
     튜플은 같은 길이, dict(자리마다 값 등)는 같은 키일 때 칸마다 맞춘다.
+    방식 이름 같은 글자 상수에는 글자만 받는다.
     """
     if isinstance(before, bool) or isinstance(value, bool):
         return value if isinstance(before, bool) and isinstance(value, bool) else None
+    if isinstance(before, str) or isinstance(value, str):
+        return value if isinstance(before, str) and isinstance(value, str) else None
     if isinstance(before, int | float):
         if not isinstance(value, int | float):
             return None

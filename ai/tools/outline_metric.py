@@ -42,6 +42,7 @@ from tools.metric_settings import (
     PARTS_USAGE,
     TAG_USAGE,
     selected_parts,
+    shifted_reference,
     split_parts,
     split_tag,
     tagged_dir,
@@ -270,7 +271,7 @@ def main() -> None:
         print(f"{checked_path}가 없습니다. 먼저 tools/check_frames.py를 실행하세요.")
         sys.exit(1)
 
-    reference = load_reference_input(folder)
+    reference = shifted_reference(load_reference_input(folder))
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
     occlusion = table_finder(folder, occlusion_name)

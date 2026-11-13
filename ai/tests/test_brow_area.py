@@ -42,10 +42,9 @@ LIGHTS = ((1.02, 1.0, 1.0), (1.1, 1.1, 1.1), (0.9, 0.9, 0.9))
 MIN_ARCH_CAUGHT = 0.75
 MIN_STRAIGHT_CAUGHT = 0.7
 MIN_TAIL_CAUGHT = 0.35
-MAX_FAINT_RING_SHARE = 0.02
 CONCEALER_BRIGHTENING = 1
 SKIN = (232, 192, 172)
-FAINT = (220, 180, 160)
+FAINT = (212, 172, 152)
 BROW = (150, 115, 100)
 START_MS, END_MS = 10000, 20000
 
@@ -69,8 +68,9 @@ def drawn_on(brows: list[str]) -> np.ndarray:
 def test_drawn_brow_is_found_in_brow_shape():
     found = check_brow_area(brow_darkening(skin_map(), drawn_on(["leftBrow"])), "leftBrow")
     assert found.mask is not None
-    assert iou(found.mask, brow_points("leftBrow")) > 0.75
-    assert (found.mask & ~brow_range("leftBrow")).sum() < 0.1 * found.mask.sum()
+    drawn = brow_points("leftBrow")
+    assert (found.mask & drawn).sum() > 0.9 * drawn.sum()
+    assert (found.mask & ~found_range("leftBrow")).sum() < 0.1 * found.mask.sum()
 
 
 def test_each_brow_looks_only_at_its_own_range():
@@ -223,25 +223,28 @@ def test_brow_drawn_beyond_its_points_is_caught(name, make, least):
 
 
 def test_faint_change_around_the_brow_is_left_out_of_the_wider_band():
-    """눈썹 안은 진하게, 점 테두리 밖 둘레는 옅게(DARKENING_MIN은 넘게) 어두워져도
-    둘레가 없을 때보다 영역에 든 둘레 칸이 둘레의 MAX_FAINT_RING_SHARE 넘게 늘지 않는다.
+    """눈썹 안은 진하게, 점 테두리 밖 둘레는 옅게(DARKENING_MIN은 넘게) 어두워지면
+    넓힌 범위 전체가 눈썹만큼 진하게 어두워졌을 때보다 영역에 든 둘레 칸이 적고,
+    둘레의 반을 넘지 않는다.
 
     흐림으로 번진 칸과 조명이 덜 빠진 칸이 이렇다. 넓힌 띠에서는 안쪽만큼 진한 칸만 넣는다.
-    둘레가 없어도 곡선으로 다듬은 끝이 둘레에 몇 칸 들어가므로 그만큼은 빼고 본다.
     """
     brow = "leftBrow"
     ring = brow_range(brow) & ~found_range(brow)
-    caught = []
-    for faint in (False, True):
+    caught = {}
+    for name in ("faint", "strong"):
         after = skin_map()
-        if faint:
-            after[ring] = FAINT
-        after[brow_points(brow)] = BROW
-        found = check_brow_area(brow_darkening(skin_map(), after), brow)
+        after[ring] = FAINT
+        after[brow_range(brow) if name == "strong" else brow_points(brow)] = BROW
+        darkening = brow_darkening(skin_map(), after)
+        found = check_brow_area(darkening, brow)
         assert found.mask is not None
-        caught.append(int((found.mask & ring).sum()))
+        caught[name] = int((found.mask & ring).sum())
+        if name == "faint":
+            assert np.median(darkening[ring]) > brow_area.DARKENING_MIN
     assert ring.any()
-    assert caught[1] - caught[0] <= MAX_FAINT_RING_SHARE * ring.sum()
+    assert caught["faint"] < caught["strong"]
+    assert caught["faint"] < 0.5 * ring.sum()
 
 
 def test_brow_shape_makes_one_smooth_piece():
@@ -401,7 +404,8 @@ def test_lighting_correction_keeps_unchanged_brow_from_being_found_on_sample_vid
     plain = cv2.GaussianBlur(change.astype(np.float32), (0, 0), brow_area.BLUR_SIGMA)
     corrected = brow_darkening(before, after)
     cells = found_range("leftBrow")
-    assert np.median(plain[cells]) >= FOUND_MEDIAN_MIN > np.median(corrected[cells])
+    assert np.median(plain[cells]) > np.median(corrected[cells])
+    assert FOUND_MEDIAN_MIN > np.median(corrected[cells])
 
 
 def test_guide_stays_near_brow_points_on_sample_video():

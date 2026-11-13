@@ -627,3 +627,16 @@ def test_range_is_mostly_unknown_past_half():
     assert mostly_unknown(cells, six)
     assert not mostly_unknown(cells, four)
     assert not mostly_unknown(cells, None)
+
+
+def test_rgb_to_lab_from_the_table_equals_the_direct_calculation():
+    """0~255 정수 표는 미리 계산한 감마 표에서 꺼내는데, 직접 계산한 값과 한 자리도 다르지 않다."""
+    rgb = np.random.default_rng(0).integers(0, 256, (64, 64, 3), dtype=np.uint8)
+
+    from_table = area_preparation.rgb_to_lab(rgb)
+    direct = area_preparation.rgb_to_lab(rgb.astype(np.float64))
+
+    assert np.array_equal(from_table, direct)
+    assert np.allclose(
+        area_preparation.rgb_to_lab(np.array([[255, 255, 255]])), [[100, 0, 0]], atol=1e-3
+    )

@@ -49,6 +49,7 @@ from app.tasks.area.guide_area_builder import (
     eyeshadow_sub_steps,
     eyeshadow_zones,
     lip_sub_step,
+    nose_blush,
     pair_sub_step,
 )
 from app.tasks.area.parts import blush_area
@@ -107,6 +108,20 @@ def step_zones(folder: Path) -> dict[str, Zones]:
     steps = GuideInput.model_validate_json(path.read_text(encoding="utf-8")).steps
     pickers = {"eyeshadow": eyeshadow_zones, "eyeliner": eyeliner_zones}
     return {step.step_id: pickers[step.makeup](step) for step in steps if step.makeup in pickers}
+
+
+def not_analyzed_steps(folder: Path) -> frozenset[str]:
+    """샘플 폴더 가이드 입력에서 서비스가 색으로 찾지 않고 기본 가이드로 보내는 단계 번호.
+
+    지금은 단계 글이 코에만 바른 블러셔인 단계다(guide_area_builder의 코 블러셔 규칙).
+    볼에서 영역이 나오면 오히려 틀린 것이라, 판정 도구가 찾은 비율에서 뺄 수 있게 표시하는 데 쓴다.
+    가이드 입력이 없으면 빈 묶음이다.
+    """
+    path = folder / GUIDE_INPUT_FILE
+    if not path.is_file():
+        return frozenset()
+    steps = GuideInput.model_validate_json(path.read_text(encoding="utf-8")).steps
+    return frozenset(step.step_id for step in steps if step.makeup == "blush" and nose_blush(step))
 
 
 def merged_sub_step(sub_steps: Sequence[AreaSubStep]) -> AreaSubStep:

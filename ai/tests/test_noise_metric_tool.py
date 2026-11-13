@@ -44,25 +44,118 @@ def test_untouched_spans_joins_touching_ranges_in_time_order():
     assert spans == [(0, 20000), (30000, 40000)]
 
 
-def test_untouched_time_keeps_the_talk_between_the_split_lip_steps():
-    """시험 영상 립은 바른 자리마다 다섯 단계로 나뉘고, 그 사이에 말하는 시간이 있다.
-
-    단계 번호로 안 건드린 시간을 고르면 바른 순간만 남아 그 사이가 빠진다. 그 시간에도 눈썹은
-    건드리지 않으므로 잡음 구간에 넣고, 단계를 나누기 전 챕터 구간을 그대로 써서 고른 이유다.
-    """
-    manifest = Manifest.model_validate_json(
+def sample_manifest() -> Manifest:
+    return Manifest.model_validate_json(
         (noise_metric.AI_ROOT / "samples" / "local_03_seq" / "manifest.json").read_text(
             encoding="utf-8"
         )
     )
-    lips = sorted((s.start_seconds, s.end_seconds) for s in manifest.steps if s.makeup == "lip")
-    first, last = lips[0][0] * 1000, lips[-1][1] * 1000
-    talk = sum(b[0] - a[1] for a, b in zip(lips, lips[1:], strict=False))
 
-    spans = noise_metric.untouched_spans(noise_metric.UNTOUCHED_SECONDS["brow"])
 
-    assert len(lips) > 1 and talk > 0
-    assert any(start <= first and last <= end for start, end in spans)
+def sample_untouched(part: str) -> list[tuple[int, int]]:
+    """시험 영상 단계표로 낸 한 부위의 안 건드린 시간(ms 구간)."""
+    manifest = sample_manifest()
+    touching = noise_metric.touching_parts(
+        {p.name: noise_metric.part_reach(p) for p in noise_metric.PARTS}
+    )
+    end = max(frame.timestamp_ms for frame in manifest.frames) / 1000
+    return noise_metric.untouched_spans(
+        noise_metric.untouched_ranges(manifest.steps, touching[part], frozenset(touching), end)
+    )
+
+
+def step(step_id: str, makeup: str, start: float, end: float) -> SimpleNamespace:
+    return SimpleNamespace(step_id=step_id, makeup=makeup, start_seconds=start, end_seconds=end)
+
+
+def test_untouched_ranges_leave_out_touching_and_unzoned_steps_with_padding():
+    """건드릴 수 있는 부위와 범위 없는 화장 단계만 앞뒤로 넓혀 빼고, 먼 부위 단계는 남긴다."""
+    steps = [
+        step("a", "lip", 100, 110),
+        step("b", "brow", 200, 210),
+        step("c", "foundation", 300, 310),
+    ]
+    pad = noise_metric.STEP_PAD_SECONDS
+
+    ranges = noise_metric.untouched_ranges(
+        steps, frozenset({"lip"}), frozenset({"lip", "brow"}), 400
+    )
+
+    assert ranges == [(0.0, 100 - pad), (110 + pad, 300 - pad), (310 + pad, 400)]
+
+
+def test_untouched_ranges_join_steps_whose_padding_overlaps():
+    steps = [step("a", "lip", 100, 110), step("b", "lip", 112, 120)]
+    pad = noise_metric.STEP_PAD_SECONDS
+
+    ranges = noise_metric.untouched_ranges(steps, frozenset({"lip"}), frozenset({"lip"}), 200)
+
+    assert ranges == [(0.0, 100 - pad), (120 + pad, 200)]
+
+
+def test_touching_parts_join_overlapping_and_near_reaches_only():
+    """겹치는 범위와 NEAR_CELLS칸 안으로 가까운 범위만 서로 건드린다고 본다."""
+
+    def box(x0: int, x1: int) -> np.ndarray:
+        reach = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+        reach[100:200, x0:x1] = True
+        return reach
+
+    gap = noise_metric.NEAR_CELLS
+    touching = noise_metric.touching_parts(
+        {
+            "a": box(100, 200),
+            "overlap": box(150, 250),
+            "near": box(200 + gap - 2, 300 + gap),
+            "far": box(200 + gap + 3, 320 + gap),
+            "empty": np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool),
+        }
+    )
+
+    assert touching["a"] == {"a", "overlap", "near"}
+    assert touching["empty"] == set()
+
+
+def test_sample_video_parts_touch_only_their_neighbours():
+    """시험 영상 범위로는 눈썹·눈, 눈·볼만 서로 건드리고 입술은 혼자다."""
+    touching = noise_metric.touching_parts(
+        {p.name: noise_metric.part_reach(p) for p in noise_metric.PARTS}
+    )
+
+    assert touching["brow"] == {"brow", "eyeshadow", "eyeliner"}
+    assert touching["eyeshadow"] == {"brow", "eyeshadow", "eyeliner", "blush"}
+    assert touching["blush"] == {"eyeshadow", "eyeliner", "blush"}
+    assert touching["lip"] == {"lip"}
+
+
+def test_untouched_time_never_overlaps_a_step_that_touches_the_part():
+    """시험 영상의 안 건드린 시간은 그 부위·이웃 부위·범위 없는 화장 단계와 겹치지 않는다."""
+    manifest = sample_manifest()
+    touching = noise_metric.touching_parts(
+        {p.name: noise_metric.part_reach(p) for p in noise_metric.PARTS}
+    )
+
+    for part in touching:
+        spans = sample_untouched(part)
+        busy = [
+            (round(s.start_seconds * 1000), round(s.end_seconds * 1000))
+            for s in manifest.steps
+            if s.makeup in touching[part] or s.makeup not in touching
+        ]
+        assert spans and busy
+        assert not any(noise_metric.overlaps(start, end, spans) for start, end in busy)
+
+
+def test_untouched_time_keeps_far_part_steps_and_talk():
+    """입술을 안 건드린 시간은 눈썹을 그리는 단계에 걸치고 영상 앞의 말하는 시간부터 시작한다."""
+    manifest = sample_manifest()
+    brow = next(s for s in manifest.steps if s.makeup == "brow")
+    start, end = round(brow.start_seconds * 1000), round(brow.end_seconds * 1000)
+
+    spans = sample_untouched("lip")
+
+    assert noise_metric.overlaps(start, end, spans)
+    assert spans[0][0] == 0
 
 
 def test_pair_starts_keep_both_windows_inside_span():
@@ -295,22 +388,17 @@ def test_parts_use_each_service_threshold():
 def test_eye_parts_leave_out_brow_steps():
     """섀도·아이라인 범위는 눈썹 바로 아래까지라, 눈썹을 그리는 단계의 변화가 헛것으로 셀 수 있다.
 
-    서비스는 눈 화장 단계 직전·직후 사이에 눈썹을 그리는 일이 드물어 그 단계를 잡음으로 보지 않는다.
+    눈썹 범위가 눈 범위와 NEAR_CELLS칸 안이라 건드릴 수 있는 부위로 잡혀 저절로 빠진다.
     """
-    manifest = Manifest.model_validate_json(
-        (noise_metric.AI_ROOT / "samples" / "local_03_seq" / "manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
     brow_steps = [
         (round(step.start_seconds * 1000), round(step.end_seconds * 1000))
-        for step in manifest.steps
+        for step in sample_manifest().steps
         if step.makeup == "brow"
     ]
 
     assert brow_steps
     for part in ("eyeshadow", "eyeliner"):
-        spans = noise_metric.untouched_spans(noise_metric.UNTOUCHED_SECONDS[part])
+        spans = sample_untouched(part)
         assert not any(noise_metric.overlaps(start, end, spans) for start, end in brow_steps)
 
 

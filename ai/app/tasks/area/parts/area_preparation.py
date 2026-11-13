@@ -434,13 +434,23 @@ def mostly_unknown(cells: np.ndarray, unknown: np.ndarray | None) -> bool:
     return unknown is not None and (cells & unknown).sum() > UNKNOWN_MAX * cells.sum()
 
 
+def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
+    """0~255 RGB 숫자를 감마를 푼 0~1 선형 값으로 바꾼다."""
+    c = rgb.astype(np.float64) / 255
+    return np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
+
+
+SRGB_LINEAR = srgb_to_linear(np.arange(256))
+
+
 def rgb_to_lab(rgb: np.ndarray) -> np.ndarray:
     """RGB 숫자 표를 Lab(L 밝기 0~100, a 초록-빨강, b 파랑-노랑)으로 바꾼다.
 
     붉은 기(a)가 밝기(L)와 나뉘어, 그림자가 져도 a는 거의 그대로다.
+    0~255 정수 표(uint8)는 값이 256가지뿐이라 감마 풀기를 미리 계산한 표(SRGB_LINEAR)에서 꺼낸다.
+    칸마다 거듭제곱을 하지 않아 빠르고, 결과는 직접 계산한 것과 같다.
     """
-    c = rgb.astype(np.float64) / 255
-    linear = np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
+    linear = SRGB_LINEAR[rgb] if rgb.dtype == np.uint8 else srgb_to_linear(rgb)
     xyz = linear @ SRGB_TO_XYZ.T / D65_WHITE
     f = np.where(xyz > (6 / 29) ** 3, np.cbrt(xyz), xyz / (3 * (6 / 29) ** 2) + 4 / 29)
     return np.stack(
