@@ -209,3 +209,22 @@ CREATE TABLE product_shade_colors (
 );
 CREATE INDEX idx_product_shade_colors_shade_order ON product_shade_colors (shade_id, sort_order);
 CREATE INDEX idx_product_shade_colors_source_item ON product_shade_colors (source_item_id);
+
+-- 회원이 쓴 제품 이름의 별칭 (S15P31A306-517). 회원이 적은 이름으로 카탈로그에서 못 찾았는데, 수집 워커가 그 브랜드 공식 홈에서
+-- 제품 하나를 확실히 찾아 적재했으면 (소분류, 회원이 쓴 브랜드, 회원이 쓴 제품명의 공백 뺀 값) → 그 제품을 남긴다.
+-- 검색·수집 요청 판정·파우치 자동 연결이 정확 일치 → 공백 무시 일치가 없을 때 이 표를 본다. 같은 키는 처음 것만 남는다.
+-- request_id 는 별칭을 만든 수집 요청이다(그 표가 pouch.sql 에 있어 FK 는 두지 않는다).
+CREATE TABLE product_name_aliases (
+    id               uuid                        NOT NULL,
+    type_code        varchar(40)                 NOT NULL,
+    brand_normalized varchar(200)                NOT NULL,
+    name_compact     varchar(400)                NOT NULL,
+    product_id       uuid                        NOT NULL,
+    request_id       uuid,
+    created_at       timestamp(6) with time zone NOT NULL,
+    CONSTRAINT product_name_aliases_pkey PRIMARY KEY (id),
+    CONSTRAINT fk_product_name_aliases_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    CONSTRAINT uk_product_name_aliases_key UNIQUE (type_code, brand_normalized, name_compact),
+    CONSTRAINT ck_product_name_aliases_nonempty CHECK (brand_normalized <> '' AND name_compact <> '')
+);
+CREATE INDEX idx_product_name_aliases_product ON product_name_aliases (product_id);

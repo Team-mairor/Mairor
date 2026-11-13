@@ -88,6 +88,7 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `PROCESSOR_API_TOKEN` | (없음) | 영상 전처리 노트북 API(`/api/v1/internal/processor/**`)의 토큰. `X-Processor-Token` 헤더와 비교한다. 운영자 토큰과 다른 값. **비우면 노트북 API 는 모두 401**(앱은 뜬다). 계약 `docs/references/processor-api.md` |
 | `ANALYSIS_PROCESSOR_ENABLED` · `ANALYSIS_PROCESSOR_LEASE` · `ANALYSIS_PROCESSOR_WAIT_TIMEOUT` · `ANALYSIS_PROCESSOR_WARN_AFTER` | `false` · `900s` · `30m` · `5m` | 노트북 연결 모드, 임대 시간, 노트북을 기다리는 최대 시간, 그 전에 "노트북이 작업을 가져가지 않음" 경고를 남기는 시간(Grafana 알림, S15P31A306-406). 켜면 대기 작업을 노트북이 가져가고 worker 는 집지 않으며, 노트북이 끝낸 작업을 worker 가 AI 에 맡긴다(S15P31A306-358). 끄면 지금처럼 worker 가 운영자가 올린 영상으로 처리한다 |
 | `INTERNAL_API_TOKEN` | (없음) | 내부 API(`/api/v1/internal/**`: 운영자 분석 명령, AI 콜백)의 공유 토큰. `X-Internal-Token` 헤더와 비교한다. **비우면 내부 API 는 모두 401**(앱은 뜬다). 코드·문서에 적지 않는다 ([분석 작업](#분석-작업-운영-명령--worker)) |
+| `CATALOG_COLLECT_QUEUE_URL` | (없음) | DB 에 없는 화장품 수집 요청을 보낼 SQS 큐 주소([화장품 수집 요청](#화장품-수집-요청-s15p31a306-517)). 비우면 보내지 않고 요청은 QUEUED 로 남는다 |
 | `APP_STORAGE_TYPE` | dev `local` / prod `s3` | 객체 저장소. `local` 은 아래 폴더, `s3` 는 버킷(자격 증명은 AWS 기본 공급자 체인, 운영은 EC2 역할) |
 | `APP_STORAGE_LOCAL_ROOT` | `<임시 폴더>/mairor-storage` | `local` 저장소의 뿌리 폴더. 저장소 키가 이 아래 상대 경로다 |
 | `APP_STORAGE_S3_BUCKET` | prod `mairor-prod-media` | `s3` 저장소 버킷. `s3` 인데 비어 있으면 기동 실패 |
@@ -349,9 +350,9 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 | 파일 | 테이블 |
 |---|---|
 | `db/schema/users.sql` | `users` (회원), `user_agreements` (약관 동의 기록), `user_identities` (Google 계정과 회원의 연결) |
-| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값), `catalog_import_runs` (카탈로그 적재 실행), `catalog_import_items` (적재 실행의 건) |
+| `db/schema/products.sql` | `product_categories` (카테고리), `product_types` (종류), `product_category_parts` (카테고리별 호환 부위), `products` (카탈로그 제품), `product_shades` (호수), `product_shade_colors` (호수의 색 칸), `product_shade_option_aliases` (합쳐진 호수의 옛 옵션 값), `catalog_import_runs` (카탈로그 적재 실행), `catalog_import_items` (적재 실행의 건), `product_name_aliases` (회원이 쓴 제품 이름의 별칭) |
 | `db/schema/analysis.sql` | `videos` (유튜브 영상), `video_selections` (회원 영상 선택 기록, 인기 Top 4), `analysis_jobs` (분석 작업), `guides` (분석이 만든 가이드, 검수 상태), `llm_calls` (LLM 호출 기록) |
-| `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본) |
+| `db/schema/pouch.sql` | `pouch_items` (회원별 개인 보유 항목·카탈로그 표시값/색상 복사본), `catalog_collect_requests`·`catalog_collect_request_users` (DB 에 없는 화장품 수집 요청과 요청한 회원·파우치 항목) |
 | `db/schema/camera.sql` | `photos` (비공개 사진 메타데이터·파일 정리 상태), `face_registrations` (실행별 기준 얼굴 등록·동의·촬영 조건) |
 | `db/schema/executions.sql` | `guide_executions`·`execution_steps` 실행 스냅샷, `history_records` 완료 기록/리포트 스냅샷, 얼굴/사진/매칭 소유권 FK |
 
@@ -360,6 +361,8 @@ Flyway 도입 전까지 스키마는 `src/main/resources/db/schema/` 의 SQL 로
 
 | 변경 | 이슈 | 기존 DB 에 적용할 문장 |
 |---|---|---|
+| 회원이 쓴 제품 이름의 별칭: 테이블 `product_name_aliases` | S15P31A306-517 | **운영 DB는 2026-11-13 적용 및 검증 완료. 재실행하지 않는다.** 다른 기존 DB 에는 **MR 머지·배포 전** `SELECT to_regclass('product_name_aliases');`가 NULL 인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/517-product-name-aliases.sql` (517 수집 요청 SQL 과 별도 파일이다. 새 테이블뿐이라 옛 버전 앱과 함께 돌아도 된다. 적용하지 않으면 `validate` 가 `missing table` 로 앱 기동을 막는다) |
+| 화장품 수집 요청: 테이블 `catalog_collect_requests`·`catalog_collect_request_users`, `pouch_items` 색 검사 제약 `ck_pouch_items_color` 넓힘(자동 연결된 CATALOG 항목이 회원 색 USER_INPUT 을 유지) | S15P31A306-517 | **운영 DB는 2026-11-13 적용 및 검증 완료. 재실행하지 않는다.** 다른 기존 DB 에는 **MR 머지·배포 전** `SELECT to_regclass('pouch_items'), to_regclass('catalog_import_runs');`가 모두 NULL 이 아니고 `SELECT to_regclass('catalog_collect_requests'), to_regclass('catalog_collect_request_users');`가 모두 NULL 인지 확인 후 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/517-catalog-collect-requests.sql` (새 테이블과 제약을 넓히는 변경뿐이라 기존 행은 모두 통과하고 옛 버전 앱과 함께 돌아도 된다. 적용하지 않으면 `validate` 가 `missing table` 로 앱 기동을 막는다) |
 | 실행·단계 스냅샷 및 실행/얼굴/사진 소유권 FK | S15P31A306-395 | **운영 DB는 2026-11-11 적용 및 검증 완료. 재실행하지 않는다.** 다른 기존 DB에 배포할 때는 396이 적용되어 `photos`, `face_registrations`, `guide_matches`가 있고 `guide_executions`, `execution_steps`, `history_records`가 없는지 `to_regclass`로 확인한 뒤 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/395-guide-executions.sql`을 1회 실행한다. 새 테이블·기존 테이블 유일 제약·FK를 한 트랜잭션으로 추가하며 적용 후 세 테이블과 네 제약의 존재/검증 상태를 확인한다. 사전 확인은 아래 실행 모델 항목 참고. |
 | 사진 메타데이터·얼굴 등록 테이블 | S15P31A306-396 | 운영 DB에서 `photos`·`face_registrations` 및 주요 제약을 확인했다. 다른 DB는 `users`·`videos`·`guides`가 있는지 확인하고, 두 테이블이 모두 없을 때만 해당 코드 배포 전에 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/396-face-registrations.sql`을 1회 실행한다. 파일은 한 트랜잭션에서 photos → face_registrations → 인덱스 순서로 생성한다. 이미 존재하면 재적용하지 않는다. 실행 테이블 FK는 395에서 추가한다. |
 | `users.password_version` (비밀번호를 바꿀 때마다 1씩 오름. 비밀번호 재설정과 겹친 로그인을 알아채는 데 쓴다) | S15P31A306-210 | `ALTER TABLE users ADD COLUMN password_version integer NOT NULL DEFAULT 0;` |
@@ -427,6 +430,22 @@ SELECT EXISTS (
 - 카테고리·종류 코드는 현재 FE 파우치 등록·일러스트와 BE 추천 매칭이 함께 쓰는 기준값이다. 코드는 변경하지 않고 라벨·표시 순서만 조정한다. `FRAGRANCE` 는 `PERFUME` 한 종류를 제공한다.
 - 현재 시드의 `compatibleParts`는 빈 목록이다. API는 테이블 값을 응답하지만 추천 매칭은 이를 사용하지 않고, 가이드 단계별 허용 종류를 `PouchCompatibilityPolicy`가 별도로 관리한다.
 - 색상 출처 내부값은 `ColorSource` enum으로 제한한다. 카탈로그 API 는 내부 출처 대신 `CATALOG`를 응답한다.
+
+## 화장품 수집 요청 (S15P31A306-517)
+
+회원이 카탈로그에 없는 제품을 **직접 입력**으로 파우치에 등록하면, 등록이 커밋된 뒤 서버가 알아서 공식 홈 수집을 요청한다. 회원에게 묻거나 알리지 않고 화면도 바뀌지 않는다.
+
+```
+직접 입력 등록 → 수집 요청(QUEUED) → SQS 수집 큐(SENT) → 수집 워커(ai/docs/CATALOG_WORKER.md)
+  → 결과 파일 S3 → from-file 적재 → 결과 콜백 → 해결 판정 → (RESOLVED 면) 파우치 항목 자동 연결
+```
+
+- **접수**(`CollectRequestIntake`): 자동 수집 소분류(`catalog.collect.types`)만, 회원당 최근 24시간 20건까지. 카탈로그에 이미 있으면 수집하지 않고 바로 끝내고, 제품은 있는데 적은 호수만 없으면 그 상품 주소로 다시 수집한다. 같은 제품의 진행 중 요청에는 회원만 붙이고, 최근 24시간 안에 못 찾은(`SEARCH_EMPTY`)·미해결 제품은 다시 요청하지 않는다.
+- **보내기**: 커밋 직후 보내고, 실패하면 worker 의 주기 작업이 30초 넘게 남은 QUEUED 를 다시 보낸다(20번 실패하면 `SEND_FAILED`). `CATALOG_COLLECT_QUEUE_URL` 이 없으면 보내지 않는다. BE 서버 역할에 그 큐의 `sqs:SendMessage` 가 필요하다.
+- **결과**: 워커가 `POST /api/v1/internal/catalog/collect-jobs/{jobId}/result`(`X-Internal-Token`)로 알린다. `COLLECTED` 면 적재된 카탈로그를 다시 읽어 일치 제품이 하나이고 적은 호수가 있을 때만 RESOLVED 다. 보낸 뒤 6시간 안에 결과가 없으면 `RESULT_TIMEOUT` 으로 끝낸다.
+- **이름 별칭**: 회원이 쓴 이름으로는 못 찾았지만 워커가 그 브랜드 공식 홈에서 제품 하나를 확실히 찾아 적재했고 소분류가 같으면, 회원이 쓴 (브랜드, 공백 뺀 제품명)을 그 제품의 별칭(`product_name_aliases`)으로 남긴다. 공식 이름이 다르거나(`더 쥬시 래스팅 틴트`) 브랜드 표기가 다른(`rom&nd`) 제품도 연결되고, 다음 회원의 검색(정확 일치 → 공백 무시 → 별칭)에도 나온다. 워커가 후보를 여럿 수집했으면 남기지 않는다. 이름을 크게 줄여 쓴 경우는 워커가 찾지 못한다(`SEARCH_EMPTY`).
+- **자동 연결**(`CollectPouchLinker`): 요청 뒤 수정하지 않은 직접 입력 항목이고, 제품이 하나·호수가 일치·같은 제품이 파우치에 없을 때만 CATALOG 로 바꾸고 `pouchVersion` 을 올린다. 회원이 넣은 색은 유지한다(팔레트 호수는 매칭에서 카탈로그 칸 색을 쓴다). 결과는 요청자 행의 `link_result` 에 남는다.
+- **운영 확인**: `GET /api/v1/internal/catalog/collect-requests?status=UNRESOLVED&limit=50`(`X-Internal-Token`)으로 최근 요청의 상태·사유·자동 연결 결과를 본다.
 
 ## 분석 작업 (운영 명령 · worker)
 

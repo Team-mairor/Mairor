@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
@@ -66,4 +68,22 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   @EntityGraph(attributePaths = {"category", "type"})
   List<Product> findAllByTypeCodeInAndBrandNormalizedAndNameCompact(
       Collection<String> typeCodes, String brandNormalized, String nameCompact);
+
+  /** 회원이 쓴 이름의 별칭으로 찾는다(S15P31A306-517). 정확 일치·공백 무시 일치가 없을 때만 쓴다. */
+  @EntityGraph(attributePaths = {"category", "type"})
+  @Query(
+      "select p from Product p where p.id in (select a.productId from ProductNameAlias a"
+          + " where a.typeCode in :types and a.brandNormalized = :brand and a.nameCompact = :name)")
+  List<Product> findAllByAlias(
+      @Param("types") Collection<String> typeCodes,
+      @Param("brand") String brandNormalized,
+      @Param("name") String nameCompact);
+
+  default List<Product> findByAlias(Collection<String> typeCodes, String brand, String name) {
+    if (typeCodes.isEmpty()) {
+      return List.of();
+    }
+    return findAllByAlias(
+        typeCodes, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.compact(name));
+  }
 }

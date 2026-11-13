@@ -358,11 +358,12 @@ class ProductSearchServiceTest {
   }
 
   @Test
-  void searchWithoutAMatchRunsThreeQueries() {
+  void searchWithoutAMatchRunsFourQueries() {
     long queries =
         countQueries(() -> searchTint(BRAND, "Other Tint"), items -> assertThat(items).isEmpty());
 
-    assertThat(queries).isEqualTo(3);
+    // 종류·정확 일치·공백 무시 일치·별칭(S15P31A306-517)
+    assertThat(queries).isEqualTo(4);
   }
 
   @Test

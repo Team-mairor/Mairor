@@ -195,6 +195,9 @@ public class GuideStepProductLinkReconciler {
     }
 
     List<Product> compact = products.findCompact(typeCodes, brand, name);
+    if (compact.isEmpty()) {
+      compact = products.findByAlias(typeCodes, brand, name);
+    }
     if (compact.size() == 1) {
       return ProductMatch.found(compact.getFirst());
     }

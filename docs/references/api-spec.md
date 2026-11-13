@@ -287,6 +287,7 @@ API-POUCH-001 · GET /api/v1/products
 - 200 \{items:Product\[\]\}, 최대5개(정확 일치 우선). 0건이면 직접 입력, 1건이면 호수 목록. 별도 검색 결과 목록 UI 없음. 다건을 임의로 첫 항목에 연결하지 않으며 다건 처리 UX는 확정 필요.
 - 400 VALIDATION\_FAILED(코드·필드 오류). 네트워크/서버 실패는 재시도 또는 직접 입력. 결과에 shades가 이미 있으면 API-POUCH-002 중복 조회 불필요.
 - <b>검색 계약</b>: 정규화한 brand·name과 type이 정확히 같은 제품을 0\~1건 제공하고, 0건은 200 \{items:\[\]\}(404 아님)이며 화면은 직접 입력으로 전환한다. 위 "최대5개(정확 일치 우선)"에서 부분 일치를 빼고 줄인 결정이다(검색 결과 목록 UI 없음, (type, brand, name) 유니크). 목록 응답 형태는 유지하며, 다건 검색을 도입하면 FE 처리와 계약을 별도로 조정한다.
+- <b>로컬 수정 -517</b>: 정확 일치·공백 무시 일치가 없으면 회원이 쓴 이름의 별칭(직접 입력 등록 뒤 자동 수집이 그 브랜드 공식 홈에서 제품 하나를 확인해 남긴 (type, brand, 공백 뺀 name) → 제품)을 본다. 0\~1건 계약과 응답 모양은 그대로다.
 - <b>오류 필드</b>: 형식 오류는 필드마다 details에 모두 담는다. 코드 검사는 카테고리가 없으면 field=category(종류가 있어도), 종류가 없거나 다른 카테고리 소속이면 field=type.
 - <b>공백·길이</b>: 빈 값 판정과 앞뒤 공백 제거는 PouchWrite 정규화와 같은 유니코드 공백 기준(NBSP·전각 공백 포함)이다. 길이는 앞뒤 공백을 지운 원문을 NFC 전 String.length()로 센다(카탈로그 엔티티와 같은 단위). <b>name 상한은 200자</b>(카탈로그 저장 상한과 같게, 기존 100자), brand는 100자.
 - <b>응답</b>: brand·name은 카탈로그 원문. shades는 sort\_order, 이름 순. color.source는 항상 CATALOG(내부 출처값 비노출), 색을 모르면 color=null. color=null은 수집하지 못했거나 근거가 약해 서버가 쓰지 않은 색이다(틀린 색보다 없는 색을 택한다).
@@ -327,6 +328,7 @@ API-POUCH-004 · POST /api/v1/users/me/pouch-items
 - 회원·CSRF 필요. Body는 아래 PouchWrite 계약. 201 \{item:PouchItem,pouchVersion:integer\}.
 - 400 POUCH\_INVALID\_PRODUCT(조건부 필드·제품/호수 조합), 409 POUCH\_DUPLICATE(정규화 브랜드·제품명·호수 중복). 공통 필드 형식 오류는 400 VALIDATION\_FAILED.
 - <b>등록 계약</b>: CATALOG는 서버에서 기존 제품·호수를 검증하고 표시 정보·색상을 개인 항목에 복사하며 연결 ID도 보관한다. MANUAL은 개인 항목에만 저장한다. 이 요청은 공용 카탈로그를 생성·수정하거나 크롤링을 시작하지 않는다.
+- <b>로컬 수정 -517</b>: MANUAL 등록 응답은 그대로지만, 등록이 커밋된 뒤 서버가 자동 수집을 요청할 수 있다(자동 수집 소분류만). 수집 뒤 조건(일치 제품 하나·적은 호수 존재·요청 뒤 미수정·파우치 중복 없음)을 만족하면 그 항목이 나중에 `registrationMode=CATALOG`로 바뀌고 productId·shadeId가 채워지며 brand·name·shadeName은 카탈로그 값이 된다. 회원이 넣은 색은 `colorSource=USER_INPUT`으로 유지된다(CATALOG 항목도 USER_INPUT 색을 가질 수 있다). 바뀌면 pouchVersion이 오르므로 FE는 다음 목록 조회에서 반영하면 된다.
 - MANUAL의 colorHex 생략/null은 color=null·colorSource=NONE이고, 입력한 색은 color.source=USER\_INPUT·estimated=true다. CATALOG는 요청 colorHex가 아니라 선택 호수의 색을 사용하며, 색이 있으면 source=CATALOG·estimated는 카탈로그 값을 보존한다. 어느 방식이든 저장 색이 없으면 color=null·colorSource=NONE이다. <b>로컬 수정 -325</b>: 추천 후보 자격은 등록 응답의 color만으로 정하지 않는다. USER_INPUT 색이 저장돼 있으면 그 색을 쓰고, 그 외 CATALOG 항목은 연결 호수의 현재 사용 가능한 카탈로그 색 칸이 있을 때 후보가 된다. MANUAL에 사용자 입력 색이 없으면 색 비교 후보에서 제외한다.
 - 본인 항목 저장과 pouchVersion 증가는 원자적으로 처리한다. 초기 pouchVersion=0, 등록 성공마다 +1이며 실패·중복·롤백 시 증가하지 않는다. 시작 전 매칭은 변경된 버전으로 재계산 대상이 되고, 이미 시작한 실행·완료 리포트의 당시 제품 스냅샷은 변경하지 않는다.
 - 카탈로그 복사본·정규화 중복키와 개인 표시값은 등록 시점 기준이다. 이후 카탈로그 이름·색상 변경은 기존 개인 항목을 수정하지 않는다. <b>로컬 수정 -325</b>: 파우치 목록·상세 API의 PouchItem에는 저장된 개인 색상만 반환하며 카탈로그 색 칸 목록 `colors[]`는 포함하지 않는다. Product API는 호수별 `Shade.colors[]`를 제공한다. 추천은 저장된 USER_INPUT 색이 있으면 이를 쓰고, 그 외 CATALOG 항목은 연결된 호수의 현재 사용 가능한 색 칸을 계산에 쓴다. 현재 카탈로그 색은 추천 스냅샷에만 반영하고 pouch_items의 복사본은 바꾸지 않는다. `CatalogColorChanged` 소비자는 영향 회원의 pouchVersion을 올린다. 카탈로그 적재(S15P31A306-295)가 서비스에 보이는 색이 바뀔 때 같은 트랜잭션에서 이 이벤트를 발행하므로, 적재로 색이 바뀐 호수를 가진 회원의 기존 매칭은 pouchVersion 변경으로 stale 처리된다. 연결 가이드의 referenceVersion은 카탈로그 대조 스키마 규칙이 갱신한다. 카탈로그 적재·수집·크롤링은 이 API 범위가 아니다.

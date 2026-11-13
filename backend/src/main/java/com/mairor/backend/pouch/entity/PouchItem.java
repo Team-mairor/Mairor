@@ -116,9 +116,9 @@ public class PouchItem {
       throw new IllegalArgumentException("카탈로그 항목은 제품 ID가 필요하다");
     }
     if (color != null
-        && ((registrationMode == RegistrationMode.CATALOG)
-            != (color.getSource() == PouchColor.Source.CATALOG))) {
-      throw new IllegalArgumentException("등록 방식과 색상 출처가 다르다");
+        && registrationMode == RegistrationMode.MANUAL
+        && color.getSource() == PouchColor.Source.CATALOG) {
+      throw new IllegalArgumentException("직접 입력 항목에 카탈로그 색을 넣을 수 없다");
     }
     this.productId = productId;
     this.shadeId = shadeId;
@@ -201,6 +201,43 @@ public class PouchItem {
 
   public String getColorSource() {
     return color == null ? "NONE" : color.getSource().name();
+  }
+
+  /**
+   * 직접 입력 항목을 카탈로그 제품·호수에 연결한다(수집 요청 자동 연결, S15P31A306-517). 표시 이름은 카탈로그 값으로 바꾼다.
+   *
+   * <p>회원이 넣은 색은 버리지 않고 그대로 둔다(출처 USER_INPUT). 회원 색이 없으면 카탈로그 단색을 복사한다. 팔레트 호수에서 회원 색을 쓸지는 매칭이 정한다.
+   *
+   * @throws IllegalStateException 직접 입력 항목이 아니면
+   */
+  public void linkToCatalog(
+      UUID productId,
+      UUID shadeId,
+      String category,
+      String type,
+      String brand,
+      String name,
+      String shadeName,
+      PouchColor catalogColor) {
+    if (registrationMode != RegistrationMode.MANUAL) {
+      throw new IllegalStateException("직접 입력 항목만 연결한다");
+    }
+    if (catalogColor != null && catalogColor.getSource() != PouchColor.Source.CATALOG) {
+      throw new IllegalArgumentException("카탈로그 색이 아니다");
+    }
+    PouchColor kept = color != null ? color : catalogColor;
+    replaceDetailsFrom(
+        new PouchItem(
+            userId,
+            RegistrationMode.CATALOG,
+            Objects.requireNonNull(productId, "productId"),
+            shadeId,
+            category,
+            type,
+            brand,
+            name,
+            shadeName,
+            kept));
   }
 
   /** 수정 후보의 변경 가능한 필드를 반영한다. 식별자·소유자·생성 시각은 유지한다. */

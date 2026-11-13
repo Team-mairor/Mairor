@@ -55,6 +55,10 @@ dependencies {
     implementation('software.amazon.awssdk:s3') {
         exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
     }
+    // 화장품 수집 큐 (SQS: 수집 워커에 작업 보내기, S15P31A306-517)
+    implementation('software.amazon.awssdk:sqs') {
+        exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+    }
 
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
