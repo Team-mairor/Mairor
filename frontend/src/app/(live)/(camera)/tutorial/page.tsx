@@ -225,6 +225,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const [ready, setReady] = useState(false);
   const [gauge, setGauge] = useState(10);
   const [exitAsk, setExitAsk] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownActive = useRef(false);
 
   // 나가기로 실행을 끝낸 뒤에는 동의 카드로 보내지 않는다 (홈으로 가는 중)
   const leaving = useRef(false);
@@ -335,6 +338,59 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   });
   const { cancel: cancelShot } = shot;
 
+  const cancelCountdown = () => {
+    if (!countdownActive.current) return;
+    countdownActive.current = false;
+    if (countdownTimer.current !== null) {
+      clearTimeout(countdownTimer.current);
+      countdownTimer.current = null;
+    }
+    setCountdown(null);
+  };
+
+  const startFinalCountdown = () => {
+    if (countdownActive.current) return;
+    countdownActive.current = true;
+    setCountdown(3);
+
+    const tick = (remaining: number) => {
+      countdownTimer.current = setTimeout(() => {
+        if (!countdownActive.current) return;
+        if (remaining > 1) {
+          setCountdown(remaining - 1);
+          tick(remaining - 1);
+          return;
+        }
+
+        countdownActive.current = false;
+        countdownTimer.current = null;
+        setCountdown(null);
+        shot.start();
+      }, 1000);
+    };
+
+    tick(3);
+  };
+
+  useEffect(() => {
+    if (!blocked && !paused && !exitAsk) return;
+    countdownActive.current = false;
+    if (countdownTimer.current !== null) {
+      clearTimeout(countdownTimer.current);
+      countdownTimer.current = null;
+    }
+    const resetTimer = setTimeout(() => setCountdown(null), 0);
+    return () => clearTimeout(resetTimer);
+  }, [blocked, paused, exitAsk]);
+
+  useEffect(
+    () => () => {
+      countdownActive.current = false;
+      if (countdownTimer.current !== null) clearTimeout(countdownTimer.current);
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!ready || blocked || exitAsk || target === null) return;
     const t = setInterval(() => {
@@ -372,6 +428,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
   // 진행바·이전 버튼으로 옮기면 촬영 대기를 접는다. 예전 단계 사진으로 넘어가지 않게
   function goStep(i: number, prep = true) {
+    cancelCountdown();
     cancelShot();
     setStep(i);
     setAct(0);
@@ -380,6 +437,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   }
   // 모든 단계(제품 없는 단계·생략한 단계 포함)를 넘길 때 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
   const next = () => {
+    if (countdownActive.current) return cancelCountdown();
     if (shot.shooting || shot.saving || paused) return;
     if (!lastAct) {
       setAct((a) => a + 1);
@@ -389,10 +447,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       setDefaultsFailed(false);
       return loadDefaults();
     }
-    shot.start();
+    if (last) startFinalCountdown();
+    else shot.start();
   };
   const quit = () => {
     leaving.current = true;
+    cancelCountdown();
     cancelShot();
     // 실제 가이드는 서버 실행을 중도 종료한다. 실패해도 서버가 세션 종료 때 정리하므로 기다리지 않는다
     if (run.mode === "guide" && run.executionId)
@@ -406,32 +466,52 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   };
 
   const nextLabel =
-    shot.state === "outOfView"
-      ? "화면에 보이면 찍어요"
-      : shot.state === "waiting"
-        ? "잠시 멈춰 주세요…"
-        : lastAct && defaultsFailed && photoRegions.length === 0
-          ? "다시 불러오기"
-          : shot.state === "failed"
-            ? "다시 찍기"
-            : !lastAct
-              ? "했어요 · 다음 할 일"
-              : last
-                ? "완성하기"
-                : paced
-                  ? "다음 스텝"
-                  : "건너뛰기";
+    countdown !== null
+      ? "촬영 취소"
+      : shot.state === "outOfView"
+        ? "화면에 보이면 찍어요"
+        : shot.state === "waiting"
+          ? "잠시 멈춰 주세요…"
+          : lastAct && defaultsFailed && photoRegions.length === 0
+            ? "다시 불러오기"
+            : shot.state === "failed"
+              ? "다시 찍기"
+              : !lastAct
+                ? "했어요 · 다음 할 일"
+                : last
+                  ? "완성하기"
+                  : paced
+                    ? "다음 스텝"
+                    : "건너뛰기";
 
   return (
     <main className="relative flex flex-1 flex-col">
       <TutorialViewport step={canRender ? guideStep : null} face={canRender} />
       <div className="flex-1" />
 
+      {countdown !== null && (
+        <div
+          className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-night/55 px-8 text-center text-white"
+          role="status"
+          aria-live="assertive"
+          aria-label={`마지막 사진 촬영까지 ${countdown}초`}
+        >
+          <span className="font-serif text-[clamp(120px,30vw,220px)] leading-none tabular-nums">
+            {countdown}
+          </span>
+          <span className="text-[21px] font-bold">잠시 후 마지막 사진을 촬영해요</span>
+          <span className="text-[16px] text-white/80">
+            아래 버튼을 누르면 촬영을 취소할 수 있어요
+          </span>
+        </div>
+      )}
+
       <TutorialTopBar
         steps={steps}
         step={step}
         onExit={() => {
           // 촬영을 기다리는 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 접는다
+          cancelCountdown();
           cancelShot();
           setExitAsk(true);
         }}
@@ -529,6 +609,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         <div className="flex items-center gap-3">
           <RoundBack
             onClick={() => {
+              if (countdownActive.current) return cancelCountdown();
               if (shot.saving) return;
               // 촬영을 기다리는 중이면(부위가 계속 화면 밖 등) 대기만 접고 지금 단계에 머문다
               if (shot.shooting) return cancelShot();
