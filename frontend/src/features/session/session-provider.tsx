@@ -19,6 +19,7 @@ import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/li
 
 import {
   createRun,
+  continueAnalysisRun,
   EMPTY_RUN,
   invalidateRun as invalidated,
   type RunPatch,
@@ -89,6 +90,7 @@ interface SessionContextValue {
   isCurrentRun: (expectedRunId: string) => boolean;
   /** 새 실행 시작. 이전 실행의 진행 데이터는 버린다 */
   startRun: (input: StartRunInput) => void;
+  continueAnalysis: (expectedRunId: string, jobId: string, guideId: string) => void;
   reset: () => void;
 }
 
@@ -243,6 +245,14 @@ export function SessionProvider({
     setState((prev) => ({ ...prev, run }));
   }, []);
 
+  const continueAnalysis = useCallback((expectedRunId: string, jobId: string, guideId: string) => {
+    setState((prev) =>
+      prev.run.id !== expectedRunId
+        ? prev
+        : { ...prev, run: continueAnalysisRun(prev.run, jobId, guideId) },
+    );
+  }, []);
+
   const endRun = useCallback((expectedRunId: string) => {
     if (activeRunId.current === expectedRunId) activeRunId.current = "";
     setState((prev) => (prev.run.id !== expectedRunId ? prev : { ...prev, run: EMPTY_RUN }));
@@ -302,6 +312,7 @@ export function SessionProvider({
       expireSession,
       updateRun,
       startRun,
+      continueAnalysis,
       isCurrentRun,
       endRun,
       bindGuide,
@@ -320,6 +331,7 @@ export function SessionProvider({
       expireSession,
       updateRun,
       startRun,
+      continueAnalysis,
       isCurrentRun,
       endRun,
       bindGuide,

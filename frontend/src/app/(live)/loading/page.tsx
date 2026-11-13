@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { IconButton } from "@/components/ui/icon-button";
@@ -30,7 +30,12 @@ import {
 import { emptyDraft, ProductSheet, type PouchCat, type ProductDraft } from "@/features/pouch";
 import { faceReady, hasSame, isGuideId, runHref, useSession } from "@/features/session";
 import { ANALYSIS_PHASES } from "@/features/video";
-import { ApiError, errorMessage, type AnalysisJobStatus } from "@/lib/api";
+import {
+  ApiError,
+  errorMessage,
+  type AnalysisJobStatus,
+  type FaceRegistrationRequest,
+} from "@/lib/api";
 import { REF_PRODUCTS, VIDEOS } from "@/mocks/mock-data";
 
 const PHASE_EN = ["Queued", "Fetching", "Scenes", "Detecting", "Steps", "Composing"];
@@ -105,7 +110,7 @@ export default function LoadingPage() {
 
 function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string | null }) {
   const router = useRouter();
-  const { state, update, updateRun, startRun, isCurrentRun } = useSession();
+  const { state, update, updateRun, isCurrentRun, expireSession } = useSession();
   const camera = useCamera();
   const { load } = useGuide();
   const run = state.run;
@@ -115,16 +120,16 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   // 상태 응답에 영상 정보가 없어, 이 작업으로 시작한 실행의 영상만 쓰고 모르면 비워 둔다
   const picked = jobId ? (run.jobId === jobId ? run.picked : null) : (run.picked ?? VIDEOS[0]);
   const href = (path: string) => runHref(path, run.guideId);
-  // 사진은 메모리에만 있어서, 새로 고침으로 사라졌으면 다시 등록해야 한다. 가이드 실행은 서버 등록 ID도 있어야 한다
+  // 새로고침하면 메모리 사진이 사라지므로 다시 등록한다.
   const faceOk = faceReady(run) && facePhoto(run.id) !== null;
+  const faceCaptured = run.faceReg && facePhoto(run.id) !== null;
 
-  const [demoPct, setDemoPct] = useState(replay ? 100 : 0);
+  const [demoPct, setDemoPct] = useState(0);
   const [joined, setJoined] = useState(false);
   const [demoFail, setDemoFail] = useState<Fail>(null);
   const [demoReview, setDemoReview] = useState<Review>(null);
-  // 다시 따라 하기는 들어오자마자 등록부터 한다. 미리보기에서 돌아왔을 때처럼 이미 등록했으면 띄우지 않는다
-  const [faceModal, setFaceModal] = useState(replay && !faceOk);
-  const [faceShown, setFaceShown] = useState(replay);
+  const [faceModal, setFaceModal] = useState(replay && !faceCaptured && !run.facePrompted);
+  const [faceShown, setFaceShown] = useState(replay || run.facePrompted);
   const [pouchModal, setPouchModal] = useState(false);
   const [newIds, setNewIds] = useState<string[]>([]);
   const [form, setForm] = useState<ProductDraft | null>(null);
@@ -132,6 +137,9 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const [retryRefused, setRetryRefused] = useState(false);
+  const [savingFace, setSavingFace] = useState(false);
+  const [faceSaveError, setFaceSaveError] = useState<string | null>(null);
+  const faceSaving = useRef(false);
 
   useEffect(() => {
     if (run.mode === "guide") return;
@@ -156,7 +164,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
 
   const live = useAnalysisJob(jobId);
   const job = jobId ? live.job : null;
-  const pct = jobId ? live.pct : demoPct;
+  const pct = jobId ? live.pct : replay ? 100 : demoPct;
   const fail = jobId ? jobFail(live.error, job) : demoFail;
   const review: Review = job ? jobReview(job) : demoReview;
   // 분석이 끝나 공개되면 그 가이드로 바로 넘어간다. 옛 검수 대기 작업은 상태를 계속 받다가 승인되면 넘어간다
@@ -166,8 +174,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
       : null;
 
   useEffect(() => {
-    if (live.error?.code === "UNAUTHORIZED") router.replace("/login?expired=basic");
-  }, [live.error, router]);
+    if (live.error?.code === "UNAUTHORIZED") {
+      expireSession();
+      router.replace("/login?expired=basic");
+    }
+  }, [live.error, expireSession, router]);
 
   // 샘플 진행률 타이머
   const running = !replay && !fail && pct < 100;
@@ -177,19 +188,18 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     return () => clearInterval(t);
   }, [running, sample]);
 
-  // 4%가 되면 얼굴 등록 모달을 한 번 띄운다. 실패·검수 안내 중에는 띄우지 않는다.
-  // 실제 분석(jobId)은 오래 걸려 사용자가 기다리지 않으므로, 등록은 가이드를 시작할 때 받는다
+  // 실제 분석은 대기열부터, 샘플은 4%부터 준비한다.
   useEffect(() => {
-    if (pct >= 4 && !jobId && !faceShown && !faceOk && !fail && !review) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- 진행률이 문턱을 넘는 순간 한 번만
+    const preparing = jobId ? job && ["PENDING", "RUNNING"].includes(job.status) : pct >= 4;
+    if (preparing && !faceShown && !faceCaptured && !fail && !review) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 준비를 처음 권하는 순간 한 번만
       setFaceShown(true);
       setFaceModal(true);
+      updateRun({ facePrompted: true }, run.id);
     }
-  }, [pct, jobId, faceShown, faceOk, fail, review]);
+  }, [pct, jobId, job, faceShown, faceCaptured, fail, review, updateRun, run.id]);
 
-  // 등록 중이 아니면 추적을 쉬게 한다. 카메라는 켜 둬서 미리보기에서 바로 다시 돌린다
-  // 등록 모달이 닫히면 프레임을 받는 곳이 없어 추적은 쉬고, 카메라는 미리보기에서 이어 쓴다.
-  // 영상은 등록 모달의 원 안에만 보여 주므로 뒤에 깔린 전체 화면 영상은 숨긴다
+  // 카메라 영상은 등록 모달 안에서만 보여 준다.
   useHiddenVideo();
 
   const done = pct >= 100;
@@ -293,7 +303,7 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
           ? {
               tag: "READY",
               title: "분석이 끝났어요",
-              sub: "이 영상의 가이드로 바로 따라 할 수 있어요. 얼굴 등록은 다음 화면에서 해요.",
+              sub: "이 영상의 가이드로 바로 따라 할 수 있어요.",
               retry: false,
             }
           : null;
@@ -319,9 +329,8 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
   let ctaGo: (() => void) | null = null;
   if (approvedGuide) {
     ctaLabel = "가이드로 따라 하기";
-    // 여기서 실행을 바꾸면 실행 경로 검사가 아직 남은 ?jobId= 주소에 guideId를 붙여 덮어쓴다.
-    // 가이드 주소로만 옮기고, 새 가이드 실행은 직접 들어온 가이드 주소처럼 RunGuideProvider가 시작한다
-    ctaGo = () => router.push(runHref("/loading", approvedGuide));
+    // 실행 전환은 주소 변경 뒤 Provider가 처리한다.
+    ctaGo = () => router.push(runHref("/loading", approvedGuide, jobId ? { jobId } : undefined));
   } else if (review === "pending") {
     ctaLabel = "홈으로";
     ctaGo = () => {
@@ -334,11 +343,26 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     ctaLabel = "다른 영상 고르기";
     ctaGo = () => router.push("/select");
   } else if (!guideOk) ctaLabel = "분석이 끝나면 미리보기를 열 수 있어요";
-  else if (!faceOk) {
+  else if (!faceCaptured) {
     // 실제 가이드는 색상 정보가 없어 입혀 볼 수 없다
     const tryOn = replay && run.mode !== "guide";
     ctaLabel = tryOn ? "얼굴 등록하고 입혀보기" : "얼굴 등록하고 미리보기";
-    ctaGo = () => setFaceModal(true);
+    ctaGo = () => {
+      setFaceShown(true);
+      updateRun({ facePrompted: true }, run.id);
+      setFaceModal(true);
+    };
+  } else if (!faceOk && run.mode === "guide") {
+    ctaLabel = savingFace
+      ? "얼굴 등록을 저장하는 중"
+      : faceSaveError
+        ? "얼굴 등록 저장 다시 시도"
+        : "미리보기 보기";
+    ctaGo = savingFace
+      ? null
+      : () => {
+          void savePreparedFace();
+        };
   } else {
     ctaLabel = replay && run.mode !== "guide" ? "입혀보기" : "미리보기 보기";
     ctaGo = () => router.push(href("/preview"));
@@ -348,7 +372,48 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
     ? run.replay === "guide"
       ? "분석해 둔 가이드가 있어 바로 시작해요"
       : "이전에 분석한 가이드를 그대로 써요"
-    : "영상 분석은 그대로 진행 중이에요";
+    : done
+      ? "영상 분석이 끝났어요"
+      : "영상 분석은 그대로 진행 중이에요";
+
+  const saveFace = async (photo: Blob, metadata: FaceRegistrationRequest) => {
+    try {
+      return await registerFace(photo, metadata);
+    } catch (e) {
+      if (isCurrentRun(run.id) && e instanceof ApiError && e.code === "UNAUTHORIZED") {
+        expireSession();
+        router.replace("/login?expired=basic");
+      }
+      throw e;
+    }
+  };
+
+  const savePreparedFace = async () => {
+    if (faceSaving.current || load.status !== "ready") return;
+    const photo = facePhoto(run.id);
+    if (!photo) return;
+    faceSaving.current = true;
+    setSavingFace(true);
+    setFaceSaveError(null);
+    try {
+      const metadata = faceRegistrationRequest(load.guide.videoId, load.guide.guideId);
+      const { faceRegistrationId } = await saveFace(photo, metadata);
+      if (!isCurrentRun(run.id)) {
+        await deleteFaceRegistration(faceRegistrationId).catch((e: unknown) =>
+          console.warn("얼굴 등록 정리 실패", e),
+        );
+        return;
+      }
+      updateRun({ faceRegistrationId }, run.id);
+      router.push(href("/preview"));
+    } catch (e) {
+      if (!isCurrentRun(run.id)) return;
+      setFaceSaveError(`얼굴 등록을 저장하지 못했어요. ${errorMessage(e)}`);
+    } finally {
+      faceSaving.current = false;
+      setSavingFace(false);
+    }
+  };
 
   const retryJob = async () => {
     if (!jobId || retrying) return;
@@ -360,11 +425,12 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
         live.restart(next);
         return;
       }
-      // 같은 영상의 다른 진행 중 작업에 합류했다. 고른 영상을 이어 쓰도록 그 작업으로 실행을 시작한다
-      if (picked) startRun({ kind: "sample", picked, jobId: next.jobId });
+      // 재시도 합류에도 촬영 상태를 유지한다.
+      updateRun({ jobId: next.jobId }, run.id);
       router.replace(`/loading?jobId=${encodeURIComponent(next.jobId)}`);
     } catch (e) {
       if (e instanceof ApiError && e.code === "UNAUTHORIZED") {
+        expireSession();
         router.replace("/login?expired=basic");
         return;
       }
@@ -382,7 +448,8 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
 
   const closePouch = () => {
     setPouchModal(false);
-    if (replay) router.push(href("/preview"));
+    updateRun({ pouchReviewed: true }, run.id);
+    if (replay && faceOk) router.push(href("/preview"));
   };
 
   return (
@@ -481,11 +548,21 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             ["가이드 준비", guideState, guideOk],
             [
               "얼굴 인식 준비",
-              faceOk ? "완료" : faceModal ? "등록 중" : jobId ? "가이드 시작 때 등록" : "등록 필요",
+              faceOk ? "완료" : faceCaptured ? "촬영 완료" : faceModal ? "등록 중" : "등록 필요",
               faceOk,
             ],
           ]}
         />
+        {faceSaveError && (
+          <p role="alert" className="text-[17px] text-error">
+            {faceSaveError}
+          </p>
+        )}
+        {jobId && !fail && !review && (
+          <PillButton variant="line" size="hero" onClick={() => setPouchModal(true)}>
+            내 파우치 확인 / 추가
+          </PillButton>
+        )}
         {fail ? (
           <div className="flex gap-3">
             {notice?.retry && (
@@ -515,7 +592,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
             </PillButton>
           </div>
         ) : (
-          <PillButton size="hero" onClick={() => ctaGo?.()} disabled={!ctaGo}>
+          <PillButton
+            size="hero"
+            onClick={() => ctaGo?.()}
+            disabled={(!approvedGuide && !review && !guideOk) || savingFace}
+          >
             {ctaLabel}
           </PillButton>
         )}
@@ -525,20 +606,28 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
         <FaceRegisterModal
           pct={pct}
           replay={replay}
+          pouchReviewed={run.pouchReviewed}
           barText={barText}
           runId={run.id}
           onLater={() => {
             setFaceModal(false);
+            setFaceShown(true);
+            updateRun({ facePrompted: true }, run.id);
+            if (!run.pouchReviewed) setPouchModal(true);
             camera.stop();
           }}
           onDone={async () => {
-            // 실제 가이드는 찍은 사진을 서버에 등록한다. 실패하면 등록 창이 오류를 보여 준다
             let faceRegistrationId: string | null = null;
-            if (run.mode === "guide") {
+            const metadata =
+              jobId && job
+                ? faceRegistrationRequest(job.videoId, null)
+                : run.mode === "guide" && load.status === "ready"
+                  ? faceRegistrationRequest(load.guide.videoId, load.guide.guideId)
+                  : null;
+            if (jobId || run.mode === "guide") {
               const photo = facePhoto(run.id);
-              if (load.status !== "ready" || !photo) throw new Error("가이드나 얼굴 사진이 없다");
-              const metadata = faceRegistrationRequest(load.guide.videoId, load.guide.guideId);
-              faceRegistrationId = (await registerFace(photo, metadata)).faceRegistrationId;
+              if (!metadata || !photo) throw new Error("영상이나 얼굴 사진이 없다");
+              faceRegistrationId = (await saveFace(photo, metadata)).faceRegistrationId;
               if (!isCurrentRun(run.id)) {
                 await deleteFaceRegistration(faceRegistrationId).catch((e: unknown) =>
                   console.warn("얼굴 등록 정리 실패", e),
@@ -546,9 +635,11 @@ function LoadingScreen({ query, jobId }: { query: URLSearchParams; jobId: string
                 return;
               }
             }
-            updateRun({ faceReg: true, faceRegistrationId }, run.id);
+            if (!isCurrentRun(run.id)) return;
+            updateRun({ faceReg: true, facePrompted: true, faceRegistrationId }, run.id);
+            setFaceShown(true);
             setFaceModal(false);
-            if (pct < 100 || replay) setPouchModal(true);
+            if (!run.pouchReviewed) setPouchModal(true);
           }}
         />
       )}

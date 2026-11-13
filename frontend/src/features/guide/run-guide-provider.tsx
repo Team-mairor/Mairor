@@ -48,6 +48,7 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
     storageLoaded,
     sessionChecked,
     startRun,
+    continueAnalysis,
     endRun,
     bindGuide,
     invalidateRun,
@@ -105,7 +106,7 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
     if (!isRunPath(route.path)) {
       bootstrapped.current = null;
       if (previous && isRunPath(previous) && run.id) {
-        if (run.mode === "guide" && run.faceRegistrationId && !run.executionId)
+        if (run.faceRegistrationId && !run.executionId)
           deleteFaceRegistration(run.faceRegistrationId).catch((e: unknown) =>
             console.warn("얼굴 등록 정리 실패", e),
           );
@@ -119,7 +120,21 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
       const entry = `${route.path}?${route.search}`;
       if (bootstrapped.current === entry) return;
       bootstrapped.current = entry;
-      startRun({ kind: "guide", guideId: decision.guideId });
+      const sourceJobId = new URLSearchParams(route.search).get("jobId");
+      if (
+        run.mode === "sample" &&
+        run.jobId &&
+        run.jobId === sourceJobId &&
+        run.phase === "preparing"
+      ) {
+        continueAnalysis(run.id, sourceJobId, decision.guideId);
+      } else {
+        if (run.faceRegistrationId && !run.executionId)
+          deleteFaceRegistration(run.faceRegistrationId).catch((e: unknown) =>
+            console.warn("얼굴 등록 정리 실패", e),
+          );
+        startRun({ kind: "guide", guideId: decision.guideId });
+      }
       router.replace(runHref("/loading", decision.guideId));
     } else if (decision.kind === "redirect") {
       // 실행을 끝낸 직후 남은 주소에서는 다른 화면으로 보내지 않는다. 이어지는 이동을 덮어쓰기 때문이다
@@ -138,7 +153,7 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
         router.replace(runHref("/loading", run.guideId));
       }
     }
-  }, [initialized, route, run, state.loggedIn, startRun, endRun, router]);
+  }, [initialized, route, run, state.loggedIn, startRun, continueAnalysis, endRun, router]);
 
   const search = route?.path === pathname ? route.search : null;
   const value = useMemo(() => ({ load, retry: store.retry, search }), [load, store, search]);

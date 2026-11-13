@@ -22,6 +22,13 @@ const RECORD_ID = "r0000000-0000-4000-8000-000000000001";
 afterEach(() => vi.restoreAllMocks());
 
 describe("faceRegistrationRequest", () => {
+  it("분석 중에는 영상 ID만으로 등록하고 가이드 연결은 나중에 한다", () => {
+    expect(faceRegistrationRequest(VIDEO_ID, null)).toMatchObject({
+      videoId: VIDEO_ID,
+      guideId: null,
+      agreed: true,
+    });
+  });
   it("내부 영상 · 가이드 ID, 안내 판 v1, 동의, 서버 이름의 촬영 조건을 담는다", () => {
     expect(faceRegistrationRequest(VIDEO_ID, GUIDE_ID)).toEqual({
       videoId: VIDEO_ID,

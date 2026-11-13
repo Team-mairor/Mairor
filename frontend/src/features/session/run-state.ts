@@ -15,7 +15,9 @@ export interface RunState {
   /** 이 실행이 요청한 분석 작업. 로딩 화면은 주소의 jobId와 같을 때만 picked를 쓴다 */
   jobId: string | null;
   faceReg: boolean;
-  /** 가이드 실행에서 서버에 등록한 얼굴. 샘플 실행은 늘 null */
+  facePrompted: boolean;
+  pouchReviewed: boolean;
+  /** 분석·가이드의 서버 얼굴 등록 ID */
   faceRegistrationId: string | null;
   /** 제품 체크에서 시작한 서버 실행. 동의 · 나가기 · 완료가 이 ID로 간다 */
   executionId: string | null;
@@ -35,6 +37,8 @@ export const EMPTY_RUN: RunState = {
   replay: null,
   jobId: null,
   faceReg: false,
+  facePrompted: false,
+  pouchReviewed: false,
   faceRegistrationId: null,
   executionId: null,
   choice: {},
@@ -55,13 +59,34 @@ export type StartRunInput =
 export type RunPatch = Partial<
   Pick<
     RunState,
-    "faceReg" | "faceRegistrationId" | "executionId" | "choice" | "subOn" | "photoOk" | "captures"
+    | "jobId"
+    | "faceReg"
+    | "facePrompted"
+    | "pouchReviewed"
+    | "faceRegistrationId"
+    | "executionId"
+    | "choice"
+    | "subOn"
+    | "photoOk"
+    | "captures"
   >
 >;
 
 /** 얼굴 등록을 마쳤나. 가이드 실행은 서버 등록 ID까지 있어야 한다 */
 export function faceReady(run: RunState) {
   return run.faceReg && (run.mode !== "guide" || run.faceRegistrationId !== null);
+}
+
+/** 같은 작업의 결과 가이드에서만 사진·준비 상태를 유지한다. */
+export function continueAnalysisRun(run: RunState, jobId: string, guideId: string): RunState {
+  if (run.mode !== "sample" || run.jobId !== jobId || run.phase !== "preparing") return run;
+  return {
+    ...createRun({ kind: "guide", guideId }, run.id),
+    faceReg: run.faceReg,
+    faceRegistrationId: run.faceRegistrationId,
+    facePrompted: run.facePrompted,
+    pouchReviewed: run.pouchReviewed,
+  };
 }
 
 export function createRun(input: StartRunInput, id: string): RunState {

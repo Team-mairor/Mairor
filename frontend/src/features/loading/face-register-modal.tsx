@@ -46,6 +46,7 @@ export function FaceRegisterModal({
   pct,
   barText,
   replay,
+  pouchReviewed,
   onDone,
   onLater,
 }: {
@@ -55,6 +56,7 @@ export function FaceRegisterModal({
   pct: number;
   barText: string;
   replay: boolean;
+  pouchReviewed: boolean;
   /** 실패하면 던진 오류를 창에 보여 준다 */
   onDone: () => Promise<void> | void;
   onLater: () => void;
@@ -191,9 +193,9 @@ export function FaceRegisterModal({
           ? "등록하는 중"
           : saveError
             ? "다시 등록하기"
-            : replay
-              ? "등록 완료 · 파우치 확인"
-              : "등록 완료 · 분석 계속 보기";
+            : pouchReviewed
+              ? "등록 완료"
+              : "등록 완료 · 파우치 확인";
   const alert =
     errorNote || !cameraReady || stage !== "ready"
       ? null

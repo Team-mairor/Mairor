@@ -142,6 +142,71 @@ afterEach(async () => {
 });
 
 describe("루트 실행·가이드 연동", () => {
+  it("같은 분석 결과로 이동하면 촬영 사진과 준비 상태를 이어 쓴다", async () => {
+    await navigate("/loading?jobId=j1");
+    await act(async () => session.startRun({ kind: "sample", jobId: "j1" }));
+    const id = session.state.run.id;
+    const photo = new Blob(["face"]);
+    await act(async () => {
+      saveFacePhoto(id, photo);
+      session.updateRun(
+        { faceReg: true, faceRegistrationId: "f1", facePrompted: true, pouchReviewed: true },
+        id,
+      );
+    });
+    await navigate(`/loading?guideId=${B}&jobId=j1`);
+    expect(session.state.run).toMatchObject({
+      id,
+      mode: "guide",
+      guideId: B,
+      faceReg: true,
+      facePrompted: true,
+      pouchReviewed: true,
+      faceRegistrationId: "f1",
+    });
+    expect(facePhoto(id)).toBe(photo);
+    expect(nav.router.replace).toHaveBeenLastCalledWith(`/loading?guideId=${B}`);
+  });
+
+  it("다른 분석의 결과로 이동하면 이전 사진과 준비 상태를 버린다", async () => {
+    const remove = vi.spyOn(api, "delete").mockResolvedValue(undefined);
+    await navigate("/loading?jobId=j1");
+    await act(async () => session.startRun({ kind: "sample", jobId: "j1" }));
+    const id = session.state.run.id;
+    await act(async () => {
+      saveFacePhoto(id, new Blob());
+      session.updateRun(
+        { faceReg: true, faceRegistrationId: "old-face", facePrompted: true, pouchReviewed: true },
+        id,
+      );
+    });
+    await navigate(`/loading?guideId=${B}&jobId=j2`);
+    expect(session.state.run.id).not.toBe(id);
+    expect(session.state.run).toMatchObject({
+      faceReg: false,
+      facePrompted: false,
+      pouchReviewed: false,
+    });
+    expect(facePhoto(id)).toBeNull();
+    expect(remove).toHaveBeenCalledWith("/v1/users/me/face-registrations/old-face");
+  });
+
+  it("분석 화면에서 나가면 실행에 연결하지 않은 서버 얼굴 등록을 정리한다", async () => {
+    const remove = vi.spyOn(api, "delete").mockResolvedValue(undefined);
+    await navigate("/loading?jobId=j1");
+    await act(async () => session.startRun({ kind: "sample", jobId: "j1" }));
+    const id = session.state.run.id;
+    await act(async () => {
+      saveFacePhoto(id, new Blob());
+      session.updateRun({ faceReg: true, faceRegistrationId: "analysis-face" }, id);
+    });
+    await navigate("/select");
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledWith("/v1/users/me/face-registrations/analysis-face");
+    expect(session.state.run.id).toBe("");
+    expect(facePhoto(id)).toBeNull();
+  });
+
   it("StrictMode에서도 URL로 한 실행을 만들고 화면 전환에서는 재조회하지 않는다", async () => {
     await navigate(`/loading?guideId=${A}`);
     const firstId = session.state.run.id;
