@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GuideReportStep } from "@/features/session";
 import { deleteStepPhotos, saveStepPhoto } from "@/features/session";
 
-import { guideReportRows } from "./report-rows";
+import { captureTiles, guideReportRows, type ReportRow } from "./report-rows";
 
 const step = (stepId: string, extra: Partial<GuideReportStep> = {}): GuideReportStep => ({
   stepId,
@@ -78,5 +78,39 @@ describe("guideReportRows", () => {
       ["none", undefined],
     ]);
     deleteStepPhotos("run1");
+  });
+});
+
+const row = (no: number, category: ReportRow["category"], photo: "none" | "slot"): ReportRow => ({
+  no,
+  title: `단계 ${no}`,
+  category,
+  guide: "",
+  ref: "",
+  usedKind: "",
+  used: "",
+  photo,
+});
+
+describe("captureTiles", () => {
+  it("연속한 같은 부위를 한 칸으로 묶고 묶음에서 사진을 남긴 마지막 단계를 쓴다", () => {
+    const tiles = captureTiles([
+      row(1, "BASE", "none"),
+      row(2, "BASE", "slot"),
+      row(3, "BASE", "none"),
+      row(4, "LIP", "none"),
+    ]);
+    expect(tiles.map((t) => [t.no, t.label, t.first, t.row.no])).toEqual([
+      [1, "피부", 0, 2],
+      [2, "입술", 3, 4],
+    ]);
+  });
+
+  it("부위를 모르는 이전 기록은 단계마다 한 칸이다", () => {
+    const tiles = captureTiles([row(1, null, "slot"), row(2, null, "slot")]);
+    expect(tiles.map((t) => [t.label, t.row.no])).toEqual([
+      ["단계 1", 1],
+      ["단계 2", 2],
+    ]);
   });
 });

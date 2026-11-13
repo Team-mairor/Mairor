@@ -31,6 +31,14 @@ export {
   type MatchCategory,
 } from "./guide-model";
 export {
+  CATEGORY_LABEL,
+  categoryOfPart,
+  groupIndexOf,
+  groupSteps,
+  MAKEUP_CATEGORY,
+  type StepGroup,
+} from "./step-group";
+export {
   checkGuideArea,
   GuideOverlay,
   loadDefaultGuideSet,

@@ -2,23 +2,25 @@
 
 import { X } from "lucide-react";
 
-import type { GuideStepInfo } from "@/features/session";
 import { cn } from "@/lib/utils";
 
-/** 튜토리얼 상단: 나가기·단계 진행바. 준비 카드(z-[4]) 위에 둬서 카드가 떠 있어도 누를 수 있다 */
+/**
+ * 튜토리얼 상단: 나가기·부위 묶음 진행바. 준비 카드(z-[4]) 위에 둬서 카드가 떠 있어도 누를 수 있다.
+ * 칸 하나가 연속한 같은 부위 단계 묶음이다.
+ */
 export function TutorialTopBar({
-  steps,
-  step,
+  groups,
+  group,
   reachable,
   onExit,
-  onGoStep,
+  onGoGroup,
 }: {
-  steps: Pick<GuideStepInfo, "stepId" | "short">[];
-  step: number;
-  /** 눌러서 갈 수 있는 마지막 단계. 앞 단계 사진이 모두 있어야 그 뒤로 갈 수 있다 */
+  groups: readonly { label: string }[];
+  group: number;
+  /** 눌러서 갈 수 있는 마지막 묶음. 앞 묶음 사진이 모두 있어야 그 뒤로 갈 수 있다 */
   reachable: number;
   onExit: () => void;
-  onGoStep: (i: number) => void;
+  onGoGroup: (i: number) => void;
 }) {
   return (
     <div className="absolute inset-x-5 top-5 z-[5] flex items-center gap-3.5">
@@ -34,25 +36,25 @@ export function TutorialTopBar({
         <div
           className="flex min-w-0 flex-1 gap-1"
           role="progressbar"
-          aria-valuenow={step + 1}
-          aria-valuemax={steps.length}
+          aria-valuenow={group + 1}
+          aria-valuemax={groups.length}
         >
-          {steps.map((s, i) => (
+          {groups.map((g, i) => (
             <button
-              key={s.stepId}
+              key={i}
               type="button"
-              onClick={() => onGoStep(i)}
+              onClick={() => onGoGroup(i)}
               disabled={i > reachable}
-              aria-label={`${i + 1}단계 ${s.short}`}
+              aria-label={`${i + 1}단계 ${g.label}`}
               className={cn(
                 "h-1.5 flex-1 rounded-full transition-colors",
-                i < step ? "bg-navy" : i === step ? "bg-ice" : "bg-line-2",
+                i < group ? "bg-navy" : i === group ? "bg-ice" : "bg-line-2",
               )}
             />
           ))}
         </div>
         <span className="font-serif text-[24px] leading-none whitespace-nowrap text-white tabular">
-          {step + 1} / {steps.length}
+          {group + 1} / {groups.length}
         </span>
       </div>
     </div>

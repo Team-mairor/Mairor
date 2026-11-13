@@ -103,6 +103,7 @@ describe("fromRecord", () => {
       {
         stepId: "s1",
         title: "크림 블러셔",
+        category: "CHEEK",
         summary: "볼 중앙에 두드린다",
         ref: { name: "젤리 치크", shade: "02" },
         pick: "picked",
@@ -113,6 +114,7 @@ describe("fromRecord", () => {
       {
         stepId: "s2",
         title: "블러셔",
+        category: "CHEEK",
         summary: "첫 동작",
         ref: null,
         pick: "skipped",
@@ -120,7 +122,13 @@ describe("fromRecord", () => {
         photo: false,
         photoUrl: null,
       },
-      expect.objectContaining({ stepId: "s3", title: "기타", summary: null, ref: null }),
+      expect.objectContaining({
+        stepId: "s3",
+        title: "기타",
+        category: null,
+        summary: null,
+        ref: null,
+      }),
     ]);
   });
 

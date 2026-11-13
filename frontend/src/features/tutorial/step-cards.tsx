@@ -75,15 +75,19 @@ export function ActCard({
 export function PrepCard({
   step,
   total,
+  detail,
   info,
   refProduct,
   match,
   pick = null,
   onStart,
 }: {
+  /** 부위 묶음 순번 */
   step: number;
-  /** 전체 단계 수 */
+  /** 전체 묶음 수 */
   total: number;
+  /** 묶음 안 위치(예: 피부 2/5). 한 단계뿐인 묶음이면 없다 */
+  detail?: string;
   info: Pick<GuideStepInfo, "title" | "acts" | "doneWhen">;
   /** 영상 속 제품. 없으면 제품 줄을 띄우지 않는다 */
   refProduct: StepProduct | null;
@@ -117,6 +121,7 @@ export function PrepCard({
       <div className="flex flex-col gap-1.5">
         <span className="font-label text-[14px] font-semibold tracking-[.14em] text-mute">
           STEP {String(step + 1).padStart(2, "0")} / {total}
+          {detail && ` · ${detail}`}
         </span>
         <h2 id="prep-title" className="font-display text-[36px] leading-[1.2]">
           {info.title}

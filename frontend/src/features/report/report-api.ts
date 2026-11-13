@@ -1,6 +1,6 @@
 "use client";
 
-import { MAKEUP_LABEL } from "@/features/guide";
+import { categoryOfPart, MAKEUP_LABEL } from "@/features/guide";
 import type { GuideReportStep, ReportSummary } from "@/features/session";
 import { api, type Page, type ReportRecordDto, type ReportSummaryDto } from "@/lib/api";
 import { useLoad } from "@/lib/hooks/use-load";
@@ -62,6 +62,7 @@ export function fromRecord(d: ReportRecordDto): ReportSummary {
     return {
       stepId: s.stepId,
       title: s.partLabel ?? partLabel(s.part),
+      category: categoryOfPart(s.part),
       summary: s.summary ?? s.actions[0]?.text ?? null,
       ref: ref && (ref.name || ref.shadeName) ? { name: ref.name, shade: ref.shadeName } : null,
       pick: s.selectedProduct && !s.skipped ? "picked" : "skipped",

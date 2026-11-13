@@ -1,3 +1,4 @@
+import { groupSteps, type MatchCategory } from "@/features/guide";
 import { stepPhoto, type GuideReport, type StepPhoto } from "@/features/session";
 
 /** 리포트 상세 단계 한 줄. photo가 shot이면 찍은 사진이 shot에 있다 */
@@ -10,6 +11,8 @@ export type ReportRowPhoto =
 interface ReportRowBase {
   no: number;
   title: string;
+  /** 단계 사진을 묶는 부위. 모르면 단계마다 따로 본다 */
+  category: MatchCategory | null;
   guide: string;
   ref: string;
   usedKind: string;
@@ -33,12 +36,36 @@ export function guideReportRows(report: GuideReport, runId?: string): ReportRow[
     return {
       no: i + 1,
       title: s.title,
+      category: s.category ?? null,
       guide: s.summary ?? "영상에서 설명을 찾지 못했어요",
       ref: ref || "영상에서 제품 정보를 찾지 못했어요",
       usedKind: PICK_LABEL[s.pick].kind,
       used: used || PICK_LABEL[s.pick].empty,
       ...(shot ? { photo: "shot" as const, shot } : { photo: s.photo ? "slot" : "none" }),
       photoUrl: s.photoUrl ?? null,
+    };
+  });
+}
+
+/** 리포트의 단계 사진 칸 하나. 연속한 같은 부위 단계 묶음이다 */
+export interface CaptureTile {
+  no: number;
+  label: string;
+  /** 묶음 첫 단계의 순번 */
+  first: number;
+  /** 사진을 보여 줄 단계. 묶음에서 사진을 남긴 마지막 단계, 없으면 마지막 단계 */
+  row: ReportRow;
+}
+
+/** 단계 사진은 묶음마다 한 장이라 묶음 단위로 보여 준다 */
+export function captureTiles(rows: readonly ReportRow[]): CaptureTile[] {
+  return groupSteps(rows).map((g, i) => {
+    const inGroup = rows.slice(g.start, g.end).reverse();
+    return {
+      no: i + 1,
+      label: g.label,
+      first: g.start,
+      row: inGroup.find((r) => r.photo !== "none") ?? inGroup[0],
     };
   });
 }

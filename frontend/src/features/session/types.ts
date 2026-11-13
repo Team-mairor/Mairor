@@ -1,5 +1,5 @@
 // 단계·제품·리포트를 화면끼리 주고받는 모양. API가 붙으면 lib/api/types와 맞춘다
-import type { Makeup } from "@/features/guide";
+import type { Makeup, MatchCategory } from "@/features/guide";
 import type { PouchCat } from "@/features/pouch";
 
 import type { ReportStep } from "./matching";
@@ -97,6 +97,8 @@ export interface GuideReport {
 export interface GuideReportStep {
   stepId: string;
   title: string;
+  /** 단계 사진을 묶는 부위. 이전에 저장한 기록에는 없고, 없으면 단계마다 따로 본다 */
+  category?: MatchCategory | null;
   summary: string | null;
   /** 영상 제품 이름·호수 그대로 */
   ref: { name: string | null; shade: string | null } | null;

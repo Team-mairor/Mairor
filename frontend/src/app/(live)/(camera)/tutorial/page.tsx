@@ -5,9 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
 import { pickOf } from "@/features/check";
-import { useHiddenVideo } from "@/features/face";
+import { useHiddenVideo, type RegionName } from "@/features/face";
 import {
+  categoryOfPart,
   checkGuideArea,
+  groupIndexOf,
+  groupSteps,
   TutorialViewport,
   loadDefaultGuideSet,
   loadGuideArea,
@@ -20,6 +23,7 @@ import {
   type GuideModel,
   type GuideSet,
   type Makeup,
+  type MatchCategory,
 } from "@/features/guide";
 import {
   abandonExecution,
@@ -59,6 +63,8 @@ import { MOCK_GUIDE_AREA_URL } from "@/mocks/mock-guide";
 interface TutorialStep {
   stepId: string;
   makeup: Makeup;
+  /** 상단 바에서 묶는 부위 */
+  category: MatchCategory | null;
   short: string;
   title: string;
   acts: GuideAction[];
@@ -75,6 +81,7 @@ const SAMPLE_STEPS: TutorialStep[] = GUIDE_STEPS.map((s, i) => {
   return {
     stepId: s.stepId,
     makeup: s.makeup,
+    category: categoryOfPart(s.makeup),
     short: s.short,
     title: s.title,
     acts: s.acts,
@@ -98,6 +105,7 @@ function stepsOf(guide: GuideModel): TutorialStep[] {
     return {
       stepId: s.stepId,
       makeup: s.makeup,
+      category: s.matchCategory ?? categoryOfPart(s.makeup),
       short: s.label,
       title: s.label,
       acts: s.actions.length ? s.actions : s.summary ? [{ text: s.summary, tip: null }] : [],
@@ -115,6 +123,20 @@ function stepsOf(guide: GuideModel): TutorialStep[] {
       ref: null,
     };
   });
+}
+
+/** 단계의 가이드 영역 하위 단계. 영역에 없는 단계는 화장 종류의 기본 가이드를 쓴다 */
+function subsOf(s: TutorialStep, area: GuideArea | null) {
+  return withStepTemplate(
+    area?.steps.find((a) => a.stepId === s.stepId)?.subSteps ?? [templateOf(s)],
+    s.short,
+  );
+}
+
+/** 영역을 찾지 못한 단계도 화장 종류의 기본 가이드 부위를 써, 립 단계에서 입이 보일 때 입술을 찍는다 */
+function photoRegionsOf(s: TutorialStep, area: GuideArea | null, defaults: GuideSet | null) {
+  const drawn = resolveStep(s.stepId, subsOf(s, area), defaults)?.regions ?? [];
+  return drawn.length ? drawn : (resolveStep(s.stepId, [templateOf(s)], defaults)?.regions ?? []);
 }
 
 /**
@@ -206,7 +228,8 @@ function GuideTutorial() {
 }
 
 /**
- * 단계를 넘길 때마다 확인 창 없이 사진을 남긴다. 사진 저장 동의는 필수이고 튜토리얼 안내에서 받는다.
+ * 상단 바는 연속한 같은 부위 단계를 한 칸으로 묶고, 묶음의 마지막 단계를 넘길 때 확인 창 없이 사진을 한 장 남긴다.
+ * 사진 저장 동의는 필수이고 튜토리얼 안내에서 받는다.
  * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. 진하기 측정이 생기면 gauge를 측정값으로 바꾼다.
  */
 function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea | null }) {
@@ -253,6 +276,10 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   useHiddenVideo();
 
   const info = steps[step];
+  const groups = useMemo(() => groupSteps(steps), [steps]);
+  const g = groupIndexOf(groups, step);
+  const group = groups[g];
+  const groupLast = step === group.end - 1;
   // 샘플은 내 파우치와 맞춰 본다. 가이드 조회 응답은 아직 맞춰 보지 않아(제품 매칭 전) null
   const pr = info.ref ? matchFor(info.ref, run, state.pouch) : null;
   // 실제 가이드의 선택은 표시만 하고 촬영·게이지 판단에는 쓰지 않는다
@@ -263,33 +290,26 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 진하기 기준이 있고 제품을 쓰는 단계만 게이지를 띄운다
   const target = hasProduct ? info.target : null;
   const last = step >= steps.length - 1;
-  // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다.
-  // 영역에 없는 단계는 화장 종류의 기본 가이드를 쓰고, 그릴 것이 없으면 설명만 보여 준다
-  const subs = useMemo(
-    () =>
-      withStepTemplate(
-        area?.steps.find((s) => s.stepId === info.stepId)?.subSteps ?? [templateOf(info)],
-        info.short,
-      ),
-    [area, info],
-  );
+  // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다. 그릴 것이 없으면 설명만 보여 준다
+  const subs = useMemo(() => subsOf(info, area), [area, info]);
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
   const guideStep = useMemo(
     () => resolveStep(info.stepId, subs, defaults),
     [info.stepId, subs, defaults],
   );
-  // 단계 사진을 기다리고 확대할 부위. 영역을 찾지 못한 단계도 화장 종류의 기본 가이드 부위를 써,
-  // 립 단계에서 입이 보일 때 입술을 찍는다. 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
+  // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
+  // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
   const photoRegions = useMemo(
-    () =>
-      guideStep?.regions.length
-        ? guideStep.regions
-        : (resolveStep(info.stepId, [templateOf(info)], defaults)?.regions ?? []),
-    [guideStep, info, defaults],
+    () => [
+      ...new Set<RegionName>(
+        steps.slice(group.start, group.end).flatMap((s) => photoRegionsOf(s, area, defaults)),
+      ),
+    ],
+    [steps, group.start, group.end, area, defaults],
   );
-  // 촬영 기록이 아니라 실제로 남은 사진으로 상단 단계 바의 이동 범위를 정한다
+  // 촬영 기록이 아니라 실제로 남은 사진으로 상단 바의 이동 범위를 정한다. 사진은 묶음 마지막 단계에 있다
   const reachable = reachableStep(
-    steps.map((s) => s.stepId),
+    groups.map((x) => steps[x.end - 1].stepId),
     (id) => !!stepPhoto(run.id, id),
   );
   // 가이드가 있는 단계는 지금 단계 부위의 판정(놓침·고개 돌림·잘림·너무 멂)으로 안내하고 측정을 멈춘다
@@ -418,6 +438,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const gaugeLabel =
     gv > 62 ? "레퍼런스보다 진해요" : gv < 45 ? "레퍼런스보다 연해요" : "레퍼런스와 비슷해요";
   const lastAct = !paced || act >= info.acts.length - 1;
+  // 사진은 묶음 마지막 단계에서만 찍으므로, 촬영 부위를 다시 불러오는 것도 그 단계에서만 한다
+  const reloadRegions = groupLast && defaultsFailed && photoRegions.length === 0;
+  // 묶음 안 위치. 한 단계뿐인 묶음이면 띄우지 않는다
+  const groupSize = group.end - group.start;
+  const groupDetail =
+    groupSize > 1 ? `${group.label} ${step - group.start + 1}/${groupSize}` : null;
   // 화면에 띄우고 읽어 줄 동작. 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
   const shownActs = paced ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
 
@@ -435,7 +461,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setReady(!prep);
     setGauge(10);
   }
-  // 모든 단계(제품 없는 단계·생략한 단계 포함)를 넘길 때 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
+  // 모든 묶음(제품 없는 단계·생략한 단계 포함)의 끝에서 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
   const next = () => {
     if (countdownActive.current) return cancelCountdown();
     if (shot.shooting || shot.saving || paused) return;
@@ -443,7 +469,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       setAct((a) => a + 1);
       return;
     }
-    if (photoRegions.length === 0 && defaultsFailed) {
+    if (!groupLast) return goStep(step + 1);
+    if (reloadRegions) {
       setDefaultsFailed(false);
       return loadDefaults();
     }
@@ -472,7 +499,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         ? "화면에 보이면 찍어요"
         : shot.state === "waiting"
           ? "잠시 멈춰 주세요…"
-          : lastAct && defaultsFailed && photoRegions.length === 0
+          : lastAct && reloadRegions
             ? "다시 불러오기"
             : shot.state === "failed"
               ? "다시 찍기"
@@ -507,8 +534,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       )}
 
       <TutorialTopBar
-        steps={steps}
-        step={step}
+        groups={groups}
+        group={g}
         onExit={() => {
           // 촬영을 기다리는 중에 나가기 창을 열면 뒤에서 단계가 넘어가지 않게 대기를 접는다
           cancelCountdown();
@@ -516,7 +543,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           setExitAsk(true);
         }}
         reachable={shot.saving ? -1 : reachable}
-        onGoStep={(i) => !shot.saving && i <= reachable && goStep(i, i > step)}
+        onGoGroup={(i) => !shot.saving && i <= reachable && goStep(groups[i].start, i > g)}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
       {/* 영상 제품 정보가 없어도 고른 제품이 있으면 보여 준다 */}
@@ -534,9 +561,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       <div className="relative flex flex-col gap-3.5 px-7 pt-2 pb-[18px]">
         <div className="flex items-end gap-3">
           <span className="shrink-0 font-serif text-[34px] leading-[.9] text-blush italic tabular">
-            {String(step + 1).padStart(2, "0")}
+            {String(g + 1).padStart(2, "0")}
           </span>
           <h1 className="font-display text-[26px] leading-[1.15] text-white">{info.title}</h1>
+          {groupDetail && (
+            <span className="shrink-0 text-[15px] text-line-2 tabular">{groupDetail}</span>
+          )}
           {paced && info.acts.length > 1 && (
             <span className="shrink-0 text-[15px] text-line-2 tabular">
               할 일 {act + 1}/{info.acts.length}
@@ -587,7 +617,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
             사진을 저장하고 있어요. 잠시만 기다려 주세요.
           </p>
         )}
-        {defaultsFailed && photoRegions.length === 0 && (
+        {reloadRegions && (
           <p
             role="alert"
             className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
@@ -595,7 +625,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
             촬영할 부위 정보를 불러오지 못했어요. 인터넷 연결을 확인한 뒤 다시 불러와 주세요.
           </p>
         )}
-        {shot.state === "failed" && !(defaultsFailed && photoRegions.length === 0) && (
+        {shot.state === "failed" && !reloadRegions && (
           <p
             role="alert"
             className="rounded-[18px] bg-white/90 px-5 py-3 text-[17px] font-bold text-error"
@@ -645,8 +675,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
       {!ready && (
         <PrepCard
-          step={step}
-          total={steps.length}
+          step={g}
+          total={groups.length}
+          detail={groupDetail ?? undefined}
           info={info}
           refProduct={info.product}
           match={pr}

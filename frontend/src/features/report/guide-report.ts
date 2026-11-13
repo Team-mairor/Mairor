@@ -1,5 +1,5 @@
 import { pickOf } from "@/features/check";
-import type { GuideModel } from "@/features/guide";
+import { categoryOfPart, type GuideModel } from "@/features/guide";
 import type { PouchItem } from "@/features/pouch";
 import type { GuideReport, ReportSummary, RunState } from "@/features/session";
 
@@ -23,6 +23,7 @@ export function buildGuideReport(
       return {
         stepId: s.stepId,
         title: s.label,
+        category: s.matchCategory ?? categoryOfPart(s.makeup),
         summary: s.summary ?? s.actions[0]?.text ?? null,
         ref: s.product ? { ...s.product } : null,
         pick: pick.kind,

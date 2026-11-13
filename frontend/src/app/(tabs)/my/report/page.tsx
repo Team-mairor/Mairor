@@ -5,7 +5,9 @@ import { useEffect, useState, type ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
+import { categoryOfPart } from "@/features/guide";
 import {
+  captureTiles,
   deleteReport,
   fromRecord,
   guideReportRows,
@@ -95,6 +97,7 @@ function sampleRows(
     return {
       no: i + 1,
       title: x.title,
+      category: categoryOfPart(x.makeup),
       guide: x.guide,
       ref: `${r.brand} ${r.name}`,
       usedKind:
@@ -151,6 +154,9 @@ export default function ReportPage() {
     state.loggedIn && !missing && (!sessionChecked || remote.load.status === "loading");
 
   const steps = rep?.guide ? guideReportRows(rep.guide, rep.runId) : sampleRows(rep, state);
+  const tiles = captureTiles(steps);
+  // 부위를 아는 묶음의 첫 단계 앞에 부위 이름을 띄운다
+  const heads = new Map(tiles.filter((t) => t.row.category).map((t) => [t.first, t.label]));
   // 최종 사진: 샘플 기록은 있음으로 본다. 실행으로 만든 기록은 마지막 단계 사진
   const hasFinal = !!rep && !rep.noPhoto && (rep.finalPhoto ?? true);
   const last = steps.at(-1);
@@ -282,15 +288,15 @@ export default function ReportPage() {
             </div>
             {expanded && (
               <div className="grid grid-cols-4 gap-2.5">
-                {steps.map((c) => (
-                  <div key={c.no} className="flex flex-col gap-1.5">
+                {tiles.map((t) => (
+                  <div key={t.no} className="flex flex-col gap-1.5">
                     <div className="relative aspect-square overflow-hidden rounded-[14px] border border-line">
-                      <StepPhoto row={c} url={c.photoUrl} />
+                      <StepPhoto row={t.row} url={t.row.photoUrl} />
                       <span className="absolute top-2 left-2 rounded-full bg-white px-2 py-[3px] font-serif text-[18px] text-ink">
-                        {c.no}
+                        {t.no}
                       </span>
                     </div>
-                    <span className="text-[16px] text-ink">{c.title}</span>
+                    <span className="text-[16px] text-ink">{t.label}</span>
                   </div>
                 ))}
               </div>
@@ -303,24 +309,28 @@ export default function ReportPage() {
             <span className="font-serif text-[26px] leading-none text-ink italic">Step guide</span>
             <span className="text-[16px] text-mute">순서 · 레퍼런스 제품 / 내가 쓴 제품</span>
           </div>
-          {steps.map((c) => (
-            <div
-              key={c.no}
-              className="grid grid-cols-[40px_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] items-start gap-3.5 border-t border-line py-3.5"
-            >
-              <span className="font-serif text-[26px] leading-none text-navy">{c.no}</span>
-              <span className="flex flex-col gap-1">
-                <span className="font-display text-[17px] text-ink">{c.title}</span>
-                <span className="text-[16px] leading-[1.45] text-mute">{c.guide}</span>
-              </span>
-              <span className="flex flex-col gap-[3px] text-[16px]">
-                <span className="text-mute">레퍼런스</span>
-                <span className="font-semibold text-ink">{c.ref}</span>
-              </span>
-              <span className="flex flex-col gap-[3px] text-[16px]">
-                <span className="text-mute">{c.usedKind}</span>
-                <span className="font-semibold text-ink">{c.used}</span>
-              </span>
+          {steps.map((c, i) => (
+            <div key={c.no} className="flex flex-col">
+              {heads.has(i) && (
+                <span className="border-t border-line pt-4 pb-1 text-[16px] font-bold text-navy">
+                  {heads.get(i)}
+                </span>
+              )}
+              <div className="grid grid-cols-[40px_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] items-start gap-3.5 border-t border-line py-3.5">
+                <span className="font-serif text-[26px] leading-none text-navy">{c.no}</span>
+                <span className="flex flex-col gap-1">
+                  <span className="font-display text-[17px] text-ink">{c.title}</span>
+                  <span className="text-[16px] leading-[1.45] text-mute">{c.guide}</span>
+                </span>
+                <span className="flex flex-col gap-[3px] text-[16px]">
+                  <span className="text-mute">레퍼런스</span>
+                  <span className="font-semibold text-ink">{c.ref}</span>
+                </span>
+                <span className="flex flex-col gap-[3px] text-[16px]">
+                  <span className="text-mute">{c.usedKind}</span>
+                  <span className="font-semibold text-ink">{c.used}</span>
+                </span>
+              </div>
             </div>
           ))}
         </section>
