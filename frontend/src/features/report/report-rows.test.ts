@@ -81,7 +81,11 @@ describe("guideReportRows", () => {
   });
 });
 
-const row = (no: number, category: ReportRow["category"], photo: "none" | "slot"): ReportRow => ({
+const row = (
+  no: number,
+  category: ReportRow["category"],
+  photo: "none" | "slot" | "sample",
+): ReportRow => ({
   no,
   title: `단계 ${no}`,
   category,
@@ -100,10 +104,29 @@ describe("captureTiles", () => {
       row(3, "BASE", "none"),
       row(4, "LIP", "none"),
     ]);
-    expect(tiles.map((t) => [t.no, t.label, t.first, t.row.no])).toEqual([
-      [1, "피부", 0, 2],
-      [2, "입술", 3, 4],
+    expect(tiles.map((t) => [t.no, t.label, t.row.no])).toEqual([
+      [1, "피부", 2],
+      [2, "입술", 4],
     ]);
+  });
+
+  it("찍은 사진이 여러 장인 묶음은 단계마다 찍던 이전 기록이라 사진마다 한 칸이다", () => {
+    const tiles = captureTiles([
+      row(1, "BASE", "slot"),
+      row(2, "BASE", "none"),
+      row(3, "BASE", "slot"),
+      row(4, "LIP", "slot"),
+    ]);
+    expect(tiles.map((t) => [t.no, t.label, t.row.no])).toEqual([
+      [1, "단계 1", 1],
+      [2, "단계 3", 3],
+      [3, "입술", 4],
+    ]);
+  });
+
+  it("샘플 사진만 있는 묶음은 그대로 한 칸이다", () => {
+    const tiles = captureTiles([row(1, "BASE", "sample"), row(2, "BASE", "sample")]);
+    expect(tiles.map((t) => [t.label, t.row.no])).toEqual([["피부", 2]]);
   });
 
   it("부위를 모르는 이전 기록은 단계마다 한 칸이다", () => {

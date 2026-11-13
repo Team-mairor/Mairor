@@ -47,25 +47,28 @@ export function guideReportRows(report: GuideReport, runId?: string): ReportRow[
   });
 }
 
-/** 리포트의 단계 사진 칸 하나. 연속한 같은 부위 단계 묶음이다 */
+/** 리포트의 단계 사진 칸 하나. 보통은 연속한 같은 부위 단계 묶음이다 */
 export interface CaptureTile {
   no: number;
   label: string;
-  /** 묶음 첫 단계의 순번 */
-  first: number;
   /** 사진을 보여 줄 단계. 묶음에서 사진을 남긴 마지막 단계, 없으면 마지막 단계 */
   row: ReportRow;
 }
 
-/** 단계 사진은 묶음마다 한 장이라 묶음 단위로 보여 준다 */
+const taken = (r: ReportRow) => r.photo === "shot" || r.photo === "slot";
+
+/**
+ * 단계 사진은 묶음마다 한 장이라 묶음 단위로 보여 준다.
+ * 찍은 사진이 여러 장인 묶음은 단계마다 찍던 이전 기록이라 사진마다 한 칸으로 나눈다
+ */
 export function captureTiles(rows: readonly ReportRow[]): CaptureTile[] {
-  return groupSteps(rows).map((g, i) => {
-    const inGroup = rows.slice(g.start, g.end).reverse();
-    return {
-      no: i + 1,
-      label: g.label,
-      first: g.start,
-      row: inGroup.find((r) => r.photo !== "none") ?? inGroup[0],
-    };
-  });
+  return groupSteps(rows)
+    .flatMap((g) => {
+      const inGroup = rows.slice(g.start, g.end);
+      const shots = inGroup.filter(taken);
+      if (shots.length > 1) return shots.map((r) => ({ label: r.title, row: r }));
+      const last = [...inGroup].reverse();
+      return [{ label: g.label, row: shots[0] ?? last.find((r) => r.photo !== "none") ?? last[0] }];
+    })
+    .map((t, i) => ({ no: i + 1, ...t }));
 }

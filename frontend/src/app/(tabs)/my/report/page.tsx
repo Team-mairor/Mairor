@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
-import { categoryOfPart } from "@/features/guide";
+import { categoryOfPart, groupSteps } from "@/features/guide";
 import {
   captureTiles,
   deleteReport,
@@ -156,7 +156,11 @@ export default function ReportPage() {
   const steps = rep?.guide ? guideReportRows(rep.guide, rep.runId) : sampleRows(rep, state);
   const tiles = captureTiles(steps);
   // 부위를 아는 묶음의 첫 단계 앞에 부위 이름을 띄운다
-  const heads = new Map(tiles.filter((t) => t.row.category).map((t) => [t.first, t.label]));
+  const heads = new Map(
+    groupSteps(steps)
+      .filter((g) => g.category)
+      .map((g) => [g.start, g.label]),
+  );
   // 최종 사진: 샘플 기록은 있음으로 본다. 실행으로 만든 기록은 마지막 단계 사진
   const hasFinal = !!rep && !rep.noPhoto && (rep.finalPhoto ?? true);
   const last = steps.at(-1);
