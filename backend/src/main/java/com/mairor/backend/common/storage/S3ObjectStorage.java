@@ -6,13 +6,20 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -79,6 +86,46 @@ public class S3ObjectStorage implements ObjectStorage, AutoCloseable {
       // 같은 정리 요청이 반복돼도 이미 없는 객체는 삭제 완료다.
     } catch (SdkException e) {
       throw new StorageException("S3 객체를 삭제하지 못했습니다", e);
+    }
+  }
+
+  /** 목록 한 쪽(최대 1,000개)씩 받아 한 번에 지운다. 지우면서 다음 쪽 토큰으로 넘어가도 키 순서라 빠지지 않는다. */
+  @Override
+  public int deletePrefix(String prefix) {
+    ObjectStorage.requireFolderPrefix(prefix);
+    int deleted = 0;
+    String token = null;
+    try {
+      do {
+        ListObjectsV2Response page =
+            client.listObjectsV2(
+                ListObjectsV2Request.builder()
+                    .bucket(bucket)
+                    .prefix(prefix)
+                    .continuationToken(token)
+                    .build());
+        List<ObjectIdentifier> objects =
+            page.contents().stream()
+                .map(o -> ObjectIdentifier.builder().key(o.key()).build())
+                .toList();
+        if (!objects.isEmpty()) {
+          DeleteObjectsResponse result =
+              client.deleteObjects(
+                  DeleteObjectsRequest.builder()
+                      .bucket(bucket)
+                      .delete(Delete.builder().objects(objects).quiet(true).build())
+                      .build());
+          if (result.hasErrors() && !result.errors().isEmpty()) {
+            throw new StorageException(
+                "S3 객체 " + result.errors().size() + "개를 지우지 못했습니다: " + prefix, null);
+          }
+          deleted += objects.size();
+        }
+        token = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
+      } while (token != null);
+      return deleted;
+    } catch (SdkException e) {
+      throw new StorageException("S3 객체를 지우지 못했습니다: " + prefix, e);
     }
   }
 

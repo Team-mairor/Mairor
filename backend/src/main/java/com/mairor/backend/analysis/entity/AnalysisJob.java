@@ -386,6 +386,20 @@ public class AnalysisJob {
     }
   }
 
+  /**
+   * 노트북이 올린 결과 파일(요청 JSON · 프레임)을 지웠다(S15P31A306-407). 다시 시도하면 가이드 단계가 아니라 처음(대기열)부터 돌게 한다. 실패한
+   * 작업에만 쓴다.
+   *
+   * @return 지울 수 있으면 true(아직 실패 상태). 그사이 다시 시도해 실패가 아니면 false 이고 아무것도 바꾸지 않는다
+   */
+  public boolean forgetProcessorOutput() {
+    if (status != AnalysisStatus.FAILED) {
+      return false;
+    }
+    this.processorRequestKey = null;
+    return true;
+  }
+
   /** worker 가 처리 중에 죽었다. 다시 기동할 때 대기열로 돌린다. RUNNING 일 때만. */
   public void requeueAfterCrash() {
     requireStatus(AnalysisStatus.RUNNING, "재시작 복구");

@@ -18,7 +18,7 @@ class WorkerSchedulingConfig {
 
   /**
    * 오래 도는 것은 대기 작업 처리({@link AnalysisWorker#poll()}) 하나다. 나머지 주기 작업(AI 콜백 감시, 카탈로그 적재 감시, 노트북 결과
-   * 제출)은 짧아 두 번째 스레드를 나눠 써도 서로 오래 막지 않는다.
+   * 제출, 하루 한 번 저장소 · 영상 메타 정리)은 짧아 두 번째 스레드를 나눠 써도 서로 오래 막지 않는다.
    */
   static final int POOL_SIZE = 2;
 

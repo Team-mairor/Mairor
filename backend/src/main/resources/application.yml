@@ -244,6 +244,14 @@ app:
       reconcile-interval: 30s
       listen-poll-timeout: 10s
       listen-retry-max: 30s
+  maintenance:
+    # 하루 한 번 운영 정리(worker, S15P31A306-407). 끝난 작업의 노트북 파일(videos/<영상>/jobs/<작업>/)을 남겨 두는 기간,
+    # 지울 작업을 찾는 창(이만큼 전까지 끝난 작업), 영상 메타를 다시 받는 간격(YouTube 정책 30일 안, ADR-002), 한 번에 받는 영상 수
+    cron: ${MAINTENANCE_CRON:0 30 4 * * *}
+    job-files-keep: ${MAINTENANCE_JOB_FILES_KEEP:7d}
+    job-files-lookback: 30d
+    meta-refresh-after: ${MAINTENANCE_META_REFRESH_AFTER:25d}
+    meta-refresh-batch: 200
   youtube:
     # 영상 검색 · 선택(API-VIDEO-004 · 001). 비우면 검색 503 · 선택 502 로 실패한다(앱은 뜬다). 운영은 Parameter Store YOUTUBE_API_KEY
     api-key: ${YOUTUBE_API_KEY:}

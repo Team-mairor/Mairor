@@ -69,4 +69,31 @@ class LocalObjectStorageTest {
     assertThatThrownBy(() -> storage.exists("../secret.txt"))
         .isInstanceOf(IllegalArgumentException.class);
   }
+
+  @Test
+  void deletePrefixRemovesTheWholeFolderAndOnlyThatFolder() throws IOException {
+    LocalObjectStorage storage = new LocalObjectStorage(root);
+    Path job = root.resolve("videos/v1/jobs/j1");
+    Files.createDirectories(job.resolve("frames/step_01"));
+    Files.writeString(job.resolve("frames/step_01/frame_000060.jpg"), "a");
+    Files.writeString(job.resolve("guide_job_request.json"), "{}");
+    Files.writeString(root.resolve("videos/v1/source.mp4"), "video");
+
+    assertThat(storage.deletePrefix("videos/v1/jobs/j1/")).isEqualTo(2);
+    assertThat(job).doesNotExist();
+    assertThat(root.resolve("videos/v1/source.mp4")).exists();
+    assertThat(storage.deletePrefix("videos/v1/jobs/j1/")).as("다시 지워도 성공").isZero();
+  }
+
+  @Test
+  void deletePrefixRefusesPrefixesThatCouldMeanEverything() {
+    LocalObjectStorage storage = new LocalObjectStorage(root);
+    assertThatThrownBy(() -> storage.deletePrefix("")).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> storage.deletePrefix("videos"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> storage.deletePrefix("/"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> storage.deletePrefix("../outside/"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
 }

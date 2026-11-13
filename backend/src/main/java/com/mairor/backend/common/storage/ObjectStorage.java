@@ -36,6 +36,26 @@ public interface ObjectStorage {
   void delete(String key);
 
   /**
+   * 키가 {@code prefix}로 시작하는 객체를 모두 지운다(폴더 지우기). 없으면 0 이다. 버킷 전체를 지우는 실수를 막으려고 {@code prefix}는 비지 않고
+   * {@code /}로 끝나야 한다(S15P31A306-407).
+   *
+   * @return 지운 객체 수
+   * @throws IllegalArgumentException prefix 가 비었거나 {@code /}로 끝나지 않으면
+   * @throws StorageException 저장소에 닿지 못하면
+   */
+  default int deletePrefix(String prefix) {
+    throw new UnsupportedOperationException("이 저장소는 접두사 삭제를 지원하지 않습니다.");
+  }
+
+  /** {@link #deletePrefix}에 넘길 수 있는 접두사인지 본다. */
+  static String requireFolderPrefix(String prefix) {
+    if (prefix == null || prefix.isBlank() || !prefix.endsWith("/") || prefix.startsWith("/")) {
+      throw new IllegalArgumentException("지울 접두사는 비지 않고 / 로 끝나야 합니다: " + prefix);
+    }
+    return prefix;
+  }
+
+  /**
    * 로그인 없이 내려받을 수 있는 주소. S3 는 사전 서명 URL, 로컬은 {@code file:} URI 다.
    *
    * <p>S3 사전 서명 URL 은 서명한 자격 증명이 끝나면 함께 끝난다. 운영 EC2 는 역할의 임시 자격 증명(몇 시간마다 바뀜)이라 {@code ttl}보다 일찍 끝날

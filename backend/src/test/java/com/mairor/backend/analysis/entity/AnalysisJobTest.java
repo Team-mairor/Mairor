@@ -220,6 +220,34 @@ class AnalysisJobTest {
   }
 
   @Test
+  void retryAfterTheNotebookFilesWereCleanedGoesBackToTheQueue() {
+    AnalysisJob job = newJob();
+    job.claimByProcessor(T0, LEASE);
+    job.completeByProcessor("videos/VxAXD6PP76I/jobs/x/guide_job_request.json");
+    job.awaitAi("ai-1", T0);
+    job.fail(AnalysisFailureCode.ANALYSIS_TIMEOUT, null, T1);
+
+    assertThat(job.forgetProcessorOutput()).isTrue();
+    job.retry();
+
+    assertThat(job.getStatus()).isEqualTo(AnalysisStatus.PENDING);
+    assertThat(job.getProgressStage()).isEqualTo(ProgressStage.QUEUED);
+    assertThat(job.getProcessorRequestKey()).isNull();
+    assertThat(job.isClaimableByProcessor(T1)).isTrue();
+  }
+
+  @Test
+  void notebookFilesAreForgottenOnlyForFailedJobs() {
+    AnalysisJob job = newJob();
+    job.claimByProcessor(T0, LEASE);
+    job.completeByProcessor("videos/VxAXD6PP76I/jobs/x/guide_job_request.json");
+
+    assertThat(job.forgetProcessorOutput()).isFalse();
+    assertThat(job.getProcessorRequestKey())
+        .isEqualTo("videos/VxAXD6PP76I/jobs/x/guide_job_request.json");
+  }
+
+  @Test
   void onlyRetryableFailuresCanBeRetried() {
     AnalysisJob pending = newJob();
     assertThatThrownBy(pending::retry).isInstanceOf(IllegalStateException.class);

@@ -101,7 +101,9 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `FACE_REGISTRATION_ORPHAN_CLEANUP_ENABLED` | `true` | 세션이 이미 사라진 미연결 등록의 누락 정리. 테스트 외에는 켠다 |
 | `FACE_REGISTRATION_CLEANUP_INTERVAL` / `FACE_REGISTRATION_CLEANUP_BATCH_SIZE` | `1m` / `50` | 누락 세션 확인 주기와 한 번에 처리할 등록 수. 사진 보관 기한을 뜻하지 않는다 |
 | `ANALYSIS_POLL_INTERVAL` | `5s` | worker 가 대기 작업을 확인하는 간격 |
-| `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지운다 |
+| `ANALYSIS_WORK_DIR` | `<임시 폴더>/mairor-analysis` (prod `/tmp/mairor-analysis`) | worker 가 작업마다 영상·프레임을 잠깐 두는 폴더. 작업이 끝나면 작업별 하위 폴더를 지우고, worker 가 뜰 때 지난 실행이 남긴 것도 비운다 |
+| `MAINTENANCE_CRON` | `0 30 4 * * *` (Asia/Seoul) | worker 의 하루 한 번 정리(저장소 · 영상 메타) 시각. Spring cron(초 분 시 일 월 요일) |
+| `MAINTENANCE_JOB_FILES_KEEP` · `MAINTENANCE_META_REFRESH_AFTER` | `7d` · `25d` | 끝난 작업의 노트북 파일 보관 기간(`job-files-lookback` 30d 보다 짧아야 하고, 어긋나면 기동 실패), 영상 메타를 다시 받는 간격(YouTube 정책 30일 안). 아래 "저장소 · 영상 메타 정리" |
 | `FFPROBE_PATH` | `ffprobe` | ffprobe 실행 파일. 운영 이미지에는 들어 있다. 로컬에서 worker 를 돌리려면 ffmpeg 를 설치한다 |
 | `FFMPEG_PATH` | `ffmpeg` | 프레임 추출(SEGMENTING)의 ffmpeg. 운영 이미지에는 들어 있다. 추출 시간 제한(30분)·동시 업로드 수(8)는 `app.analysis.worker` 기본값 |
 | `AI_BASE_URL` · `AI_CALLBACK_BASE_URL` | 로컬 `http://localhost:8000` · `http://localhost:8080/api` / 운영 `http://ai:8000` · `http://api:8080/api` | AI 서버 주소와 AI 가 콜백을 보낼 BE 주소(context-path 포함). 운영은 `core` 네트워크로 nginx 를 거치지 않는다 |
@@ -543,9 +545,28 @@ ai ── POST api:8080/api/v1/internal/ai/guide-jobs/callback ──▶ guides.
 
 - 로컬: api 를 띄운 채로 두 번째 프로세스를 `./gradlew bootRun --args='--spring.profiles.active=dev,worker --server.port=8081'` 로 띄운다. ffmpeg(ffprobe)가 PATH 에 있어야 한다.
 - 운영: compose 의 `worker` 서비스(같은 이미지, `SPRING_PROFILES_ACTIVE=prod,worker`)는 기본으로 꺼져 있다. 처음 한 번만 EC2 에서 `docker compose --profile worker up -d worker` 로 켠다. 그 뒤로는 배포 스크립트가 떠 있는 worker 를 같이 교체한다(`deploy/deploy.sh`).
-- worker 의 주기 작업(대기 작업 처리 `poll` · AI 콜백 감시 `check`)은 worker 전용 스케줄러(`WorkerSchedulingConfig`, 스레드 2개)에서 돈다. 가상 스레드 설정의 Boot 기본 스케줄러는 fixed-delay 작업을 스레드 하나에서 차례로 돌려, 긴 작업 동안 감시가 멈췄다(S15P31A306-311 추가 작업).
+- worker 의 주기 작업(대기 작업 처리 `poll` · AI 콜백 감시 `check` · 하루 한 번 정리)은 worker 전용 스케줄러(`WorkerSchedulingConfig`, 스레드 2개)에서 돈다. 가상 스레드 설정의 Boot 기본 스케줄러는 fixed-delay 작업을 스레드 하나에서 차례로 돌려, 긴 작업 동안 감시가 멈췄다(S15P31A306-311 추가 작업).
 - **worker 는 하나만 띄운다.** 기동할 때 RUNNING 으로 남은 작업(처리 중에 죽은 작업)을 PENDING 으로 되돌리는데, 둘이면 다른 worker 가 처리 중인 작업까지 되돌린다.
 - 단계 처리기(`AnalysisStepHandler`)는 처음 단계부터 다시 돌아도 같은 결과를 내야 하고, 긴 일(내려받기·외부 호출)을 트랜잭션 안에서 하지 않는다. 처리기가 없는 단계는 건너뛴다.
+
+**저장소 · 영상 메타 정리** (worker, 하루 한 번 04:30 KST, S15P31A306-407)
+
+| 대상 | 경로 | 보관 |
+|---|---|---|
+| 노트북 작업 파일(프레임 · `frames.json` · `guide_job_request.json`) | `videos/<yt>/jobs/<jobId>/` | 작업이 끝나고 7일 |
+| 옛 BE worker 모드 프레임(영상별 공유) | `videos/<yt>/frames/` | 그 영상에 진행 중 작업이 없고 마지막 작업이 끝나고 7일 |
+| 원본 영상 | `videos/<yt>/source.mp4` | 지우지 않는다 |
+| 가이드(설명 · 영역) | DB | 지우지 않는다 |
+| 미완료 멀티파트 조각 | 버킷 전체 | 1일(S3 수명 규칙) |
+| worker 작업 폴더 | `ANALYSIS_WORK_DIR` | 작업이 끝나면 지우고, worker 가 뜰 때 남은 것도 비운다 |
+
+- 저장소 정리(`JobFileCleanup`): 7~30일 전에 끝난(COMPLETED · FAILED) 작업을 매번 다시 찾아 지운다. 이미 지운 곳은 목록이 비어 비용이 거의 없다. 매일 돌아 창이 겹치므로 빠지는 작업은 없고(분석 테이블이 11.03 에 생겨 첫 배포 때도 모든 작업이 창 안), worker 가 23일 넘게 멈추면 그 사이 끝난 작업 파일은 남는다. 지우기 직전에 작업을 잠그고 아직 끝난 상태인지 다시 보아, 그사이 다시 시도한 작업은 건너뛴다. S3 수명 규칙은 경로 가운데(`jobs`)에 와일드카드를 걸 수 없어 코드로 지운다. 프레임은 AI 가 가이드를 만드는 동안과 "가이드 단계부터 다시 시도"에만 쓰고, 공개 가이드는 DB 만 쓴다.
+- 작업 폴더를 지워도 `guides.frames_manifest_key` 는 남긴다. 이 키는 "AI 에 프레임을 보냈다"는 기록이고(AI 콜백 검사는 작업이 AI 를 기다리는 동안 키가 있는지만 본다), 끝난 작업의 `frames.json` 을 다시 읽는 곳은 없다.
+- 재시도 가능 실패 작업은 파일을 지우기 전에 `processor_request_key` 를 비운다. 7일 지나 다시 시도하면 가이드 단계가 아니라 대기열부터 돈다(노트북 · Gemini 를 한 번 더 쓴다).
+- 영상 메타 갱신(`VideoMetaRefresher`): YouTube 값은 30일 안에 다시 받아야 해서(ADR-002) `meta_refreshed_at` 이 25일 지난 영상을 하루 최대 200편, `videos.list` 50개씩(1 unit) 다시 받아 제목 · 채널 · 길이 · 썸네일 · 게시일 · 챕터를 바꾼다. YouTube 오류(할당량 등)면 멈추고 다음 날 이어 한다.
+- YouTube 에 없는 영상(삭제 · 비공개)은 공개 가이드를 내리고(REJECTED) 확인 시각만 남긴다. 재생할 수 없는 영상의 가이드는 쓸 수 없어 한 번 빠지면 바로 내린다. 영상이 다시 공개돼도 자동으로 되돌리지 않고, 회원이 다시 분석을 요청하면(공개 · CC 확인) 새 판이 만들어져 자동 공개된다. 영상 행은 리포트 기록이 참조해 지우지 않고 메타는 마지막 값으로 둔다. CC 라이선스가 바뀐 영상은 내리지 않는다(이미 받은 CC 는 철회되지 않음).
+- 설정 `app.maintenance`: `cron` · `job-files-keep` 7d · `job-files-lookback` 30d(지울 작업을 찾는 창) · `meta-refresh-after` 25d · `meta-refresh-batch` 200. `job-files-keep` 이 `job-files-lookback` 보다 짧지 않으면 기동 실패.
+- 확인: worker 로그 `저장소 정리 jobs=… objects=… sharedFrameVideos=… failed=…` · `영상 메타 갱신 refreshed=… missing=… takenDown=… failed=…` 한 줄씩, 내린 가이드마다 WARN `YouTube 에서 사라진 영상의 공개 가이드를 내림`. Grafana Explore 에서 `{service_name="worker"} |= "저장소 정리"`.
 
 ## 로그 (운영 JSON · 작업 ID, S15P31A306-401)
 

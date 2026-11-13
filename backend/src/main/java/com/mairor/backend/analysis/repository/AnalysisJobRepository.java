@@ -101,4 +101,19 @@ public interface AnalysisJobRepository extends JpaRepository<AnalysisJob, UUID> 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select j from AnalysisJob j where j.aiJobId = :aiJobId")
   Optional<AnalysisJob> lockByAiJobId(@Param("aiJobId") String aiJobId);
+
+  /** {@code from} 이상 {@code to} 미만에 끝난 작업(저장소 정리, S15P31A306-407). 영상 키를 쓰므로 영상을 같이 읽는다. */
+  @Query(
+      "select j from AnalysisJob j join fetch j.video"
+          + " where j.status in :statuses and j.finishedAt >= :from and j.finishedAt < :to")
+  List<AnalysisJob> findFinishedBetween(
+      @Param("statuses") Collection<AnalysisStatus> statuses,
+      @Param("from") Instant from,
+      @Param("to") Instant to);
+
+  /** 영상에 진행 중(PENDING · RUNNING) 작업이 있는가. */
+  boolean existsByVideoIdAndStatusIn(UUID videoId, Collection<AnalysisStatus> statuses);
+
+  /** 영상의 작업 중 {@code since} 이후에 끝난 것이 있는가. */
+  boolean existsByVideoIdAndFinishedAtGreaterThanEqual(UUID videoId, Instant since);
 }

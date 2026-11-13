@@ -6,6 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Stream;
 
 /** 로컬 폴더를 저장소로 쓴다(개발·테스트). 키는 뿌리 폴더 아래 상대 경로이며, 뿌리 밖을 가리키는 키({@code ../})는 거절한다. */
 public class LocalObjectStorage implements ObjectStorage {
@@ -56,6 +59,29 @@ public class LocalObjectStorage implements ObjectStorage {
       Files.deleteIfExists(target);
     } catch (IOException e) {
       throw new StorageException("로컬 객체를 삭제하지 못했습니다", e);
+    }
+  }
+
+  /** 키가 폴더 경로이므로 그 폴더를 통째로 지운다. 지운 파일 수를 돌려준다. */
+  @Override
+  public int deletePrefix(String prefix) {
+    ObjectStorage.requireFolderPrefix(prefix);
+    Path dir = resolve(prefix);
+    if (!Files.isDirectory(dir)) {
+      return 0;
+    }
+    try (Stream<Path> walk = Files.walk(dir)) {
+      List<Path> paths = walk.sorted(Comparator.reverseOrder()).toList();
+      int files = 0;
+      for (Path path : paths) {
+        if (Files.isRegularFile(path)) {
+          files++;
+        }
+        Files.deleteIfExists(path);
+      }
+      return files;
+    } catch (IOException e) {
+      throw new StorageException("로컬 폴더를 지우지 못했습니다: " + prefix, e);
     }
   }
 
