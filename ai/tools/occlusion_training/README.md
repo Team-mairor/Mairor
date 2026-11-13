@@ -27,6 +27,8 @@
 | 검증 | `G4b0bh0X9ko` | 같음 |
 | 시험 | GO지승 `VxAXD6PP76I` | `samples/local_03_seq` |
 
+local_01은 `eFzG30avtOI`, local_02는 `vWhW8hSlL54`와 같은 영상이라 학습 영상은 4개다([학습 영상과 사진](../../../docs/experiments/GUIDE_AREA_TRAIN_FRAMES.md)).
+
 ## 실행 순서
 
 모두 `ai/` 폴더에서 `uv run --no-sync python tools/occlusion_training/<스크립트>`로 돌린다.

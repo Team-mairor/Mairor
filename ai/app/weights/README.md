@@ -28,7 +28,7 @@ AI 서버만 쓰는 학습한 모델 파일이다. 경로는 `app/core/paths.py`
 
 - 출발 가중치: [yakhyo/face-parsing](https://github.com/yakhyo/face-parsing) 릴리스의 `resnet18.pt` (SHA-256 `18c44e06b77e47da86fe2b48fac78e0ccbd0b5241c829f9487ebf7fd4a6389e6`). CelebAMask-HQ의 얼굴 부위 19개로 학습된 BiSeNet이다.
 - 출력 칸을 19개에서 20개로 늘리고(19번 = 가림), 가림 정답지가 있는 사진으로 이어서 학습했다. 고른 결과는 가림 칸 손실 가중치 3, 8번째 에폭이다.
-  - 진짜 사진 721장: 다른 메이크업 영상 5개(local_01, local_02, eWupBVUZ6bM, OubRDaaWGPc, vWhW8hSlL54)의 사진이다. 정답지는 얼굴 테두리 안에서 MediaPipe 셀카 다중 분할이 얼굴 피부가 아니라고 한 픽셀을 가림으로, 나머지 칸은 원본 BiSeNet 결과로 채웠다. 얼굴 위 자막 상자는 가림으로 덧칠했다.
+  - 진짜 사진 721장: 다른 메이크업 영상 4개의 사진이다. 사진 묶음은 5개(local_01, local_02, eWupBVUZ6bM, OubRDaaWGPc, vWhW8hSlL54)인데 local_01은 `eFzG30avtOI`, local_02는 `vWhW8hSlL54`와 같은 영상이다([학습 영상과 사진](../../../docs/experiments/GUIDE_AREA_TRAIN_FRAMES.md)). 정답지는 얼굴 테두리 안에서 MediaPipe 셀카 다중 분할이 얼굴 피부가 아니라고 한 픽셀을 가림으로, 나머지 칸은 원본 BiSeNet 결과로 채웠다. 얼굴 위 자막 상자는 가림으로 덧칠했다.
   - 합성 사진 3,000장: 가림이 없는 사진에 손 조각·그린 도구(펜슬·브러시·뷰러)·자막을 붙이고, 붙인 자리를 정답지에서 가림으로 칠했다.
   - 학습 중 고르기(검증)는 G4b0bh0X9ko 영상과 그 합성 사진으로 했다. 시험 영상 VxAXD6PP76I는 학습·검증에 쓰지 않았다.
 - PyTorch(`torch.onnx.export`, opset 17)로 onnx를 만들었다. 합성 사진 50장에서 PyTorch와 가림 픽셀이 모두 같았다.

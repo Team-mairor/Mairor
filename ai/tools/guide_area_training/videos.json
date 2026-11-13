@@ -1,0 +1,13 @@
+{
+  "testVideoId": "VxAXD6PP76I",
+  "videos": [
+    {"videoId": "eFzG30avtOI", "url": "https://www.youtube.com/watch?v=eFzG30avtOI", "occlusionSplit": "train"},
+    {"videoId": "eWupBVUZ6bM", "url": "https://www.youtube.com/watch?v=eWupBVUZ6bM", "occlusionSplit": "train"},
+    {"videoId": "OubRDaaWGPc", "url": "https://www.youtube.com/watch?v=OubRDaaWGPc", "occlusionSplit": "train"},
+    {"videoId": "vWhW8hSlL54", "url": "https://www.youtube.com/watch?v=vWhW8hSlL54", "occlusionSplit": "train"},
+    {"videoId": "EjYNN1d2A1w", "url": "https://www.youtube.com/watch?v=EjYNN1d2A1w", "occlusionSplit": null},
+    {"videoId": "BJOEa0LjLYw", "url": "https://www.youtube.com/watch?v=BJOEa0LjLYw", "occlusionSplit": null},
+    {"videoId": "tSBaf010odM", "url": "https://www.youtube.com/watch?v=tSBaf010odM", "occlusionSplit": null},
+    {"videoId": "G4b0bh0X9ko", "url": "https://www.youtube.com/watch?v=G4b0bh0X9ko", "occlusionSplit": "validation"}
+  ]
+}
