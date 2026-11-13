@@ -13,12 +13,13 @@ import {
   failText,
   isAbortError,
   type Product,
+  type ProductSuggestion,
   type Shade,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { CAT_CODE, POUCH_CATS, SHADE_COLORS, type PouchCat, type PouchItem } from "./catalog";
-import { draftType, patchDraft, saveBody, toUpdate } from "./draft";
+import { draftType, patchDraft, pickSuggestion, saveBody, suggestQuery, toUpdate } from "./draft";
 import { Illustration } from "./illustration";
 import {
   createPouchItem,
@@ -28,6 +29,7 @@ import {
   searchProduct,
   updatePouchItem,
   useCategories,
+  useProductSuggestions,
 } from "./pouch-api";
 
 export type ProductDraft = Omit<PouchItem, "id"> & { id?: string; custom?: boolean };
@@ -81,6 +83,8 @@ export function ProductSheet({
   const [fail, setFail] = useState<string | null>(null);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const lookupCtl = useRef<AbortController | null>(null);
+  // 제품명 입력칸에 커서가 있는 동안만 후보 목록을 보여 준다
+  const [sugOpen, setSugOpen] = useState(false);
   useEffect(() => () => lookupCtl.current?.abort(), []);
 
   const isEdit = !!f.id;
@@ -108,6 +112,8 @@ export function ProductSheet({
   const guest = !state.loggedIn;
   const canSave = ready && !!type && !dup && !busy && !guest;
   const noColor = custom && !f.color;
+  // 후보는 로그인 뒤에만 받는다. 이미 카탈로그 제품에 연결됐거나 입력이 짧으면 묻지 않는다
+  const suggestions = useProductSuggestions(guest ? null : suggestQuery(f, type));
 
   const patch = (o: Partial<ProductDraft>) => {
     setFail(null);
@@ -152,6 +158,14 @@ export function ProductSheet({
   const toggleShades = () => {
     setShKey(shOpen ? null : key);
     if (!shOpen && !found) findProduct().catch(() => {});
+  };
+
+  const pick = (s: ProductSuggestion) => {
+    setFail(null);
+    setF((p) => pickSuggestion(p, s, codes));
+    setCustom(false);
+    setShKey(null);
+    setSugOpen(false);
   };
 
   const toCustom = () => {
@@ -326,13 +340,41 @@ export function ProductSheet({
           <Label>제품명</Label>
           <input
             value={f.name}
-            onChange={(e) => patch({ name: e.target.value })}
+            onChange={(e) => {
+              patch({ name: e.target.value });
+              setSugOpen(true);
+            }}
+            onFocus={() => setSugOpen(true)}
+            onBlur={() => setSugOpen(false)}
             placeholder="예) 킬커버 파운웨어 쿠션"
             maxLength={200}
+            autoComplete="off"
             className="h-[68px] w-full min-w-0 rounded-[18px] border-2 border-line px-[22px] text-[22px] font-semibold text-ink outline-none focus:border-navy"
           />
         </label>
       </div>
+
+      {sugOpen && suggestions.length > 0 && (
+        <ul
+          aria-label="비슷한 제품"
+          className="-mt-3 flex shrink-0 flex-col overflow-hidden rounded-[18px] border-2 border-line bg-white"
+        >
+          {suggestions.map((s) => (
+            <li key={s.productId}>
+              {/* 입력칸이 포커스를 잃기 전에 고르도록 mousedown 을 막는다 */}
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(s)}
+                className="flex w-full min-w-0 flex-col gap-0.5 px-[22px] py-3 text-left active:bg-line/40"
+              >
+                <span className="truncate text-[17px] font-bold text-ink">{s.name}</span>
+                <span className="truncate text-[14px] text-mute">{s.brand}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {shadeSelectable && (
         <div className="flex flex-col gap-2">

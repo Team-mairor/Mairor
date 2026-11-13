@@ -1,7 +1,7 @@
 # API 명세
 
 <callout icon="📌" color="blue_bg">
-<b>API 명세 v2 — 현행 API 46개 · 기능 45개 대응</b><br /><br />기능 정책은 <a href="feature-spec.md">기능명세서</a>, 화면 순서는 <a href="user-flow.md">최종 유저플로우</a> 기준. API별 요청·응답·오류와 공통 모델의 단일 기준 문서이며, 이 파일이 원본이다. 명세는 구현 완료를 뜻하지 않는다.
+<b>API 명세 v2 — 현행 API 47개 · 기능 45개 대응</b><br /><br />기능 정책은 <a href="feature-spec.md">기능명세서</a>, 화면 순서는 <a href="user-flow.md">최종 유저플로우</a> 기준. API별 요청·응답·오류와 공통 모델의 단일 기준 문서이며, 이 파일이 원본이다. 명세는 구현 완료를 뜻하지 않는다.
 </callout>
 
 ## 0. 구현 규칙 (AI·팀원 공통)
@@ -17,7 +17,7 @@
 
 ## 1. API 요약
 
-현행 API 46개는 모두 P0입니다.
+현행 API 47개는 모두 P0입니다.
 
 공통 경로 Prefix: <code>/api/v1</code> · Endpoint는 공통 Prefix를 포함한 전체 경로입니다. API ID와 기능 ID는 별도 번호 체계입니다(API-USERS-005 등 결번은 재사용 금지).
 
@@ -60,6 +60,7 @@
 | API-POUCH-006 | PATCH /api/v1/users/me/pouch-items/\{pouchItemId\} | POUCH-005 제품 수정 |
 | API-POUCH-007 | DELETE /api/v1/users/me/pouch-items/\{pouchItemId\} | POUCH-006 제품 삭제 |
 | API-POUCH-008 | GET /api/v1/product-categories | POUCH-002 · POUCH-003 · POUCH-004 · RECOMMEND-001 · RECOMMEND-002 |
+| API-POUCH-009 | GET /api/v1/products/suggestions | POUCH-002 제품 찾기 (이름 자동 완성, S15P31A306-530) |
 | API-RECOMMEND-001 | POST /api/v1/users/me/guide-matches | RECOMMEND-001 · RECOMMEND-002 · GUIDE-001 · GUIDE-004 |
 | API-RECOMMEND-002 | GET /api/v1/users/me/guide-matches/\{matchId\} | RECOMMEND-001 · RECOMMEND-002 · GUIDE-001 · GUIDE-004 |
 | API-GUIDE-001 | POST /api/v1/users/me/executions | GUIDE-001 · GUIDE-003 · GUIDE-004 · GUIDE-011 · CAMERA-005 · REPORT-005 |
@@ -306,6 +307,19 @@ API-POUCH-002 · GET /api/v1/products/\{productId\}
 - <b>색 칸</b>: 응답 모양은 API-POUCH-001과 같고 호수마다 colors(ShadeColor\[\])를 준다.
 - shades=\[\]는 등록된 호수 정보 없음. 임의 호수·색상 생성 금지. 실제 피부 발색 보장 안 함.
 - productId가 UUID 형식이 아니면 400 VALIDATION\_FAILED(field=productId). 응답은 API-POUCH-001 검색 결과 항목과 같은 모양이다. FE 등록 흐름은 검색만 쓰며, 이 API는 저장된 productId로 호수를 다시 띄울 때(예: CATALOG 파우치 항목 수정) 쓸 수 있다.
+</toggle>
+
+<toggle>
+API-POUCH-009 · GET /api/v1/products/suggestions
+
+관련 기능: POUCH-002 제품 찾기 (S15P31A306-530)
+
+- 회원 GET. Query q:string 필수(앞뒤 공백 제거 뒤 1\~50자)·category:string·type:string 선택·limit:int 선택(기본 8, 1\~15). category/type은 있으면 그 분류 제품만 찾고, 없는 코드면 오류 없이 빈 목록이다.
+- 200 \{items:ProductSuggestion\[\]\}. ProductSuggestion = \{productId·brand·name·category·type\}(호수·색은 싣지 않는다. 고른 뒤 API-POUCH-002로 받는다). 없으면 \{items:\[\]\}.
+- <b>일치 규칙</b>: 대소문자·공백을 무시하고 브랜드+제품명에서 부분 일치를 본다. 공백으로 나눈 단어가 모두 들어 있어야 하고, 단어는 앞에서 6개까지 본다. 입력에서 공백을 뺀 길이가 2자 미만이면 빈 목록이다. 회원이 쓴 이름의 별칭(API-POUCH-001 로컬 수정 -517)도 보며, 별칭 한 건이 모든 단어를 만족할 때만 후보가 된다.
+- <b>정렬</b>: 제품명이 입력으로 시작하는 제품 → 짧은 제품명 → 제품명 순. 서버가 DB에서 이 순서로 정해 후보가 많아도 앞쪽 후보가 남는다. 호수·색이 없는 제품도 후보다.
+- 400 VALIDATION\_FAILED(q 누락·51자 이상, limit 범위 밖). 401 로그인 필요.
+- FE는 입력 지연(디바운스)과 이전 요청 취소로 호출하고, 후보를 고르지 않으면 기존 직접 입력 흐름을 그대로 쓴다.
 </toggle>
 
 <toggle>

@@ -94,6 +94,28 @@ final class ProductApiDocs {
       """
       {"items": []}""";
 
+  /** 제품 후보 검색 성공 응답. */
+  static final String PRODUCT_SUGGEST =
+      """
+      {
+        "items": [
+          {
+            "productId": "00000000-0000-4000-8000-000000000101",
+            "brand": "롬앤",
+            "name": "블러 퍼지 틴트 #오리지널",
+            "category": "LIP",
+            "type": "LIP_TINT"
+          },
+          {
+            "productId": "00000000-0000-4000-8000-000000000102",
+            "brand": "롬앤",
+            "name": "블러 퍼지 틴트 #블랙스펙트럼",
+            "category": "LIP",
+            "type": "LIP_TINT"
+          }
+        ]
+      }""";
+
   /** 제품 상세 성공 응답. */
   static final String PRODUCT_DETAIL = PRODUCT;
 

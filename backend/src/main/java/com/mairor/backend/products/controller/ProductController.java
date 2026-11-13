@@ -3,9 +3,12 @@ package com.mairor.backend.products.controller;
 import com.mairor.backend.common.error.ErrorResponse;
 import com.mairor.backend.common.web.OpenApiConfig;
 import com.mairor.backend.products.dto.request.ProductSearchQuery;
+import com.mairor.backend.products.dto.request.ProductSuggestQuery;
 import com.mairor.backend.products.dto.response.ProductListResponse;
 import com.mairor.backend.products.dto.response.ProductResponse;
+import com.mairor.backend.products.dto.response.ProductSuggestionListResponse;
 import com.mairor.backend.products.service.ProductSearchService;
+import com.mairor.backend.products.service.ProductSuggestService;
 import com.mairor.backend.users.controller.AuthApiDocs;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -37,9 +40,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProductController {
 
   private final ProductSearchService productSearchService;
+  private final ProductSuggestService productSuggestService;
 
-  public ProductController(ProductSearchService productSearchService) {
+  public ProductController(
+      ProductSearchService productSearchService, ProductSuggestService productSuggestService) {
     this.productSearchService = productSearchService;
+    this.productSuggestService = productSuggestService;
   }
 
   /** 제품 검색. */
@@ -82,6 +88,40 @@ public class ProductController {
   public ProductListResponse search(
       @Valid @ParameterObject @ModelAttribute ProductSearchQuery query) {
     return new ProductListResponse(productSearchService.search(query));
+  }
+
+  /** 제품 후보 검색(자동 완성). */
+  @Operation(
+      summary = "제품 후보 검색",
+      description =
+          """
+          입력한 말이 이름에 들어 있는 카탈로그 제품을 후보로 찾는다.
+
+          - 공백을 무시하고 브랜드+제품명에서 부분 일치를 본다. 공백으로 나눈 단어는 모두 들어 있어야 한다.
+          - 호수·색이 없는 제품도 나온다. 호수는 고른 뒤 제품 상세로 받는다.
+          - 입력이 2자 미만이면 빈 목록이다.
+          """,
+      security = @SecurityRequirement(name = OpenApiConfig.SESSION_COOKIE))
+  @ApiResponse(
+      responseCode = "200",
+      description = "후보 목록. 없으면 빈 목록이다.",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ProductSuggestionListResponse.class),
+              examples = @ExampleObject(name = "후보 2건", value = ProductApiDocs.PRODUCT_SUGGEST)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "q 가 비었거나 길고, limit 이 범위를 벗어났다. (VALIDATION_FAILED)",
+      content =
+          @Content(
+              mediaType = MediaType.APPLICATION_JSON_VALUE,
+              schema = @Schema(implementation = ErrorResponse.class)))
+  @AuthApiDocs.Unauthorized
+  @GetMapping("/suggestions")
+  public ProductSuggestionListResponse suggest(
+      @Valid @ParameterObject @ModelAttribute ProductSuggestQuery query) {
+    return new ProductSuggestionListResponse(productSuggestService.suggest(query));
   }
 
   /** 제품 상세. */

@@ -246,6 +246,69 @@ class ProductControllerTest {
   }
 
   @Test
+  void suggestions_returnsCandidatesInTheContractShape() throws Exception {
+    mockMvc
+        .perform(get("/v1/products/suggestions").with(member()).queryParam("q", "래스팅"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(1))
+        .andExpect(jsonPath("$.items[0].length()").value(5))
+        .andExpect(jsonPath("$.items[0].productId").value(tint.getId().toString()))
+        .andExpect(jsonPath("$.items[0].brand").value(BRAND))
+        .andExpect(jsonPath("$.items[0].name").value(NAME))
+        .andExpect(jsonPath("$.items[0].category").value("LIP"))
+        .andExpect(jsonPath("$.items[0].type").value("LIP_TINT"))
+        .andExpect(jsonPath("$.items[0].shades").doesNotExist());
+  }
+
+  @Test
+  void suggestions_withoutMatchIsAnEmptyList() throws Exception {
+    mockMvc
+        .perform(get("/v1/products/suggestions").with(member()).queryParam("q", "없는제품"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items.length()").value(0));
+  }
+
+  @Test
+  void suggestions_countsTheQueryLengthWithoutEdgeWhitespace() throws Exception {
+    String fifty = "가".repeat(50);
+    mockMvc
+        .perform(get("/v1/products/suggestions").with(member()).queryParam("q", " " + fifty + " "))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(get("/v1/products/suggestions").with(member()).queryParam("q", fifty + "나"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.details[0].field").value("q"));
+    mockMvc
+        .perform(get("/v1/products/suggestions").with(member()).queryParam("q", "   "))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.details[0].field").value("q"));
+  }
+
+  @Test
+  void suggestions_rejectsMissingQueryAndBadLimit() throws Exception {
+    mockMvc
+        .perform(get("/v1/products/suggestions").with(member()))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+        .andExpect(jsonPath("$.details[0].field").value("q"));
+    mockMvc
+        .perform(
+            get("/v1/products/suggestions")
+                .with(member())
+                .queryParam("q", "틴트")
+                .queryParam("limit", "16"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.details[0].field").value("limit"));
+  }
+
+  @Test
+  void anonymous_isRejectedForSuggestions() throws Exception {
+    mockMvc
+        .perform(get("/v1/products/suggestions").queryParam("q", "틴트"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   void anonymous_isRejectedForSearchAndDetail() throws Exception {
     mockMvc
         .perform(

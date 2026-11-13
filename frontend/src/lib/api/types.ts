@@ -221,6 +221,20 @@ export interface ProductList {
   items: Product[];
 }
 
+/** 제품 후보 한 건 (ProductSuggestionResponse). 호수·색은 없고 고른 뒤 제품 상세로 받는다 */
+export interface ProductSuggestion {
+  productId: string;
+  brand: string;
+  name: string;
+  category: string;
+  type: string;
+}
+
+/** GET /v1/products/suggestions 응답. 이름이 입력과 가까운 순서 */
+export interface ProductSuggestionList {
+  items: ProductSuggestion[];
+}
+
 export interface ProductType {
   code: string;
   label: string;

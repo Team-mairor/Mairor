@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { draftType, patchDraft, saveBody, toUpdate } from "./draft";
+import { draftType, patchDraft, pickSuggestion, saveBody, suggestQuery, toUpdate } from "./draft";
 import { emptyDraft } from "./product-sheet";
 
 const CODES = ["LIP_TINT", "LIPSTICK"];
@@ -108,5 +108,51 @@ describe("saveBody", () => {
     expect(toUpdate(manual)).not.toHaveProperty("registrationMode");
     const catalog = saveBody(linked, "LIP_TINT", "p1", true);
     expect(toUpdate(catalog)).toBe(catalog);
+  });
+});
+
+describe("제품 후보", () => {
+  const sug = {
+    productId: "p9",
+    brand: "롬앤",
+    name: "블러 퍼지 틴트 #오리지널",
+    category: "LIP",
+    type: "LIP_TINT",
+  };
+
+  it("이름이 2자 미만이거나 이미 연결된 입력은 묻지 않는다", () => {
+    const base = emptyDraft({ cat: "립", brand: "롬앤", name: "퍼" });
+    expect(suggestQuery(base, "LIP_TINT")).toBeNull();
+    expect(suggestQuery({ ...base, name: "퍼지" }, "LIP_TINT")).not.toBeNull();
+    expect(suggestQuery({ ...base, name: "퍼지", productId: "p1" }, "LIP_TINT")).toBeNull();
+    expect(suggestQuery({ ...base, name: " 퍼  " }, "LIP_TINT")).toBeNull();
+  });
+
+  it("브랜드를 적었으면 함께 보내고, 분류·종류로 좁힌다", () => {
+    const f = emptyDraft({ cat: "립", brand: " 롬앤 ", name: " 퍼지 " });
+    expect(suggestQuery(f, "LIP_TINT")).toEqual({
+      q: "롬앤 퍼지",
+      category: "LIP",
+      type: "LIP_TINT",
+    });
+    expect(suggestQuery({ ...f, brand: "" }, undefined)).toEqual({ q: "퍼지", category: "LIP" });
+  });
+
+  it("후보를 고르면 브랜드·제품명·종류를 채우고 그 제품에 연결하며 호수는 비운다", () => {
+    const typed = emptyDraft({ cat: "립", brand: "", name: "퍼지", shade: "02", color: "#111111" });
+    expect(pickSuggestion(typed, sug, CODES)).toMatchObject({
+      brand: "롬앤",
+      name: "블러 퍼지 틴트 #오리지널",
+      type: "LIP_TINT",
+      productId: "p9",
+      shadeId: null,
+      shade: "",
+      color: null,
+    });
+  });
+
+  it("목록에 없는 종류는 바꾸지 않는다", () => {
+    const typed = emptyDraft({ cat: "립", type: "LIPSTICK", name: "퍼지" });
+    expect(pickSuggestion(typed, { ...sug, type: "OTHER" }, CODES).type).toBe("LIPSTICK");
   });
 });

@@ -33,7 +33,7 @@ class OpenApiDocsTest {
    * 가이드 매칭 POST·GET, 얼굴 등록 3개, 실행 생성·조회·사진 동의·업로드·바이너리 조회·완료·중도 종료, 리포트 목록·상세·삭제 포함. API 를 추가하면 함께
    * 올린다.
    */
-  private static final int ALL_OPERATIONS = 72;
+  private static final int ALL_OPERATIONS = 73;
 
   @Autowired private MockMvc mockMvc;
 

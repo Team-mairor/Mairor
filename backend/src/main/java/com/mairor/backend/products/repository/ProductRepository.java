@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -111,4 +112,82 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     return findAllByAlias(
         typeCodes, CatalogTextNormalizer.normalize(brand), CatalogTextNormalizer.compact(name));
   }
+
+  /**
+   * 자동 완성 후보(S15P31A306-530): 브랜드+제품명(공백 제거)에 단어 패턴 {@code w1..w6}(LIKE, 이스케이프 문자 {@code !})이
+   * **모두** 들어 있는 제품. 안 쓰는 칸은 {@code %}로 채운다. 카테고리·종류는 {@code null}이면 거르지 않는다.
+   *
+   * <p>정렬은 DB 가 정한다: 제품명이 {@code prefix}로 시작하는 것 → 짧은 제품명 → 제품명 순. 그래서 {@code Pageable}로 잘라도 상위 후보가
+   * 남는다.
+   */
+  @EntityGraph(attributePaths = {"category", "type"})
+  @Query(
+      "select p from Product p where "
+          + SUGGEST_KEY
+          + " like :w1 escape '!' and "
+          + SUGGEST_KEY
+          + " like :w2 escape '!' and "
+          + SUGGEST_KEY
+          + " like :w3 escape '!' and "
+          + SUGGEST_KEY
+          + " like :w4 escape '!' and "
+          + SUGGEST_KEY
+          + " like :w5 escape '!' and "
+          + SUGGEST_KEY
+          + " like :w6 escape '!'"
+          + SUGGEST_FILTER
+          + SUGGEST_ORDER)
+  List<Product> findSuggestions(
+      @Param("w1") String w1,
+      @Param("w2") String w2,
+      @Param("w3") String w3,
+      @Param("w4") String w4,
+      @Param("w5") String w5,
+      @Param("w6") String w6,
+      @Param("prefix") String prefix,
+      @Param("category") String categoryCode,
+      @Param("type") String typeCode,
+      Pageable pageable);
+
+  /**
+   * 별칭(회원이 쓴 이름)의 브랜드+별칭에 단어 패턴이 **모두** 들어 있는 별칭을 가진 제품. 정렬은 {@link #findSuggestions}와 같다. 같은 별칭 행
+   * 하나가 모든 단어를 만족해야 한다.
+   */
+  @EntityGraph(attributePaths = {"category", "type"})
+  @Query(
+      "select p from Product p where p.id in (select a.productId from ProductNameAlias a where "
+          + ALIAS_KEY
+          + " like :w1 escape '!' and "
+          + ALIAS_KEY
+          + " like :w2 escape '!' and "
+          + ALIAS_KEY
+          + " like :w3 escape '!' and "
+          + ALIAS_KEY
+          + " like :w4 escape '!' and "
+          + ALIAS_KEY
+          + " like :w5 escape '!' and "
+          + ALIAS_KEY
+          + " like :w6 escape '!')"
+          + SUGGEST_FILTER
+          + SUGGEST_ORDER)
+  List<Product> findSuggestionsByAlias(
+      @Param("w1") String w1,
+      @Param("w2") String w2,
+      @Param("w3") String w3,
+      @Param("w4") String w4,
+      @Param("w5") String w5,
+      @Param("w6") String w6,
+      @Param("prefix") String prefix,
+      @Param("category") String categoryCode,
+      @Param("type") String typeCode,
+      Pageable pageable);
+
+  String SUGGEST_KEY = "concat(replace(p.brandNormalized, ' ', ''), p.nameCompact)";
+  String ALIAS_KEY = "concat(replace(a.brandNormalized, ' ', ''), a.nameCompact)";
+  String SUGGEST_FILTER =
+      " and (:category is null or p.category.code = :category)"
+          + " and (:type is null or p.type.code = :type)";
+  String SUGGEST_ORDER =
+      " order by case when p.nameCompact like :prefix escape '!' then 0 else 1 end,"
+          + " length(p.nameCompact), p.nameCompact";
 }

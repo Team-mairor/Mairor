@@ -17,6 +17,8 @@ import {
   type ProductCategory,
   type ProductCategoryList,
   type ProductList,
+  type ProductSuggestion,
+  type ProductSuggestionList,
 } from "@/lib/api";
 
 import { catOf, type PouchItem } from "./catalog";
@@ -84,6 +86,50 @@ export async function searchProduct(
 ): Promise<Product | null> {
   const r = await api.get<ProductList>("/v1/products", { query, signal });
   return r.items[0] ?? null;
+}
+
+/** GET /v1/products/suggestions (API-POUCH-009). 이름이 비슷한 제품 후보 */
+export async function suggestProducts(
+  query: { q: string; category?: string; type?: string },
+  signal: AbortSignal,
+): Promise<ProductSuggestion[]> {
+  const r = await api.get<ProductSuggestionList>("/v1/products/suggestions", { query, signal });
+  return r.items;
+}
+
+const SUGGEST_DELAY_MS = 250;
+const NO_SUGGESTIONS: ProductSuggestion[] = [];
+
+/**
+ * 입력하는 동안의 제품 후보. 입력이 멈춘 뒤에 묻고, 새 입력이 오면 지난 요청은 취소한다.
+ * 후보는 도움일 뿐이라 실패하면 조용히 비운다(직접 입력은 그대로 된다)
+ */
+export function useProductSuggestions(
+  query: { q: string; category?: string; type?: string } | null,
+) {
+  const q = query?.q ?? null;
+  const category = query?.category;
+  const type = query?.type;
+  const id = q === null ? null : `${category ?? ""}|${type ?? ""}|${q}`;
+  // 받은 후보는 어떤 입력에 대한 것인지(id)와 함께 둔다. 입력이 바뀌면 지난 후보는 보이지 않는다
+  const [got, setGot] = useState<{ id: string; items: ProductSuggestion[] } | null>(null);
+  useEffect(() => {
+    if (q === null || id === null) return;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => {
+      suggestProducts({ q, category, type }, ctl.signal).then(
+        (items) => setGot({ id, items }),
+        (e: unknown) => {
+          if (!isAbortError(e)) setGot({ id, items: [] });
+        },
+      );
+    }, SUGGEST_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      ctl.abort();
+    };
+  }, [id, q, category, type]);
+  return got && got.id === id ? got.items : NO_SUGGESTIONS;
 }
 
 /** GET /v1/products/{productId} (API-POUCH-002) */
