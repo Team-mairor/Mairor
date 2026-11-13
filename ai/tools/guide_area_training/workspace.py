@@ -18,6 +18,8 @@ sys.path.insert(0, str(AI_ROOT))
 WORK_DIR = Path(os.environ.get("GUIDE_AREA_TRAIN_DIR", HERE / "work"))
 VIDEOS_FILE = HERE / "videos.json"
 SUMMARY_FILE = WORK_DIR / "summary.json"
+LABELS_DIR = WORK_DIR / "labels"
+SPLITS = ("train", "validation", "test")
 
 
 def load_videos() -> list[dict]:
@@ -50,6 +52,16 @@ def sample_dir(video_id: str) -> Path:
 
 def counts_path(video_id: str) -> Path:
     return sample_dir(video_id) / "output" / "photo_counts.json"
+
+
+def labels_dir(split: str, source: str) -> Path:
+    """정답지 폴더. split은 SPLITS, source는 합성(synth)이나 실제 장면(real)이다."""
+    return LABELS_DIR / split / source
+
+
+def video_splits() -> dict[str, str]:
+    """영상 ID → 나눔(train·validation). report.py가 쓴 summary.json의 나눔을 읽는다."""
+    return {video["videoId"]: video["split"] for video in read_json(SUMMARY_FILE)["videos"]}
 
 
 def read_json(path: Path) -> dict:

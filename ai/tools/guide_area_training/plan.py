@@ -8,6 +8,10 @@
   round(fps / 10)의 배수인 것만 뽑아 초당 약 10장이다.
 - 학습에 고르는 사진: 이어 찍은 사진은 거의 같아서 THIN_GAP_MS 안에서는 한 장만 남긴다.
 - 학습·검증 나눔: 같은 사람이 양쪽에 들어가지 않게 채널 단위로 나눈다.
+- 합성 바탕: 그 부위를 바르기 전 시간의 묶음 가운데 다른 분석하는 화장 단계와 겹치지 않는 것만
+  쓴다(bare_ranges). 묶음 하나를 시각 순서로 앞 반·뒤 반으로 나눠(halves) 직전·직후로 쓰고,
+  한쪽에 SYNTH_PHOTOS장까지만 고르게 뽑는다(spread).
+- 합성 수: 부위마다 실제 정답지와 합친 수가 같아지게 채운다(fill_counts).
 """
 
 import math
@@ -19,6 +23,7 @@ JUDGE_MS = 1000
 WINDOW_FPS = 10.0
 THIN_GAP_MS = 2000
 VALIDATION_EVERY = 5
+SYNTH_PHOTOS = 8
 
 
 def boundary_ranges(steps: Sequence[Mapping], margin_ms: int = MARGIN_MS) -> list[dict]:
@@ -139,3 +144,51 @@ def split_videos(
         video["videoId"]: "validation" if channels[video["videoId"]] in held else "train"
         for video in videos
     }
+
+
+def bare_ranges(steps: Sequence[Mapping], makeup: str, margin_ms: int = MARGIN_MS) -> list[dict]:
+    """makeup을 아직 바르지 않은 시간의 묶음(boundary_ranges) 목록. 합성의 바탕으로 쓴다.
+
+    그 화장의 첫 단계가 시작하기 전에 끝나는 묶음만 남긴다. 그 화장 단계가 영상에 없으면
+    그 조건은 없다. 영상 내내 그 부위가 바뀌지 않아서다.
+    다른 분석하는 화장(ANALYZED_MAKEUPS)의 단계 시간과 겹치는 묶음도 뺀다. 묶음 앞 반과 뒤 반
+    사이에 그 화장이 실제로 늘어나는데, 합성 정답은 칠한 자리 말고 모두 안 바름이라서다.
+    분석하지 않는 화장(베이스·마스카라 등) 단계와 겹치는 묶음은 쓴다. 그 화장은 정답의 어느
+    자리도 아니라 안 바름이 맞다.
+    """
+    starts = [round(step["startSeconds"] * 1000) for step in steps if step["makeup"] == makeup]
+    others = [
+        (round(step["startSeconds"] * 1000), round(step["endSeconds"] * 1000))
+        for step in steps
+        if step["makeup"] in ANALYZED_MAKEUPS and step["makeup"] != makeup
+    ]
+    return [
+        item
+        for item in boundary_ranges(steps, margin_ms)
+        if (not starts or item["highMs"] <= min(starts))
+        and not any(low < item["highMs"] and high > item["lowMs"] for low, high in others)
+    ]
+
+
+def halves(timestamps_ms: Sequence[int]) -> tuple[list[int], list[int]]:
+    """시각들을 순서대로 세워 (앞 반, 뒤 반)으로 나눈다. 홀수면 가운데 것은 뒤 반에 든다."""
+    ordered = sorted(timestamps_ms)
+    middle = len(ordered) // 2
+    return ordered[:middle], ordered[middle:]
+
+
+def spread(items: Sequence, count: int = SYNTH_PHOTOS) -> list:
+    """items에서 count개를 처음부터 끝까지 고른 간격으로 뽑는다. count개 이하면 그대로다."""
+    if len(items) <= count:
+        return list(items)
+    return [items[round(index * (len(items) - 1) / (count - 1))] for index in range(count)]
+
+
+def fill_counts(real: Mapping[str, int], names: Sequence[str], base: int) -> dict[str, int]:
+    """부위(names)마다 만들 합성 정답지 수. real은 부위마다 실제 정답지 수다.
+
+    실제 정답지가 가장 많은 부위에도 합성을 base건 넣고, 다른 부위는 실제 + 합성이 그 부위와
+    같아지게 채운다. 실제 정답이 적은 부위(아이섀도·아이라인)일수록 합성이 많다.
+    """
+    most = max((real.get(name, 0) for name in names), default=0)
+    return {name: most + base - real.get(name, 0) for name in names}
