@@ -101,9 +101,17 @@ def test_crop_box_stays_inside_the_photo():
 def test_check_picture_is_saved(tmp_path):
     photo = np.full((40, 60, 3), 200, dtype=np.uint8)
     lines = [[(10.0, 10.0), (40.0, 12.0), (30.0, 25.0)]]
-    path = draw_guide_area.save(photo, lines, tmp_path, "s10_473.0s")
+    arrows = [[(12.0, 12.0), (36.0, 14.0)]]
+    path = draw_guide_area.save(photo, lines, tmp_path / "output", "s10_473.0s", arrows=arrows)
     assert path == tmp_path / "output" / "guide_area_s10_473.0s_check.jpg"
     assert path.is_file()
+
+
+def test_arrow_head_opens_backward_from_the_end():
+    wings = draw_guide_area._arrow_head((0.0, 0.0), (100.0, 0.0))
+
+    assert all(x < 100 for x, _ in wings)
+    assert wings[0][1] == -wings[1][1] != 0
 
 
 def test_default_photo_needs_the_guide_regions_in_frame():

@@ -3,12 +3,16 @@
 테두리의 얼굴 주소를 그 사진의 얼굴 점으로 다시 계산해, 사진 속 바른 자리에 오는지 본다.
 사진은 단계 끝 직후 PHOTO_WINDOW_MS 안에서 영역의 부위(빼는 부위 포함)가 모두 화면 안인 첫 사진이다.
 빼는 부위(exclude)는 그 사진의 얼굴 점 테두리를 다른 색으로 그린다. FE가 구멍으로 그리는 자리다.
+바른 방향(arrow)이 있으면 먼저 바른 곳에서 나중에 바른 곳으로 화살표를 그린다.
 먼저 tools/build_guide_area.py를 실행해 둔다.
+--area <파일>을 주면 output/guide_area.json 대신 그 파일을 읽고 그림도 그 파일 옆에 둔다
+(tools/direction_metric.py --out 결과를 볼 때).
 사진 시각(초)을 붙이면 그 시각에 가장 가까운 ok 사진마다 그린다(다른 자세에서 따라가는지 보기).
 저장: output/guide_area_<stepId>_check.jpg (사진의 영역 부분, 왼쪽 그대로 · 오른쪽 테두리와 구멍)
       시각을 붙이면 output/guide_area_<stepId>_<초>s_check.jpg
 실행 (ai/ 폴더에서): uv run python tools/draw_guide_area.py samples/local_01_lip_seq
                      uv run python tools/draw_guide_area.py samples/local_01_lip_seq 473.0 511.0
+                     uv run python tools/draw_guide_area.py samples/local_03_seq --area <파일>
 """
 
 import json
@@ -35,6 +39,8 @@ PHOTO_WINDOW_MS = 1000
 LINE_COLOR = (255, 140, 0)
 POINT_COLOR = (230, 0, 0)
 HOLE_COLOR = (0, 120, 255)
+ARROW_COLOR = (0, 200, 80)
+ARROW_HEAD = 0.25
 CROP_PADDING = 0.4
 CHECK_SCALE = 2
 
@@ -42,18 +48,31 @@ Pixel = tuple[float, float]
 
 
 def main() -> None:
-    usage = "사용법: uv run python tools/draw_guide_area.py <샘플 폴더> [사진 시각(초) …]"
-    if len(sys.argv) < 2:
+    usage = (
+        "사용법: uv run python tools/draw_guide_area.py <샘플 폴더> [사진 시각(초) …]"
+        " [--area <파일>]"
+    )
+    args = sys.argv[1:]
+    area_file = None
+    if "--area" in args:
+        at = args.index("--area")
+        if at + 1 >= len(args):
+            print(usage)
+            sys.exit(1)
+        area_file = Path(args[at + 1])
+        args = args[:at] + args[at + 2 :]
+    if not args:
         print(usage)
         sys.exit(1)
     try:
-        seconds = [float(text) for text in sys.argv[2:]]
+        seconds = [float(text) for text in args[1:]]
     except ValueError:
         print(usage)
         sys.exit(1)
 
-    folder = Path(sys.argv[1])
-    guide_path = folder / GUIDE_AREA_FILE
+    folder = Path(args[0])
+    guide_path = area_file or folder / GUIDE_AREA_FILE
+    out = guide_path.parent if area_file else folder / "output"
     if not guide_path.is_file():
         print(f"{guide_path}가 없습니다. 먼저 tools/build_guide_area.py를 실행하세요.")
         sys.exit(1)
@@ -70,7 +89,9 @@ def main() -> None:
     drawn = 0
     for step in area.steps:
         guide_sets = [guide_set for sub_step in step.sub_steps for guide_set in sub_step.guide_sets]
-        outlines = [shape.outline for guide_set in guide_sets for shape in guide_set.guides]
+        shapes = [shape for guide_set in guide_sets for shape in guide_set.guides]
+        outlines = [shape.outline for shape in shapes if shape.type == "polygon"]
+        ways = [[shape.start, shape.end] for shape in shapes if shape.type == "arrow"]
         if not outlines:
             continue
         holes = list(dict.fromkeys(name for guide_set in guide_sets for name in guide_set.exclude))
@@ -89,11 +110,13 @@ def main() -> None:
                 _photo_points(outline, row.face, width, height, triangles) for outline in outlines
             ]
             hole_lines = [_region_pixels(hole, row.face, width, height) for hole in holes]
+            arrows = [_photo_points(way, row.face, width, height, triangles) for way in ways]
             name = f"{step.step_id}_{row.timestamp_ms / 1000:.1f}s" if seconds else step.step_id
-            path = save(photo, lines, folder, name, hole_lines)
+            path = save(photo, lines, out, name, hole_lines, arrows)
             print(
                 f"{step.step_id}: {row.timestamp_ms / 1000:.1f}초 사진, "
-                f"테두리 점 {sum(len(line) for line in lines)}개, 구멍 {len(hole_lines)}개"
+                f"테두리 점 {sum(len(line) for line in lines)}개, 구멍 {len(hole_lines)}개, "
+                f"화살표 {len(arrows)}개"
             )
             print(f"저장: {path}")
             drawn += 1
@@ -104,16 +127,17 @@ def main() -> None:
 def save(
     photo: np.ndarray,
     lines: list[list[Pixel]],
-    folder: Path,
+    out: Path,
     name: str,
     holes: Sequence[list[Pixel]] = (),
+    arrows: Sequence[list[Pixel]] = (),
 ) -> Path:
-    """사진의 영역 부분을 잘라 왼쪽은 그대로, 오른쪽은 테두리와 구멍을 그려 저장한다.
+    """사진의 영역 부분을 잘라 왼쪽은 그대로, 오른쪽은 테두리·구멍·화살표를 그려 out에 저장한다.
 
     저장한 경로를 돌려준다. holes는 빼는 부위의 테두리로, 영역 테두리와 다른 색 선으로 그린다.
+    arrows는 (먼저 바른 곳, 나중에 바른 곳) 픽셀 쌍이고 나중에 바른 곳에 화살촉을 그린다.
     """
-    out = folder / "output"
-    out.mkdir(exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     height, width = photo.shape[:2]
     box = _box(lines, width, height)
     crop = Image.fromarray(photo).crop(box)
@@ -130,12 +154,29 @@ def save(
     for hole in holes:
         points = [((x - box[0]) * CHECK_SCALE, (y - box[1]) * CHECK_SCALE) for x, y in hole]
         draw.line([*points, points[0]], fill=HOLE_COLOR, width=2)
+    for arrow in arrows:
+        start, end = (((x - box[0]) * CHECK_SCALE, (y - box[1]) * CHECK_SCALE) for x, y in arrow)
+        draw.line([start, end], fill=ARROW_COLOR, width=4)
+        for head in _arrow_head(start, end):
+            draw.line([end, head], fill=ARROW_COLOR, width=4)
+        draw.ellipse((start[0] - 5, start[1] - 5, start[0] + 5, start[1] + 5), fill=ARROW_COLOR)
     sheet = Image.new("RGB", (left.width * 2, left.height), "white")
     sheet.paste(left, (0, 0))
     sheet.paste(right, (left.width, 0))
     path = out / f"guide_area_{name}_check.jpg"
     sheet.save(path, quality=90)
     return path
+
+
+def _arrow_head(start: Pixel, end: Pixel) -> list[Pixel]:
+    """화살촉 두 날개의 끝 점. 화살표 길이의 ARROW_HEAD만큼, 뒤로 30도씩 벌린다."""
+    back = np.array([start[0] - end[0], start[1] - end[1]], dtype=float) * ARROW_HEAD
+    cos, sin = np.cos(np.pi / 6), np.sin(np.pi / 6)
+    wings = [(cos, -sin, sin, cos), (cos, sin, -sin, cos)]
+    return [
+        (end[0] + a * back[0] + b * back[1], end[1] + c * back[0] + d * back[1])
+        for a, b, c, d in wings
+    ]
 
 
 def _first_row(

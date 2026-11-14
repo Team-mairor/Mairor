@@ -35,9 +35,8 @@ from app.schemas.guide_area import (
 )
 from app.tasks.area.common.face_map import (
     MAP_SIZE,
+    anchors_to_points,
     map_points,
-    mesh_triangles,
-    mesh_uv,
 )
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -179,17 +178,8 @@ def output_sub_step(
 
 
 def anchor_points(anchors: Sequence[MeshAnchor]) -> list[tuple[float, float]]:
-    """얼굴 주소들을 지도 칸 좌표로 되돌린다. points_to_anchors의 거꾸로다.
-
-    주소는 칸 가운데(칸 번호 + 0.5)를 조각 세 꼭짓점 비율로 적은 것이라,
-    비율로 꼭짓점 좌표를 섞은 뒤 0.5를 빼면 칸 번호 좌표가 된다.
-    """
-    if not anchors:
-        return []
-    corners = mesh_uv()[mesh_triangles()[[anchor.triangle for anchor in anchors]]]
-    ratios = np.array([anchor.bary for anchor in anchors])
-    points = np.einsum("nk,nkd->nd", ratios, corners) - 0.5
-    return [(float(x), float(y)) for x, y in points]
+    """얼굴 주소들을 지도 칸 좌표로 되돌린다(face_map.anchors_to_points)."""
+    return anchors_to_points(anchors)
 
 
 def smooth_points(points: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:

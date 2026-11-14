@@ -70,8 +70,14 @@ def main() -> None:
 
     for step in area.steps:
         for sub_step in step.sub_steps:
-            points = sum(len(g.outline) for s in sub_step.guide_sets for g in s.guides)
-            detail = f"테두리 점 {points}개" if points else ", ".join(sub_step.reasons) or "-"
+            guides = [g for s in sub_step.guide_sets for g in s.guides]
+            points = sum(len(g.outline) for g in guides if g.type == "polygon")
+            arrows = sum(g.type == "arrow" for g in guides)
+            detail = (
+                f"테두리 점 {points}개, 화살표 {arrows}개"
+                if points
+                else ", ".join(sub_step.reasons) or "-"
+            )
             print(f"{sub_step.sub_step_id} {step.makeup}: {sub_step.status} ({detail})")
     print(f"저장: {path}")
 
