@@ -110,6 +110,60 @@ class PouchItemTest {
         .isInstanceOf(IllegalArgumentException.class);
   }
 
+  @Test
+  void aMemberColorThatTheCatalogColorReplacedIsNotRestoredWhenTheCatalogColorGoesAway() {
+    PouchItem item =
+        new PouchItem(
+            UUID.randomUUID(),
+            RegistrationMode.MANUAL,
+            null,
+            null,
+            "LIP",
+            "LIP_TINT",
+            "Brand",
+            "Name",
+            "01",
+            PouchColor.userInput("#C0FFEE"));
+
+    item.linkToCatalog(
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        "LIP",
+        "LIP_TINT",
+        "Brand",
+        "Name",
+        "01",
+        PouchColor.catalog("#AA3344", false));
+
+    // 카탈로그 색이 회원 색을 덮는다(S15P31A306-531). 원래 회원 색은 따로 보관하지 않는다
+    assertThat(item.getColorSource()).isEqualTo("CATALOG");
+    assertThat(item.getColor().getHex()).isEqualTo("#AA3344");
+
+    // 나중에 카탈로그 색을 쓸 수 없게 되면 틀린 색 대신 색 없음이 되고, 회원 색으로 되돌리지 않는다
+    assertThat(item.refreshCatalogColor(null)).isTrue();
+    assertThat(item.getColor()).isNull();
+    assertThat(item.getColorSource()).isEqualTo("NONE");
+  }
+
+  @Test
+  void aMemberColorThatWasNeverReplacedSurvivesWhenTheCatalogHasNoUsableColor() {
+    PouchItem item =
+        new PouchItem(
+            UUID.randomUUID(),
+            RegistrationMode.CATALOG,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "LIP",
+            "LIP_TINT",
+            "Brand",
+            "Name",
+            "01",
+            PouchColor.userInput("#C0FFEE"));
+
+    assertThat(item.refreshCatalogColor(null)).isFalse();
+    assertThat(item.getColor()).isEqualTo(PouchColor.userInput("#C0FFEE"));
+  }
+
   private PouchItem manual(String brand, String name, String shade) {
     return new PouchItem(
         UUID.randomUUID(),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useSession } from "@/features/session";
 import {
@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 
 import { catOf, type PouchItem } from "./catalog";
+import { awaitsCatalog, samePouch } from "./pouch-refresh";
 
 const ITEMS = "/v1/users/me/pouch-items";
 
@@ -173,6 +174,10 @@ async function fetchAllPouch(signal: AbortSignal) {
 
 export type PouchSync = "idle" | "loading" | "ready" | "error";
 
+/** 카탈로그에 연결되지 않은 항목이 있을 때 목록을 다시 받는 간격과 지속 시간. 수집은 보통 몇 분 안에 끝난다 */
+const REFRESH_EVERY_MS = 15_000;
+const REFRESH_WINDOW_MS = 5 * 60_000;
+
 /** 로그인했으면 서버 파우치로 세션 파우치(state.pouch)를 바꾼다. 계정이 바뀌면 다시 받는다 */
 export function usePouchSync() {
   const { state, sessionChecked, update, expireSession } = useSession();
@@ -213,6 +218,49 @@ export function usePouchSync() {
       setStatus("idle");
     };
   }, [on, account, attempt, update, expireSession, router]);
+
+  // 수집이 끝나 카탈로그 색이 채워지면 보이는 색이 바뀐다(S15P31A306-531). 화면을 다시 보게 되면(탭 복귀·포커스) 받고,
+  // 카탈로그에 연결되지 않은 항목이 있는 동안은 일정 시간 주기적으로 조용히 다시 받는다(로딩 표시 없이, 바뀐 것만 반영)
+  const pouchRef = useRef(state.pouch);
+  useEffect(() => {
+    pouchRef.current = state.pouch;
+  });
+  const waiting = on && awaitsCatalog(state.pouch);
+  useEffect(() => {
+    if (!on) return;
+    let controller: AbortController | null = null;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      controller?.abort();
+      const own = new AbortController();
+      controller = own;
+      const seen = writes;
+      fetchAllPouch(own.signal).then(
+        (items) => {
+          if (writes !== seen) return;
+          const next = items.map(fromApi);
+          if (!samePouch(pouchRef.current, next)) update({ pouch: next });
+        },
+        () => {},
+      );
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    const stopAt = Date.now() + REFRESH_WINDOW_MS;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    if (waiting) {
+      timer = setInterval(() => {
+        if (Date.now() >= stopAt) clearInterval(timer);
+        else refresh();
+      }, REFRESH_EVERY_MS);
+    }
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+      clearInterval(timer);
+      controller?.abort();
+    };
+  }, [on, account, waiting, update]);
 
   // effect가 돌기 전 첫 렌더도 loading으로 알려 지난 파우치가 보이지 않게 한다
   const shown: PouchSync = !on ? "idle" : status === "idle" ? "loading" : status;

@@ -206,7 +206,8 @@ public class PouchItem {
   /**
    * 직접 입력 항목을 카탈로그 제품·호수에 연결한다(수집 요청 자동 연결, S15P31A306-517). 표시 이름은 카탈로그 값으로 바꾼다.
    *
-   * <p>회원이 넣은 색은 버리지 않고 그대로 둔다(출처 USER_INPUT). 회원 색이 없으면 카탈로그 단색을 복사한다. 팔레트 호수에서 회원 색을 쓸지는 매칭이 정한다.
+   * <p>카탈로그에 쓸 수 있는 단색이 있으면 회원이 넣은 색 대신 그 색을 복사한다(S15P31A306-531). 카탈로그에 단색이 없으면(없음·팔레트·미승인) 회원 색을
+   * 그대로 둔다.
    *
    * @throws IllegalStateException 직접 입력 항목이 아니면
    */
@@ -225,7 +226,7 @@ public class PouchItem {
     if (catalogColor != null && catalogColor.getSource() != PouchColor.Source.CATALOG) {
       throw new IllegalArgumentException("카탈로그 색이 아니다");
     }
-    PouchColor kept = color != null ? color : catalogColor;
+    PouchColor kept = catalogColor != null ? catalogColor : color;
     replaceDetailsFrom(
         new PouchItem(
             userId,
@@ -238,6 +239,36 @@ public class PouchItem {
             name,
             shadeName,
             kept));
+  }
+
+  /**
+   * 카탈로그 색이 바뀐 호수에 연결된 항목의 색 복사본을 맞춘다(S15P31A306-531).
+   *
+   * <p>쓸 수 있는 카탈로그 단색이 있으면 회원이 넣은 색보다 그 색을 쓴다. 단색이 없어졌으면 카탈로그에서 복사한 색은 비우고(틀린 색보다 없는 색), 아직 카탈로그
+   * 색으로 덮이지 않은 회원 색은 그대로 둔다.
+   *
+   * <p>한계: 회원 색이 이미 카탈로그 색으로 덮였다면 원래 회원 색은 보관하지 않으므로, 그 뒤 카탈로그 색이 없어져도 회원 색으로 되돌리지 않고 색 없음이 된다.
+   * 되돌리려면 원래 색을 담을 컬럼이 따로 필요하다(운영 DB 변경).
+   *
+   * @param catalogColor 호수의 쓸 수 있는 카탈로그 단색. 없으면 {@code null}
+   * @return 색이 바뀌었으면 {@code true}. 카탈로그 호수에 연결된 항목이 아니면 항상 {@code false}
+   */
+  public boolean refreshCatalogColor(PouchColor catalogColor) {
+    if (registrationMode != RegistrationMode.CATALOG || shadeId == null) {
+      return false;
+    }
+    if (catalogColor != null && catalogColor.getSource() != PouchColor.Source.CATALOG) {
+      throw new IllegalArgumentException("카탈로그 색이 아니다");
+    }
+    PouchColor next = catalogColor;
+    if (next == null) {
+      next = color != null && color.getSource() == PouchColor.Source.USER_INPUT ? color : null;
+    }
+    if (Objects.equals(color, next)) {
+      return false;
+    }
+    color = next;
+    return true;
   }
 
   /** 수정 후보의 변경 가능한 필드를 반영한다. 식별자·소유자·생성 시각은 유지한다. */

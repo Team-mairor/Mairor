@@ -1,5 +1,6 @@
 package com.mairor.backend.pouch.repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.Query;
@@ -43,4 +44,30 @@ public interface PouchCatalogRepository
           """,
       nativeQuery = true)
   List<Object[]> findSelection(@Param("productId") UUID productId, @Param("shadeId") UUID shadeId);
+
+  /**
+   * 호수들의 파우치에 복사할 카탈로그 색. {@link #findSelection}과 같은 규칙이다: 칸이 하나이고 쓸 수 있는 상태면 그 색, 팔레트이거나 쓸 수 있는 칸이
+   * 없으면 {@code null}, 칸이 없는 호수는 옛 단일 색 컬럼. 행은 호수마다 하나이고 열은 (shade_id, color_hex, color_estimated)다.
+   */
+  @Query(
+      value =
+          """
+          select s.id as shade_id,
+                 case when coalesce(sc.slot_count, 0) = 0 then s.color_hex
+                      when sc.slot_count = 1 and sc.usable then sc.color_hex end as color_hex,
+                 case when coalesce(sc.slot_count, 0) = 0 then s.color_estimated
+                      when sc.slot_count = 1 and sc.usable then sc.color_estimated end as color_estimated
+            from product_shades s
+            left join lateral (
+                 select count(*) as slot_count,
+                        min(k.color_hex) as color_hex,
+                        bool_or(k.color_estimated) as color_estimated,
+                        coalesce(bool_and(k.review_status in ('AUTO_APPROVED', 'APPROVED')), false) as usable
+                   from product_shade_colors k
+                  where k.shade_id = s.id
+            ) sc on true
+           where s.id in (:shadeIds)
+          """,
+      nativeQuery = true)
+  List<Object[]> findShadeColors(@Param("shadeIds") Collection<UUID> shadeIds);
 }

@@ -69,10 +69,25 @@ class PouchCandidateAssemblerTest {
   }
 
   @Test
-  void aLinkedItemKeepsTheMembersColorForASingleSlotShade() {
+  void aLinkedItemUsesTheCatalogColorInsteadOfTheMembersForASingleSlotShade() {
     UUID shadeId = UUID.randomUUID();
     PouchItem item = linked(shadeId, PouchColor.userInput("#123456"));
     ProductShade shade = shadeWith(slot("#AA0000"));
+
+    var candidate = assembler.assemble(item, Map.of(shadeId, shade));
+
+    assertThat(candidate.colors())
+        .extracting(RecommendationCandidateSelector.ColorOption::hex)
+        .containsExactly("#AA0000");
+  }
+
+  @Test
+  void aLinkedItemFallsBackToTheMembersColorWhenTheCatalogHasNoUsableColor() {
+    UUID shadeId = UUID.randomUUID();
+    PouchItem item = linked(shadeId, PouchColor.userInput("#123456"));
+    ProductShadeColor unusable = mock(ProductShadeColor.class);
+    when(unusable.hasUsableColor()).thenReturn(false);
+    ProductShade shade = shadeWith(unusable);
 
     var candidate = assembler.assemble(item, Map.of(shadeId, shade));
 

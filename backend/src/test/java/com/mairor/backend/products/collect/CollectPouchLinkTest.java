@@ -87,7 +87,7 @@ class CollectPouchLinkTest {
   }
 
   @Test
-  void aResolvedRequestLinksTheItemAndKeepsTheMembersColor() throws Exception {
+  void aResolvedRequestLinksTheItemAndShowsTheCatalogColorInsteadOfTheMembers() throws Exception {
     UUID item = register(user, "쥬시래스팅틴트", "01 니어", "#C0FFEE");
     UUID request = sendRequest();
     UUID product = product("쥬시 래스팅 틴트");
@@ -102,8 +102,8 @@ class CollectPouchLinkTest {
         .containsEntry("product_id", product)
         .containsEntry("shade_id", shade)
         .containsEntry("name", "쥬시 래스팅 틴트")
-        .containsEntry("color_hex", "#C0FFEE")
-        .containsEntry("color_source", "USER_INPUT");
+        .containsEntry("color_hex", "#AA3344")
+        .containsEntry("color_source", "CATALOG");
     assertThat(pouchVersion(user)).isEqualTo(versionBefore + 1);
     assertThat(linkResult(request)).isEqualTo("LINKED");
   }

@@ -21,7 +21,15 @@ public interface PouchItemRepository extends JpaRepository<PouchItem, UUID> {
   List<PouchItem> findByUserIdOrderByCreatedAtDescIdDesc(UUID userId);
 
   /** 카탈로그 색 칸을 참조하는 파우치 회원을 중복 없이 찾는다. */
-  List<UUID> findDistinctUserIdByShadeIdIn(Collection<UUID> shadeIds);
+  @Query("select distinct item.userId from PouchItem item where item.shadeId in :shadeIds")
+  List<UUID> findDistinctUserIdByShadeIdIn(@Param("shadeIds") Collection<UUID> shadeIds);
+
+  /**
+   * 지정한 회원들의 항목 중 카탈로그 호수에 연결된 것들. 호수의 색이 바뀌면 색 복사본을 맞춘다(S15P31A306-531). 회원 행을 잠근 뒤 그 회원들로 한정해서
+   * 읽어, 버전을 올리는 회원과 색이 바뀌는 회원이 같게 한다.
+   */
+  List<PouchItem> findAllByShadeIdInAndUserIdIn(
+      Collection<UUID> shadeIds, Collection<UUID> userIds);
 
   /** 회원·선택 필터에 맞는 페이지를 새 항목 순서로 읽는다. */
   @Query(
