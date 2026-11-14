@@ -8,6 +8,8 @@ AI는 분석 단계의 시작 직전 창과 끝 직후 창 사진만 비교한�
 - 후보: 분석 단계마다 시작 앞(앞 단계 끝까지)·끝 뒤(다음 단계 시작까지) 최대 SEARCH_SECONDS초를 1초에 SAMPLE_FPS장.
 - 쓸 사진: AI와 같은 판정(얼굴 하나·각도·크기·크기 튐, 부위가 화면 안, 눈 화장이면 눈 뜸)에 부위 가림 OCCLUDED_MAX 이하.
   판정은 AI 서버 코드(ai/app)를 그대로 불러 쓴다. 기준이 어긋나면 처리기가 고른 사진을 AI가 다시 버린다.
+  쉐딩은 AI처럼 콧대 양옆 띠(contour_area.SIDE_POINTS)의 가림을 쪽마다 보고, 화면 안인지는 두 볼로 본다.
+  코 띠는 부위 이름이 없어 화면 밖 점 수가 적혀 있지 않기 때문이다(SHOWN_BY).
 - 창: AI 직전·직후 창 길이 안에 좌우 부위마다 쓸 사진 MIN_PER_SIDE장 이상, 전·후 얼굴 폭 비는 SIZE_MATCH_RANGE 안.
 - 앞 단계가 끝난 뒤에는 바르는 것이 없으므로 앞 단계의 바른 뒤 사진을 이 단계의 바르기 전 사진으로 같이 쓴다.
   앞 단계 끝과 그 전, 다음 단계 시작과 그 뒤 사진은 쓰지 않는다.
@@ -47,6 +49,7 @@ from app.tasks.area.common.region_points import REGION_POINTS  # noqa: E402
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS, check_frames  # noqa: E402
 from app.tasks.area.landmarks.landmarks_builder import build_landmarks  # noqa: E402
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion, load_occlusion_model  # noqa: E402
+from app.tasks.area.parts import contour_area  # noqa: E402
 from app.tasks.area.parts.area_preparation import (  # noqa: E402
     OCCLUDED_MAX,
     SIZE_MATCH_RANGE,
@@ -68,6 +71,18 @@ SIDES = {
     "brow": [["leftBrow"], ["rightBrow"]],
     "eyeshadow": [["leftEye", "leftBrow"], ["rightEye", "rightBrow"]],
     "eyeliner": [["leftEye"], ["rightEye"]],
+    "contour": [["leftNoseSide"], ["rightNoseSide"]],
+}
+# 가림을 셀 테두리. AI 부위 이름에 없는 코 띠는 AI 쉐딩 찾기 범위의 점을 그대로 쓴다.
+OUTLINES = {
+    **REGION_POINTS,
+    "leftNoseSide": contour_area.SIDE_POINTS["leftEye"],
+    "rightNoseSide": contour_area.SIDE_POINTS["rightEye"],
+}
+# 화면 안인지를 다른 부위로 보는 테두리. 없으면 그 부위 자신으로 본다.
+SHOWN_BY = {
+    "leftNoseSide": contour_area.VISIBLE_REGIONS,
+    "rightNoseSide": contour_area.VISIBLE_REGIONS,
 }
 REGIONS = sorted({region for sides in SIDES.values() for side in sides for region in side})
 
@@ -126,8 +141,9 @@ class PhotoJudge:
     def usable(self, lo: float, hi: float, regions: list[str], bounds: tuple[int, int]) -> list:
         """(lo, hi]초 사진 중 AI usable_rows를 통과하고 부위를 덜 가린 사진. bounds(ms) 밖 사진은 쓰지 않는다."""
         self._ensure(int(lo * 1000), int(hi * 1000))
+        shown = list(dict.fromkeys(name for region in regions for name in SHOWN_BY.get(region, (region,))))
         with within_step(*bounds):
-            rows = [r for r in usable_rows(self.result, int(lo * 1000), int(hi * 1000), regions)
+            rows = [r for r in usable_rows(self.result, int(lo * 1000), int(hi * 1000), shown)
                     if bounds[0] < r.timestamp_ms < bounds[1]]
         return [r for r in rows if all(self._covered(r, region) <= OCCLUDED_MAX for region in regions)]
 
@@ -342,7 +358,7 @@ def _checked(video_id: str, rows: dict[int, object]) -> LandmarksResult:
 def _coverage(row, mask: np.ndarray, region: str) -> float:
     """부위 테두리 안에서 가림 모델이 가렸다고 칠한 픽셀 비율. 사진 전체 대신 테두리를 감싼 네모 안만 칠해 센다."""
     height, width = mask.shape
-    outline = [(row.face.landmarks[i].x * width, row.face.landmarks[i].y * height) for i in REGION_POINTS[region]]
+    outline = [(row.face.landmarks[i].x * width, row.face.landmarks[i].y * height) for i in OUTLINES[region]]
     x0 = max(0, int(min(x for x, _ in outline)))
     y0 = max(0, int(min(y for _, y in outline)))
     x1 = min(width, int(np.ceil(max(x for x, _ in outline))) + 1)

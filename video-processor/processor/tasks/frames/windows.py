@@ -1,7 +1,8 @@
 """AI 서버가 영역 분석에 쓰는 사진 구간과 그 안에서 뽑을 프레임 번호.
 
-AI는 분석하는 단계(립·블러셔·눈썹·섀도·아이라인)의 시작 직전 창과 끝 직후 창 사진만 비교하고,
+AI는 분석하는 단계(립·블러셔·눈썹·섀도·아이라인·쉐딩)의 시작 직전 창과 끝 직후 창 사진만 비교하고,
 사진 판정에 창 앞뒤 1초를 더 본다(ai/app/tasks/area/reference_area.py photo_ranges).
+쉐딩은 AI가 단계 글에 코가 있을 때만 찾지만, 처리기는 글을 보지 않고 쉐딩 단계 전부를 분석 단계로 둔다.
 노트북 처리기는 그 구간만 BE FramePlan과 같은 번호 규칙(n % round(fps/10) == 0)으로 뽑는다
 (docs/requests/2026-11-09-hyeonsoo-hyeongjun-processor-frame-rule.md).
 창 길이는 AI 부위 코드의 BEFORE_WINDOW_MS · AFTER_WINDOW_MS(reference_area.py PART_WINDOWS),
@@ -16,6 +17,7 @@ AI_WINDOWS_MS: dict[str, tuple[int | None, int]] = {
     "brow": (3000, 3000),
     "eyeshadow": (2000, 1000),
     "eyeliner": (3000, 4000),
+    "contour": (3000, 3000),
 }
 RATIO_WINDOW_MS = 1000
 WINDOW_FPS = 10.0

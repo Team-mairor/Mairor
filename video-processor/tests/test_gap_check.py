@@ -17,7 +17,7 @@ def step(makeup, start, end, name="제품", kind=None, areas=()):
 
 class GapPlanTests(unittest.TestCase):
     def test_frames_stay_between_neighbours(self):
-        steps = [step("foundation", 0, 50), step("brow", 60, 70), step("lip", 80, 90), step("contour", 95, 99)]
+        steps = [step("foundation", 0, 50), step("brow", 60, 70), step("lip", 80, 90), step("highlight", 95, 99)]
         plans = gap_plan(steps, 100)
         self.assertEqual([p["index"] for p in plans], [1, 2])
         brow, lip = plans

@@ -8,13 +8,15 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from processor.tasks.frames.photo_fit import (
+    OUTLINES,
     REGIONS,
-    REGION_POINTS,
     SAMPLE_FPS,
+    SIDES,
     _coverage,
     _missing_runs,
     fit_photo_times,
 )
+from processor.tasks.frames.windows import AI_WINDOWS_MS
 
 
 class FakeJudge:
@@ -80,6 +82,12 @@ class PhotoFitTests(unittest.TestCase):
         self.assertEqual([s["stepId"] for s in fitted], ["s2", "s1"])
 
 
+class SideTableTests(unittest.TestCase):
+    def test_every_analyzed_makeup_has_sides(self):
+        """창 표에 부위를 넣고 SIDES에 빠뜨리면 그 부위 단계가 있는 영상에서 사진 자리 맞추기가 멈춘다."""
+        self.assertEqual(set(SIDES), set(AI_WINDOWS_MS))
+
+
 class PhotoCacheTests(unittest.TestCase):
     def test_missing_runs_skip_photos_already_taken_and_join_neighbouring_ticks(self):
         spans = [(1.0, 2.0), (1.9, 2.6), (5.1, 5.6)]
@@ -93,7 +101,7 @@ class PhotoCacheTests(unittest.TestCase):
             points = [SimpleNamespace(x=rng.uniform(-0.2, 1.2), y=rng.uniform(-0.2, 1.2)) for _ in range(478)]
             row = SimpleNamespace(face=SimpleNamespace(landmarks=points))
             for region in REGIONS:
-                outline = [(points[i].x * 160, points[i].y * 120) for i in REGION_POINTS[region]]
+                outline = [(points[i].x * 160, points[i].y * 120) for i in OUTLINES[region]]
                 polygon = Image.new("1", (160, 120), 0)
                 ImageDraw.Draw(polygon).polygon(outline, fill=1)
                 area = np.asarray(polygon)

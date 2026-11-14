@@ -59,7 +59,9 @@ class FrameWindowTests(unittest.TestCase):
         self.assertEqual(photo_ranges_ms(liner), [(6000, 11000), (19000, 25000)])
         lip = {"makeup": "lip", "startSeconds": 10, "endSeconds": 20}
         self.assertEqual(photo_ranges_ms(lip), [(5000, 11000), (19000, 25000)])
-        for makeup in ("foundation", "highlight", "contour", "mascara", "other"):
+        contour = {"makeup": "contour", "startSeconds": 10, "endSeconds": 20}
+        self.assertEqual(photo_ranges_ms(contour), [(6000, 11000), (19000, 24000)])
+        for makeup in ("foundation", "highlight", "mascara", "other"):
             self.assertEqual(photo_ranges_ms({"makeup": makeup, "startSeconds": 10, "endSeconds": 20}), [])
 
     def test_frame_numbers_are_interval_multiples_inside_windows(self):
