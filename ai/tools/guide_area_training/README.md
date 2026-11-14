@@ -36,6 +36,20 @@
 
 `sample/`은 `ai/samples`와 같은 모양이라 `tools/build_guide_area.py` 같은 다른 도구가 그대로 읽는다.
 
+## 방식 고르기 시험
+
+하위 영역마다 규칙·모델·규칙 + 모델 합치기 가운데 어느 방식으로 바른 곳을 찾을지 고르는 시험이다. 결과와 고른 방식은 [docs/experiments/GUIDE_AREA_METHOD_SELECT.md](../../../docs/experiments/GUIDE_AREA_METHOD_SELECT.md)에 있다. 모델은 `model_area.export_onnx`로 onnx로 바꿔 쓴다.
+
+| 스크립트 | 하는 일 | 결과 |
+| --- | --- | --- |
+| `eval_synthetic.py <결과 json> [--methods rule,template] [--model <onnx> --model-method <방식> --label <이름>]` | 정답지 test 나눔 합성으로 자리별 IoU · 덮음 · 넘침, 안 바른 정답지에 칠한 비율(참고용). `--model`을 주면 rule 줄을 그 방식으로 잰다 | `<결과 json>` |
+| `build_with_method.py <onnx> <방식> <이름> <샘플 폴더> … [--each-side]` | 부위 판정 자리에 모델(방식)을 끼워 서비스 흐름 그대로 가이드 영역을 만든다 | `<샘플 폴더>/output/guide_area_<이름>.json` |
+| `eval_real.py <결과 json> [--reference <샘플 폴더>] [--area <이름>] <샘플 폴더> …` | 하위 단계마다 찾음 · 사진은 정상인데 못 찾음 · 쓸 사진 없음, 눈 구멍 · 얼굴 밖 큰 오류 | `<결과 json>` |
+| `eval_fallback.py <결과 json> [--bisenet <모델 파일>] <샘플 폴더> …` | 못 찾을 때 보여 줄 모양 후보(기본 영역 · 낱말 지도 · 앞 단계 영역 · 얼굴 분할 칸) 견주기 | `<결과 json>` |
+| `compare_methods.py <샘플 폴더> --occlusion <이름> --base <규칙> --shifted <이름> --out <json> <후보> …` | 시험 영상 지표 결과를 부위 · 자리마다 규칙과 견줘 425 판정 규칙으로 줄 세운다 | `<json>` |
+
+시험 영상 지표는 `tools/run_metrics.py`로 잰다. 모델 방식은 환경 변수 `A306_METHOD`(`model` · `and` · `or` · `rule_gate` · `model_gate`) · `A306_MODEL`(onnx) · `A306_AI_ROOT`(ai 폴더)를 주고, `PYTHONPATH`에 `model_area.install_from_env()`를 부르는 `sitecustomize.py`를 둔 폴더를 넣어 지표 도구의 하위 프로세스에도 들어가게 한다. `A306_STORE`를 주면 모델 결과를 파일로 남겨 다른 방식 실행이 다시 쓰고, `A306_PAIRING=each`는 짝 부위 좌우 맞추기를 끈다.
+
 ## 정답지 한 건 (`labels.py`)
 
 `<작업 폴더>/labels/<나눔>/<real 또는 synth>/<이름>/` 폴더 하나가 정답지 한 건이고, 같은 자리의 `list.jsonl`이 목록이다. 나눔은 `train`·`validation`·`test`다.
@@ -76,3 +90,7 @@
 | `train.py` | 전후 얼굴 지도 6겹 입력, 칸마다 자리 번호 출력. 출발 모델(BiSeNet 이어 학습·작은 모델 처음부터), 모름 칸을 뺀 가중 손실, 에폭별 검증 점수(자리별 IoU·안 바른 정답지에 칠한 비율). 정답지를 메모리에 올리기(`--preload`), 시작값(`--seed`), 학습률 줄이기(`--schedule cosine`) (`tests/test_guide_area_training_train.py`) |
 | `search.py` | 축별 설정 탐색과 고르기 |
 | `plot.py` | 학습 곡선과 예측 그림 |
+| `model_area.py` | 모델 onnx 바꾸기·돌리기, 부위 판정 자리에 모델(방식)을 끼우기, 좌우 맞추기 끄기 (`tests/test_guide_area_training_model_area.py`) |
+| `eval_synthetic.py`·`eval_real.py`·`eval_fallback.py` | 방식 고르기 시험 (`tests/test_guide_area_training_eval.py`) |
+| `build_with_method.py` | 모델 방식으로 샘플 폴더 가이드 영역 만들기 |
+| `compare_methods.py` | 시험 영상 지표로 방식 줄 세우기 (`tests/test_guide_area_training_compare_methods.py`) |
