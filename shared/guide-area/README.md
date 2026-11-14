@@ -12,7 +12,7 @@ AI가 레퍼런스 영상에서 찾아 넘기는 튜토리얼 가이드 영역(`
  └ 단계      stepId · order · makeup · subSteps
     └ 하위 단계  subStepId · order · status · reasons · templateId · guideSets
        └ 부위별 묶음  region · source · guides · exclude
-          └ 도형    polygon (outline = MeshAnchor[])
+          └ 도형    polygon (outline = MeshAnchor[]) · arrow (from · to = MeshAnchor)
 ```
 
 ## 사용 위치
@@ -38,8 +38,24 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
 - `subStepId`는 `<stepId>-<order>`이고, 하위 단계 `order`는 1부터 차례대로
 - 단계는 `order` 순서대로, `stepId` · `order`가 겹치지 않음
 - `bary` 세 값의 합이 1 (0.001까지 허용)
+- 부위별 묶음의 `guides`에 `polygon`이 1개 이상 (`arrow`만 있는 묶음은 없음)
 
 가이드 입력의 단계가 빠짐없이 같은 순서로 들어 있는지는 AI가 결과를 만들 때 가이드 입력과 맞춰 본다.
+
+## 바른 방향 (`arrow`)
+
+`extracted` 영역 묶음의 `guides`에는 도포 영역(`polygon`) 뒤에 바른 방향(`arrow`)이 0개나 1개 온다. `from`은 먼저 바른 곳, `to`는 나중에 바른 곳이고, FE `frontend/src/features/face/types.ts`의 `arrow` 도형과 같아 FE가 `from` → `to`로 그린다.
+
+AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 전과 견줘, 찾은 영역 안에서 색이 먼저 바뀐 곳과 나중에 바뀐 곳을 찾는다(`ai/app/tasks/area/direction_finder.py`). 고른 방법과 근거는 [docs/experiments/GUIDE_APPLY_DIRECTION.md](../../docs/experiments/GUIDE_APPLY_DIRECTION.md)에 있다. 단계 동안의 사진이 와야 하므로, 처리기가 직전·직후 창만 뽑는 지금은 화살표가 오지 않는다. 아래일 때는 화살표를 넣지 않고 영역만 보내며, 이유는 AI 서버 `area_step` 기록의 `directions`에 남긴다.
+
+| 이유 | 뜻 |
+| --- | --- |
+| `noMiddlePhoto` | 단계 동안의 사진이 없거나 너무 적음 |
+| `tooFewBlocks` | 영역이 작아 순서를 잴 묶음이 모자람 |
+| `timeSpreadSmall` | 영역이 거의 한꺼번에 바뀌어 순서가 없음 |
+| `orderLikeChance` | 시각 순서를 섞어도 나오는 점수라 바른 순서로 볼 수 없음 |
+
+기본 가이드(`template`) 단계의 방향은 FE 기본 가이드에 들어 있어 AI가 보내지 않는다.
 
 ## 기본 가이드 키 (`templateId`)
 

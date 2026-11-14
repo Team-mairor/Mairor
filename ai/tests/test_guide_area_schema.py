@@ -5,6 +5,7 @@ from jsonschema import Draft202012Validator
 
 from tests.test_guide_area import (
     EYESHADOW_KEYS,
+    arrow_sample,
     broken_sample,
     eyeshadow_key_sample,
     load_sample,
@@ -15,7 +16,7 @@ SCHEMA_CATCHES = [
     "없는 부위 이름",
     "없는 삼각형 번호",
     "없는 화장 종류",
-    "arrow 도형",
+    "끝점 없는 arrow",
     "단계 화장 종류에 기본 가이드 키",
     "없는 기본 가이드 키",
 ]
@@ -32,6 +33,10 @@ def test_shared_schema_matches_model():
 
 def test_sample_passes_shared_schema():
     load_validator().validate(load_sample())
+
+
+def test_arrow_beside_polygon_passes_shared_schema():
+    load_validator().validate(arrow_sample())
 
 
 @pytest.mark.parametrize("template_id", EYESHADOW_KEYS)

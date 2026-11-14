@@ -54,13 +54,36 @@ class PolygonShape(CamelModel):
     outline: list[MeshAnchor] = Field(min_length=3)
 
 
+class ArrowShape(CamelModel):
+    """바르는 방향. from은 먼저 바른 곳(시작점), to는 나중에 바른 곳이고 FE가 from → to로 그린다.
+
+    FE 얼굴 구조 스키마(face/types.ts)의 arrow 도형과 같다.
+    """
+
+    type: Literal["arrow"]
+    start: MeshAnchor = Field(alias="from")
+    end: MeshAnchor = Field(alias="to")
+
+
 class GuideSet(CamelModel):
-    """부위별 묶음. region은 얼굴의 어디·어느 쪽인지, exclude는 이 영역에서 뺄 부위다."""
+    """부위별 묶음. region은 얼굴의 어디·어느 쪽인지, exclude는 이 영역에서 뺄 부위다.
+
+    guides에는 도포 영역(polygon)이 1개 이상 있어야 하고, 방향(arrow)은 순서를 알 때만 넣는다.
+    """
 
     region: RegionName
     source: GuideSetSource
-    guides: list[PolygonShape] = Field(min_length=1)
+    guides: list[PolygonShape | ArrowShape] = Field(min_length=1)
     exclude: list[RegionName] = Field(default_factory=list)
+
+    @field_validator("guides")
+    @classmethod
+    def check_polygon(
+        cls, guides: list[PolygonShape | ArrowShape]
+    ) -> list[PolygonShape | ArrowShape]:
+        if not any(guide.type == "polygon" for guide in guides):
+            raise ValueError("guides에는 polygon이 1개 이상 있어야 합니다")
+        return guides
 
 
 class AreaSubStep(CamelModel):
