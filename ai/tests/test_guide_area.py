@@ -25,6 +25,7 @@ GUIDE_SETS = [
         "guides": [{"type": "polygon", "outline": ANCHORS}],
     }
 ]
+ARROW = {"type": "arrow", "from": ANCHORS[0], "to": ANCHORS[2]}
 
 
 def load_sample() -> dict:
@@ -57,7 +58,8 @@ BROKEN: dict[str, Callable[[dict], None]] = {
         makeup="eyeshadowUpper"
     ),
     "없는 기본 가이드 키": lambda s: sub_step(s, EYESHADOW_BOTH).update(templateId="eyeshadowTail"),
-    "arrow 도형": lambda s: lip_polygon(s).update(type="arrow"),
+    "끝점 없는 arrow": lambda s: lip_polygon(s).update(type="arrow"),
+    "화살표만 있는 묶음": lambda s: sub_step(s, LIP)["guideSets"][0].update(guides=[ARROW]),
     "이유 없는 failed": lambda s: sub_step(s, LIP_FAILED).update(reasons=[]),
 }
 
@@ -90,6 +92,20 @@ def test_eyeshadow_template_keys_pass_model(template_id: str):
     area = GuideArea.model_validate(eyeshadow_key_sample(template_id))
 
     assert area.steps[EYESHADOW_UNDER].sub_steps[0].template_id == template_id
+
+
+def arrow_sample() -> dict:
+    sample = load_sample()
+    sub_step(sample, LIP)["guideSets"][0]["guides"].append(ARROW)
+    return sample
+
+
+def test_arrow_beside_polygon_passes_model_and_keeps_its_keys():
+    area = GuideArea.model_validate(arrow_sample())
+
+    arrow = area.steps[LIP].sub_steps[0].guide_sets[0].guides[-1]
+    assert arrow.type == "arrow"
+    assert arrow.model_dump(by_alias=True, mode="json") == ARROW
 
 
 @pytest.mark.parametrize("name", BROKEN)

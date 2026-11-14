@@ -22,6 +22,7 @@ from app.schemas.guide_area import GuideArea
 from app.schemas.guide_job import FrameSource, ReferenceFrame
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Frame, Makeup, Manifest, Step, VideoSource
+from app.tasks.area.direction_finder import middle_windows
 from app.tasks.area.guide_area_builder import ORDERED_MAKEUPS, build_guide_area
 from app.tasks.area.landmarks.face_finder import find_faces
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS, check_frames
@@ -34,6 +35,7 @@ from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 
 OCCLUSION_KEEP = 64
 FACE_MAP_KEEP = 64
+DIRECTION_PHOTOS = False
 PART_WINDOWS: dict[Makeup, tuple[int | None, int]] = {
     "lip": (lip_area.BEFORE_WINDOW_MS, lip_area.AFTER_WINDOW_MS),
     "blush": (blush_area.BEFORE_WINDOW_MS, blush_area.AFTER_WINDOW_MS),
@@ -52,12 +54,25 @@ def photo_ranges(steps: Sequence[GuideInputStep]) -> list[tuple[int, int]]:
     사진 판정은 얼굴 크기를 앞뒤 RATIO_WINDOW_MS 안 사진과 견주므로 창 양쪽에 그만큼 더한다.
     그래서 창 안 사진의 판정은 모든 사진으로 판정할 때와 같다.
     단계 시각은 build_guide_area처럼 초 × 1000을 반올림한 ms다.
+    DIRECTION_PHOTOS가 참이면 바른 방향 찾기가 쓰는 단계 동안의 구간(direction_windows)도 넣는다.
+    지금은 거짓이다. 처리기가 단계 동안의 사진을 뽑지 않고, 받으면 방향 찾기만큼 처리 시간이
+    늘기 때문이다. 거짓이면 단계 동안의 사진을 받지 않아 화살표 없이 영역만 나간다.
     """
     return [
         (low - RATIO_WINDOW_MS, high + RATIO_WINDOW_MS)
         for step in steps
-        for low, high in step_windows(step)
+        for low, high in [
+            *step_windows(step),
+            *(direction_windows(step) if DIRECTION_PHOTOS else []),
+        ]
     ]
+
+
+def direction_windows(step: GuideInputStep) -> list[tuple[int, int]]:
+    """바른 방향 찾기가 단계 동안 사진을 고르는 구간. 분석하지 않는 단계는 빈 목록이다."""
+    if step.makeup not in PART_WINDOWS:
+        return []
+    return middle_windows(round(step.start_seconds * 1000), round(step.end_seconds * 1000))
 
 
 def step_windows(step: GuideInputStep) -> list[tuple[int, int]]:

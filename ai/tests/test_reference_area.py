@@ -142,6 +142,19 @@ def test_needed_frames_keep_window_photos_and_one_second_either_side():
     ]
 
 
+def test_photos_during_the_step_are_kept_only_when_direction_photos_is_on(monkeypatch):
+    """스위치가 꺼져 있으면 지금처럼 창 사진만, 켜면 방향 찾기가 쓰는 단계 동안 사진도 받는다."""
+    steps = guide_input(("s1", "foundation", 0, 5), ("s2", "blush", 10, 20)).steps
+    items = frames_every_half_second(30_000).items
+
+    off = [item.timestamp_ms for item in needed_frames(steps, items)]
+    monkeypatch.setattr(reference_area, "DIRECTION_PHOTOS", True)
+    on = [item.timestamp_ms for item in needed_frames(steps, items)]
+
+    assert off == [*range(8_000, 11_001, 500), *range(19_000, 22_001, 500)]
+    assert on == list(range(8_000, 22_001, 500))
+
+
 def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
     """부위 분석이 사진을 고르는 구간에 판정 여유를 더해도 photo_ranges 안이다.
 

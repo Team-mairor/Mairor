@@ -36,6 +36,7 @@ from app.schemas.manifest import Makeup, Step
 from app.tasks.area.common.face_map import MAP_SIZE, points_to_anchors
 from app.tasks.area.common.mask_outline import smooth_outlines
 from app.tasks.area.common.region_mask import polygon_mask
+from app.tasks.area.direction_finder import add_directions
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
 from app.tasks.area.parts.area_preparation import (
@@ -146,6 +147,8 @@ def build_guide_area(
     on_step은 단계 하나를 끝낼 때마다 부른다. 작업 진행 숫자를 세는 자리다.
     occlusion은 사진에서 얼굴을 가린 픽셀을 찾는 함수이고, 있으면 부위 분석마다 넘긴다.
     None이면 가림을 따로 빼지 않고 사진 여러 장의 중앙값에만 맡긴다.
+    찾은 영역마다 단계 동안의 사진으로 바른 방향을 찾아 화살표를 더하고(_with_directions),
+    area_step 기록의 directions에 영역 묶음마다 화살표를 넣었는지와 안 넣은 이유를 남긴다.
     단계마다 area_step 기록에 결과 상태·이유와, 판정을 통과했는데 부위 분석에서 빠진 사진 번호를
     이유별로(area_preparation.recording_dropped) 남긴다.
     부위 분석은 앞 단계 끝과 다음 단계 시작 사이의 사진만 쓴다(area_preparation.within_step).
@@ -162,6 +165,7 @@ def build_guide_area(
     area_steps = []
     for step in ordered:
         reused_from = None
+        bright_under = False
         zones: tuple[Zone, ...] | tuple[LineZone, ...] | None = None
         with (
             traced(
@@ -180,9 +184,14 @@ def build_guide_area(
                 sub_steps = [sub_step]
             elif step.makeup == "eyeshadow":
                 zones = eyeshadow_zones(step)
-                sub_steps = _eyeshadow_step(step, result, load_photo, occlusion, zones)
+                sub_steps, bright_under = _eyeshadow_step(
+                    step, result, load_photo, occlusion, zones
+                )
             else:
                 sub_steps = [_sub_step(step, result, load_photo, occlusion)]
+            sub_steps, directions = _with_directions(
+                step, sub_steps, result, load_photo, occlusion, bright_under
+            )
             record = {
                 "status": sub_steps[0].status,
                 "reasons": sub_steps[0].reasons,
@@ -197,6 +206,8 @@ def build_guide_area(
                     {"subStepId": sub.sub_step_id, "status": sub.status, "reasons": sub.reasons}
                     for sub in sub_steps
                 ]
+            if directions:
+                record["directions"] = directions
             set_output(span, record)
         area_steps.append(
             AreaStep(
@@ -209,6 +220,35 @@ def build_guide_area(
         if on_step is not None:
             on_step()
     return GuideArea(video_id=video_id, mesh_version="v1", steps=area_steps)
+
+
+def _with_directions(
+    step: Step | GuideInputStep,
+    sub_steps: list[AreaSubStep],
+    result: LandmarksResult,
+    load_photo: PhotoLoader,
+    occlusion: OcclusionFinder | None,
+    bright_under: bool,
+) -> tuple[list[AreaSubStep], list[dict]]:
+    """찾은 영역에 바른 방향 화살표를 더한 하위 단계들과 기록(direction_finder.add_directions).
+
+    방향 찾기에서 오류가 나면 로그를 남기고 화살표 없이 찾은 영역 그대로 돌려준다.
+    방향은 덧붙이는 정보라, 못 구해도 영역 안내는 그대로 나가야 한다.
+    """
+    try:
+        return add_directions(
+            step.makeup,
+            sub_steps,
+            result,
+            round(step.start_seconds * 1000),
+            round(step.end_seconds * 1000),
+            load_photo,
+            occlusion,
+            bright_under,
+        )
+    except Exception:
+        logger.exception("%s 단계 바른 방향 찾기에서 오류", step.step_id)
+        return sub_steps, []
 
 
 def failed_guide_area(video_id: str, steps: Sequence[Step | GuideInputStep]) -> GuideArea:
@@ -751,10 +791,12 @@ def _eyeshadow_step(
     load_photo: PhotoLoader,
     occlusion: OcclusionFinder | None,
     zones: tuple[Zone, ...] | None,
-) -> list[AreaSubStep]:
-    """아이섀도 단계의 하위 단계들. 눈마다 찾아 eyeshadow_sub_steps로 바른 자리마다 적는다.
+) -> tuple[list[AreaSubStep], bool]:
+    """아이섀도 단계의 (하위 단계들, 눈 밑을 밝아진 양으로 찾았는지).
 
+    눈마다 찾아 eyeshadow_sub_steps로 바른 자리마다 적는다.
     zones는 단계의 바른 자리(eyeshadow_zones)이고 None이면 모른다.
+    눈 밑을 밝아진 양으로 찾았으면 바른 방향도 밝아진 양으로 재야 해서 함께 돌려준다.
     분석 중 오류가 나면 이 단계만 failed 하나로 적고 로그를 남긴다.
     """
     try:
@@ -771,8 +813,10 @@ def _eyeshadow_step(
         }
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
-        return [_failed(f"{step.step_id}-1")]
-    return eyeshadow_sub_steps(step.step_id, areas, zones)
+        return [_failed(f"{step.step_id}-1")], False
+    under = [area.zone("under") for area in areas.values()]
+    bright_under = any(zone.mask is not None and zone.color == "brightening" for zone in under)
+    return eyeshadow_sub_steps(step.step_id, areas, zones), bright_under
 
 
 def eyeshadow_sub_steps(
