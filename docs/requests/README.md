@@ -31,3 +31,5 @@
 | [운영 단계 추출에서 어긋난 종류·나누기·경계 고치기](2026-11-10-hyeonsoo-hyeongjun-step-extraction-misses.md) | 2026-11-10 | 김현수 → 박형준 | 요청 |
 | [코 블러셔 기본 가이드(blushNose) 추가](2026-11-10-hyeonsoo-seoyun-blush-nose-template.md) | 2026-11-10 | 김현수 → 한서윤 | 요청 |
 | [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md) | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 요청 대기 |
+| [노트북 처리기에서 분석 단계 동안의 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-middle-photos.md) | 2026-11-14 | 김현수 → 박형준 | 요청 |
+| [찾은 영역에 바른 방향 화살표(arrow)가 함께 올 수 있음](2026-11-14-hyeonsoo-seoyun-area-arrow.md) | 2026-11-14 | 김현수 → 한서윤 | 요청 |
