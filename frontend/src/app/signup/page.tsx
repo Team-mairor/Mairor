@@ -33,16 +33,10 @@ import { useRequest } from "@/lib/hooks/use-request";
 import { cn } from "@/lib/utils";
 import { isValidEmail, normalizeEmail, passwordRule } from "@/lib/validation";
 
-/**
- * 가입 전에 이메일 인증을 거칠지. BE의 SIGNUP_REQUIRE_EMAIL_VERIFICATION과 맞춘다.
- * 메일 발송이 꺼진(MAIL_ENABLED=false) 환경에서는 "false"로 빌드해야 가입할 수 있다.
- */
-const EMAIL_VERIFICATION = process.env.NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION !== "false";
+const EMAIL_VERIFICATION = process.env.NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION === "true";
 
-/** dup: 이미 가입된 이메일, msg: 서버가 준 안내 문구 */
 type EmailError = { kind: "dup" } | { kind: "msg"; text: string } | null;
 
-/** 진행 중인 요청: 중복 확인, 인증번호 받기, 인증번호 확인, 가입 */
 type Pending = "check" | "send" | "verify" | "submit";
 
 function RuleItem({ ok, children }: { ok: boolean; children: string }) {
@@ -54,7 +48,6 @@ function RuleItem({ ok, children }: { ok: boolean; children: string }) {
   );
 }
 
-/** 이메일 칸 옆 버튼. done: 끝난 단계(초록), on: 누를 수 있음 */
 function SideButton({
   tone,
   busy,
@@ -80,26 +73,21 @@ function SideButton({
   );
 }
 
-/** 입력 칸에서 Enter를 가입 제출 대신 그 칸의 동작으로 보낸다. 한글 조합 중 Enter는 무시한다 */
 const onEnter = (action: () => void) => (e: React.KeyboardEvent<HTMLInputElement>) => {
   if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
   e.preventDefault();
   action();
 };
 
-/** 01-1 회원가입. 이메일 중복 확인 → 이메일 인증(EMAIL_VERIFICATION) → 비밀번호 규칙 → 약관 동의 → 가입 */
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const form = useProfileForm();
-  /** 가입할 수 있다고 확인한 이메일 */
   const [okFor, setOkFor] = useState("");
-  /** 인증번호를 보낸 이메일 */
   const [sentFor, setSentFor] = useState("");
   const code = useVerificationCode();
-  /** 인증을 마친 이메일과 가입 요청에 실을 토큰 */
   const [verified, setVerified] = useState<{ email: string; token: string } | null>(null);
   const [emailErr, setEmailErr] = useState<EmailError>(null);
   const [codeErr, setCodeErr] = useState<string | null>(null);
@@ -107,7 +95,6 @@ export default function SignupPage() {
   const [pw2Err, setPw2Err] = useState<string | null>(null);
   const [formErr, setFormErr] = useState<string | null>(null);
   const { pending, run } = useRequest<Pending>();
-  /** 중복 확인 요청 제한(429)이 풀리는 시각 */
   const [checkUntil, setCheckUntil] = useState<number | null>(null);
   const checkLeft = useCountdown(checkUntil);
 
@@ -115,7 +102,6 @@ export default function SignupPage() {
   const emailOk = isValidEmail(email);
   const rule = passwordRule(pw);
   const match = pw2.length > 0 && pw === pw2;
-  // 이메일을 바꾸면 중복 확인·인증을 다시 해야 한다. 빈 칸끼리 같다고 확인·발송된 것으로 보지 않는다
   const checked = emailOk && okFor === emN;
   const sent = checked && sentFor === emN;
   const done = checked && verified?.email === emN;
@@ -124,7 +110,6 @@ export default function SignupPage() {
   const emailReady = EMAIL_VERIFICATION ? done : checked;
   const canSubmit = emailOk && emailReady && rule.ok && match && form.ready && !pending;
 
-  /** 인증을 마친 이메일을 풀어 다시 입력하게 한다 */
   const changeEmail = () => {
     setOkFor("");
     setSentFor("");
@@ -137,7 +122,6 @@ export default function SignupPage() {
     setEmailErr({ kind: "dup" });
   };
 
-  /** 이메일 중복 확인 */
   const checkEmail = () => {
     if (!canCheck) return;
     setEmailErr(null);
@@ -160,7 +144,6 @@ export default function SignupPage() {
     );
   };
 
-  /** 인증번호 받기. 이미 가입된 이메일이면 409 */
   const sendCode = () => {
     setCodeErr(null);
     return run(
@@ -182,7 +165,6 @@ export default function SignupPage() {
     );
   };
 
-  /** 인증번호 확인 */
   const verifyCode = () => {
     setCodeErr(null);
     return run(
@@ -202,7 +184,6 @@ export default function SignupPage() {
     if (!(e instanceof ApiError)) return setFormErr(errorMessage(e));
     if (e.code === "USERS_EMAIL_DUPLICATE") return dup();
     if (e.code === "USERS_EMAIL_NOT_VERIFIED") {
-      // 인증 토큰이 만료됐다. 인증번호부터 다시 받는다
       setSentFor("");
       setVerified(null);
       return setEmailErr({ kind: "msg", text: e.message });
@@ -214,12 +195,10 @@ export default function SignupPage() {
     if (emailReason) setEmailErr({ kind: "msg", text: emailReason });
     setPwErr(reason("password"));
     setPw2Err(reason("passwordConfirm"));
-    // 짝이 되는 칸이 없는 오류(본문·약관 항목 등)는 폼 아래에 보여 준다
     const known: string[] = ["email", "password", "passwordConfirm", ...EXTRA_FIELDS];
     if (e.details.some((d) => !known.includes(d.field))) setFormErr(e.message);
   };
 
-  /** 회원가입 */
   const submit = () => {
     if (!canSubmit) return;
     setEmailErr(null);
@@ -295,14 +274,11 @@ export default function SignupPage() {
                   setEmail(e.target.value);
                   setEmailErr(null);
                   setCodeErr(null);
-                  // 인증번호 다시 받기 대기는 이메일마다 따로다
                   code.resetResend();
                 }}
-                // Enter는 가입이 아니라 이 칸의 다음 동작(중복 확인)으로 보낸다
                 onKeyDown={onEnter(checkEmail)}
                 autoComplete="email"
                 maxLength={254}
-                // 인증을 마치면 잠근다. 바꾸려면 '이메일 변경'으로 풀고 다시 인증한다
                 readOnly={done}
                 className={cn("flex-1", done && "bg-cream text-mute")}
               />

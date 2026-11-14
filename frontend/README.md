@@ -287,7 +287,7 @@ try {
 - 토큰이 없거나 맞지 않는 변경 요청은 403 `CSRF_INVALID`이고, `api`가 내 계정 조회로 토큰을 다시 받아 한 번만 다시 보낸다. 조회가 401이면 `UNAUTHORIZED`를 던진다. 회원가입·로그인은 세션이 없어 토큰 대신 허용 Origin으로 검사한다(허용되지 않으면 403 `FORBIDDEN`). 개발 서버 Origin `http://localhost:3000`은 BE 개발 설정에서 허용돼 있다.
 - 앱을 열면 `SessionProvider`가 내 계정 조회로 로그인 상태를 서버 기준으로 맞추고 토큰을 넣는다. 401이면 로그아웃 상태로 바꾸고, 서버에 닿지 못하거나 5초 안에 답이 없으면 저장된 상태로 시작한다. 저장된 상태가 로그인인데 401이면 세션 만료로 보고 인트로가 `/login?expired=basic`으로 보낸다(로그인하면 풀린다). 화면에서 받은 API가 401이면 `expireSession()`으로 같은 만료 상태로 바꾼다. 로그아웃·만료 때는 서버에서 받은 파우치를 지우고 처음 샘플로 돌리며, 로그아웃 상태에서 로그인하거나 다른 계정으로 바뀌면 파우치를 비우고 서버 목록을 기다린다(목록 조회가 실패해도 샘플·이전 계정 목록을 내 제품으로 쓰지 않는다). 첫 조회가 끝나기 전에는 로그인 버튼이 막히고 "로그인 상태 확인 중"을 보여 준다. 세션 상태는 둘로 나뉜다: `storageLoaded`(브라우저 저장값을 읽음 — 파우치·리포트 화면이 기다린다), `sessionChecked`(내 계정 조회가 끝남 — 로그인 분기가 기다린다).
 - 오류 문구는 `errorMessage(e)`로 고른다. 아래 표에 있는 코드면 `message`, 아니면 "잠시 후 다시 시도해 주세요."다.
-- 가입 전 이메일 인증은 `NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION`으로 정한다(빌드 시점 값, 기본 켜짐). BE의 `SIGNUP_REQUIRE_EMAIL_VERIFICATION`과 같게 둔다. BE가 메일을 보내지 않는 환경(`MAIL_ENABLED=false`)에서는 인증번호를 받을 수 없으므로 `false`로 빌드해야 가입할 수 있다. 끄면 이메일 중복 확인만 거치고 인증 토큰은 보내지 않는다.
+- 가입 전 이메일 인증은 `NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION`으로 정한다(빌드 시점 값, 기본 꺼짐). BE의 `SIGNUP_REQUIRE_EMAIL_VERIFICATION`과 같게 둔다. 인증을 켤 때는 `true`로 빌드하고 BE의 메일 발송도 켜야 한다. 끄면 이메일 중복 확인만 거치고 인증 토큰은 보내지 않는다.
 - **약관 버전**: 가입 때 보내는 버전은 `lib/validation.ts`의 `AGREEMENT_VERSION`에 고정돼 있다. BE의 `AGREEMENT_*_VERSION`만 올리면 모든 가입이 실패하므로, 약관을 바꿀 때는 두 값을 같이 바꿔 FE·BE를 함께 배포한다.
 - BE 없이 개발할 때는 `NEXT_PUBLIC_API_MOCK=success|error`로 모의 응답을 쓴다. 운영 빌드(`npm run build`)에서는 이 값을 무시한다. 요청마다 `mock` 옵션으로 바꿀 수도 있지만 운영 빌드에도 적용되므로 `/debug` 확인 화면에서만 쓴다.
 - BE를 로컬에서 띄웠다면 `API_PROXY_TARGET=http://localhost:8080`으로 개발 서버가 `/api`를 넘긴다. 배포에서는 리버스 프록시가 맡는다.

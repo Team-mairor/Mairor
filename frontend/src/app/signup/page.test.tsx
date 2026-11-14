@@ -19,7 +19,6 @@ const button = (label: string) => {
   if (!found) throw new Error(`${label} 버튼이 없습니다`);
   return found;
 };
-/** React가 바뀐 값을 알아채도록 원래 setter로 넣고 input 이벤트를 보낸다 */
 const type = async (id: string, value: string) => {
   const el = element.querySelector<HTMLInputElement>(`#${id}`)!;
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -35,7 +34,6 @@ const submit = async () => {
       .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
 };
-/** 이메일 확인부터 약관 동의까지 마친 상태 */
 const fillRequired = async () => {
   await type("su-email", "new@example.com");
   await act(async () => button("중복 확인").click());
@@ -53,9 +51,7 @@ beforeEach(async () => {
     removeItem: (key: string) => saved.delete(key),
     clear: () => saved.clear(),
   });
-  // 이메일 인증 단계는 이 테스트 범위가 아니라 끈 빌드로 본다
-  vi.stubEnv("NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION", "false");
-  // 화면과 같은 모듈 인스턴스를 써야 api 가로채기가 먹는다
+  vi.stubEnv("NEXT_PUBLIC_SIGNUP_EMAIL_VERIFICATION", "");
   vi.resetModules();
   SignupPage = (await import("./page")).default;
   ({ api, ApiError } = await import("@/lib/api"));
