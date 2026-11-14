@@ -34,7 +34,7 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
   | `notApplicable` | 빈 목록 | `null` | 빈 목록 |
   | `failed` | 빈 목록 | `null` | 1개 이상 |
 
-- `makeup`이 `other`인 단계는 `notApplicable`이고, `notApplicable`은 `other`에만 쓴다. 마스카라처럼 영역을 분석하지 않는 부위는 `template`(`notAnalyzed`)로 보낸다
+- `makeup`이 `other`인 단계는 `notApplicable`이다. 그 밖에는 컨실러 단계에만 쓴다. 컨실러는 영역을 띄우지 않으며, 가이드 입력이 `foundation` · `highlight`로 보내므로 이 두 종류에서만 `notApplicable`이 나올 수 있다. 마스카라처럼 영역을 분석하지 않는 부위는 `template`(`notAnalyzed`)로 보낸다
 - `subStepId`는 `<stepId>-<order>`이고, 하위 단계 `order`는 1부터 차례대로
 - 단계는 `order` 순서대로, `stepId` · `order`가 겹치지 않음
 - `bary` 세 값의 합이 1 (0.001까지 허용)
@@ -70,13 +70,16 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 | `eyelinerWaterline` | 아이라인 윗점막(꼬리 없는 윗선) |
 | `eyelinerUnder` | 아이라인 아랫라인 · 아랫점막(아래 속눈썹 바깥쪽 절반) |
 | `blushNose` | 블러셔 코(코끝 · 콧등 · 콧대) |
+| `contourNose` | 쉐딩 콧대 옆 |
 
 아이섀도 키는 가이드 입력의 `eyeZone`(`upper` · `under` · `both`)으로 고르고, 없으면 `partLabel` · `facts.area` 글로 고른다([ai/docs/GUIDE_INPUT.md](../../ai/docs/GUIDE_INPUT.md)).
 아이섀도 단계는 그 바른 자리(윗눈두덩 · 눈 밑)마다 하위 단계를 하나씩 둔다(위 → 아래). 찾은 자리는 `extracted`, 단계 글에 있는데 못 찾은 자리는 그 자리 키의 `template`이라 한 단계에 둘이 섞일 수 있다. 어느 자리도 못 찾으면 전처럼 하위 단계 하나다.
 아이라인도 그린 자리(윗라인 · 윗점막 · 아랫라인)마다 하위 단계를 하나씩 둔다(윗라인 → 윗점막 → 아랫라인). 자리는 `eyeZone`(`upper` · `under` · `both` · `waterline`)으로, 없으면 단계 글로 고른다. 찾은 자리는 `extracted`, 못 찾은 윗라인은 `eyeliner`, 아랫라인은 `eyelinerUnder`이고, 윗점막은 사진으로 찾지 않고 `eyelinerWaterline`(이유 `notAnalyzed`)이다. 아이섀도와 달리 자리를 아는 단계는 어느 자리도 못 찾아도 자리마다 그 키를 둔다(「위아래」면 `eyeliner` · `eyelinerUnder` 둘). 자리를 모르는 단계는 찾은 자리만 두고, 아무것도 못 찾으면 `eyeliner` 하나다. 아이라인 영역은 선이 눈을 감쌀 때만 그 눈을 `exclude`에 넣는다.
 `blushNose`는 블러셔 단계의 `partLabel` · `facts.area` 글이 코에만 바른다고 할 때 쓴다(이유 `notAnalyzed`). 코는 색으로 찾지 않는다.
 
-FE는 `contour` 단계의 이름(`partLabel`)에 코가 있으면 코 쉐딩 기본 가이드(`contourNose`)로 바꿔 그린다. `contourNose`는 FE에서만 쓰는 키라 AI는 보내지 않는다.
+쉐딩은 단계 글(`partLabel` · `facts.area`)에 코(코 · 콧 · 노즈, 코렉터 · 코랄 제외)가 있을 때만 콧대 양옆을 사진으로 찾는다. 두 쪽 모두 찾으면 `extracted`이고 영역 이름은 그쪽 눈(`leftEye` · `rightEye`)이다(코 부위 이름이 없어 FE 코 쉐딩 기본 가이드와 같은 이름을 쓴다). 못 찾으면 그 이유(`contourColorNotFound` · `lightingChanged` · `noUsableFrame` · `faceSizeMismatch`)로 `contourNose`다.
+같은 단계 글에 광대 · 턱 · 이마 같은 코 밖 자리도 있으면 하위 단계를 하나 더 두어 `contour`(이유 `notAnalyzed`)를 보낸다. 코 밖 쉐딩은 사진으로 찾지 않는다. 글에 코가 없는 쉐딩 단계는 전처럼 `contour` 하나다.
+FE는 지금 `contour` 단계의 이름에 코가 있으면 `contour`를 `contourNose`로 바꿔 그린다(`frontend/src/features/tutorial/template.ts`). AI가 `contourNose`를 직접 보내므로 이 바꾸기는 빼야 하고([요청 문서](../../docs/requests/2026-11-14-hyeonsoo-seoyun-contour-nose-and-concealer.md)), 빼기 전에는 코와 광대를 같이 바르는 단계의 둘째 하위 단계(`contour`)도 코 가이드로 그려진다.
 
 ## 형식을 바꿀 때
 

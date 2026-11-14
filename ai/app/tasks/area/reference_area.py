@@ -30,7 +30,14 @@ from app.tasks.area.landmarks.landmarks_builder import FaceFinder, build_landmar
 from app.tasks.area.landmarks.occlusion import OcclusionFinder, remember_by_frame
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.landmarks.reference_input import ReferenceInput, read_frame_rgb
-from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
+from app.tasks.area.parts import (
+    blush_area,
+    brow_area,
+    contour_area,
+    eyeliner_area,
+    eyeshadow_area,
+    lip_area,
+)
 from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 
 OCCLUSION_KEEP = 64
@@ -42,6 +49,7 @@ PART_WINDOWS: dict[Makeup, tuple[int | None, int]] = {
     "brow": (brow_area.BEFORE_WINDOW_MS, brow_area.AFTER_WINDOW_MS),
     "eyeshadow": (eyeshadow_area.BEFORE_WINDOW_MS, eyeshadow_area.AFTER_WINDOW_MS),
     "eyeliner": (eyeliner_area.BEFORE_WINDOW_MS, eyeliner_area.AFTER_WINDOW_MS),
+    "contour": (contour_area.BEFORE_WINDOW_MS, contour_area.AFTER_WINDOW_MS),
 }
 
 

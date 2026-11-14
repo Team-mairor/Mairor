@@ -17,7 +17,14 @@ from app.tasks.area.guide_area_builder import (
 )
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
-from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
+from app.tasks.area.parts import (
+    blush_area,
+    brow_area,
+    contour_area,
+    eyeliner_area,
+    eyeshadow_area,
+    lip_area,
+)
 from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 from app.tasks.area.reference_area import (
     FACE_MAP_KEEP,
@@ -162,6 +169,7 @@ def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
     결과가 조용히 바뀐다. 실제 build_guide_area가 usable_rows에 묻는 구간을 모두 모아 본다.
     분석하는 부위를 새로 넣고 PART_WINDOWS에 빠뜨려도 같은 일이 생기므로, 분석하는 부위
     (AREA_FINDERS와 단계마다 따로 부르는 STEP_MAKEUPS)가 PART_WINDOWS와 같은지도 본다.
+    쉐딩은 단계 글이 콧대 옆일 때만 찾으므로 쉐딩 단계 글을 코 쉐딩으로 둔다.
     """
     assert set(PART_WINDOWS) == set(AREA_FINDERS) | set(STEP_MAKEUPS)
     asked = []
@@ -170,11 +178,16 @@ def test_every_range_a_part_asks_for_is_inside_needed_frames(monkeypatch):
         asked.append((start_ms, end_ms))
         return []
 
-    for part in (blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area):
+    parts = (blush_area, brow_area, contour_area, eyeliner_area, eyeshadow_area, lip_area)
+    for part in parts:
         monkeypatch.setattr(part, "usable_rows", record)
     steps = guide_input(
-        *[(f"s{i}", makeup, 10 * i, 10 * i + 5) for i, makeup in enumerate(PART_WINDOWS, start=1)]
+        *[(f"s{i}", makeup, 9 * i, 9 * i + 4) for i, makeup in enumerate(PART_WINDOWS, start=1)]
     ).steps
+    steps = [
+        step.model_copy(update={"part_label": "코쉐딩"}) if step.makeup == "contour" else step
+        for step in steps
+    ]
 
     build_guide_area(
         "test_01",

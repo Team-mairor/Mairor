@@ -8,8 +8,15 @@ from app.schemas.manifest import Makeup
 TRIANGLE_COUNT = 898
 BARY_TOLERANCE = 0.001
 NO_AREA_MAKEUPS: tuple[Makeup, ...] = ("other",)
+CONCEALER_MAKEUPS: tuple[Makeup, ...] = ("foundation", "highlight")
 TemplateId = Literal[
-    Makeup, "eyeshadowUpper", "eyeshadowUnder", "eyelinerWaterline", "eyelinerUnder", "blushNose"
+    Makeup,
+    "eyeshadowUpper",
+    "eyeshadowUnder",
+    "eyelinerWaterline",
+    "eyelinerUnder",
+    "blushNose",
+    "contourNose",
 ]
 
 RegionName = Literal[
@@ -96,6 +103,7 @@ class AreaSubStep(CamelModel):
     아이라인은 그린 자리별 키(eyelinerWaterline 꼬리 없는 윗점막 선, eyelinerUnder 아랫라인)가 있고,
     eyeliner는 꼬리까지 그린 윗라인이다.
     블러셔는 코(코끝·콧등·콧대)에 바르는 단계의 키 blushNose가 있고, blush는 두 볼이다.
+    쉐딩은 콧대 옆에 바르는 단계의 키 contourNose가 있고, contour는 옆광대에서 턱선까지다.
     """
 
     sub_step_id: str = Field(min_length=1)
@@ -137,7 +145,10 @@ class AreaStep(CamelModel):
     def check_sub_steps(self) -> "AreaStep":
         """하위 단계 번호와, 영역이 없는 화장 종류의 상태를 본다.
 
-        makeup이 NO_AREA_MAKEUPS(other)이면 notApplicable이고, 그 밖에는 쓰지 않는다.
+        makeup이 NO_AREA_MAKEUPS(other)이면 notApplicable이다.
+        그 밖에는 컨실러 단계가 올 수 있는 CONCEALER_MAKEUPS(foundation·highlight)에만 쓴다.
+        컨실러는 영역을 띄우지 않기로 해서, 가이드 입력이 foundation·highlight로 보낸 컨실러 단계를
+        notApplicable로 적는다.
         """
         for order, sub_step in enumerate(self.sub_steps, start=1):
             if sub_step.order != order:
@@ -149,8 +160,11 @@ class AreaStep(CamelModel):
                 raise ValueError(
                     f"{self.step_id}는 makeup이 {self.makeup}라 notApplicable이어야 합니다"
                 )
-            if not no_area and sub_step.status == "notApplicable":
-                raise ValueError("notApplicable은 makeup이 other인 단계에만 씁니다")
+            concealer = self.makeup in CONCEALER_MAKEUPS
+            if not no_area and not concealer and sub_step.status == "notApplicable":
+                raise ValueError(
+                    "notApplicable은 other와 컨실러 단계(foundation·highlight)에만 씁니다"
+                )
         return self
 
 

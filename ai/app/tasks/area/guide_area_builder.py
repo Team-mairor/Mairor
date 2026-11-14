@@ -1,9 +1,11 @@
 """단계마다 부위 분석을 불러 영상 하나의 가이드 영역(GuideArea)을 만든다.
 
 분석이 있는 화장 종류는 AREA_FINDERS에서 찾아 부르고, 결과를 shared/guide-area 형식에 채운다.
+컨실러 단계는 영역을 띄우지 않는다(concealer_step).
 아이라인은 단계 글로 그린 자리(윗라인·아랫라인·윗점막)를 고르고 앞 아이라인 단계에서 안내한 곳을
 빼고 봐야 하고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을 써야 하고, 아이섀도는 단계 글로 바른 자리
-(윗눈두덩·눈 밑)를 골라야 해서, 세 부위(STEP_MAKEUPS)는 단계마다 따로 부른다.
+(윗눈두덩·눈 밑)를 골라야 하고, 쉐딩은 단계 글에 코가 있을 때만 찾아서,
+네 부위(STEP_MAKEUPS)는 단계마다 따로 부른다.
 그중 앞 단계 결과를 이어받는 아이라인·눈썹(ORDERED_MAKEUPS)은 단계를 여러 줄로 나눠 만들 때도
 한 줄에 순서대로 둬야 한다.
 가림 찾기 함수를 받으면 모든 부위 분석에 그대로 넘겨 사진마다 가린 칸을 빼고 보게 한다.
@@ -21,6 +23,7 @@ import numpy as np
 from app.core.tracing import set_output, traced
 from app.schemas.guide import EyeZone, GuideInputStep
 from app.schemas.guide_area import (
+    CONCEALER_MAKEUPS,
     NO_AREA_MAKEUPS,
     AreaStep,
     AreaSubStep,
@@ -38,7 +41,14 @@ from app.tasks.area.common.mask_outline import smooth_outlines
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.direction_finder import add_directions
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
-from app.tasks.area.parts import blush_area, brow_area, eyeliner_area, eyeshadow_area, lip_area
+from app.tasks.area.parts import (
+    blush_area,
+    brow_area,
+    contour_area,
+    eyeliner_area,
+    eyeshadow_area,
+    lip_area,
+)
 from app.tasks.area.parts.area_preparation import (
     StepBounds,
     recording_dropped,
@@ -47,6 +57,7 @@ from app.tasks.area.parts.area_preparation import (
 )
 from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, paired_blush
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
+from app.tasks.area.parts.contour_area import ContourArea, find_contour_area, paired_contour
 from app.tasks.area.parts.eyeliner_area import (
     EyelinerArea,
     find_eyeliner_area,
@@ -78,6 +89,9 @@ EYE_EXCLUSION_PATTERN = re.compile(
 NOSE_WORDS = ("코끝", "콧등", "콧대", "콧볼", "콧방울", "코볼", "코블러셔")
 NOSE_PATTERN = re.compile("|".join(NOSE_WORDS))
 CHEEK_WORDS = ("볼", "광대", "뺨", "애플존")
+CONCEALER_WORDS = ("컨실러", "코렉터")
+CONTOUR_NOSE_PATTERN = re.compile("콧|코(?!렉터|랄)|노즈")
+CONTOUR_OTHER_WORDS = ("광대", "턱", "이마", "헤어라인", "볼", "윤곽")
 EYE_ZONES: dict[EyeZone, tuple[Zone, ...]] = {
     "upper": ("upper",),
     "under": ("under",),
@@ -113,7 +127,7 @@ LINE_EXCLUSION_PATTERN = re.compile(
 SURROUND_SHARE = 0.5
 
 ORDERED_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow")
-STEP_MAKEUPS: tuple[Makeup, ...] = (*ORDERED_MAKEUPS, "eyeshadow")
+STEP_MAKEUPS: tuple[Makeup, ...] = (*ORDERED_MAKEUPS, "eyeshadow", "contour")
 
 AreaFinder = Callable[
     [LandmarksResult, int, int, PhotoLoader, str, OcclusionFinder | None], AreaSubStep
@@ -174,7 +188,12 @@ def build_guide_area(
             recording_dropped() as dropped,
             within_step(*bounds[step.step_id]),
         ):
-            if step.makeup == "eyeliner":
+            concealer = concealer_step(step)
+            if concealer:
+                sub_steps = [_not_applicable(f"{step.step_id}-1")]
+            elif step.makeup == "contour":
+                sub_steps = _contour_step(step, result, load_photo, occlusion)
+            elif step.makeup == "eyeliner":
                 zones = eyeliner_zones(step)
                 sub_steps, drawn = _eyeliner_step(step, result, load_photo, drawn, occlusion, zones)
             elif step.makeup == "brow":
@@ -199,6 +218,8 @@ def build_guide_area(
             }
             if reused_from is not None:
                 record["reusedAreaFrom"] = reused_from
+            if concealer:
+                record["concealer"] = True
             if step.makeup in ("eyeshadow", "eyeliner"):
                 record["eyeZones"] = None if zones is None else list(zones)
             if len(sub_steps) > 1:
@@ -351,6 +372,103 @@ def nose_blush(step: Step | GuideInputStep) -> bool:
     nose = any(NOSE_PATTERN.search(text) for text in texts)
     cheek = any(word in NOSE_PATTERN.sub("", text) for text in texts for word in CHEEK_WORDS)
     return nose and not cheek
+
+
+def concealer_step(step: Step | GuideInputStep) -> bool:
+    """컨실러 단계인지. 컨실러 영역은 띄우지 않아 notApplicable로 적는다.
+
+    가이드 입력은 컨실러를 피부를 덮으면 foundation, 얼굴을 밝히면 highlight로 보내므로
+    (CONCEALER_MAKEUPS) 그 두 종류에서 partLabel에 컨실러 낱말(CONCEALER_WORDS)이 있으면
+    컨실러 단계다. 덮기와 밝히기 사이라 바른 곳도 보여 줄 기본 가이드도 정하기 어렵고,
+    기본 가이드를 두면 이마에 바른 컨실러에도 콧대·눈 밑 하이라이트 가이드가 나온다.
+    글이 없는 매니페스트 단계는 컨실러 단계가 아니다.
+    """
+    if not isinstance(step, GuideInputStep) or step.makeup not in CONCEALER_MAKEUPS:
+        return False
+    label = "".join(step.part_label.split())
+    return any(word in label for word in CONCEALER_WORDS)
+
+
+def contour_nose(step: Step | GuideInputStep) -> bool:
+    """쉐딩 단계 글(partLabel·facts.area)에 코가 있는지(CONTOUR_NOSE_PATTERN).
+
+    코·콧·노즈가 든 글이고, 코렉터·코랄은 뺀다. 운영 단계 글은 「코 쉐딩」「콧대 쉐딩」뿐 아니라
+    「코」 한 글자로도 온다. FE가 단계 이름으로 코 쉐딩 기본 가이드를 고르던 규칙과 같다.
+    띄어쓰기를 지우고 본다. 글이 없는 매니페스트 단계는 코 쉐딩이 아니다.
+    """
+    return any(CONTOUR_NOSE_PATTERN.search(text) for text in _step_texts(step))
+
+
+def contour_elsewhere(step: Step | GuideInputStep) -> bool:
+    """쉐딩 단계 글에 코 밖 자리(CONTOUR_OTHER_WORDS: 광대·턱·이마 등)가 있는지.
+
+    코 낱말(NOSE_WORDS)을 먼저 지우고 본다. 콧볼의 볼을 볼로 보지 않으려는 것이다.
+    """
+    return any(
+        word in CONTOUR_NOSE_PATTERN.sub("", NOSE_PATTERN.sub("", text))
+        for text in _step_texts(step)
+        for word in CONTOUR_OTHER_WORDS
+    )
+
+
+def _step_texts(step: Step | GuideInputStep) -> list[str]:
+    if not isinstance(step, GuideInputStep):
+        return []
+    return ["".join(text.split()) for text in (step.part_label, step.facts.area.value)]
+
+
+def _contour_step(
+    step: Step | GuideInputStep,
+    result: LandmarksResult,
+    load_photo: PhotoLoader,
+    occlusion: OcclusionFinder | None,
+) -> list[AreaSubStep]:
+    """쉐딩 단계의 하위 단계들.
+
+    단계 글에 코가 있으면(contour_nose) 콧대 양옆을 찾아 contour_sub_steps로 적는다.
+    아니면 찾지 않고 notAnalyzed 이유로 쉐딩 기본 가이드(contour)다.
+    분석 중 오류가 나면 이 단계만 failed 하나로 적고 로그를 남긴다.
+    """
+    if not contour_nose(step):
+        return [template_sub_step(f"{step.step_id}-1", "contour", [NOT_ANALYZED])]
+    try:
+        areas = find_contour_area(
+            result,
+            round(step.start_seconds * 1000),
+            round(step.end_seconds * 1000),
+            load_photo,
+            occlusion=occlusion,
+        )
+    except Exception:
+        logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
+        return [_failed(f"{step.step_id}-1")]
+    return contour_sub_steps(step.step_id, areas, contour_elsewhere(step))
+
+
+def contour_sub_steps(
+    step_id: str, areas: Mapping[RegionName, ContourArea], elsewhere: bool
+) -> list[AreaSubStep]:
+    """콧대 양옆의 찾기 결과를 하위 단계로 적는다.
+
+    두 쪽 모두 찾았으면(paired_contour) 쪽마다 영역 하나씩 적은 extracted이고,
+    못 찾았으면 그 이유로 코 쉐딩 기본 가이드(contourNose)다.
+    영역 이름은 FE 코 쉐딩 기본 가이드처럼 그쪽 눈(leftEye·rightEye)이다. 코 부위 이름이 없어서다.
+    elsewhere(단계 글에 광대·턱·이마 같은 코 밖 자리도 있음)이면, 그 자리는 찾지 않으므로
+    notAnalyzed 이유의 쉐딩 기본 가이드(contour) 하위 단계를 뒤에 하나 더한다.
+    """
+    nose = pair_sub_step(
+        f"{step_id}-1",
+        "contourNose",
+        areas,
+        paired_contour(dict(areas)),
+        "contourColorNotFound",
+        False,
+        contour_area.OUTLINE_SMOOTH_CELLS,
+    )
+    if not elsewhere:
+        return [nose]
+    rest = template_sub_step(f"{step_id}-2", "contour", [NOT_ANALYZED])
+    return [nose, rest.model_copy(update={"order": 2})]
 
 
 def eyeliner_zones(step: Step | GuideInputStep) -> tuple[LineZone, ...] | None:
@@ -874,8 +992,8 @@ def eyeshadow_sub_steps(
 
 def pair_sub_step(
     sub_step_id: str,
-    makeup: Makeup,
-    areas: Mapping[RegionName, BlushArea | BrowArea | EyeshadowArea],
+    makeup: TemplateId,
+    areas: Mapping[RegionName, BlushArea | BrowArea | EyeshadowArea | ContourArea],
     masks: Mapping[RegionName, np.ndarray] | None,
     not_found: str,
     exclude_self: bool,

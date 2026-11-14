@@ -28,6 +28,8 @@ from app.tasks.area.guide_area_builder import (
 from app.tasks.area.parts.area_preparation import usable_rows
 from app.tasks.area.parts.blush_area import BlushArea, cheek_range
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, brow_range, symmetric_brows
+from app.tasks.area.parts.contour_area import SIDES as CONTOUR_SIDES
+from app.tasks.area.parts.contour_area import ContourArea, side_range
 from app.tasks.area.parts.eyeliner_area import EyelinerArea
 from app.tasks.area.parts.eyeshadow_area import (
     EYES,
@@ -909,3 +911,188 @@ def test_makeup_without_analysis_falls_back_to_its_default_guide(monkeypatch, ma
         makeup,
         [NOT_ANALYZED],
     )
+
+
+def contour_found(*sides: str, reason: str = "contourColorNotFound"):
+    """적은 쪽만 콧대 옆 범위 전체를 찾은 것으로 돌려주는 가짜 찾기 함수."""
+
+    def find(*_, **__):
+        return {
+            side: ContourArea(mask=np.array(side_range(side)), yellowing=1.0)
+            if side in sides
+            else ContourArea(mask=None, reason=reason)
+            for side in CONTOUR_SIDES
+        }
+
+    return find
+
+
+def contour_sub_steps_of(monkeypatch, finder, part_label, area):
+    monkeypatch.setattr(guide_area_builder, "find_contour_area", finder)
+    step = input_step("contour", part_label, area)
+    return build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area"),
+    [
+        ("코쉐딩", "콧대 옆"),
+        ("코 쉐딩하기", "눈 앞머리, 콧대, 코 옆"),
+        ("노즈 쉐딩", "얼굴 중앙"),
+        ("코", "코"),
+        ("코 쉐딩 블렌딩", "코 끝"),
+    ],
+)
+def test_nose_contour_found_on_both_sides_sends_one_area_on_each_side(
+    monkeypatch, part_label, area
+):
+    """시험 영상 코 쉐딩 단계(s9), 확인용 영상, 운영 단계표의 글. 영역 이름은 그쪽 눈이다."""
+    sub_steps = contour_sub_steps_of(monkeypatch, contour_found(*CONTOUR_SIDES), part_label, area)
+    assert [(s.status, s.reasons) for s in sub_steps] == [("extracted", [])]
+    assert [s.region for s in sub_steps[0].guide_sets] == ["leftEye", "rightEye"]
+    assert all(s.exclude == [] for s in sub_steps[0].guide_sets)
+    assert all(len(s.guides[0].outline) >= 3 for s in sub_steps[0].guide_sets)
+    area_step = guide_area_builder.AreaStep(
+        step_id="s5", order=1, makeup="contour", sub_steps=sub_steps
+    )
+    guide = guide_area_builder.GuideArea(video_id="test_01", mesh_version="v1", steps=[area_step])
+    jsonschema.validate(guide.model_dump(mode="json", by_alias=True), SCHEMA)
+
+
+def test_nose_contour_found_on_one_side_uses_the_nose_template_with_the_other_reason(monkeypatch):
+    sub_steps = contour_sub_steps_of(monkeypatch, contour_found("leftEye"), "코쉐딩", "콧대 옆")
+    assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("template", "contourNose", ["contourColorNotFound"])
+    ]
+
+
+def test_nose_contour_without_photos_uses_the_nose_template_with_its_reason(monkeypatch):
+    finder = contour_found(reason="noUsableFrame")
+    sub_steps = contour_sub_steps_of(monkeypatch, finder, "코쉐딩", "콧대 옆")
+    assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("template", "contourNose", ["noUsableFrame"])
+    ]
+    area_step = guide_area_builder.AreaStep(
+        step_id="s5", order=1, makeup="contour", sub_steps=sub_steps
+    )
+    guide = guide_area_builder.GuideArea(video_id="test_01", mesh_version="v1", steps=[area_step])
+    jsonschema.validate(guide.model_dump(mode="json", by_alias=True), SCHEMA)
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area"),
+    [
+        ("코 쉐딩", "콧대, 코 옆, 옆광대~턱선"),
+        ("턱선, 광대, 콧대, 코 끝 쉐딩", "턱, 옆광대~턱선, 콧대, 코 끝"),
+        ("콧대 쉐딩", "콧대, 코 옆, 옆광대~턱선, 턱, 이마"),
+    ],
+)
+def test_nose_contour_with_other_places_adds_the_face_contour_template(
+    monkeypatch, part_label, area
+):
+    """코와 광대·턱·이마를 같이 바르면 코는 찾고, 나머지는 쉐딩 기본 가이드를 더한다."""
+    sub_steps = contour_sub_steps_of(monkeypatch, contour_found(*CONTOUR_SIDES), part_label, area)
+    assert [(s.sub_step_id, s.order, s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("s5-1", 1, "extracted", None, []),
+        ("s5-2", 2, "template", "contour", [NOT_ANALYZED]),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area"),
+    [
+        ("블러셔와 쉐딩 이어주기", "옆광대~턱선"),
+        ("쉐딩 컬러로 애교살 경계선 잡기", "애교살, 눈 밑"),
+        ("코랄 쉐딩", "볼"),
+        ("코렉터 섞은 쉐딩", "턱"),
+    ],
+)
+def test_contour_away_from_the_nose_sides_uses_the_contour_template_without_finding(
+    monkeypatch, part_label, area
+):
+    """글에 코가 없는 쉐딩은 찾지 않는다. 광대·턱선·이마는 바르지 않은 단계와 가르지 못했다."""
+
+    def never_find(*_, **__):
+        raise AssertionError("콧대 옆이 아닌 쉐딩은 색으로 찾지 않아야 합니다")
+
+    sub_steps = contour_sub_steps_of(monkeypatch, never_find, part_label, area)
+    assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("template", "contour", [NOT_ANALYZED])
+    ]
+
+
+def test_error_in_nose_contour_fails_only_that_step(monkeypatch, caplog):
+    def broken(*_, **__):
+        raise RuntimeError("사진을 읽지 못함")
+
+    with caplog.at_level(logging.ERROR):
+        sub_steps = contour_sub_steps_of(monkeypatch, broken, "코쉐딩", "콧대 옆")
+    assert [(s.status, s.reasons) for s in sub_steps] == [("failed", [ANALYSIS_ERROR])]
+    assert "s5" in caplog.text
+
+
+def test_nose_contour_step_start_and_end_are_passed_in_milliseconds(monkeypatch):
+    seen = []
+
+    def find(result, start_ms, end_ms, load_photo, occlusion=None):
+        seen.append((start_ms, end_ms))
+        return contour_found()()
+
+    contour_sub_steps_of(monkeypatch, find, "코쉐딩", "콧대 옆")
+    assert seen == [(8000, 10500)]
+
+
+@pytest.mark.parametrize(
+    ("makeup", "part_label"),
+    [
+        ("highlight", "컨실러"),
+        ("foundation", "컨실러로 잡티 가리기"),
+        ("foundation", "눈썹 테두리 컨실러"),
+        ("highlight", "코렉터 바르기"),
+    ],
+)
+def test_concealer_step_shows_no_area(monkeypatch, makeup, part_label):
+    """컨실러는 영역을 띄우지 않는다. BE가 foundation·highlight로 보낸 컨실러 단계를 글로 가린다."""
+    step = input_step(makeup, part_label, "눈 밑과 콧대")
+    area = build_guide_area("test_01", [step], RESULT, never)
+    sub_step = area.steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id, sub_step.reasons, sub_step.guide_sets) == (
+        "notApplicable",
+        None,
+        [],
+        [],
+    )
+    jsonschema.validate(area.model_dump(mode="json", by_alias=True), SCHEMA)
+
+
+@pytest.mark.parametrize(
+    ("makeup", "part_label"),
+    [
+        ("highlight", "하이라이터"),
+        ("foundation", "쿠션 바르기"),
+        ("blush", "컨실러 섞은 블러셔"),
+    ],
+)
+def test_steps_without_concealer_words_keep_their_guide(monkeypatch, makeup, part_label):
+    monkeypatch.setattr(
+        guide_area_builder,
+        "find_blush_area",
+        lambda *_, **__: BlushArea(mask=None, reason="noUsableFrame"),
+    )
+    step = input_step(makeup, part_label, "볼")
+    sub_step = build_guide_area("test_01", [step], RESULT, never).steps[0].sub_steps[0]
+    assert (sub_step.status, sub_step.template_id) == ("template", makeup)
+
+
+def test_concealer_step_is_marked_in_the_step_record(monkeypatch):
+    """Phoenix area_step 기록에 컨실러 단계라 영역을 띄우지 않았다는 표시(concealer)가 남는다."""
+    records = []
+    monkeypatch.setattr(guide_area_builder, "set_output", lambda span, out: records.append(out))
+    steps = [
+        input_step("highlight", "컨실러", "눈 밑과 콧대"),
+        input_step("highlight", "하이라이터", "콧대"),
+    ]
+    steps[1] = steps[1].model_copy(update={"step_id": "s6", "order": 2})
+    build_guide_area("test_01", steps, RESULT, never)
+    assert (records[0]["status"], records[0]["concealer"]) == ("notApplicable", True)
+    assert "concealer" not in records[1]
