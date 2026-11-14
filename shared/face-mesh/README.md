@@ -18,7 +18,7 @@ FE(브라우저, `@mediapipe/tasks-vision`)와 AI(Python, `mediapipe`)가 **같�
 
 - FE: `frontend/scripts/sync-mediapipe-assets.mjs`가 `npm run dev`·`npm run build` 전에 `frontend/public/models/`로 복사한다.
 - FE: `frontend/src/features/face/regions.ts`가 `regions.v1.json`을 직접 import한다 (`next.config.ts`의 `turbopack.root`가 저장소 루트).
-- AI (예정): Python에서 이 경로의 파일을 직접 읽는다. 부위 점 번호는 `regions.v1.json`을 읽고 따로 옮겨 적지 않는다.
+- AI: `ai/app/core/paths.py`의 `FACE_MESH_DIR`로 이 폴더의 파일을 직접 읽는다. 얼굴 점 찾기는 `face_landmarker.task`(`ai/app/tasks/area/landmarks/face_finder.py`), 얼굴 지도 · 얼굴 주소는 `triangles.v1.json` · `uv.v1.json`(`ai/app/tasks/area/common/face_map.py`)을 쓴다. 부위 점 번호는 `regions.v1.json`을 읽고 따로 옮겨 적지 않는다(`ai/app/tasks/area/common/region_points.py`).
 
 ## 메시 규칙 (`meshVersion: "v1"`)
 

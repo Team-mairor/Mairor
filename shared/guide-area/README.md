@@ -18,8 +18,8 @@ AI가 레퍼런스 영상에서 찾아 넘기는 튜토리얼 가이드 영역(`
 ## 사용 위치
 
 - AI: `ai/tests/test_guide_area_schema.py`가 이 파일이 모델과 같은지, 샘플(`ai/samples/local_01/guide_area.json`)이 통과하는지, 규칙을 어긴 예를 잡는지 본다. 샘플의 상태·이유·삼각형 번호는 형식을 보이기 위한 예시다.
-- FE (예정): 받은 영역 데이터를 이 스키마로 검사하거나 타입을 맞춘다. 얼굴 주소 · 부위 이름 · 도형은 `frontend/src/features/face/types.ts`와 같다.
-- BE (예정): AI 결과를 FE에 넘기기 전에 이 스키마로 검사한다.
+- FE: 스키마 파일을 직접 읽지 않고 같은 모양의 타입으로 받는다(`frontend/src/features/guide/types.ts`, 얼굴 주소 · 부위 이름 · 도형은 `frontend/src/features/face/types.ts`). 튜토리얼은 가이드 조회 응답(`GET /v1/guides/{guideId}`)의 `subSteps`를 그리기 전에 `checkGuideArea`(`frontend/src/features/guide/guide-overlay.tsx`)로 메시 판 · 도형 · 얼굴 주소 · 부위 이름을 검사하고, 쓸 수 없는 도형만 뺀다. FE에 없는 기본 가이드 키를 받은 하위 단계는 그리지 않는다.
+- BE: 가이드 작업 콜백에서 필수 칸, 영상 ID, 설명 단계 ID가 가이드 입력과 같은지만 본다(`backend/src/main/java/com/mairor/backend/analysis/service/AiResultCheck.java`). 영역은 이 스키마로 검사하지 않고 받은 그대로 저장해 가이드 조회 응답의 `subSteps`로 넘긴다.
 
 ## 스키마에 없는 검사
 
