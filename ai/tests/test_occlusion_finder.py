@@ -101,7 +101,7 @@ def test_nothing_is_occlusion_when_the_model_paints_no_occluder(monkeypatch):
 
 
 LFS_POINTER = (
-    f"version https://git-lfs.github.com/spec/v1\noid sha256:{MODEL_SHA256}\nsize 52600479\n"
+    f"version https://git-lfs.github.com/spec/v1\noid sha256:{MODEL_SHA256}\nsize 13334181\n"
 )
 
 
@@ -119,7 +119,7 @@ def test_readme_records_the_same_fingerprint():
 
 def test_lfs_pointer_in_place_of_the_model_is_refused(tmp_path):
     """git lfs 없이 받아 모델 자리에 포인터만 있으면, 지문이 달라 이유와 받는 법을 알린다."""
-    pointer = tmp_path / "occlusion_bisenet.v1.onnx"
+    pointer = tmp_path / "occlusion_bisenet.v1.int8.onnx"
     pointer.write_text(LFS_POINTER, encoding="utf-8")
 
     with pytest.raises(OcclusionModelError, match="git lfs pull"):
@@ -128,7 +128,7 @@ def test_lfs_pointer_in_place_of_the_model_is_refused(tmp_path):
 
 def test_missing_model_file_is_refused(tmp_path):
     with pytest.raises(OcclusionModelError, match="없습니다"):
-        check_model_file(tmp_path / "occlusion_bisenet.v1.onnx")
+        check_model_file(tmp_path / "occlusion_bisenet.v1.int8.onnx")
 
 
 def test_model_file_gives_scores_for_twenty_labels():
@@ -203,7 +203,7 @@ def hidden_share(frame_index: int, region: str) -> float:
 
 @NEEDS_SAMPLE
 def test_pencil_and_subtitle_over_the_lips_are_found():
-    """454.1초: 펜슬과 자막 상자가 입술을 덮는다. 이 모델은 입술의 64%를 가림으로 찾는다.
+    """454.1초: 펜슬과 자막 상자가 입술을 덮는다. 이 모델은 입술의 71%를 가림으로 찾는다.
 
     이 모델을 고른 이유다. MediaPipe 셀카 다중 분할 그대로는 같은 사진에서 4%만 찾았다.
     """

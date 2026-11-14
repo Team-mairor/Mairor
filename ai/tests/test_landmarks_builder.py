@@ -1,4 +1,7 @@
+import threading
+
 import numpy as np
+import pytest
 
 from app.core.errors import AppError
 from app.schemas.landmarks import Face, Point, Pose
@@ -100,3 +103,56 @@ def test_each_frame_photo_goes_to_finder():
     build_landmarks(make_manifest([0, 30]), lambda frame: photos[frame.frame_index], finder=finder)
 
     assert seen == [10, 20]
+
+
+def test_workers_share_frames_and_keep_frame_order():
+    """스레드 둘이 나눠 찾아도 결과는 프레임 순서 그대로이고, 두 스레드가 실제로 같이 일한다.
+
+    처음 두 장은 두 스레드가 같이 들어올 때까지 기다리게 해, 한 스레드가 다 가져가지 못하게 한다.
+    """
+    both = threading.Barrier(2, timeout=10)
+    seen = []
+
+    def finder(rgb: np.ndarray) -> list[Face]:
+        seen.append(threading.get_ident())
+        if len(seen) <= 2:
+            both.wait()
+        return [fake_face(0.1, 0.1 + rgb[0, 0, 0] / 100)]
+
+    photos = {
+        index: np.full((2, 4, 3), index // 30 + 1, dtype=np.uint8) for index in range(0, 180, 30)
+    }
+
+    result = build_landmarks(
+        make_manifest([150, 0, 60, 30, 120, 90]),
+        lambda frame: photos[frame.frame_index],
+        finder=finder,
+        workers=2,
+    )
+
+    assert [frame.frame_index for frame in result.frames] == [0, 30, 60, 90, 120, 150]
+    assert [frame.face.landmarks[1].x for frame in result.frames] == pytest.approx(
+        [0.11, 0.12, 0.13, 0.14, 0.15, 0.16]
+    )
+    assert len(set(seen)) == 2
+
+
+def test_unhandled_error_stops_the_frames_not_started_yet():
+    """작업이 취소되면 진행 숫자를 세는 자리에서 오류가 난다.
+
+    남은 사진을 다 읽지 않고 바로 올리는지 본다.
+    """
+
+    class Stopped(Exception):
+        pass
+
+    loaded = []
+
+    def load_photo(frame: Frame) -> np.ndarray:
+        loaded.append(frame.frame_index)
+        raise Stopped
+
+    with pytest.raises(Stopped):
+        build_landmarks(make_manifest(list(range(0, 3000, 30))), load_photo, workers=2)
+
+    assert len(loaded) < 100

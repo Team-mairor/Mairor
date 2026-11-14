@@ -12,8 +12,10 @@ within_step 안에서는 앞 단계 끝과 다음 단계 시작 사이의 사진
 립·블러셔·눈썹 같은 부위 분석이 같이 쓴다. 기준값의 근거는 ai/docs/FRAME_SELECTION.md에 있다.
 """
 
+import threading
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import Future
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Literal
@@ -23,7 +25,12 @@ import numpy as np
 
 from app.schemas.guide_area import RegionName
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
-from app.tasks.area.common.face_map import face_cells, flatten, flatten_mask, median_map
+from app.tasks.area.common.face_map import (
+    face_cells,
+    flatten,
+    flatten_with_mask,
+    median_map,
+)
 from app.tasks.area.landmarks.frame_checker import outside_count_name
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 
@@ -138,13 +145,15 @@ class RememberedPhotos:
     기억한 지도는 읽기 전용이라, 꺼내 쓰는 쪽이 고치면 오류가 난다.
     지도는 사진 1장에 약 4MB(얼굴 지도 3MB + 가린 칸 지도 1MB)다.
     얼굴 선명도(sharpness)는 값 하나라 keep장에 묶지 않고 잰 사진을 모두 기억한다.
+    여러 줄(스레드)이 한 꾸러미를 같이 써도 된다(face_maps).
     """
 
     def __init__(self, load_photo: PhotoLoader, keep: int) -> None:
         self.load_photo = load_photo
         self.keep = keep
-        self._kept: OrderedDict[tuple[int, bool], FaceMaps] = OrderedDict()
+        self._kept: OrderedDict[tuple[int, bool], Future[FaceMaps]] = OrderedDict()
         self._sharpness: dict[tuple[int, bool], float | None] = {}
+        self._lock = threading.Lock()
 
     def __call__(self, row: FrameLandmarks) -> np.ndarray:
         return self.load_photo(row)
@@ -153,19 +162,33 @@ class RememberedPhotos:
         """row 사진의 (얼굴 지도, 가린 칸 지도). occlusion이 None이면 가린 칸 지도도 None이다.
 
         영역 작업 하나에서 occlusion은 늘 같은 함수라고 보고, 사진 번호와 가림 찾기 여부로 기억한다.
+        여러 스레드가 같이 불러도 된다. 같은 사진을 두 스레드가 찾으면 먼저 온 쪽만 만들고
+        다른 쪽은 그 결과를 기다린다. 만들다 오류가 나면 기억하지 않고 그 오류를 올린다.
         """
         key = (row.frame_index, occlusion is not None)
-        hit = self._kept.get(key)
-        if hit is not None:
-            self._kept.move_to_end(key)
-            return hit
-        maps = make_face_maps(row, self.load_photo, occlusion)
+        with self._lock:
+            slot = self._kept.get(key)
+            mine = slot is None
+            if slot is None:
+                slot = self._kept[key] = Future()
+                if len(self._kept) > self.keep:
+                    self._kept.popitem(last=False)
+            else:
+                self._kept.move_to_end(key)
+        if not mine:
+            return slot.result()
+        try:
+            maps = make_face_maps(row, self.load_photo, occlusion)
+        except BaseException as error:
+            with self._lock:
+                if self._kept.get(key) is slot:
+                    del self._kept[key]
+            slot.set_exception(error)
+            raise
         for found in maps:
             if found is not None:
                 found.flags.writeable = False
-        self._kept[key] = maps
-        if len(self._kept) > self.keep:
-            self._kept.popitem(last=False)
+        slot.set_result(maps)
         return maps
 
     def sharpness(self, row: FrameLandmarks, occlusion: OcclusionFinder | None) -> float | None:
@@ -185,8 +208,9 @@ def make_face_maps(
 ) -> FaceMaps:
     """row 사진을 읽어 (얼굴 지도, 가린 칸 지도)를 만든다. occlusion이 None이면 가린 칸도 None."""
     photo = load_photo(row)
-    covered = None if occlusion is None else flatten_mask(occlusion(row, photo), row.face)
-    return flatten(photo, row.face), covered
+    if occlusion is None:
+        return flatten(photo, row.face), None
+    return flatten_with_mask(photo, occlusion(row, photo), row.face)
 
 
 def usable_rows(

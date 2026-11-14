@@ -83,7 +83,7 @@ def test_patched_times_tool_and_service_functions_and_puts_them_back():
         (module, "table_finder"),
         (module, "measure_part"),
         (area_preparation, "flatten"),
-        (area_preparation, "flatten_mask"),
+        (area_preparation, "flatten_with_mask"),
         (area_preparation, "known_median_map"),
     ]
     originals = [getattr(owner, name) for owner, name in places]
@@ -103,9 +103,8 @@ def test_patched_times_tool_and_service_functions_and_puts_them_back():
     )
     laps = recorder.laps
     assert laps[("noise", "part:lip")].calls == 1
-    assert laps[("noise", "flatten")].calls == 2
-    assert len(laps[("noise", "flatten")].distinct) == 2
-    assert laps[("noise", "flattenMask")].calls == 2
+    assert laps[("noise", "flattenWithMask")].calls == 2
+    assert len(laps[("noise", "flattenWithMask")].distinct) == 2
     assert laps[("noise", "occlusionTable")].calls == 2
     assert laps[("noise", "median")].calls == 1
 

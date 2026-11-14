@@ -5,6 +5,7 @@
 정사각형이 사진 밖으로 나간 곳은 검은색으로 채워 넣고, 결과는 사진 안쪽만 되돌린다.
 모델은 얼굴 분할 BiSeNet에 가림 칸을 더해 학습한 것이고, 출처와 만든 방법은
 app/weights/README.md에 있다. onnxruntime(CPU)으로 돌린다.
+서비스는 그 모델의 숫자를 8비트 정수로 줄인 판을 쓴다. 사진 1장 시간이 약 3분의 1이다.
 모델 파일은 처음 열 때 지문(SHA-256)을 확인하고, 서버는 켜질 때 load_occlusion_model로 미리 연다.
 """
 
@@ -19,8 +20,8 @@ import onnxruntime
 from app.core.paths import WEIGHTS_DIR
 from app.schemas.landmarks import Face, FrameLandmarks
 
-MODEL_PATH = WEIGHTS_DIR / "occlusion_bisenet.v1.onnx"
-MODEL_SHA256 = "14ccbd897384b1f3ebd92365bcdc0b7f593df74adc6ec3d9dc610c428259280c"
+MODEL_PATH = WEIGHTS_DIR / "occlusion_bisenet.v1.int8.onnx"
+MODEL_SHA256 = "b98d246d93a4eb440e702cbeb67d5a5c13b1140e31b610d66ecd62bed6630ad3"
 LFS_HINT = "Git LFS 포인터만 받았다면 git lfs install --skip-repo 뒤 git lfs pull로 받는다"
 INPUT_NAME = "input"
 INPUT_SIZE = 512

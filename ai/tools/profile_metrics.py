@@ -55,6 +55,7 @@ PIECES = {
     "read_frame_rgb": "readPhoto",
     "flatten": "flatten",
     "flatten_mask": "flattenMask",
+    "flatten_with_mask": "flattenWithMask",
     "known_median_map": "median",
     "output_area": "output",
     "read_maps": "storeRead",
@@ -77,6 +78,7 @@ LABELS = {
     "occlusionTable": "가림 표 읽기",
     "flatten": "얼굴 지도 펴기",
     "flattenMask": "가린 칸 지도 펴기",
+    "flattenWithMask": "얼굴 지도·가린 칸 한 번에 펴기",
     "median": "중앙값 지도",
     "parse": "분할 모델",
     "output": "나가는 영역 만들기",
@@ -96,6 +98,10 @@ def face_key(_image: object, face: object, *_args: object, **_kwargs: object) ->
     return id(face)
 
 
+def mask_face_key(_image: object, _mask: object, face: object) -> int:
+    return id(face)
+
+
 def row_key(row: Any, *_args: object) -> int:
     return row.frame_index
 
@@ -104,6 +110,7 @@ KEYS: dict[str, Callable[..., Any]] = {
     "read_frame_rgb": frame_key,
     "flatten": face_key,
     "flatten_mask": face_key,
+    "flatten_with_mask": mask_face_key,
 }
 
 

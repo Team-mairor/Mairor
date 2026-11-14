@@ -48,6 +48,7 @@ local_01은 `eFzG30avtOI`, local_02는 `vWhW8hSlL54`와 같은 영상이라 학�
 | 11 | `eval_real.py samples/local_03_seq` | 실제 사진 361장 | `work/out/eval_real/` |
 | 12 | 지표 도구 4개와 `guide_scorecard.py`에 `--occlusion ours`·`--occlusion mp`, 그다음 `compare_scorecards.py samples/local_03_seq ours mp` | 판정 도구 비교 | `work/out/compare_scorecards.json` |
 | 13 | `selection_distribution.py samples/local_03_seq ours` | 사진 고르기 기준값 분포 | `work/out/selection_distribution/` |
+| 14 | `quantize.py make app/weights/occlusion_bisenet.v1.int8.onnx <학습 샘플 폴더> …`, `quantize.py check …`, `quantize.py masks …` | 8비트 판 만들기, 줄이기 전 모델과 시간 · 가린 칸 견주기, 시험 영상 가림 표 다시 만들기 | onnx 파일, 결과 json, `output/occlusion/<이름>/masks/` |
 
 지표 도구 실행법은 [가이드 영역 검증 지표와 합격선](../../../docs/experiments/GUIDE_AREA_METRICS.md)에 있다.
 
@@ -56,5 +57,6 @@ local_01은 `eFzG30avtOI`, local_02는 `vWhW8hSlL54`와 같은 영상이라 학�
 | 파일 | 내용 |
 | --- | --- |
 | `workspace.py` | 작업 폴더와 모델 파일 위치. 불러오면 `app` 패키지를 찾게 한다 |
+| `quantize.py` | 서비스가 쓰는 8비트 판을 만들고(학습 영상 사진으로 보정) 줄이기 전 모델과 견준다 |
 | `windows.py` | 시험 영상에서 서비스가 쓰는 단계 직전·직후 사진과 부위 범위 |
 | `face_parsing/` | [yakhyo/face-parsing](https://github.com/yakhyo/face-parsing)의 `models/bisenet.py`·`resnet.py` 사본(MIT, `LICENSE`). 바꾼 곳: import 경로, ResNet을 `weights=None`으로 만들어 ImageNet 가중치를 인터넷에서 받지 않게 함, 주석 삭제, ruff 형식 |

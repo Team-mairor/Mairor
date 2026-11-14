@@ -755,7 +755,9 @@ def test_flats_to_map_matches_the_service_map_and_drops_a_crowded_photo(monkeypa
     covered = {0: np.zeros_like(zone), 1: half & zone}
     photos = {0: skin, 1: red}
     monkeypatch.setattr(area_preparation, "flatten", lambda photo, face: photo)
-    monkeypatch.setattr(area_preparation, "flatten_mask", lambda mask, face: mask)
+    monkeypatch.setattr(
+        area_preparation, "flatten_with_mask", lambda photo, mask, face: (photo, mask)
+    )
     rows = [SimpleNamespace(frame_index=i, face=None) for i in (0, 1)]
 
     service = area_preparation.rows_to_known_map(

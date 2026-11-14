@@ -9,10 +9,12 @@ from app.tasks.area.common.face_map import (
     BARY_DIGITS,
     MAP_SIZE,
     MESH_DIR,
+    _neighbors,
     _sample,
     face_cells,
     flatten,
     flatten_mask,
+    flatten_with_mask,
     map_points,
     median_map,
     points_to_anchors,
@@ -85,7 +87,7 @@ def test_sampling_gives_the_same_colors_as_converting_the_whole_photo_first():
     bottom = image[y1, x0] * (1 - fx) + image[y1, x1] * fx
     whole_first = np.round(top * (1 - fy) + bottom * fy).astype(np.uint8)
 
-    assert np.array_equal(_sample(rgb, x, y), whole_first)
+    assert np.array_equal(_sample(rgb, _neighbors(x, y, 192, 108)), whole_first)
 
 
 def test_median_keeps_the_majority_color():
@@ -143,3 +145,24 @@ def test_cell_outside_face_uses_nearest_piece_with_a_negative_ratio():
     anchor = points_to_anchors([(512.0, 982.0)])[0]
     assert min(anchor.bary) < 0
     assert np.abs(back_to_map(anchor) - (512.5, 982.5)).max() < 0.01
+
+
+def test_flatten_with_mask_matches_separate_calls():
+    """한 번에 낸 두 지도는 flatten·flatten_mask를 따로 부른 것과 칸마다 같아야 한다."""
+    rng = np.random.default_rng(7)
+    photo = rng.integers(0, 256, size=(600, 800, 3), dtype=np.uint8)
+    mask = rng.random((600, 800)) > 0.8
+    face = face_on_map()
+
+    face_map, covered = flatten_with_mask(photo, mask, face)
+
+    assert np.array_equal(face_map, flatten(photo, face))
+    assert np.array_equal(covered, flatten_mask(mask, face))
+
+
+def test_flatten_with_mask_rejects_a_mask_of_another_size():
+    """표 크기가 사진과 다르면 엉뚱한 픽셀을 보게 되므로 바로 오류를 낸다."""
+    photo = np.zeros((600, 800, 3), dtype=np.uint8)
+
+    with pytest.raises(ValueError):
+        flatten_with_mask(photo, np.zeros((300, 400), dtype=bool), face_on_map())

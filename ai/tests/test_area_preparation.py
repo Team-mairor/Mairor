@@ -1,3 +1,5 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import cv2
@@ -299,6 +301,56 @@ def test_remembered_photos_forget_the_oldest_photo_past_keep():
         photos.face_maps(row, None)
 
     assert reads == [1000, 2000, 1000]
+
+
+def test_remembered_photos_make_a_photo_once_when_two_threads_ask_together():
+    """줄들이 한 꾸러미를 같이 쓴다. 같은 사진을 두 스레드가 같이 찾아도 한 번만 읽고 펴야 한다.
+
+    먼저 온 스레드가 사진을 읽는 동안 다른 스레드가 같은 사진을 찾게 해 고른 경우다.
+    두 번째 스레드도 사진을 읽으러 오면 바로 드러나고, 오지 않으면 첫 스레드가 0.5초 기다린 뒤
+    끝낸다.
+    """
+    rows, load_photo = photos_with_hands({1000: None})
+    reading, read_again = threading.Event(), threading.Event()
+    reads = []
+
+    def load(row: FrameLandmarks) -> np.ndarray:
+        reads.append(row.timestamp_ms)
+        if len(reads) == 1:
+            reading.set()
+            read_again.wait(0.5)
+        else:
+            read_again.set()
+        return load_photo(row)
+
+    photos = RememberedPhotos(load, keep=64)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(photos.face_maps, rows[0], None)
+        assert reading.wait(10)
+        second = pool.submit(photos.face_maps, rows[0], None)
+        first_map, second_map = first.result()[0], second.result()[0]
+
+    assert reads == [1000]
+    assert first_map is second_map
+
+
+def test_remembered_photos_do_not_keep_a_photo_that_failed():
+    """읽다 오류가 난 사진을 기억하면 다음에 찾는 쪽이 같은 오류만 받는다. 다시 읽게 한다."""
+    rows, load_photo = photos_with_hands({1000: None})
+    reads = []
+
+    def load(row: FrameLandmarks) -> np.ndarray:
+        reads.append(row.timestamp_ms)
+        if len(reads) == 1:
+            raise OSError("읽을 수 없는 사진")
+        return load_photo(row)
+
+    photos = RememberedPhotos(load, keep=64)
+    with pytest.raises(OSError):
+        photos.face_maps(rows[0], None)
+
+    assert photos.face_maps(rows[0], None)[0] is not None
+    assert reads == [1000, 1000]
 
 
 def test_remembered_maps_cannot_be_changed():

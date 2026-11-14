@@ -4,8 +4,10 @@ AI 서버만 쓰는 학습한 모델 파일이다. 경로는 `app/core/paths.py`
 
 | 파일 | 내용 | 쓰는 곳 |
 | --- | --- | --- |
-| `occlusion_bisenet.v1.onnx` | 얼굴을 가린 픽셀(손·붓·펜슬·퍼프·제품·머리카락·자막)을 찾는 분할 모델 | `app/tasks/area/landmarks/occlusion_finder.py` |
+| `occlusion_bisenet.v1.int8.onnx` | 얼굴을 가린 픽셀(손·붓·펜슬·퍼프·제품·머리카락·자막)을 찾는 분할 모델. 아래 모델의 숫자를 8비트 정수로 줄인 판 | `app/tasks/area/landmarks/occlusion_finder.py` |
+| `occlusion_bisenet.v1.onnx` | 줄이기 전 모델(32비트 실수) | 8비트 판을 다시 만들 때(`tools/occlusion_training/quantize.py`)와 학습·시험 도구 |
 
+- `occlusion_bisenet.v1.int8.onnx` SHA-256: `b98d246d93a4eb440e702cbeb67d5a5c13b1140e31b610d66ecd62bed6630ad3` (13,334,181B)
 - `occlusion_bisenet.v1.onnx` SHA-256: `14ccbd897384b1f3ebd92365bcdc0b7f593df74adc6ec3d9dc610c428259280c` (52,600,479B)
 
 ## Git LFS
@@ -40,6 +42,14 @@ AI 서버만 쓰는 학습한 모델 파일이다. 경로는 `app/core/paths.py`
 | 합성 600장 가림 IoU: 자막 / 도구 | 0.848 / 0.795 | 0.486 / 0.529 |
 | 실제 사진 297장(깨끗한 얼굴 290, 눈 감음 7) 중 부위의 5% 넘게 가림으로 칠한 사진 | 0장 | 0장 |
 | CPU 1장 처리 시간(512×512) | 약 0.05초 (onnxruntime) | 약 0.14초 |
+
+### 8비트 판 (occlusion_bisenet.v1.int8.onnx)
+
+- 모델 안의 숫자(32비트 실수)를 256단계 눈금(8비트 정수)으로 반올림해 적은 판이다(onnxruntime 정적 양자화, QDQ, 채널마다 눈금). 입력 · 출력 모양과 쓰는 법은 같다.
+- 눈금 범위는 학습 영상 8개(`BJOEa0LjLYw` · `eFzG30avtOI` · `EjYNN1d2A1w` · `eWupBVUZ6bM` · `G4b0bh0X9ko` · `OubRDaaWGPc` · `tSBaf010odM` · `vWhW8hSlL54`)에서 판정을 통과한 사진을 30장씩, 240장 넣어 정했다. 시험 영상과 시연 영상은 넣지 않았다.
+- 만들기: `tools/occlusion_training/quantize.py make <저장할 onnx> <학습 샘플 폴더> ...`
+- 사진 1장 시간(교육용 서버, 일꾼 1명): 0.73초 → 0.25초. 가린 칸은 줄이기 전 모델과 88~94% 겹치고(영상 5개, 80장씩), 가린 비율이 조금 준다(시연 영상 7.25% → 6.69%).
+- 시험 영상 지표(가름 · 찾음 · 헛것)는 아홉 칸 모두 줄이기 전과 같다. 근거는 [시연 영상 가이드 영역 시간과 서버 크기](../../../docs/experiments/GUIDE_AREA_DEMO_SPEED.md)에 있다.
 
 ### 이용 조건
 

@@ -12,6 +12,7 @@ from app.tasks.area.parts import area_preparation
 from tools.profile_guide_area import (
     MB,
     Recorder,
+    _thread_ids,
     limit_cores,
     onnx_threads,
     patched,
@@ -144,6 +145,7 @@ def test_patched_records_service_calls_and_puts_functions_back():
         (reference_area, "read_frame_rgb"),
         (reference_area, "remember_by_frame"),
         (area_preparation, "flatten"),
+        (area_preparation, "flatten_with_mask"),
         (guide_area_builder, "find_lip_area"),
         (guide_area_builder, "points_to_anchors"),
     ]
@@ -174,6 +176,21 @@ def test_limit_cores_without_count_keeps_every_core_and_rejects_too_many():
     assert limit_cores(0) == list(range(total))
     with pytest.raises(ValueError):
         limit_cores(total + 1)
+
+
+def test_limit_cores_rejects_a_first_core_that_runs_past_the_last_core():
+    """시작 코어에서 세어 코어 수를 넘으면 엉뚱한 코어에 묶지 않고 오류를 낸다."""
+    total = os.cpu_count() or 1
+
+    with pytest.raises(ValueError):
+        limit_cores(1, first=total)
+    with pytest.raises(ValueError):
+        limit_cores(1, first=-1)
+
+
+def test_thread_ids_always_include_a_thread_to_bind():
+    """묶을 스레드가 하나도 없으면 코어 묶기가 아무 일도 안 하므로 늘 하나 이상이어야 한다."""
+    assert len(_thread_ids()) >= 1
 
 
 def test_onnx_threads_set_worker_count_only_while_inside(monkeypatch):

@@ -1,5 +1,6 @@
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
@@ -22,11 +23,7 @@ def flatten(rgb: np.ndarray, face: Face) -> np.ndarray:
     정해져 있다. 사진에서 같은 조각의 같은 위치를 찾아 그 색을 가져온다.
     """
     height, width = rgb.shape[:2]
-    rows, cols = _cells()[:2]
-    source = _source(face, width, height)
-    out = np.full((MAP_SIZE, MAP_SIZE, 3), 255, dtype=np.uint8)
-    out[rows, cols] = _sample(rgb, source[:, 0], source[:, 1])
-    return out
+    return _on_map(_sample(rgb, _near(face, width, height)), 255, np.uint8)
 
 
 def flatten_mask(mask: np.ndarray, face: Face) -> np.ndarray:
@@ -36,11 +33,25 @@ def flatten_mask(mask: np.ndarray, face: Face) -> np.ndarray:
     가린 픽셀이 조금이라도 섞인 칸을 놓치지 않으려는 것이다.
     """
     height, width = mask.shape[:2]
-    rows, cols = _cells()[:2]
-    source = _source(face, width, height)
-    out = np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
-    out[rows, cols] = _touches(mask, source[:, 0], source[:, 1])
-    return out
+    return _on_map(_touches(mask, _near(face, width, height)), False, bool)
+
+
+def flatten_with_mask(
+    rgb: np.ndarray, mask: np.ndarray, face: Face
+) -> tuple[np.ndarray, np.ndarray]:
+    """같은 사진의 flatten(rgb, face)와 flatten_mask(mask, face)를 한 번에 낸다.
+
+    둘은 사진에서 같은 자리를 보므로 볼 자리를 한 번만 계산한다. 결과는 따로 부른 것과 같다.
+    mask는 rgb와 가로·세로가 같아야 한다.
+    """
+    height, width = rgb.shape[:2]
+    if mask.shape[:2] != (height, width):
+        raise ValueError(f"사진과 표의 크기가 다릅니다: {(height, width)} · {mask.shape[:2]}")
+    near = _near(face, width, height)
+    return (
+        _on_map(_sample(rgb, near), 255, np.uint8),
+        _on_map(_touches(mask, near), False, bool),
+    )
 
 
 def median_map(maps: Sequence[np.ndarray]) -> np.ndarray:
@@ -166,28 +177,81 @@ def _ratios(p: np.ndarray, a: np.ndarray, b: np.ndarray, c: np.ndarray) -> np.nd
     return np.stack([1 - to_b - to_c, to_b, to_c], axis=1)
 
 
-def _sample(rgb: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """사진에서 소수점 위치의 색을 주변 네 칸을 섞어 가져온다.
+@dataclass(frozen=True)
+class _Neighbors:
+    """자리마다 사진에서 섞을 둘레 네 픽셀과 섞는 비율.
+
+    픽셀은 사진을 한 줄로 편 번호(행 × 가로 + 열)다. right·down은 볼 자리가 왼쪽 위 픽셀에서
+    오른쪽·아래로 떨어진 정도(0~1)다.
+    """
+
+    top_left: np.ndarray
+    top_right: np.ndarray
+    bottom_left: np.ndarray
+    bottom_right: np.ndarray
+    right: np.ndarray
+    down: np.ndarray
+
+
+def _near(face: Face, width: int, height: int) -> _Neighbors:
+    """얼굴 안 지도 칸마다 사진에서 볼 자리를 둘러싼 네 픽셀과 섞는 비율."""
+    source = _source(face, width, height)
+    return _neighbors(source[:, 0], source[:, 1], width, height)
+
+
+def _neighbors(x: np.ndarray, y: np.ndarray, width: int, height: int) -> _Neighbors:
+    """소수점 자리 (x, y)마다 둘러싼 네 픽셀과 섞는 비율. 사진 밖 자리는 가장자리로 당긴다."""
+    x = np.clip(x, 0, width - 1)
+    y = np.clip(y, 0, height - 1)
+    left, top = np.floor(x), np.floor(y)
+    x0, y0 = left.astype(np.intp), top.astype(np.intp)
+    x1, y1 = np.minimum(x0 + 1, width - 1), np.minimum(y0 + 1, height - 1)
+    upper, lower = y0 * width, y1 * width
+    return _Neighbors(
+        top_left=upper + x0,
+        top_right=upper + x1,
+        bottom_left=lower + x0,
+        bottom_right=lower + x1,
+        right=(x - left)[:, None],
+        down=(y - top)[:, None],
+    )
+
+
+def _on_map(values: np.ndarray, empty: int | bool, dtype: type) -> np.ndarray:
+    """얼굴 안 지도 칸마다 구한 값을 지도에 놓는다. 얼굴 밖 칸은 empty다."""
+    rows, cols = _cells()[:2]
+    out = np.full((MAP_SIZE, MAP_SIZE, *values.shape[1:]), empty, dtype=dtype)
+    out[rows, cols] = values
+    return out
+
+
+def _sample(rgb: np.ndarray, near: _Neighbors) -> np.ndarray:
+    """자리마다 사진 색을 둘레 네 픽셀을 섞어 가져온다.
 
     사진 전체를 소수로 바꾸지 않고 필요한 픽셀만 집어 섞는다. 정수 색은 소수로 바뀔 때 값이
-    그대로라, 전체를 먼저 바꾸던 때와 결과가 같다.
+    그대로라, 전체를 먼저 바꾸던 때와 결과가 같다. 섞는 순서는 위 두 픽셀, 아래 두 픽셀,
+    그 둘 순서이고, 중간 표를 다시 써서 새 표를 덜 만든다.
     """
-    height, width = rgb.shape[:2]
-    x = np.clip(x, 0, width - 1)
-    y = np.clip(y, 0, height - 1)
-    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
-    x1, y1 = np.minimum(x0 + 1, width - 1), np.minimum(y0 + 1, height - 1)
-    fx, fy = (x - x0)[:, None], (y - y0)[:, None]
-    top = rgb[y0, x0] * (1 - fx) + rgb[y0, x1] * fx
-    bottom = rgb[y1, x0] * (1 - fx) + rgb[y1, x1] * fx
-    return np.round(top * (1 - fy) + bottom * fy).astype(np.uint8)
+    pixels = rgb.reshape(-1, rgb.shape[2])
+    left, up = 1 - near.right, 1 - near.down
+    top = pixels.take(near.top_left, axis=0) * left
+    spare = pixels.take(near.top_right, axis=0) * near.right
+    top += spare
+    bottom = pixels.take(near.bottom_left, axis=0) * left
+    np.multiply(pixels.take(near.bottom_right, axis=0), near.right, out=spare)
+    bottom += spare
+    top *= up
+    bottom *= near.down
+    top += bottom
+    np.round(top, out=top)
+    return top.astype(np.uint8)
 
 
-def _touches(mask: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """사진에서 소수점 위치를 둘러싼 네 픽셀(_sample이 섞는 픽셀) 중 True가 하나라도 있는지."""
-    height, width = mask.shape[:2]
-    x = np.clip(x, 0, width - 1)
-    y = np.clip(y, 0, height - 1)
-    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
-    x1, y1 = np.minimum(x0 + 1, width - 1), np.minimum(y0 + 1, height - 1)
-    return mask[y0, x0] | mask[y0, x1] | mask[y1, x0] | mask[y1, x1]
+def _touches(mask: np.ndarray, near: _Neighbors) -> np.ndarray:
+    """자리마다 둘레 네 픽셀(_sample이 섞는 픽셀) 중 True가 하나라도 있는지."""
+    pixels = mask.reshape(-1)
+    touched = pixels.take(near.top_left)
+    touched |= pixels.take(near.top_right)
+    touched |= pixels.take(near.bottom_left)
+    touched |= pixels.take(near.bottom_right)
+    return touched

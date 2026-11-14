@@ -142,7 +142,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-사진 자리 맞추기가 쓰는 가림 모델(`ai/app/weights/occlusion_bisenet.v1.onnx`)은 Git LFS 파일입니다.
+사진 자리 맞추기가 쓰는 가림 모델(`ai/app/weights/occlusion_bisenet.v1.int8.onnx`)은 Git LFS 파일입니다.
 포인터만 받았다면 저장소에서 `git lfs pull`로 받습니다.
 
 ```ini

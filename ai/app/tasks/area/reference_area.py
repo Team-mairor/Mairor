@@ -4,12 +4,14 @@
 가이드 영역은 사진마다 손·붓·자막 같은 것이 가린 칸을 빼고 만든다.
 영역에 쓰는 사진은 분석하는 단계의 직전·직후 창 근처뿐이라, needed_frames로 그 사진만 골라
 받고 얼굴 점을 찾는다.
-단계별 영역은 split_steps로 단계를 여러 줄로 나눠 동시에 만들 수 있다.
+단계별 영역은 step_bundles로 단계를 묶음으로 나눠 여러 줄이 동시에 만들 수 있다.
 """
 
-from collections import Counter
+import threading
+from collections import Counter, deque
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from contextvars import copy_context
 from pathlib import Path
 
@@ -40,8 +42,10 @@ from app.tasks.area.parts import (
 )
 from app.tasks.area.parts.area_preparation import RememberedPhotos, step_bounds
 
-OCCLUSION_KEEP = 64
-FACE_MAP_KEEP = 64
+OCCLUSION_KEEP = 128
+FACE_MAP_KEEP = 128
+WARM_AHEAD_STEPS = 1
+WARM_MIN_LINES = 4
 DIRECTION_PHOTOS = False
 PART_WINDOWS: dict[Makeup, tuple[int | None, int]] = {
     "lip": (lip_area.BEFORE_WINDOW_MS, lip_area.AFTER_WINDOW_MS),
@@ -95,39 +99,31 @@ def step_windows(step: GuideInputStep) -> list[tuple[int, int]]:
     return windows
 
 
-def split_steps(
-    steps: Sequence[GuideInputStep], result: LandmarksResult, lines: int
+def step_bundles(
+    steps: Sequence[GuideInputStep], result: LandmarksResult
 ) -> list[list[GuideInputStep]]:
-    """단계를 lines줄로 나눠, 줄마다 동시에 영역을 만들 수 있게 한다. 빈 줄은 뺀다.
+    """단계를 따로 만들어도 되는 묶음으로 나눠, 창 안 사진이 많은 묶음부터 돌려준다. 빈 묶음은 없다.
 
-    단계 순서대로 앞 단계를 이어받는 부위(ORDERED_MAKEUPS)는 모두 첫 줄에 순서대로 둔다.
+    단계 순서대로 앞 단계를 이어받는 부위(ORDERED_MAKEUPS)는 부위마다 한 묶음이다.
     아이라인은 앞 아이라인 단계에서 안내한 칸을 빼고, 눈썹은 못 찾으면 앞 눈썹 단계 영역을
-    그대로 쓴다(build_guide_area). 줄끼리는 서로의 결과를 모르므로 다른 줄에 가면 이어받지 못한다.
-    다른 분석하는 단계는 창 안 사진이 많은 것부터, 그때까지 사진 수가 가장 적은 줄에 넣는다.
-    사진 수는 영역 만들기 시간과 거의 비례한다.
-    분석하지 않는 단계는 사진을 쓰지 않아 마지막 줄에 둔다.
+    그대로 쓴다(build_guide_area). 묶음끼리는 서로의 결과를 모르므로 갈라지면 이어받지 못한다.
+    아이라인과 눈썹은 서로의 결과를 쓰지 않아 두 묶음으로 둔다.
+    다른 분석하는 단계는 하나가 한 묶음이다.
+    사진 수는 영역 만들기 시간과 거의 비례해서, 오래 걸릴 묶음이 앞에 온다.
+    분석하지 않는 단계는 사진을 쓰지 않아 한 묶음으로 맨 뒤에 둔다.
     """
-    if lines <= 1:
-        return [list(steps)]
     times = [row.timestamp_ms for row in result.frames]
 
     def photos(step: GuideInputStep) -> int:
         windows = step_windows(step)
         return sum(1 for time in times if any(low < time <= high for low, high in windows))
 
-    groups: list[list[GuideInputStep]] = [[] for _ in range(lines)]
-    loads = [0] * lines
-    for step in steps:
-        if step.makeup in ORDERED_MAKEUPS:
-            groups[0].append(step)
-            loads[0] += photos(step)
-    analyzed = [s for s in steps if s.makeup in PART_WINDOWS and s.makeup not in ORDERED_MAKEUPS]
-    for step in sorted(analyzed, key=lambda s: (-photos(s), s.order)):
-        lightest = loads.index(min(loads))
-        groups[lightest].append(step)
-        loads[lightest] += photos(step)
-    groups[-1] += [s for s in steps if s.makeup not in PART_WINDOWS]
-    return [group for group in groups if group]
+    chains = [[s for s in steps if s.makeup == makeup] for makeup in ORDERED_MAKEUPS]
+    singles = [[s] for s in steps if s.makeup in PART_WINDOWS and s.makeup not in ORDERED_MAKEUPS]
+    weighed = [(sum(photos(s) for s in bundle), bundle) for bundle in chains + singles if bundle]
+    weighed.sort(key=lambda item: (-item[0], item[1][0].order))
+    rest = [s for s in steps if s.makeup not in PART_WINDOWS]
+    return [bundle for _, bundle in weighed] + ([rest] if rest else [])
 
 
 def needed_frames(
@@ -207,7 +203,8 @@ def build_reference_area(
     최근 OCCLUSION_KEEP장을 기억한다.
     같은 까닭으로 사진을 얼굴 지도에 편 결과도 RememberedPhotos로 최근 FACE_MAP_KEEP장을 기억해,
     좌우 짝 부위가 같은 사진을 다시 읽고 펴지 않게 한다.
-    lines는 단계별 영역을 나눠 동시에 만들 줄 수다(split_steps). 줄마다 기억을 따로 두고,
+    lines는 동시에 돌릴 줄 수다. 얼굴 점 찾기는 그만큼의 스레드가 사진을 나눠 맡고(build_landmarks),
+    단계별 영역도 그만큼의 줄이 나눠 만든다(build_area_in_lines). 영역은 줄마다 기억을 따로 두고,
     끝나면 단계 순서대로 합친다. 1이면 한 줄로 차례로 만든다.
     """
     manifest = reference_manifest(guide_input, source, items)
@@ -225,7 +222,7 @@ def build_reference_area(
         return read_frame_rgb(reference, by_index[row.frame_index])
 
     with traced("face_landmarks", {"frames": len(manifest.frames)}) as span:
-        landmarks = build_landmarks(manifest, load_frame, finder)
+        landmarks = build_landmarks(manifest, load_frame, finder, workers=lines)
         set_output(span, dict(Counter(row.status for row in landmarks.frames)))
     with traced("check_frames", {"frames": len(landmarks.frames)}) as span:
         checked = check_frames(landmarks)
@@ -253,6 +250,96 @@ def build_reference_area(
     return area
 
 
+class LineWork:
+    """줄들이 나눠 가질 일감. 묶음(step_bundles)과, 도는 중인 이어받는 묶음의 사진 미리 펴기다.
+
+    이어받는 묶음(아이라인·눈썹)은 한 줄이 단계 순서대로 만들어야 해서 다른 줄이 대신 못 한다.
+    그런데 그 시간의 대부분은 사진을 읽어 가림을 찾고 얼굴 지도에 펴는 일이고, 이 일은 단계 순서와
+    상관없다. 그래서 다른 줄이 그 묶음의 사진을 미리 펴 둔다(지도 꾸러미를 줄들이 같이 쓴다).
+    미리 펴기는 묶음이 지금 만드는 단계와 그다음 WARM_AHEAD_STEPS개 단계까지만 한다.
+    너무 앞서 펴면 꾸러미가 기억하는 장수를 넘어, 쓰기 전에 밀려난다.
+    줄은 미리 펼 사진이 있으면 그것부터, 없으면 남은 묶음 중 맨 앞을 가져간다.
+    이어받는 묶음이 가장 오래 걸려서, 그 묶음을 돕는 일이 먼저다.
+    warm이 False면 미리 펴기 없이 묶음만 나눠 준다.
+    """
+
+    def __init__(
+        self,
+        bundles: Sequence[list[GuideInputStep]],
+        checked: LandmarksResult,
+        warm: bool = True,
+    ) -> None:
+        self._turn = threading.Condition()
+        self._bundles = deque(enumerate(bundles))
+        self._rows = {
+            index: [_window_rows(step, checked) for step in bundle]
+            for index, bundle in enumerate(bundles)
+            if warm and len(bundle) > 1
+        }
+        self._running: dict[int, int] = {}
+        self._stopped = False
+
+    def take(self) -> tuple[int, list[GuideInputStep]] | FrameLandmarks | None:
+        """다음 일. 사진이면 미리 펼 사진, (번호, 묶음)이면 만들 묶음, None이면 할 일이 없다.
+
+        남은 묶음은 없는데 다른 줄이 이어받는 묶음을 만드는 중이면, 그 묶음이 다음 단계로 넘어가
+        미리 펼 사진이 생기거나 끝날 때까지 기다린다.
+        """
+        with self._turn:
+            while not self._stopped:
+                row = self._next_row()
+                if row is not None:
+                    return row
+                if self._bundles:
+                    index, bundle = self._bundles.popleft()
+                    self._running[index] = 0
+                    return index, bundle
+                if not any(self._ahead(index) for index in self._running):
+                    return None
+                self._turn.wait()
+            return None
+
+    def step_done(self, index: int) -> None:
+        """index번 묶음이 단계 하나를 끝냈다. 미리 펴기를 한 단계 앞으로 옮긴다."""
+        with self._turn:
+            self._running[index] += 1
+            self._turn.notify_all()
+
+    def bundle_done(self, index: int) -> None:
+        """index번 묶음이 끝났다(오류로 끝나도 부른다). 그 묶음의 미리 펴기를 그만둔다."""
+        with self._turn:
+            self._running.pop(index, None)
+            self._rows.pop(index, None)
+            self._turn.notify_all()
+
+    def stop(self) -> None:
+        """오류가 났거나 취소됐다. 기다리는 줄을 깨워 더 가져가지 않게 한다."""
+        with self._turn:
+            self._stopped = True
+            self._turn.notify_all()
+
+    def _ahead(self, index: int) -> list[list[FrameLandmarks]]:
+        """index번 묶음에서 아직 안 끝난 단계들의 남은 사진 목록."""
+        return [rows for rows in self._rows.get(index, [])[self._running[index] :] if rows]
+
+    def _next_row(self) -> FrameLandmarks | None:
+        for index, done in self._running.items():
+            for rows in self._rows.get(index, [])[done : done + 1 + WARM_AHEAD_STEPS]:
+                if rows:
+                    return rows.pop()
+        return None
+
+
+def _window_rows(step: GuideInputStep, checked: LandmarksResult) -> list[FrameLandmarks]:
+    """단계의 직전·직후 창 안에서 판정을 통과한 사진. 시간 순이다."""
+    windows = step_windows(step)
+    return [
+        row
+        for row in checked.frames
+        if row.status == "ok" and any(low < row.timestamp_ms <= high for low, high in windows)
+    ]
+
+
 def build_area_in_lines(
     video_id: str,
     steps: Sequence[GuideInputStep],
@@ -262,32 +349,72 @@ def build_area_in_lines(
     on_step: Callable[[], None] | None,
     lines: int,
 ) -> GuideArea:
-    """단계를 split_steps로 나눈 줄마다 동시에 build_guide_area를 돌리고 단계 순서대로 합친다.
+    """단계를 step_bundles 묶음으로 나눠 lines줄이 동시에 만들고 단계 순서대로 합친다.
 
-    줄마다 지도 꾸러미(RememberedPhotos)와 가림 기억(remember_by_frame)을 따로 둔다.
-    같은 기억을 두 줄이 같이 넣고 빼면 꼬일 수 있어서다. 줄이 하나면 그 자리에서 바로 만든다.
+    줄은 비는 대로 LineWork에서 다음 일을 가져간다. 묶음을 줄마다 미리 정해 두면 사진 수로 어림한
+    시간이 틀릴 때 한 줄만 길어져, 줄을 늘려도 그 줄이 끝날 때까지 기다린다.
+    지도 꾸러미(RememberedPhotos)는 줄들이 같이 쓴다. 그래야 다른 줄이 미리 편 사진을 이어받는
+    묶음이 쓰고, 이웃 단계가 다른 줄에 가도 겹치는 사진을 한 번만 편다.
+    기억하는 장수는 줄마다 FACE_MAP_KEEP장씩이다.
+    가림 기억(remember_by_frame)은 같이 넣고 빼면 꼬일 수 있어 줄마다 따로 둔다.
+    줄이 하나면 묶음으로 나누지 않고 그 자리에서 단계 순서대로 만든다.
     줄마다 지금 문맥을 복사해 넘겨, 단계 기록(area_step)이 이 작업의 기록 밑에 붙게 한다.
     단계마다 앞뒤 단계 시각(step_bounds)은 나누기 전 전체 단계로 정해 넘긴다.
-    줄에 든 단계만으로 정하면 다른 줄에 간 이웃 단계를 못 봐서다.
+    묶음에 든 단계만으로 정하면 다른 묶음에 간 이웃 단계를 못 봐서다.
+    미리 펴기는 줄이 WARM_MIN_LINES개 이상일 때만 한다. 줄이 적으면 묶음만으로 줄이 다 차서
+    빨라지지 않고, 미리 편 사진을 들고 있느라 메모리만 더 쓴다.
+    미리 펴다 난 오류는 버린다. 그 사진을 쓰는 단계가 다시 펴다 같은 오류를 만나 그 단계만 실패한다.
     """
     bounds = step_bounds(steps)
+    photos = RememberedPhotos(load_row, FACE_MAP_KEEP * max(1, lines))
+    memory = threading.local()
 
-    def build(group: list[GuideInputStep]) -> GuideArea:
+    def own_occlusion() -> OcclusionFinder:
+        if not hasattr(memory, "occlusion"):
+            memory.occlusion = remember_by_frame(occlusion, OCCLUSION_KEEP)
+        return memory.occlusion
+
+    def build(group: list[GuideInputStep], tick: Callable[[], None] | None) -> GuideArea:
         return build_guide_area(
             video_id,
             group,
             checked,
-            RememberedPhotos(load_row, FACE_MAP_KEEP),
-            on_step=on_step,
-            occlusion=remember_by_frame(occlusion, OCCLUSION_KEEP),
+            photos,
+            on_step=tick,
+            occlusion=own_occlusion(),
             bounds=bounds,
         )
 
-    groups = split_steps(steps, checked, lines)
-    if len(groups) == 1:
-        return build(groups[0])
-    with ThreadPoolExecutor(max_workers=len(groups)) as pool:
-        futures = [pool.submit(copy_context().run, build, group) for group in groups]
-        areas = [future.result() for future in futures]
+    if lines <= 1:
+        return build(list(steps), on_step)
+    work = LineWork(step_bundles(steps, checked), checked, warm=lines >= WARM_MIN_LINES)
+
+    def line() -> list[GuideArea]:
+        areas = []
+        try:
+            while (job := work.take()) is not None:
+                if isinstance(job, FrameLandmarks):
+                    with suppress(Exception):
+                        photos.face_maps(job, own_occlusion())
+                    continue
+                index, bundle = job
+
+                def tick(index: int = index) -> None:
+                    work.step_done(index)
+                    if on_step is not None:
+                        on_step()
+
+                try:
+                    areas.append(build(bundle, tick))
+                finally:
+                    work.bundle_done(index)
+        except BaseException:
+            work.stop()
+            raise
+        return areas
+
+    with ThreadPoolExecutor(max_workers=lines) as pool:
+        futures = [pool.submit(copy_context().run, line) for _ in range(lines)]
+        areas = [area for future in futures for area in future.result()]
     merged = sorted((step for area in areas for step in area.steps), key=lambda step: step.order)
     return GuideArea(video_id=video_id, mesh_version=areas[0].mesh_version, steps=merged)

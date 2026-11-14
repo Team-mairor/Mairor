@@ -1,4 +1,4 @@
-from functools import lru_cache
+import threading
 from math import asin, atan2, hypot
 
 import mediapipe as mp
@@ -15,6 +15,8 @@ RIGHT_IRIS_CENTER = 468
 LEFT_IRIS_CENTER = 473
 DIGITS = 6
 
+_models = threading.local()
+
 
 def find_faces(rgb: np.ndarray) -> list[Face]:
     """사진 1장(RGB 숫자 표)에서 얼굴을 찾는다. 얼굴마다 점 478개, 눈 사이 거리, 고개 각도."""
@@ -29,18 +31,23 @@ def find_faces(rgb: np.ndarray) -> list[Face]:
     ]
 
 
-@lru_cache
 def _landmarker() -> vision.FaceLandmarker:
-    """모델을 한 번만 불러 두고 다시 쓴다."""
-    options = vision.FaceLandmarkerOptions(
-        base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
-        running_mode=vision.RunningMode.IMAGE,
-        num_faces=MAX_FACES,
-        min_face_detection_confidence=MIN_CONFIDENCE,
-        min_face_presence_confidence=MIN_CONFIDENCE,
-        output_facial_transformation_matrixes=True,
-    )
-    return vision.FaceLandmarker.create_from_options(options)
+    """모델을 스레드마다 한 번만 불러 두고 다시 쓴다.
+
+    얼굴 점 찾기를 여러 스레드로 나눠 돌릴 때(build_landmarks) 한 모델을 같이 부르지 않게 한다.
+    사진 1장씩 따로 보는 방식(IMAGE)이라 어느 스레드가 찾아도 결과는 같다.
+    """
+    if not hasattr(_models, "landmarker"):
+        options = vision.FaceLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(MODEL_PATH)),
+            running_mode=vision.RunningMode.IMAGE,
+            num_faces=MAX_FACES,
+            min_face_detection_confidence=MIN_CONFIDENCE,
+            min_face_presence_confidence=MIN_CONFIDENCE,
+            output_facial_transformation_matrixes=True,
+        )
+        _models.landmarker = vision.FaceLandmarker.create_from_options(options)
+    return _models.landmarker
 
 
 def _to_face(points, matrix: np.ndarray, width: int, height: int) -> Face:

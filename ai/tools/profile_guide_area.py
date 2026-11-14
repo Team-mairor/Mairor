@@ -12,7 +12,7 @@ area_work.build_area_from_frames가 BE 요청을 받았을 때처럼 주소로 �
 
 실행 (ai/ 폴더에서):
 uv run python tools/profile_guide_area.py samples/local_03_seq <결과 폴더>
-    [--manifest <manifest.json>] [--guide-input <guide_input.json>] [--cores 2]
+    [--manifest <manifest.json>] [--guide-input <guide_input.json>] [--cores 2] [--first-core 0]
     [--ort-threads 1] [--cv-threads 2] [--lines 1]
 영역 만들기를 여러 줄로 돌리면(--lines 2) 구간 시간은 줄마다 따로 재서,
 안쪽 합이 영역 시간보다 크다.
@@ -68,7 +68,7 @@ LABELS = {
     "occlusionLookup": "가림 찾기 요청",
     "occlusionModel": "가림 찾기 모델",
     "flatten": "얼굴 지도 펴기",
-    "flattenMask": "가린 칸 지도 펴기",
+    "flattenWithMask": "얼굴 지도·가린 칸 지도 펴기",
     "lip": "부위 찾기: 립",
     "blush": "부위 찾기: 블러셔",
     "brow": "부위 찾기: 눈썹",
@@ -204,13 +204,18 @@ def patched(recorder: Recorder) -> Iterator[None]:
     def face_key(_image: object, face: object) -> int:
         return id(face)
 
+    def mask_face_key(_image: object, _mask: object, face: object) -> int:
+        return id(face)
+
     real_landmarks = reference_area.build_landmarks
     real_check = reference_area.check_frames
     real_remember = reference_area.remember_by_frame
 
-    def timed_landmarks(manifest: Any, load_photo: Any, finder: Any) -> Any:
+    def timed_landmarks(manifest: Any, load_photo: Any, finder: Any, workers: int = 1) -> Any:
         with recorder.lap("landmarks"):
-            return real_landmarks(manifest, load_photo, recorder.wrap("faceModel", finder))
+            return real_landmarks(
+                manifest, load_photo, recorder.wrap("faceModel", finder), workers=workers
+            )
 
     def timed_remember(find: Any, keep: int) -> Any:
         model = recorder.wrap("occlusionModel", find, row_key)
@@ -243,8 +248,8 @@ def patched(recorder: Recorder) -> Iterator[None]:
         )
         put(
             area_preparation,
-            "flatten_mask",
-            recorder.wrap("flattenMask", area_preparation.flatten_mask, face_key),
+            "flatten_with_mask",
+            recorder.wrap("flattenWithMask", area_preparation.flatten_with_mask, mask_face_key),
         )
         for name, function in PART_FINDERS.items():
             put(
@@ -351,27 +356,44 @@ class MemorySampler:
             self.peaks["all"] = max(self.peaks.get("all", 0), used)
 
 
-def limit_cores(count: int) -> list[int]:
-    """이 프로세스를 앞쪽 count개 논리 코어에서만 돌게 묶고 묶인 코어 번호를 돌려준다.
+def limit_cores(count: int, first: int = 0) -> list[int]:
+    """이 프로세스를 first번부터 count개 논리 코어에서만 돌게 묶고 묶인 코어 번호를 돌려준다.
 
     count가 0이면 묶지 않고 모든 코어 번호를 돌려준다.
     윈도우 0·1번 논리 코어는 보통 물리 코어 하나의 두 스레드라, 2 vCPU 서버(m6i.large)와 비슷하다.
+    리눅스에서는 이미 만들어진 스레드를 모두 묶는다. 그 뒤 생기는 스레드는
+    만든 스레드의 묶음을 물려받는다.
     """
     total = os.cpu_count() or 1
     if count <= 0:
         return list(range(total))
-    if count > total:
-        raise ValueError(f"코어는 {total}개까지 묶을 수 있습니다: {count}")
-    cores = list(range(count))
+    if first < 0 or first + count > total:
+        raise ValueError(f"코어는 {total}개입니다: {first}번부터 {count}개")
+    cores = list(range(first, first + count))
     if sys.platform == "win32":
         kernel32 = ctypes.WinDLL("kernel32")
         kernel32.GetCurrentProcess.restype = ctypes.c_void_p
         kernel32.SetProcessAffinityMask.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
-        if not kernel32.SetProcessAffinityMask(kernel32.GetCurrentProcess(), (1 << count) - 1):
+        if not kernel32.SetProcessAffinityMask(
+            kernel32.GetCurrentProcess(), ((1 << count) - 1) << first
+        ):
             raise OSError("코어를 묶지 못했습니다")
         return cores
-    os.sched_setaffinity(0, cores)
+    for thread in _thread_ids():
+        os.sched_setaffinity(thread, cores)
     return sorted(os.sched_getaffinity(0))
+
+
+def _thread_ids() -> list[int]:
+    """이 프로세스의 스레드 번호들(리눅스). 번호를 못 읽으면 지금 스레드(0)만이다.
+
+    리눅스는 스레드마다 따로 묶여서, 라이브러리가 먼저 만든 스레드도 같이 묶어야
+    프로세스 전체가 그 코어에서만 돈다.
+    """
+    tasks = Path("/proc/self/task")
+    if not tasks.is_dir():
+        return [0]
+    return [int(task.name) for task in tasks.iterdir()]
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -547,12 +569,15 @@ def main() -> None:
     parser.add_argument(
         "--cores", type=int, default=DEFAULT_CORES, help="묶을 논리 코어 수, 0은 안 묶음"
     )
+    parser.add_argument(
+        "--first-core", type=int, default=0, help="묶기 시작할 논리 코어 번호 (같이 쓰는 서버용)"
+    )
     parser.add_argument("--ort-threads", type=int, help="가림 찾기 모델 일꾼 수, 없으면 기본값")
     parser.add_argument("--cv-threads", type=int, help="OpenCV 일꾼 수, 없으면 기본값")
     parser.add_argument("--lines", type=int, default=1, help="영역 만들기 줄 수 (area_lines)")
     args = parser.parse_args()
 
-    cores = limit_cores(args.cores)
+    cores = limit_cores(args.cores, args.first_core)
     if args.cv_threads is not None:
         cv2.setNumThreads(args.cv_threads)
     manifest_path = args.manifest or args.sample / "manifest.json"
