@@ -112,6 +112,20 @@ class FixStepsTests(unittest.TestCase):
         self.assertEqual(fixed[0]["product"], product)
         self.assertEqual(len(report["rejectedCaptions"]), 1)
 
+    def test_tool_caption_does_not_come_back_on_a_product_step(self):
+        # RBm4rzufBV0 15:21: 마스카라 단계 가운데 사진에도 앞에 소개한 인조속눈썹 자막이 떠 있다
+        from processor.tasks.find_steps.caption_check import apply_captions
+
+        lashes = "Coringco 톡톡하라 필터 속눈썹 언더"
+        steps = [
+            {"absStart": 0, "absEnd": 3, "productName": lashes, "makeup": "other",
+             "isCosmeticApplication": False, "events": []},
+            {"absStart": 4, "absEnd": 9, "product": None, "productName": None, "makeup": "mascara",
+             "isCosmeticApplication": True, "events": []},
+        ]
+        fixed, _ = apply_captions(steps, {1: lashes})
+        self.assertEqual([s["productName"] for s in fixed], [lashes, None])
+
     def test_caption_read_in_three_parts_is_kept_on_the_step(self):
         from processor.tasks.find_steps.caption_check import apply_captions
 

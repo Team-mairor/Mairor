@@ -24,7 +24,7 @@ from processor.tasks.find_steps.ask import ask_clip
 from processor.tasks.find_steps.clips import cut_clip, keyframe_times, plan_clips, snap_clips
 from processor.tasks.find_steps.clock import clock
 from processor.tasks.find_steps.step_rules import (
-    absorb_blending, assign_chapters, fit_ends, keep_inside, merge_same_product,
+    absorb_aid_tools, absorb_blending, assign_chapters, drop_tool_names, fit_ends, keep_inside, merge_same_product,
 )
 
 
@@ -79,7 +79,7 @@ def extract_steps(url: str, work_dir: Path, *, api_key, model=DEFAULT_MODEL, rec
         for step in assign_chapters(keep_inside(to_steps(rows, clip["start"], index), clip["keepFrom"], clip["keepTo"]),
                                     clip["chapters"])
     ]
-    merged = fit_ends(merge_same_product(absorb_blending(steps)))
+    merged = fit_ends(merge_same_product(absorb_aid_tools(drop_tool_names(absorb_blending(steps)))))
     report = {
         "lowresVideo": str(video), "durationSeconds": duration, "chapters": len(info.get("chapters") or []),
         "clips": [{"range": f"{clock(c['start'])}~{clock(c['end'])}", "chapters": [h["title"] for h in c["chapters"]]} | r

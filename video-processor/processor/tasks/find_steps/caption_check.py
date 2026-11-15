@@ -33,7 +33,7 @@ from processor.clients.gms import DEFAULT_MODEL, RateLimitBudgetExceeded, genera
 from processor.core.paths import PROMPTS_DIR
 from processor.schemas.gms_answers import PRODUCT, id_items
 from processor.tasks.find_steps.product import label, split_product
-from processor.tasks.find_steps.step_rules import merge_same_product
+from processor.tasks.find_steps.step_rules import drop_tool_names, merge_same_product
 
 LOCATE_FRAMES = 8
 MARGIN = 0.03
@@ -182,6 +182,8 @@ def looks_same(old: str | None, new: str) -> bool:
 def apply_captions(checked, captions):
     """다시 읽은 제품 글자로 이름을 바로잡고(받은 이름과 같은 제품으로 보일 때만), 같은 제품이 된 이웃 단계를 묶는다.
 
+    이름 없는 단계는 읽은 글자를 그대로 받으므로, 바르는 단계에 도구 이름이 다시 붙지 않게 묶기 전에 한 번 더 뗀다.
+
     checked는 앞뒤 빈 구간 확인을 마친 단계, captions는 같은 순서의 {단계 순번: {brand, name, shade}}다.
     한 줄 글자도 받는다. 비교와 묶기는 세 칸을 이은 이름으로 하고, 단계에는 세 칸을 함께 남긴다.
     """
@@ -200,4 +202,4 @@ def apply_captions(checked, captions):
         named.append(step)
     rejected = [{"name": checked[i].get("productName"), "caption": label(p)}
                 for i, p in read.items() if i not in adopted]
-    return merge_same_product(named), {"captionsRead": len(captions), "rejectedCaptions": rejected}
+    return merge_same_product(drop_tool_names(named)), {"captionsRead": len(captions), "rejectedCaptions": rejected}

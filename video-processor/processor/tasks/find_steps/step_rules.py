@@ -1,12 +1,23 @@
-"""단계 묶기·붙이기 규칙: 같은 화장품은 한 단계, 브러시로 펴 바르기는 앞 단계에, 끝은 다음 단계를 넘지 않게,
-장 경계는 넘지 않게."""
+"""단계 묶기·붙이기 규칙: 같은 화장품은 한 단계, 브러시로 펴 바르기·바르며 대는 도구는 앞 단계에,
+바르는 단계에 붙은 도구 이름은 떼기, 끝은 다음 단계를 넘지 않게, 장 경계는 넘지 않게."""
 
 import re
 
+# 바르는 동안 대고 쓰는 도구. 따로 하는 동작(뷰러·속눈썹 붙이기)과 달리 그 화장품 단계의 일부다.
+# '선가드'·'UV 쉴드' 같은 선크림 이름에 걸리지 않게 눈에 대는 것만 본다.
+AID_TOOL = re.compile(r"(아이|마스카라|eye|mascara)\s*(가드|쉴드|guard|shield)", re.I)
+
+
+def name_key(step: dict) -> str:
+    return re.sub(r"\s+", "", (step.get("productName") or "").casefold())
+
 
 def same_name(a: dict, b: dict) -> bool:
-    name = lambda s: re.sub(r"\s+", "", (s.get("productName") or "").casefold())
-    return bool(name(a)) and name(a) == name(b)
+    return bool(name_key(a)) and name_key(a) == name_key(b)
+
+
+def aid_tool(step: dict) -> bool:
+    return bool(AID_TOOL.search(step.get("productName") or ""))
 
 
 def same_product(a: dict, b: dict) -> bool:
@@ -21,15 +32,54 @@ def absorb_blending(steps: list[dict]) -> list[dict]:
     이름이면(그 제품을 펴는 것) 붙인다. 뷰러·속눈썹처럼 자리가 다르거나 다른 이름이 붙은 도구 단계는 둔다.
     장이 다르면 붙이지 않는다.
     """
+    return _absorb(steps, lambda prev, step: not step.get("productName") or same_name(prev, step))
+
+
+def absorb_aid_tools(steps: list[dict]) -> list[dict]:
+    """아이가드처럼 바르는 동안 대는 도구 단계는 바로 앞 화장품 단계에 넣는다(RBm4rzufBV0 15:32 언더 마스카라가
+    아이가드 단계로 갈라짐).
+
+    absorb_blending과 따로 그 뒤에 돌린다. 함께 돌리면 길어진 화장품 단계에 바로 뒤 이름 없는 도구 단계(핀셋으로
+    속눈썹 모으기)가 펴 바르기로 딸려 붙는다.
+    """
+    return _absorb(steps, lambda prev, step: aid_tool(step))
+
+
+def _absorb(steps: list[dict], belongs) -> list[dict]:
+    """같은 장·같은 자리에서 바로 앞 화장품 단계에 딸린(belongs) 도구 단계를 그 단계에 넣는다."""
+    places = lambda s: {e.get("faceArea") for e in s["events"]} - {None}
     out = []
     for step in sorted(steps, key=lambda s: (s["absStart"], s["absEnd"])):
         prev = out[-1] if out else None
-        places = lambda s: {e.get("faceArea") for e in s["events"]} - {None}
         if (prev and prev.get("isCosmeticApplication") and not step.get("isCosmeticApplication")
-                and prev.get("chapter") == step.get("chapter")
-                and (not step.get("productName") or same_name(prev, step)) and places(prev) & places(step)):
+                and prev.get("chapter") == step.get("chapter") and belongs(prev, step) and places(prev) & places(step)):
             out[-1] = dict(prev, absEnd=max(prev["absEnd"], step["absEnd"]), events=prev["events"] + step["events"])
             continue
+        out.append(step)
+    return out
+
+
+def drop_tool_names(steps: list[dict]) -> list[dict]:
+    """바르는 단계에 붙은 도구 이름을 떼고, 같은 장에서 앞서 쓴 같은 종류 화장품 이름을 잇는다(없으면 이름 없음).
+
+    자막은 지금 바르는 제품이 아니라 앞으로 쓸 제품을 미리 띄우기도 한다. RBm4rzufBV0 15:21 언더 마스카라는
+    바로 앞에 소개한 인조속눈썹 자막이 남아 그 이름을 받았다. 도구 단계에는 화장품 이름이 붙지 않으므로 같은 장
+    도구 단계의 이름과 바르며 대는 도구 이름은 화장품이 아니다. 다만 바로 앞 화장품과 이름이 같은 도구 단계는
+    그 화장품을 펴는 것이라(자리가 없어 absorb_blending이 못 붙인 것) 세지 않는다.
+    """
+    ordered = sorted(steps, key=lambda s: (s["absStart"], s["absEnd"]))
+    tools = {(step.get("chapter"), name_key(step)) for prev, step in zip([None, *ordered], ordered)
+             if not step.get("isCosmeticApplication") and name_key(step)
+             and not (prev and prev.get("isCosmeticApplication") and same_name(prev, step))}
+    out = []
+    for step in ordered:
+        if (step.get("isCosmeticApplication") and name_key(step)
+                and ((step.get("chapter"), name_key(step)) in tools or aid_tool(step))):
+            before = next((s for s in reversed(out) if s.get("isCosmeticApplication") and name_key(s)
+                           and s.get("chapter") == step.get("chapter") and s["makeup"] == step["makeup"]), None)
+            step = step | {"product": before.get("product") if before else None,
+                           "productName": before.get("productName") if before else None,
+                           "videoProductName": step["productName"]}
         out.append(step)
     return out
 

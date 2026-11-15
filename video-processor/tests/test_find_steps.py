@@ -198,6 +198,41 @@ class StepTests(unittest.TestCase):
         steps = rules.absorb_blending(to_steps([liner, lashes], 0, 0))
         self.assertEqual(len(steps), 2)
 
+    def test_guard_held_while_applying_joins_the_product_before_it(self):
+        # RBm4rzufBV0 15:21~15:42: 아이가드를 대고 언더 마스카라를 계속 바름
+        mascara = row("00:20", "00:26", kind="mascara", product="Hakit 스위치 업 컬링 마스카라", area="아랫속눈썹")
+        guard = row("00:32", "00:41", kind="tool", product="Merythod 깔끔착 아이가드", area="아랫속눈썹")
+        tweezers = row("00:43", "00:50", kind="tool", product=None, area="아랫속눈썹")
+        steps = rules.absorb_aid_tools(rules.absorb_blending(to_steps([mascara, guard, tweezers], 0, 0)))
+        self.assertEqual([(s["makeup"], s["absStart"], s["absEnd"], s["productName"]) for s in steps],
+                         [("mascara", 20, 42, "Hakit 스위치 업 컬링 마스카라"), ("other", 43, 51, None)])
+
+    def test_tool_name_on_a_product_step_takes_the_same_kind_product_before_it(self):
+        # RBm4rzufBV0 15:21: 언더 마스카라를 바르는 동안 앞에 소개한 인조속눈썹 자막이 남음
+        hakit, lashes = "Hakit 스위치 업 컬링 마스카라", "Coringco 톡톡하라 필터 속눈썹 언더"
+        steps = rules.drop_tool_names(to_steps([
+            row("00:10", "00:14", kind="mascara", product=hakit, area="윗속눈썹"),
+            row("00:16", "00:19", kind="tool", product=lashes, area="아랫속눈썹"),
+            row("00:20", "00:26", kind="mascara", product=lashes, area="아랫속눈썹"),
+            row("00:52", "00:59", kind="tool", product=lashes, area="아랫속눈썹"),
+        ], 0, 0))
+        self.assertEqual([s["productName"] for s in steps], [hakit, lashes, hakit, lashes])
+        self.assertEqual((steps[2]["product"], steps[2]["videoProductName"]), (steps[0]["product"], lashes))
+
+    def test_tool_name_without_a_same_kind_product_before_it_becomes_no_name(self):
+        lashes = "TEMU 인조속눈썹"
+        steps = to_steps([row("00:10", "00:13", kind="tool", product=lashes, area="아랫속눈썹"),
+                          row("00:14", "00:20", kind="mascara", product=lashes, area="아랫속눈썹")], 0, 0)
+        fixed = rules.drop_tool_names(steps)
+        self.assertEqual((fixed[1]["product"], fixed[1]["productName"]), (None, None))
+        other_chapter = rules.drop_tool_names([steps[0] | {"chapter": 0}, steps[1] | {"chapter": 1}])
+        self.assertEqual(other_chapter[1]["productName"], lashes)
+
+    def test_sunscreen_named_guard_keeps_its_name(self):
+        sun = row("00:10", "00:20", kind="base", product="라운드랩 자작나무 수분 선가드", area="얼굴 전체")
+        self.assertEqual(rules.drop_tool_names(to_steps([sun], 0, 0))[0]["productName"], "라운드랩 자작나무 수분 선가드")
+        self.assertTrue(rules.aid_tool({"productName": "Merythod 깔끔착 아이가드"}))
+
     def test_end_is_the_end_of_the_last_touched_second_but_not_past_the_next_step(self):
         steps = rules.fit_ends(to_steps([
             row("00:10", "00:20", kind="eyeshadow", product="A", area="윗눈두덩"),
