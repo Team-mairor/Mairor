@@ -22,7 +22,7 @@ from app.schemas.guide import GuideInput, GuideInputStep
 from app.schemas.guide_area import GuideArea
 from app.schemas.landmarks import LandmarksResult
 from app.schemas.manifest import Step
-from app.tasks.area.guide_area_builder import build_guide_area
+from app.tasks.area.guide_area_builder import build_guide_area, video_white
 from app.tasks.area.landmarks.occlusion import remember_by_frame
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
@@ -63,15 +63,19 @@ def main() -> None:
     reference = load_reference_input(folder)
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
+    steps = guide_steps(folder, reference.manifest.steps)
+    photos = RememberedPhotos(
+        lambda row: read_frame_rgb(reference, frames[row.frame_index]), FACE_MAP_KEEP
+    )
+    occlusion = remember_by_frame(find_occlusion, OCCLUSION_KEEP)
     with recording_colors() as colors:
         area = build_guide_area(
             reference.manifest.video_id,
-            guide_steps(folder, reference.manifest.steps),
+            steps,
             result,
-            RememberedPhotos(
-                lambda row: read_frame_rgb(reference, frames[row.frame_index]), FACE_MAP_KEEP
-            ),
-            occlusion=remember_by_frame(find_occlusion, OCCLUSION_KEEP),
+            photos,
+            occlusion=occlusion,
+            white=video_white(reference.manifest.video_id, steps, result, photos, occlusion),
         )
     path = save(area, folder)
     colors_path = save_colors(area, colors, folder)

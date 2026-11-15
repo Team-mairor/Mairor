@@ -39,6 +39,7 @@ from typing import Literal
 import numpy as np
 
 from app.tasks.area.parts.area_preparation import D65_WHITE, SRGB_LINEAR, SRGB_TO_XYZ
+from app.tasks.area.parts.eye_white import white_cells
 from tools.gauge.baseline import delta_e_map
 
 MatchName = Literal["none", "effect", "skin", "skinEffect", "local", "mix"]
@@ -66,8 +67,6 @@ CAT16 = np.array(
 XYZ_TO_SRGB = np.linalg.inv(SRGB_TO_XYZ)
 TINY = 1e-6
 LEAST_PAINT_MIN = 0.02
-WHITE_SHARE = 0.25
-WHITE_CLIP = 250
 
 
 @dataclass(frozen=True)
@@ -331,30 +330,12 @@ def white_color(face_map: np.ndarray, holes: np.ndarray) -> np.ndarray | None:
     """맨얼굴 지도(sRGB uint8)에서 흰자 색(선형 RGB). 흰자 칸이 없으면 None이다.
 
     화장한 뒤에는 아이라인·속눈썹이 흰자 둘레를 덮어 어둡게 읽히므로 맨얼굴(기준) 사진에서 잰다.
+    흰자 칸을 고르는 규칙(white_cells)은 레퍼런스 쪽을 재는 서비스 코드(eye_white)와 같다.
     """
     cells = white_cells(face_map, holes)
     if not cells.any():
         return None
     return linear_of_srgb(np.median(face_map[cells].astype(np.float64), axis=0))
-
-
-def white_cells(face_map: np.ndarray, holes: np.ndarray) -> np.ndarray:
-    """눈 구멍 칸 중 흰자로 볼 칸.
-
-    밝기 위 WHITE_SHARE 칸이고, 하얗게 날아간 칸(WHITE_CLIP 이상)은 뺀다.
-
-    흰자는 피부톤과 상관없이 거의 흰색이라 그 화면의 조명·카메라 색만 알려 준다.
-    """
-    pixels = face_map[holes].astype(np.float64)
-    if not len(pixels):
-        return holes
-    light = pixels @ np.array([0.2126, 0.7152, 0.0722])
-    keep = (light >= np.percentile(light, 100 * (1 - WHITE_SHARE))) & (
-        pixels.max(axis=1) < WHITE_CLIP
-    )
-    out = np.zeros_like(holes)
-    out[holes] = keep
-    return out
 
 
 def _anchor(side: AreaSide, method: MatchMethod) -> np.ndarray:

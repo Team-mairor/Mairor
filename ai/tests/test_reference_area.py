@@ -7,6 +7,7 @@ from PIL import Image
 
 from app.clients.frames import frame_file_name
 from app.schemas.guide import GuideInput
+from app.schemas.guide_area import GaugeColor
 from app.schemas.guide_job import ReferenceFrames
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.tasks.area import guide_area_builder, reference_area
@@ -442,7 +443,9 @@ def test_one_line_builds_all_steps_at_once(monkeypatch):
     """
     seen = []
 
-    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
+    def build(
+        video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None, white=None
+    ):
         seen.append([step.step_id for step in steps])
         return failed_guide_area(video_id, steps)
 
@@ -469,7 +472,9 @@ def test_every_line_gets_neighbor_times_from_all_steps(monkeypatch):
     """
     seen = []
 
-    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
+    def build(
+        video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None, white=None
+    ):
         seen.append(bounds)
         return failed_guide_area(video_id, steps)
 
@@ -491,6 +496,44 @@ def test_every_line_gets_neighbor_times_from_all_steps(monkeypatch):
     assert seen[0]["s3"] == (15_000, 30_000)
 
 
+@pytest.mark.parametrize("lines", [1, 2])
+def test_white_is_measured_once_and_given_to_every_bundle(monkeypatch, lines):
+    """게이지 기준의 흰자는 영상마다 한 번이다.
+
+    묶음마다 재면 같은 사진을 여러 번 펴고 기록이 겹치며, 눈 화장 단계가 없는 묶음은 다른 사진으로
+    재게 된다. 나누기 전에 전체 단계로 한 번 재서 모든 묶음이 같은 값을 받아야 해서 고른 경우다.
+    """
+    white = GaugeColor(hex="#C4A7A3", lab=(70.88, 9.92, 5.99))
+    measured, seen = [], []
+
+    def measure(video_id, steps, result, load_photo, occlusion):
+        measured.append([step.step_id for step in steps])
+        return white
+
+    def build(
+        video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None, white=None
+    ):
+        seen.append(white)
+        return failed_guide_area(video_id, steps)
+
+    monkeypatch.setattr(reference_area, "video_white", measure)
+    monkeypatch.setattr(reference_area, "build_guide_area", build)
+    steps = guide_input(*LINE_STEPS).steps
+
+    build_area_in_lines(
+        "test_01",
+        steps,
+        landmarks_every_half_second(60_000),
+        lambda row: np.zeros((24, 32, 3), dtype=np.uint8),
+        find_occlusion,
+        None,
+        lines,
+    )
+
+    assert measured == [[step.step_id for step in steps]]
+    assert seen and all(one == white for one in seen)
+
+
 def test_lines_share_photos_keep_their_own_occlusion_memory_and_merge_in_step_order(monkeypatch):
     """지도 꾸러미는 줄들이 같이 써야 다른 줄이 미리 편 사진을 쓴다. 장수는 줄 수만큼 늘린다.
 
@@ -500,7 +543,9 @@ def test_lines_share_photos_keep_their_own_occlusion_memory_and_merge_in_step_or
     seen = []
     both = threading.Barrier(2, timeout=10)
 
-    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
+    def build(
+        video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None, white=None
+    ):
         seen.append((threading.get_ident(), load_photo, occlusion))
         if len(seen) <= 2:
             both.wait()
@@ -583,7 +628,8 @@ def test_idle_line_flattens_photos_of_the_running_chain_before_taking_a_bundle()
 def test_photos_are_flattened_ahead_only_with_enough_lines(monkeypatch, lines, flattens_ahead):
     """줄이 적으면 묶음만으로 줄이 다 차서 미리 펴도 빨라지지 않고 메모리만 더 쓴다.
 
-    묶음 만들기를 가짜로 바꿔 사진을 읽지 않게 했으므로, 사진 읽기가 일어났다면 미리 펴기다.
+    묶음 만들기와 흰자 재기를 가짜로 바꿔 사진을 읽지 않게 했으므로,
+    사진 읽기가 일어났다면 미리 펴기다.
     아이라인 묶음은 다른 줄이 사진을 읽을 때까지(안 읽으면 0.3초) 끝나지 않고 기다린다.
     """
     loaded = threading.Event()
@@ -592,12 +638,15 @@ def test_photos_are_flattened_ahead_only_with_enough_lines(monkeypatch, lines, f
         loaded.set()
         return np.zeros((600, 800, 3), dtype=np.uint8)
 
-    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
+    def build(
+        video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None, white=None
+    ):
         if len(steps) > 1:
             loaded.wait(10 if flattens_ahead else 0.3)
         return failed_guide_area(video_id, steps)
 
     monkeypatch.setattr(reference_area, "build_guide_area", build)
+    monkeypatch.setattr(reference_area, "video_white", lambda *args: None)
 
     build_area_in_lines(
         "test_01",
@@ -632,7 +681,9 @@ def test_line_work_ends_when_bundles_are_done_or_stopped():
 def test_error_in_one_bundle_stops_the_other_lines(monkeypatch):
     """한 묶음에서 오류가 나면 다른 줄이 기다리다 멈춰 있지 않고, 그 오류가 올라와야 한다."""
 
-    def build(video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None):
+    def build(
+        video_id, steps, result, load_photo, on_step=None, occlusion=None, bounds=None, white=None
+    ):
         if any(step.makeup == "lip" for step in steps):
             raise RuntimeError("립 묶음 오류")
         return failed_guide_area(video_id, steps)

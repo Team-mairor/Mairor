@@ -13,7 +13,7 @@ AI가 레퍼런스 영상에서 찾아 넘기는 튜토리얼 가이드 영역(`
     └ 하위 단계  subStepId · order · status · reasons · templateId · guideSets · gauge
        ├ 부위별 묶음  region · source · guides · exclude
        │  └ 도형    polygon (outline = MeshAnchor[]) · arrow (from · to = MeshAnchor)
-       └ 게이지 기준  color (hex · lab) · effect (delta · size · direction) · strength · reason
+       └ 게이지 기준  color (hex · lab) · effect (delta · size · direction) · strength · reason · white (hex · lab)
 ```
 
 ## 사용 위치
@@ -35,7 +35,7 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
   | `notApplicable` | 빈 목록 | `null` | 빈 목록 | `null` |
   | `failed` | 빈 목록 | `null` | 1개 이상 | `null` |
 
-- `gauge`는 값(`color` · `effect` · `strength`가 모두 있고 `reason`이 `null`)이거나 이유(셋 다 `null`이고 `reason`이 있음) 둘 중 하나
+- `gauge`는 값(`color` · `effect` · `strength`가 모두 있고 `reason`이 `null`)이거나 이유(셋 다 `null`이고 `reason`이 있음) 둘 중 하나. 이유일 때는 `white`도 `null`
 
 - `makeup`이 `other`인 단계는 `notApplicable`이다. 그 밖에는 컨실러 단계에만 쓴다. 컨실러는 영역을 띄우지 않으며, 가이드 입력이 `foundation` · `highlight`로 보내므로 이 두 종류에서만 `notApplicable`이 나올 수 있다. 마스카라처럼 영역을 분석하지 않는 부위는 `template`(`notAnalyzed`)로 보낸다
 - `subStepId`는 `<stepId>-<order>`이고, 하위 단계 `order`는 1부터 차례대로
@@ -69,7 +69,8 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
   "color": { "hex": "#D77F7E", "lab": [62.62, 33.87, 15.3] },
   "effect": { "delta": [-3.96, 9.13, 2.76], "size": 5.18, "direction": "darker" },
   "strength": 25.9,
-  "reason": null
+  "reason": null,
+  "white": { "hex": "#C3A8A2", "lab": [71.02, 8.84, 6.73] }
 }
 ```
 
@@ -82,6 +83,7 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 | `effect.direction` | 밝기가 어두워졌으면 `darker`(쉐딩 · 눈썹 · 아이라인), 밝아졌으면 `lighter`(하이라이트), ΔL이 ±1 안이면 `same`(색만 바뀜) |
 | `strength` | `effect.size`를 0~100으로 바꾼 진하기. ΔE2000 20이 100이고 넘으면 100이다. 부위끼리 얼마나 진한지 견주는 값이다 |
 | `reason` | 값을 못 냈을 때의 이유 (아래 표) |
+| `white` | 레퍼런스 영상의 흰자 색(`hex` · `lab`, 뜻은 `color`와 같음). 사용자 캠과 조명 · 카메라를 맞출 때 쓴다. 눈 화장 전 정면 · 눈 뜬 사진 15장으로 영상마다 한 번 재서 값이 있는 모든 하위 단계에 같은 값이 들고, 못 쟀으면 `null`이다. S15P31A306-440 전에 만든 결과에는 칸이 없다 |
 
 좌우 짝 부위(볼 · 눈 · 눈썹)는 두 쪽에서 찾은 칸을 합쳐 기준 하나를 낸다. 한쪽만 바른 단계에서 못 찾아 반대쪽 모양을 뒤집어 쓴 쪽은 빼서, 안 바른 쪽 색이 기준을 옅게 만들지 않는다. 쪽마다 따로 낸 색은 AI 서버 `area_step` 기록의 `colors`에만 남는다.
 
@@ -97,7 +99,7 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 `gauge`가 `null`이면 기준이 없다는 뜻이다. `notApplicable` · `failed` 단계, 게이지 기준을 넣기 전에 만든 결과, 색 뽑기 중 오류가 난 결과가 그렇다.
 
 한 단계에 하위 단계가 여럿이면(아이섀도 윗눈두덩 · 눈 밑, 코 쉐딩 · 코 밖 쉐딩) 기준도 하위 단계마다 따로다. FE는 화면에 지금 보이는 하위 단계(제목 옆 「영역 1/3」)의 `gauge`를 쓴다. 그 하위 단계의 `gauge`가 없거나 `reason`이 있으면, 같은 단계의 다른 하위 단계 값을 빌리지 않고 그 하위 단계 동안 게이지를 숨긴다. 자리마다 색과 진하기가 달라서다.
-색 · 효과 · 진하기를 내는 방법과 근거 숫자는 [GAUGE_REFERENCE_COLOR.md](../../docs/experiments/GAUGE_REFERENCE_COLOR.md) · [GAUGE_MAKEUP_EFFECT_SCALE.md](../../docs/experiments/GAUGE_MAKEUP_EFFECT_SCALE.md)에 있다.
+색 · 효과 · 진하기를 내는 방법과 근거 숫자는 [GAUGE_REFERENCE_COLOR.md](../../docs/experiments/GAUGE_REFERENCE_COLOR.md) · [GAUGE_MAKEUP_EFFECT_SCALE.md](../../docs/experiments/GAUGE_MAKEUP_EFFECT_SCALE.md)에, 흰자를 재는 방법과 사용자 캠 값을 이 기준과 견주는 계산은 [GAUGE_MEASURE.md](../../docs/experiments/GAUGE_MEASURE.md) · [shared/gauge](../gauge/README.md)에 있다.
 
 ## 기본 가이드 키 (`templateId`)
 

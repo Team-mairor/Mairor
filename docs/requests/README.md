@@ -40,3 +40,5 @@
 | [튜토리얼 게이지에 AI 게이지 기준(gauge) 쓰기와 게이지 계산 · 단계 끝 평가 형식](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [게이지용 사용자 캠 기준 잡기: 언제 잡을지 · 카메라 잠금 · 저장하지 않기](2026-11-15-hyeonsoo-seoyun-gauge-baseline.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [게이지 색감 맞추기: 맨얼굴 기준 때 흰자 색도 잡기 · 부위별 맞추는 법](2026-11-15-hyeonsoo-seoyun-gauge-color-match.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
+| [가이드 게이지 기준(gauge)에 레퍼런스 흰자 색(white) 칸 추가](2026-11-15-hyeonsoo-seoyeon-gauge-white.md) | 2026-11-15 | 김현수 → 김서연 | 확인 요청 |
+| [튜토리얼 게이지 계산: 맞춘 색으로 진하기 · 색감 재기와 시험 데이터](2026-11-15-hyeonsoo-seoyun-gauge-measure.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |

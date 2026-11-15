@@ -58,6 +58,7 @@ from app.tasks.area.parts.area_color import (
     StepNotes,
     area_color,
     color_record,
+    median_color,
     note_colors,
     note_mirrored,
     note_own,
@@ -72,6 +73,7 @@ from app.tasks.area.parts.area_preparation import (
 from app.tasks.area.parts.blush_area import CHEEKS, BlushArea, find_blush_area, paired_blush
 from app.tasks.area.parts.brow_area import BROWS, BrowArea, find_brow_area, symmetric_brows
 from app.tasks.area.parts.contour_area import ContourArea, find_contour_area, paired_contour
+from app.tasks.area.parts.eye_white import reference_white
 from app.tasks.area.parts.eyeliner_area import (
     EyelinerArea,
     find_eyeliner_area,
@@ -165,6 +167,7 @@ def build_guide_area(
     on_step: Callable[[], None] | None = None,
     occlusion: OcclusionFinder | None = None,
     bounds: Mapping[str, StepBounds] | None = None,
+    white: GaugeColor | None = None,
 ) -> GuideArea:
     """단계마다 하위 단계 하나를 채워 영상 하나의 가이드 영역을 돌려준다.
 
@@ -189,6 +192,10 @@ def build_guide_area(
     찾은 영역마다 대표 색도 뽑아(step_colors) area_step 기록의 colors에 남긴다.
     돌려주는 가이드 영역에는 하위 단계마다 그중 하나를 골라
     게이지 기준(gauge)으로 넣는다(step_gauges).
+    white는 게이지 기준에 넣을 영상의 흰자 색(video_white)이고, None이면 기준에 흰자가 없다.
+    흰자는 영상마다 한 번 재야 해서 부르는 쪽이 전체 단계로 재서 넘긴다.
+    단계를 묶음으로 나눠 부를 때 묶음마다 재면 같은 사진을 여러 번 펴고,
+    묶음마다 단계가 달라 값이 달라질 수 있어서다.
     단계마다 area_step 기록에 결과 상태·이유와, 판정을 통과했는데 부위 분석에서 빠진 사진 번호를
     이유별로(area_preparation.recording_dropped) 남긴다.
     부위 분석은 앞 단계 끝과 다음 단계 시작 사이의 사진만 쓴다(area_preparation.within_step).
@@ -260,7 +267,7 @@ def build_guide_area(
             if colors:
                 record["colors"] = colors
             note_colors(step.step_id, colors)
-            sub_steps = step_gauges(sub_steps, colors, step.makeup)
+            sub_steps = step_gauges(sub_steps, colors, step.makeup, white)
             set_output(span, record)
         area_steps.append(
             AreaStep(
@@ -370,13 +377,40 @@ def step_colors(step_id: str, sub_steps: Sequence[AreaSubStep], notes: StepNotes
         return []
 
 
+def video_white(
+    video_id: str,
+    steps: Sequence[Step | GuideInputStep],
+    result: LandmarksResult,
+    load_photo: PhotoLoader,
+    occlusion: OcclusionFinder | None,
+) -> GaugeColor | None:
+    """게이지 기준에 넣을 레퍼런스 영상의 흰자 색(eye_white.reference_white). 못 재면 None이다.
+
+    흰자를 재다 오류가 나면 로그를 남기고 None을 돌려준다. 흰자는 덧붙이는 정보라,
+    못 구해도 영역 안내와 게이지 기준의 다른 값은 그대로 나가야 한다.
+    """
+    with traced("reference_white", {"videoId": video_id}) as span:
+        try:
+            white, frames = reference_white(result, steps, load_photo, occlusion)
+        except Exception:
+            logger.exception("%s 영상 흰자 색 재기에서 오류", video_id)
+            return None
+        color = None if white is None else median_color(white[None, :])
+        set_output(span, {"white": None if color is None else color.hex, "frames": frames})
+    return None if color is None else GaugeColor(hex=color.hex, lab=color.lab)
+
+
 def step_gauges(
-    sub_steps: Sequence[AreaSubStep], colors: Sequence[dict], makeup: Makeup
+    sub_steps: Sequence[AreaSubStep],
+    colors: Sequence[dict],
+    makeup: Makeup,
+    white: GaugeColor | None = None,
 ) -> list[AreaSubStep]:
     """하위 단계마다 색 기록(step_colors)에서 고른 게이지 기준(gauge_reference)을 붙인다.
 
     makeup은 그 단계의 화장 종류다. 색 기록이 없는 하위 단계(notApplicable·failed,
     색 뽑기 오류)는 gauge 없이 그대로다.
+    white는 영상의 흰자 색(video_white)이고 값을 낸 기준에만 들어간다.
     """
     records: dict[str, list[dict]] = {}
     for record in colors:
@@ -385,14 +419,16 @@ def step_gauges(
         AreaSubStep.model_validate(
             {
                 **sub_step.model_dump(),
-                "gauge": gauge_reference(records.get(sub_step.sub_step_id, []), makeup),
+                "gauge": gauge_reference(records.get(sub_step.sub_step_id, []), makeup, white),
             }
         )
         for sub_step in sub_steps
     ]
 
 
-def gauge_reference(records: Sequence[dict], makeup: Makeup) -> GaugeReference | None:
+def gauge_reference(
+    records: Sequence[dict], makeup: Makeup, white: GaugeColor | None = None
+) -> GaugeReference | None:
     """하위 단계 하나의 색 기록들에서 게이지 기준을 고른다. 기록이 없으면 None이다.
 
     좌우 짝 부위는 찾은 쪽 칸만 합친 기록(region None)을, 영역 묶음이 하나뿐이면 그 기록을 쓴다.
@@ -424,6 +460,7 @@ def gauge_reference(records: Sequence[dict], makeup: Makeup) -> GaugeReference |
         ),
         strength=effect["strength"],
         reason=None,
+        white=white,
     )
 
 

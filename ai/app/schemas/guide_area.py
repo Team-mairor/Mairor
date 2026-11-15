@@ -137,12 +137,16 @@ class GaugeReference(CamelModel):
     어두워지지 않아 찾은 칸이 그린 자리가 아님이다.
     color는 바른 뒤 색이다. 좌우 짝 부위는 찾은 쪽 칸만 합쳐 낸 색이다.
     strength는 effect.size를 0~100으로 바꾼 진하기다.
+    white는 레퍼런스 영상의 흰자 색이다. 사용자 캠과 조명 · 카메라를 맞출 때 쓴다.
+    눈 화장 전 정면 · 눈 뜬 사진에서 영상마다 한 번 재서 모든 하위 단계에 같은 값을 넣고,
+    못 쟀으면 null이다. 값을 못 낸 기준(reason이 있음)에도 null이다.
     """
 
     color: GaugeColor | None
     effect: GaugeEffect | None
     strength: float | None = Field(ge=0, le=100)
     reason: GaugeReason | None
+    white: GaugeColor | None = None
 
     @model_validator(mode="after")
     def check_reason(self) -> "GaugeReference":
@@ -151,6 +155,8 @@ class GaugeReference(CamelModel):
             raise ValueError("reason이 없으면 color·effect·strength가 모두 있어야 합니다")
         if self.reason is not None and any(value is not None for value in values):
             raise ValueError("reason이 있으면 color·effect·strength가 모두 null이어야 합니다")
+        if self.reason is not None and self.white is not None:
+            raise ValueError("reason이 있으면 white도 null이어야 합니다")
         return self
 
 

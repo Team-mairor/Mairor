@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GaugeMeasureSpec",
+  "description": "사용자 캠 화장의 진하기 · 색감을 레퍼런스 게이지 기준과 견주는 계산의 값과 기대값 시험 데이터. ai/tools/gauge/export_measure_spec.py가 만든다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "grid", "area", "white", "methods", "combine", "bar", "color", "frames", "cases"],
+  "properties": {
+    "version": { "const": "v1" },
+    "grid": { "type": "integer", "minimum": 8, "description": "baseline.v1.json의 grid와 같은 칸 수" },
+    "area": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["share", "minCells", "center", "thinMakeups"],
+      "properties": {
+        "share": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "가이드 영역 테두리 안이 칸의 이 몫 이상이면 영역 칸" },
+        "minCells": { "type": "integer", "minimum": 1, "description": "잴 칸이 이보다 적으면 tooFewCells" },
+        "center": { "enum": ["median", "mean", "changed"], "description": "영역 칸 색을 모으는 법" },
+        "thinMakeups": { "type": "array", "items": { "type": "string" }, "description": "재지 않는 화장 종류(thinArea)" }
+      }
+    },
+    "white": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frames", "share", "clip"],
+      "properties": {
+        "frames": { "type": "integer", "minimum": 1, "description": "흰자를 재는 정면 · 눈 뜬 사진 수" },
+        "share": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "두 눈 구멍 픽셀 중 밝기 위 이 몫" },
+        "clip": { "type": "integer", "minimum": 1, "maximum": 255, "description": "채널 하나라도 이 값 이상이면 반사광으로 뺌" }
+      }
+    },
+    "methods": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["color", "dark", "darkMakeups", "leastPaintMin"],
+      "properties": {
+        "color": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "anchor", "weight"],
+          "properties": {
+            "name": { "const": "mix" },
+            "anchor": { "const": "white" },
+            "weight": { "type": "number" }
+          }
+        },
+        "dark": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "target", "space"],
+          "properties": {
+            "name": { "const": "local" },
+            "target": { "const": "user" },
+            "space": { "const": "rgb" }
+          }
+        },
+        "darkMakeups": { "type": "array", "items": { "type": "string" }, "description": "자리마다 비율로 맞추고 색감은 내지 않는 화장 종류" },
+        "leastPaintMin": { "type": "number", "exclusiveMinimum": 0, "description": "혼합 모델에서 가장 적게 바른 양의 아래 끝" }
+      }
+    },
+    "combine": { "enum": ["weaker", "stronger", "mean"], "description": "좌우 짝 부위 게이지 값을 고르는 법" },
+    "bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atReference", "max"],
+      "properties": {
+        "atReference": { "type": "number", "description": "진하기 비율 1(레퍼런스만큼)이 오는 막대 값" },
+        "max": { "type": "number", "description": "막대가 멈추는 값" }
+      }
+    },
+    "color": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hueMinChroma", "hueSameDegrees", "chromaSame"],
+      "properties": {
+        "hueMinChroma": { "type": "number", "minimum": 0, "description": "목표 효과 a · b 길이가 이보다 작으면 색 계열을 내지 않음" },
+        "hueSameDegrees": { "type": "number", "minimum": 0, "description": "|hue|가 이 안이면 색 계열 비슷" },
+        "chromaSame": { "type": "number", "minimum": 0, "description": "|chroma|가 이 안이면 선명도 비슷" }
+      }
+    },
+    "frames": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intervalMs", "medianWindowMs"],
+      "properties": {
+        "intervalMs": { "type": "integer", "minimum": 1, "description": "칸 색을 재는 간격" },
+        "medianWindowMs": { "type": "integer", "minimum": 1, "description": "칸마다 가운데 값으로 모으는 최근 시간" }
+      }
+    },
+    "cases": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/case" } }
+  },
+  "$defs": {
+    "lab": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "hex": { "type": ["string", "null"], "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "nullableNumber": { "type": ["number", "null"] },
+    "reason": { "enum": [null, "noReference", "noWhite", "tooFewCells", "thinArea"] },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "makeup", "reference", "sides", "expected"],
+      "properties": {
+        "name": { "type": "string" },
+        "makeup": { "type": "string" },
+        "reference": {
+          "description": "가이드 결과 gauge의 color.lab · effect.delta · white.hex. null이면 기준 없음(noArea)",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["lab", "delta", "white"],
+              "properties": {
+                "lab": { "$ref": "#/$defs/lab" },
+                "delta": { "$ref": "#/$defs/lab" },
+                "white": { "$ref": "#/$defs/hex" }
+              }
+            }
+          ]
+        },
+        "sides": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["region", "before", "after", "white", "cells"],
+            "properties": {
+              "region": { "type": "string" },
+              "before": { "$ref": "#/$defs/lab", "description": "영역 칸 단계 시작 기준 색의 가운데 값(Lab)" },
+              "after": { "$ref": "#/$defs/lab", "description": "영역 칸 조명을 뺀 지금 색의 가운데 값(Lab)" },
+              "white": { "$ref": "#/$defs/hex", "description": "맨얼굴 기준 때 잰 사용자 흰자 색" },
+              "cells": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ratio", "bar", "hue", "chroma", "hueSame", "chromaSame", "reason", "sides"],
+          "properties": {
+            "ratio": { "$ref": "#/$defs/nullableNumber" },
+            "bar": { "$ref": "#/$defs/nullableNumber" },
+            "hue": { "$ref": "#/$defs/nullableNumber" },
+            "chroma": { "$ref": "#/$defs/nullableNumber" },
+            "hueSame": { "type": ["boolean", "null"] },
+            "chromaSame": { "type": ["boolean", "null"] },
+            "reason": { "$ref": "#/$defs/reason" },
+            "sides": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["region", "ratio", "hue", "chroma", "reason"],
+                "properties": {
+                  "region": { "type": ["string", "null"] },
+                  "ratio": { "$ref": "#/$defs/nullableNumber" },
+                  "hue": { "$ref": "#/$defs/nullableNumber" },
+                  "chroma": { "$ref": "#/$defs/nullableNumber" },
+                  "reason": { "$ref": "#/$defs/reason" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

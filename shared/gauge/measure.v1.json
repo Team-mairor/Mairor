@@ -1,0 +1,698 @@
+{
+  "version": "v1",
+  "grid": 128,
+  "area": {
+    "share": 0.5,
+    "minCells": 6,
+    "center": "median",
+    "thinMakeups": [
+      "eyeliner"
+    ]
+  },
+  "white": {
+    "frames": 15,
+    "share": 0.25,
+    "clip": 250
+  },
+  "methods": {
+    "color": {
+      "name": "mix",
+      "anchor": "white",
+      "weight": 1.0
+    },
+    "dark": {
+      "name": "local",
+      "target": "user",
+      "space": "rgb"
+    },
+    "darkMakeups": [
+      "brow",
+      "eyeliner"
+    ],
+    "leastPaintMin": 0.02
+  },
+  "combine": "weaker",
+  "bar": {
+    "atReference": 50.0,
+    "max": 100.0
+  },
+  "color": {
+    "hueMinChroma": 2.0,
+    "hueSameDegrees": 2.9,
+    "chromaSame": 1.6
+  },
+  "frames": {
+    "intervalMs": 200,
+    "medianWindowMs": 1000
+  },
+  "cases": [
+    {
+      "name": "lipSameAmount",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 1.0,
+        "bar": 50.0,
+        "hue": 0.0,
+        "chroma": 0.0,
+        "hueSame": true,
+        "chromaSame": true,
+        "reason": null,
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": 1.0,
+            "hue": 0.0,
+            "chroma": 0.0,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "lipHalfAmount",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            59.78,
+            13.9,
+            13.07
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 0.5302,
+        "bar": 26.5091,
+        "hue": -0.0851,
+        "chroma": -0.0378,
+        "hueSame": true,
+        "chromaSame": true,
+        "reason": null,
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": 0.5302,
+            "hue": -0.0851,
+            "chroma": -0.0378,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "lipWarmerCamera",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.59,
+            10.14,
+            16.34
+          ],
+          "after": [
+            57.91,
+            21.63,
+            18.31
+          ],
+          "white": "#D3BCAE",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 0.9958,
+        "bar": 49.7886,
+        "hue": -0.0143,
+        "chroma": -0.0339,
+        "hueSame": true,
+        "chromaSame": true,
+        "reason": null,
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": 0.9958,
+            "hue": -0.0143,
+            "chroma": -0.0339,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "lipDarkerSkin",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            47.26,
+            11.32,
+            16.05
+          ],
+          "after": [
+            45.89,
+            25.74,
+            18.54
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 0.9824,
+        "bar": 49.1189,
+        "hue": -0.3441,
+        "chroma": -0.0454,
+        "hueSame": true,
+        "chromaSame": true,
+        "reason": null,
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": 0.9824,
+            "hue": -0.3441,
+            "chroma": -0.0454,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "blushOneSideLighter",
+      "makeup": "blush",
+      "reference": {
+        "lab": [
+          62.58,
+          18.75,
+          12.92
+        ],
+        "delta": [
+          0.46,
+          10.18,
+          0.79
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "leftCheek",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            62.58,
+            18.75,
+            12.92
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        },
+        {
+          "region": "rightCheek",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            62.34,
+            13.56,
+            12.51
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 0.5489,
+        "bar": 27.4455,
+        "hue": -0.0181,
+        "chroma": -0.0043,
+        "hueSame": true,
+        "chromaSame": true,
+        "reason": null,
+        "sides": [
+          {
+            "region": "leftCheek",
+            "ratio": 1.0,
+            "hue": 0.0,
+            "chroma": 0.0,
+            "reason": null
+          },
+          {
+            "region": "rightCheek",
+            "ratio": 0.5489,
+            "hue": -0.0181,
+            "chroma": -0.0043,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "browSameAmount",
+      "makeup": "brow",
+      "reference": {
+        "lab": [
+          51.94,
+          7.87,
+          11.02
+        ],
+        "delta": [
+          -10.18,
+          -0.7,
+          -1.11
+        ],
+        "white": null
+      },
+      "sides": [
+        {
+          "region": "leftBrow",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            51.94,
+            7.87,
+            11.02
+          ],
+          "white": null,
+          "cells": 120
+        },
+        {
+          "region": "rightBrow",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            51.94,
+            7.87,
+            11.02
+          ],
+          "white": null,
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 1.0,
+        "bar": 50.0,
+        "hue": null,
+        "chroma": null,
+        "hueSame": null,
+        "chromaSame": null,
+        "reason": null,
+        "sides": [
+          {
+            "region": "leftBrow",
+            "ratio": 1.0,
+            "hue": null,
+            "chroma": null,
+            "reason": null
+          },
+          {
+            "region": "rightBrow",
+            "ratio": 1.0,
+            "hue": null,
+            "chroma": null,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "highlightDoubleAmount",
+      "makeup": "highlight",
+      "reference": {
+        "lab": [
+          69.94,
+          6.78,
+          10.03
+        ],
+        "delta": [
+          7.82,
+          -1.79,
+          -2.1
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "faceOval",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            76.56,
+            5.57,
+            8.73
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 1.7679,
+        "bar": 88.3965,
+        "hue": 0.0448,
+        "chroma": 0.5085,
+        "hueSame": true,
+        "chromaSame": true,
+        "reason": null,
+        "sides": [
+          {
+            "region": "faceOval",
+            "ratio": 1.7679,
+            "hue": 0.0448,
+            "chroma": 0.5085,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "lipMoreOrange",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            59.22,
+            18.28,
+            18.28
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": 0.8043,
+        "bar": 40.2138,
+        "hue": 8.8254,
+        "chroma": 1.9408,
+        "hueSame": false,
+        "chromaSame": false,
+        "reason": null,
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": 0.8043,
+            "hue": 8.8254,
+            "chroma": 1.9408,
+            "reason": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "lipNoUserWhite",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": null,
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": null,
+        "bar": null,
+        "hue": null,
+        "chroma": null,
+        "hueSame": null,
+        "chromaSame": null,
+        "reason": "noWhite",
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": null,
+            "hue": null,
+            "chroma": null,
+            "reason": "noWhite"
+          }
+        ]
+      }
+    },
+    {
+      "name": "lipTooFewCells",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 5
+        }
+      ],
+      "expected": {
+        "ratio": null,
+        "bar": null,
+        "hue": null,
+        "chroma": null,
+        "hueSame": null,
+        "chromaSame": null,
+        "reason": "tooFewCells",
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": null,
+            "hue": null,
+            "chroma": null,
+            "reason": "tooFewCells"
+          }
+        ]
+      }
+    },
+    {
+      "name": "templateStepNoReference",
+      "makeup": "lip",
+      "reference": null,
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": null,
+        "bar": null,
+        "hue": null,
+        "chroma": null,
+        "hueSame": null,
+        "chromaSame": null,
+        "reason": "noReference",
+        "sides": [
+          {
+            "region": "lipsOuter",
+            "ratio": null,
+            "hue": null,
+            "chroma": null,
+            "reason": "noReference"
+          }
+        ]
+      }
+    },
+    {
+      "name": "eyelinerNotMeasured",
+      "makeup": "eyeliner",
+      "reference": {
+        "lab": [
+          48.86,
+          7.68,
+          10.71
+        ],
+        "delta": [
+          -13.26,
+          -0.89,
+          -1.42
+        ],
+        "white": null
+      },
+      "sides": [
+        {
+          "region": "leftEye",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            48.86,
+            7.68,
+            10.71
+          ],
+          "white": null,
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "ratio": null,
+        "bar": null,
+        "hue": null,
+        "chroma": null,
+        "hueSame": null,
+        "chromaSame": null,
+        "reason": "thinArea",
+        "sides": []
+      }
+    }
+  ]
+}

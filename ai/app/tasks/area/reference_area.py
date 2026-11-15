@@ -25,7 +25,7 @@ from app.schemas.guide_job import FrameSource, ReferenceFrame
 from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.schemas.manifest import Frame, Makeup, Manifest, Step, VideoSource
 from app.tasks.area.direction_finder import middle_windows
-from app.tasks.area.guide_area_builder import ORDERED_MAKEUPS, build_guide_area
+from app.tasks.area.guide_area_builder import ORDERED_MAKEUPS, build_guide_area, video_white
 from app.tasks.area.landmarks.face_finder import find_faces
 from app.tasks.area.landmarks.frame_checker import RATIO_WINDOW_MS, check_frames
 from app.tasks.area.landmarks.landmarks_builder import FaceFinder, build_landmarks
@@ -361,11 +361,15 @@ def build_area_in_lines(
     줄마다 지금 문맥을 복사해 넘겨, 단계 기록(area_step)이 이 작업의 기록 밑에 붙게 한다.
     단계마다 앞뒤 단계 시각(step_bounds)은 나누기 전 전체 단계로 정해 넘긴다.
     묶음에 든 단계만으로 정하면 다른 묶음에 간 이웃 단계를 못 봐서다.
+    게이지 기준의 흰자 색(video_white)도 나누기 전에 전체 단계로 한 번 재서 모든 묶음에 넘긴다.
+    묶음마다 재면 같은 사진을 여러 번 펴고 기록도 여러 번 남으며, 눈 화장 단계가 없는 묶음은
+    다른 사진으로 재게 된다.
     미리 펴기는 줄이 WARM_MIN_LINES개 이상일 때만 한다. 줄이 적으면 묶음만으로 줄이 다 차서
     빨라지지 않고, 미리 편 사진을 들고 있느라 메모리만 더 쓴다.
     미리 펴다 난 오류는 버린다. 그 사진을 쓰는 단계가 다시 펴다 같은 오류를 만나 그 단계만 실패한다.
     """
     bounds = step_bounds(steps)
+    white = video_white(video_id, steps, checked, load_row, occlusion)
     photos = RememberedPhotos(load_row, FACE_MAP_KEEP * max(1, lines))
     memory = threading.local()
 
@@ -383,6 +387,7 @@ def build_area_in_lines(
             on_step=tick,
             occlusion=own_occlusion(),
             bounds=bounds,
+            white=white,
         )
 
     if lines <= 1:

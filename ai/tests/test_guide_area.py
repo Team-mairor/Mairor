@@ -31,8 +31,9 @@ GAUGE = {
     "effect": {"delta": [-3.96, 9.13, 2.76], "size": 5.18, "direction": "darker"},
     "strength": 25.9,
     "reason": None,
+    "white": {"hex": "#C3A8A2", "lab": [71.02, 8.84, 6.73]},
 }
-NO_AREA = {"color": None, "effect": None, "strength": None, "reason": "noArea"}
+NO_AREA = {"color": None, "effect": None, "strength": None, "reason": "noArea", "white": None}
 
 
 def gauge(**changes) -> dict:

@@ -94,7 +94,8 @@ BE가 부르는 AI 서버 API다. 이 파일이 원본이다. FE가 부르는 AP
               "color": { "hex": "#AD686A", "lab": [51.64, 27.89, 10.74] },
               "effect": { "delta": [-6.28, 7.89, 2.11], "size": 7.2, "direction": "darker" },
               "strength": 36.0,
-              "reason": null
+              "reason": null,
+              "white": { "hex": "#C4A7A3", "lab": [70.88, 9.92, 5.99] }
             }
           }
         ]
@@ -108,7 +109,7 @@ BE가 부르는 AI 서버 API다. 이 파일이 원본이다. FE가 부르는 AP
 - `status`는 `COMPLETED`나 `FAILED`다. `COMPLETED`면 `guide`, `FAILED`면 `error`가 들어가고 `guide` · `area`는 `null`이다.
 - `guide.steps`는 입력 단계마다 하나씩, 같은 `stepId` · `order`로 온다.
 - `area`는 `frames`를 보낸 작업의 가이드 영역이다. 형식은 [shared/guide-area](../../shared/guide-area/README.md) 그대로이고, `guide.steps`와 같은 `stepId` · `order` 목록이다. 영역을 못 찾은 단계는 `area` 안에서 `template`(기본 영역) · `failed`로 온다.
-- 하위 단계의 `gauge`는 튜토리얼 진하기 게이지의 기준이다. 레퍼런스 영상에서 그 하위 단계에 바른 자리의 색(`color`), 화장 효과(`effect`), 진하기 0~100(`strength`)이 들고, 못 냈으면 셋 다 `null`이고 `reason`에 이유가 든다. 기본 영역(`template`)은 늘 `reason` `noArea`이고, `notApplicable` · `failed`와 S15P31A306-437 전에 만든 결과는 `gauge`가 `null`이다. 한 단계에 하위 단계가 여럿이면 FE는 지금 보이는 하위 단계의 `gauge`를 쓰고, 그 값이 없으면 다른 하위 단계 값을 빌리지 않고 게이지를 숨긴다. 칸 설명은 [shared/guide-area 「게이지 기준」](../../shared/guide-area/README.md#게이지-기준-gauge)에 있다. 사용자 카메라에서 잰 값은 FE 안에서만 쓰고 AI · BE로 보내지 않는다.
+- 하위 단계의 `gauge`는 튜토리얼 진하기 게이지의 기준이다. 레퍼런스 영상에서 그 하위 단계에 바른 자리의 색(`color`), 화장 효과(`effect`), 진하기 0~100(`strength`), 레퍼런스 영상의 흰자 색(`white`, 영상마다 한 번 재서 같은 값, 못 쟀으면 `null`)이 들고, 못 냈으면 `color` · `effect` · `strength` · `white`가 `null`이고 `reason`에 이유가 든다. 기본 영역(`template`)은 늘 `reason` `noArea`이고, `notApplicable` · `failed`와 S15P31A306-437 전에 만든 결과는 `gauge`가 `null`이다. 한 단계에 하위 단계가 여럿이면 FE는 지금 보이는 하위 단계의 `gauge`를 쓰고, 그 값이 없으면 다른 하위 단계 값을 빌리지 않고 게이지를 숨긴다. 칸 설명은 [shared/guide-area 「게이지 기준」](../../shared/guide-area/README.md#게이지-기준-gauge)에 있다. 사용자 카메라에서 잰 값은 FE 안에서만 쓰고 AI · BE로 보내지 않는다.
 - 영역 분석이 통째로 실패하면 설명은 그대로 `COMPLETED`로 보내고, `area`는 분석하는 단계(`lip` · `blush` · `brow` · `eyeshadow` · `eyeliner`)만 `failed`(`reasons` `analysisError`)로 온다. 나머지 단계는 평소와 같다(`foundation` · `contour` · `highlight` · `mascara`는 `template`(`notAnalyzed`), `other`는 `notApplicable`). `COMPLETED`인데 `area`가 `null`이면 `frames`를 보내지 않은 작업이다.
 - 설명을 못 만들면 영역 작업을 멈추고 `FAILED`를 바로 보낸다.
 - `actions`는 순서대로 할 동작이고, `tip`은 그 동작에 붙는 팁이다(`tip` 요령, `caution` 주의). `doneWhen`은 다음 단계로 넘어가도 되는 때이고, 입력에 근거가 없으면 `null`이다.

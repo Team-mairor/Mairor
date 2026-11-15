@@ -237,7 +237,7 @@
       "type": "object"
     },
     "GaugeReference": {
-      "description": "하위 단계의 게이지 기준. 레퍼런스 영상에서 바른 자리의 색과 화장 효과·진하기다.\n\n값을 냈으면 color·effect·strength가 모두 있고 reason은 null이다.\n못 냈으면 셋 다 null이고 reason에 이유가 든다.\nnoArea는 찾은 영역이 없음(기본 가이드 단계), noMaps는 쓸 사진이 없음,\ntooFewCells는 색을 낼 칸이 너무 적음, colorSpread는 사진마다 색이 화장으로 바뀐 양보다\n더 흔들려 화장 색인지 알 수 없음, sidesDisagree는 좌우 짝 부위에서 한쪽은 어두워지고\n다른 쪽은 밝아져 적어도 한쪽이 화장 색이 아님, notDarker는 어두워지는 화장(아이라인·눈썹·쉐딩)이\n어두워지지 않아 찾은 칸이 그린 자리가 아님이다.\ncolor는 바른 뒤 색이다. 좌우 짝 부위는 찾은 쪽 칸만 합쳐 낸 색이다.\nstrength는 effect.size를 0~100으로 바꾼 진하기다.",
+      "description": "하위 단계의 게이지 기준. 레퍼런스 영상에서 바른 자리의 색과 화장 효과·진하기다.\n\n값을 냈으면 color·effect·strength가 모두 있고 reason은 null이다.\n못 냈으면 셋 다 null이고 reason에 이유가 든다.\nnoArea는 찾은 영역이 없음(기본 가이드 단계), noMaps는 쓸 사진이 없음,\ntooFewCells는 색을 낼 칸이 너무 적음, colorSpread는 사진마다 색이 화장으로 바뀐 양보다\n더 흔들려 화장 색인지 알 수 없음, sidesDisagree는 좌우 짝 부위에서 한쪽은 어두워지고\n다른 쪽은 밝아져 적어도 한쪽이 화장 색이 아님, notDarker는 어두워지는 화장(아이라인·눈썹·쉐딩)이\n어두워지지 않아 찾은 칸이 그린 자리가 아님이다.\ncolor는 바른 뒤 색이다. 좌우 짝 부위는 찾은 쪽 칸만 합쳐 낸 색이다.\nstrength는 effect.size를 0~100으로 바꾼 진하기다.\nwhite는 레퍼런스 영상의 흰자 색이다. 사용자 캠과 조명 · 카메라를 맞출 때 쓴다.\n눈 화장 전 정면 · 눈 뜬 사진에서 영상마다 한 번 재서 모든 하위 단계에 같은 값을 넣고,\n못 쟀으면 null이다. 값을 못 낸 기준(reason이 있음)에도 null이다.",
       "properties": {
         "color": {
           "anyOf": [
@@ -290,6 +290,17 @@
             }
           ],
           "title": "Reason"
+        },
+        "white": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GaugeColor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
