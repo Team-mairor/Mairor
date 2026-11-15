@@ -14,6 +14,7 @@ import {
   TutorialViewport,
   loadDefaultGuideSet,
   resolveStep,
+  stepGauge,
   toGuideArea,
   useBrowFit,
   useGuide,
@@ -45,6 +46,7 @@ import {
 import {
   ActCard,
   DensityMeter,
+  GAUGE_REFERENCE,
   ExitModal,
   GuideStatus,
   PrepCard,
@@ -70,8 +72,6 @@ interface TutorialStep {
   title: string;
   acts: GuideAction[];
   doneWhen: string | null;
-  /** 레퍼런스 진하기(0~100). 기준이 없으면 null이고 게이지를 띄우지 않는다 */
-  target: number | null;
   product: StepProduct | null;
   /** 샘플 매칭용 제품. 가이드 조회 응답은 아직 내 파우치와 맞춰 보지 않아 null */
   ref: RefProduct | null;
@@ -89,7 +89,6 @@ function stepsOf(guide: GuideModel): TutorialStep[] {
       title: s.label,
       acts: s.actions.length ? s.actions : s.summary ? [{ text: s.summary, tip: null }] : [],
       doneWhen: s.doneWhen,
-      target: null,
       product: name
         ? {
             name,
@@ -200,7 +199,7 @@ function GuideTutorial() {
 /**
  * 상단 바는 연속한 같은 부위 단계를 한 칸으로 묶고, 묶음의 마지막 단계를 넘길 때 확인 창 없이 사진을 한 장 남긴다.
  * 사진 저장 동의는 필수이고 튜토리얼 안내에서 받는다.
- * ponytail: 진하기 게이지는 목표값으로 서서히 차오르는 연출. 진하기 측정이 생기면 gauge를 측정값으로 바꾼다.
+ * ponytail: 진하기 게이지는 레퍼런스 위치선까지 서서히 차오르는 연출. 진하기 측정이 생기면 gauge를 측정값으로 바꾼다.
  */
 function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea | null }) {
   const router = useRouter();
@@ -259,11 +258,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const hasProduct = !!pr && pr.kind !== "none";
   // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다
   const paced = hasProduct || !pr;
-  // 진하기 기준이 있고 제품을 쓰는 단계만 게이지를 띄운다
-  const target = hasProduct ? info.target : null;
   const last = step >= steps.length - 1;
   // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다. 그릴 것이 없으면 설명만 보여 준다
   const subs = useMemo(() => subsOf(info, area), [area, info]);
+  // 레퍼런스 게이지 기준이 있고 제품 없이 진행하지 않는 단계만 게이지를 띄운다
+  const reference = useMemo(() => stepGauge(subs), [subs]);
+  const target = reference && pick?.kind !== "skipped" ? GAUGE_REFERENCE : null;
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
   const resolved = useMemo(
     () => resolveStep(info.stepId, subs, defaults, info.makeup),

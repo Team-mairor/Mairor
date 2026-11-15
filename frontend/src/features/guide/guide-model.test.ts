@@ -177,6 +177,32 @@ describe("toGuideModel", () => {
     expect(warn).toHaveBeenCalledTimes(4);
   });
 
+  it("게이지 기준은 그대로 두고, 모양이 틀린 기준만 빼서 영역은 그린다", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const gauge = {
+      color: { hex: "#D77F7E", lab: [62.62, 33.87, 15.3] },
+      effect: { delta: [-3.96, 9.13, 2.76], size: 5.18, direction: "darker" },
+      strength: 25.9,
+      reason: null,
+    };
+    const sub = {
+      subStepId: "s1-1",
+      order: 1,
+      status: "extracted",
+      reasons: [],
+      templateId: null,
+      guideSets: [],
+    };
+    const subSteps = [
+      { ...sub, gauge },
+      { ...sub, subStepId: "s1-2", gauge: { ...gauge, effect: { size: -1 } } },
+      { ...sub, subStepId: "s1-3", gauge: null },
+    ];
+    const [s] = toGuideModel(guide([step("s1", 1, { subSteps })]), ID).steps;
+    expect(s.subSteps.map((x) => x.gauge)).toEqual([gauge, null, null]);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   it("GUIDE 단계가 없으면 빈 목록이다", () => {
     expect(toGuideModel(guide([]), ID).steps).toEqual([]);
   });

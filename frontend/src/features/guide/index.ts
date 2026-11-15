@@ -1,6 +1,7 @@
 export { buildDefaultGuideSet } from "./default-guides";
 export { alignBrowStep, browSpans, findBrows, fitBrowStep } from "./brow-fit";
 export { resolveStep, resolveSubStep } from "./area";
+export { stepGauge, type StepGauge } from "./gauge";
 export {
   abandonExecution,
   completeExecution,

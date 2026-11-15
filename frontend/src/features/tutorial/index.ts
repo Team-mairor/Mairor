@@ -1,4 +1,4 @@
-export { DensityMeter } from "./density-meter";
+export { DensityMeter, GAUGE_REFERENCE } from "./density-meter";
 export { ExitModal } from "./exit-modal";
 export { GuideStatus } from "./guide-status";
 export { HowItWorksSlide } from "./how-it-works";

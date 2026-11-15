@@ -1077,7 +1077,28 @@
                 }
               ]
             }
-          ]
+          ],
+          "gauge": {
+            "color": {
+              "hex": "#D77F7E",
+              "lab": [
+                62.62,
+                33.87,
+                15.3
+              ]
+            },
+            "effect": {
+              "delta": [
+                -3.96,
+                9.13,
+                2.76
+              ],
+              "size": 5.18,
+              "direction": "darker"
+            },
+            "strength": 25.9,
+            "reason": null
+          }
         }
       ]
     },
@@ -1094,7 +1115,13 @@
             "noUsableFrame"
           ],
           "templateId": "lip",
-          "guideSets": []
+          "guideSets": [],
+          "gauge": {
+            "color": null,
+            "effect": null,
+            "strength": null,
+            "reason": "noArea"
+          }
         }
       ]
     },

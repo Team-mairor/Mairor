@@ -1,3 +1,6 @@
+/** 레퍼런스만큼 바른 자리(0~100). 막대는 내 화장 효과 ÷ 레퍼런스 효과 × 50이다 */
+export const GAUGE_REFERENCE = 50;
+
 /** 연하게~진하게 게이지와 레퍼런스 위치선 */
 export function DensityMeter({
   value,
@@ -22,7 +25,8 @@ export function DensityMeter({
         {/* 레퍼런스 위치선. 어두운 게이지 위라 미러필름 모드에서도 흰색 그대로 둔다(data-dark) */}
         <span
           data-dark
-          className="absolute -top-1.5 -bottom-1.5 left-[53.5%] -ml-[1.5px] w-[3px] rounded-sm bg-white"
+          className="absolute -top-1.5 -bottom-1.5 -ml-[1.5px] w-[3px] rounded-sm bg-white"
+          style={{ left: `${GAUGE_REFERENCE}%` }}
         />
       </div>
       <span>진하게</span>

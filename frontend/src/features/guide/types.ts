@@ -80,6 +80,26 @@ export interface AreaSubStep {
   reasons: string[];
   templateId: TemplateId | null;
   guideSets: AreaGuideSet[];
+  /** 레퍼런스 게이지 기준. 기준을 넣기 전에 만든 결과에는 없고, 기준이 없으면 null */
+  gauge?: GaugeReference | null;
+}
+
+/**
+ * 레퍼런스 영상에서 그 하위 단계에 바른 자리의 색과 화장 효과(shared/guide-area 「게이지 기준」).
+ * reason이 있으면 값을 못 낸 것이다(noArea · noMaps · tooFewCells · colorSpread · sidesDisagree · notDarker)
+ */
+export interface GaugeReference {
+  /** 바른 뒤 색 */
+  color: { hex: string; lab: [number, number, number] } | null;
+  /** 바른 뒤 색 − 기준 색. size는 두 색의 ΔE2000이다 */
+  effect: {
+    delta: [number, number, number];
+    size: number;
+    direction: "darker" | "lighter" | "same";
+  } | null;
+  /** 부위끼리 견주는 진하기 0~100. 게이지 막대에는 쓰지 않는다 */
+  strength: number | null;
+  reason: string | null;
 }
 
 export interface AreaGuideSet {

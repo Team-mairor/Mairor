@@ -98,7 +98,7 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 
 `gauge`가 `null`이면 기준이 없다는 뜻이다. `notApplicable` · `failed` 단계, 게이지 기준을 넣기 전에 만든 결과, 색 뽑기 중 오류가 난 결과가 그렇다.
 
-한 단계에 하위 단계가 여럿이면(아이섀도 윗눈두덩 · 눈 밑, 코 쉐딩 · 코 밖 쉐딩) 기준도 하위 단계마다 따로다. FE는 화면에 지금 보이는 하위 단계(제목 옆 「영역 1/3」)의 `gauge`를 쓴다. 그 하위 단계의 `gauge`가 없거나 `reason`이 있으면, 같은 단계의 다른 하위 단계 값을 빌리지 않고 그 하위 단계 동안 게이지를 숨긴다. 자리마다 색과 진하기가 달라서다.
+한 단계에 하위 단계가 여럿이면(아이섀도 윗눈두덩 · 눈 밑, 코 쉐딩 · 코 밖 쉐딩) 기준도 하위 단계마다 따로다. FE 튜토리얼은 한 단계의 하위 단계 영역을 한 번에 그려서, 값이 있는 첫 하위 단계(`order` 순)의 `gauge`로 그 하위 단계 영역만 잰다. 기준과 재는 영역이 같은 하위 단계라 다른 자리의 색 · 진하기를 섞지 않는다. `gauge`가 없거나 `reason`이 있거나 화장 효과 크기(`effect.size`)가 0인 하위 단계는 건너뛰고, 값이 있는 하위 단계가 없으면 그 단계 동안 게이지를 숨긴다.
 색 · 효과 · 진하기를 내는 방법과 근거 숫자는 [GAUGE_REFERENCE_COLOR.md](../../docs/experiments/GAUGE_REFERENCE_COLOR.md) · [GAUGE_MAKEUP_EFFECT_SCALE.md](../../docs/experiments/GAUGE_MAKEUP_EFFECT_SCALE.md)에, 흰자를 재는 방법과 사용자 캠 값을 이 기준과 견주는 계산은 [GAUGE_MEASURE.md](../../docs/experiments/GAUGE_MEASURE.md) · [shared/gauge](../gauge/README.md)에 있다.
 
 ## 기본 가이드 키 (`templateId`)

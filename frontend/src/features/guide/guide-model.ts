@@ -1,3 +1,4 @@
+import { gaugeOf } from "./gauge";
 import type { GuideActionDto } from "./guide-api";
 import type { AreaSubStep, GuideArea, Makeup } from "./types";
 
@@ -87,11 +88,20 @@ function actionsOf(v: unknown): GuideActionDto[] {
 // 모양이 틀린 하위 단계는 그 하위 단계만 빼고, 단계의 설명은 그대로 보여 준다
 function subStepsOf(stepId: string, v: unknown): AreaSubStep[] {
   if (!Array.isArray(v)) return [];
-  return v.filter((sub): sub is AreaSubStep => {
-    const ok = isRecord(sub) && !!text(sub.subStepId) && AREA_STATUSES.has(sub.status);
-    if (!ok) console.warn(`${stepId}의 하위 단계 모양이 달라 뺍니다`, sub);
-    return ok;
-  });
+  return v
+    .filter((sub): sub is AreaSubStep => {
+      const ok = isRecord(sub) && !!text(sub.subStepId) && AREA_STATUSES.has(sub.status);
+      if (!ok) console.warn(`${stepId}의 하위 단계 모양이 달라 뺍니다`, sub);
+      return ok;
+    })
+    .map((sub) => {
+      // 기준을 넣기 전에 만든 결과는 그대로 두고, 게이지 기준만 틀렸으면 영역은 그리고 게이지만 숨긴다
+      if (sub.gauge === undefined) return sub;
+      const gauge = gaugeOf(sub.gauge);
+      if (sub.gauge !== null && !gauge)
+        console.warn(`${sub.subStepId}의 게이지 기준 모양이 달라 뺍니다`, sub.gauge);
+      return { ...sub, gauge };
+    });
 }
 
 function productOf(v: unknown): GuideStepModel["product"] {
