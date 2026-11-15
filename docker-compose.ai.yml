@@ -40,12 +40,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-    # m6i.large(2 vCPU · 8 GB). alloy 몫과 OS 를 남긴다
+    # m6i.2xlarge(8 vCPU · 32 GB, 시연 기간, S15P31A306-416). 가이드 영역 줄 수는 /mairor/ai/AREA_LINES(6).
+    # alloy 몫과 OS 를 남긴다. 서버를 줄일 때는 이 값을 먼저 내린다(deploy/README.md "AI 서버 크기")
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: 7G
+          cpus: "8"
+          memory: 24G
 
   # 수집기. BE 서버와 같은 설정에 서버 이름만 다르다(Grafana 에서 server=ai 로 나뉜다)
   alloy:
