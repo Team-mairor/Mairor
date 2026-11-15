@@ -62,7 +62,7 @@ export default function TutorialPage() {
         const [data, defaults] = await Promise.all([loadGuideArea(area), loadDefaultGuideSet()]);
         return data.steps.flatMap((step) =>
           step.subSteps.map((sub) => {
-            const resolved = resolveSubStep(sub, defaults);
+            const resolved = resolveSubStep(sub, defaults, step.makeup);
             const reasons = sub.reasons.length ? ` (${sub.reasons.join(", ")})` : "";
             return {
               title: resolved?.title || EMPTY_NOTE[sub.status] || STATUS_LABEL[sub.status],

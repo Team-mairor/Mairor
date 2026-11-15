@@ -120,6 +120,56 @@ describe("얼굴 윤곽 단계의 먼 쪽", () => {
     expect(drawArrow(0.6)).toBeGreaterThan(0);
   });
 
+  it("볼 부위에 묶인 가장자리 도형도 윤곽처럼 일찍 숨기고 볼 안쪽 도형은 그린다", () => {
+    const draw = (u: number, yaw: number, earlyCheekEdgeTurn = true) => {
+      const { renderer: instance, ctx } = renderer();
+      const frame = structuredClone(data) as FaceFrame;
+      frame.pose.yaw = yaw;
+      instance.render({
+        frame,
+        step: {
+          ...arrowStep,
+          stepId: "contour",
+          regions: ["rightCheek", "leftCheek"],
+          earlyCheekEdgeTurn,
+        },
+        mesh: { ...mesh, uv: mesh.uv.map(() => [u, 0.5]) },
+        projection: { toPx: (p) => ({ x: p.x * 640, y: p.y * 480 }), unit: 100 },
+        now: 0,
+      });
+      return ctx.stroke.mock.calls.length;
+    };
+    expect(draw(0.05, -0.2)).toBeGreaterThan(0);
+    expect(draw(0.05, -0.4)).toBe(0);
+    expect(draw(0.05, 0.4)).toBeGreaterThan(0);
+    expect(draw(0.3, -0.4)).toBeGreaterThan(0);
+    expect(draw(0.05, -0.4, false)).toBeGreaterThan(0);
+  });
+
+  it("눈 가장자리 도형과 안쪽 도형은 함께 남긴다", () => {
+    const { renderer: instance, ctx } = renderer();
+    const frame = structuredClone(data) as FaceFrame;
+    frame.pose.yaw = -0.4;
+    instance.render({
+      frame,
+      step: {
+        ...step,
+        earlyCheekEdgeTurn: true,
+        guides: [
+          { type: "point", region: "rightEye", at: { triangle: 0, bary: [1, 0, 0] } },
+          { type: "point", region: "rightEye", at: { triangle: 1, bary: [1, 0, 0] } },
+        ],
+      },
+      mesh: {
+        ...mesh,
+        uv: mesh.uv.map((uv, i) => [i === 33 || i === 7 || i === 163 ? 0.05 : 0.3, uv[1]]),
+      },
+      projection: { toPx: (p) => ({ x: p.x * 640, y: p.y * 480 }), unit: 100 },
+      now: 0,
+    });
+    expect(ctx.fill).toHaveBeenCalledTimes(2);
+  });
+
   it("먼 쪽 끝점이 가운데 선을 넘어도 왼쪽 반쪽 방향을 유지한다", () => {
     const down = { x: 0, y: 1 };
     // 가운데 선이 x = 0일 때 왼쪽 끝은 +x 쪽

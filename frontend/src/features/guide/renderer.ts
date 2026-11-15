@@ -90,6 +90,8 @@ export class GuideRenderer {
     thin: boolean;
     region: RegionName;
     side: Side;
+    /** 쉐딩 띠처럼 얼굴 가장자리에 붙은 한쪽 도형. 볼 뒤로 일찍 넘어가 윤곽처럼 일찍 숨긴다 */
+    edge: boolean;
     /** 단계 부위 어디에도 속하지 않는 가운데 도형. 단계가 보이면 고개 각도로만 숨긴다 */
     between: boolean;
   }[] = [];
@@ -178,14 +180,21 @@ export class GuideRenderer {
       this.preparedFor = { step, mesh };
       this.prepared = [...step.guides]
         .sort((a, b) => Number(isBrush(b)) - Number(isBrush(a)))
-        .map((guide) => ({
-          guide,
-          wide: spans(guide, mesh),
-          thin: isThinArea(guide, mesh),
-          region: guide.region ?? regionOf(guide, mesh, step),
-          side: sideOf(guide, mesh),
-          between: !guide.region && isBetween(guide, mesh, step),
-        }));
+        .map((guide) => {
+          const region = guide.region ?? regionOf(guide, mesh, step);
+          return {
+            guide,
+            wide: spans(guide, mesh),
+            thin: isThinArea(guide, mesh),
+            region,
+            side: sideOf(guide, mesh),
+            edge:
+              !!step.earlyCheekEdgeTurn &&
+              (region === "rightCheek" || region === "leftCheek") &&
+              isEdge(guide, mesh),
+            between: !guide.region && isBetween(guide, mesh, step),
+          };
+        });
     }
     const brow =
       step.regions.length > 0 &&
@@ -195,7 +204,7 @@ export class GuideRenderer {
     this.hiddenSide = nearSideOnly ? hiddenSideFor(this.hiddenSide, yaw) : null;
     const hidden = this.hiddenSide;
     const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
-    for (const { guide, wide, thin, region, side, between } of this.prepared) {
+    for (const { guide, wide, thin, region, side, edge, between } of this.prepared) {
       const areaDot = thin ? Math.max(STYLE.dot.min, dot * STYLE.thinDot.scale) : dot;
       const draw = () => {
         if (guide.type === "polygon" && guide.exclude?.length)
@@ -216,9 +225,11 @@ export class GuideRenderer {
         continue;
       }
       if (hidden && side === hidden) continue;
-      // 얼굴 윤곽 단계의 한쪽 도형(볼 화살표 등)도 윤곽의 먼 쪽과 함께 숨긴다
+      // 얼굴 윤곽 단계의 한쪽 도형(볼 화살표 등)과 가장자리 도형도 윤곽의 먼 쪽과 함께 숨긴다
       const farSide =
-        region === "faceOval" && side !== "center" ? turnAlpha(yaw, side, FAR_SIDE_TURN) : 1;
+        (region === "faceOval" || edge) && side !== "center"
+          ? turnAlpha(yaw, side, FAR_SIDE_TURN)
+          : 1;
       const alpha = between ? turnAlpha(yaw, "center") : this.visibility.alpha(region) * farSide;
       if (alpha <= 0) continue;
       ctx.globalAlpha = alpha;
@@ -493,6 +504,17 @@ export function leftNormal(d: Px, rightEdge: Px, leftEdge: Px): Px {
   const n = { x: -d.y, y: d.x };
   const toLeft = (leftEdge.x - rightEdge.x) * n.x + (leftEdge.y - rightEdge.y) * n.y;
   return toLeft < 0 ? { x: d.y, y: -d.x } : n;
+}
+
+/** 얼굴 가장자리 도형인지. 코(UV 가로 0.5)에서 평균 이만큼 떨어지면 가장자리로 본다 */
+const EDGE_FROM_CENTER = 0.35;
+
+function isEdge(guide: GuideShape, mesh: FaceMesh) {
+  const us = uvXs(guide, mesh);
+  return (
+    us.length > 0 &&
+    us.reduce((sum, u) => sum + Math.abs(u - 0.5), 0) / us.length >= EDGE_FROM_CENTER
+  );
 }
 
 type Side = "left" | "right" | "center";

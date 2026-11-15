@@ -261,6 +261,7 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     {
       // 얼굴 외곽만 얇게: 옆광대 아래(234·454) ~ 턱선(172·397), 안쪽 경계는 코끝(4) 쪽으로 조금 들인 선
       stepId: "contour",
+      earlyCheekEdgeTurn: true,
       title: "쉐딩: 옆광대 아래부터 턱선까지 바깥쪽에서 안쪽으로 짧게 쓸어요",
       regions: ["rightCheek", "leftCheek"],
       guides: [

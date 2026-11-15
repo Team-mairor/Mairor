@@ -1,4 +1,4 @@
-import type { AreaSubStep, GuideSet, GuideStep, TemplateId } from "./types";
+import type { AreaSubStep, GuideSet, GuideStep, Makeup, TemplateId } from "./types";
 
 /** eyeshadow(위아래)에 이미 들어 있는 바른 자리별 템플릿 */
 const EYESHADOW_PARTS = new Set<TemplateId | null>(["eyeshadowUpper", "eyeshadowUnder"]);
@@ -8,12 +8,17 @@ const EYESHADOW_PARTS = new Set<TemplateId | null>(["eyeshadowUpper", "eyeshadow
  * template은 기본 가이드에서 templateId(기본 가이드 키) 단계를 꺼내 쓴다.
  * stepId는 하위 단계 ID로 바꿔, 하위 단계가 바뀔 때 이전 영역의 표시 판정을 이어 쓰지 않게 한다.
  */
-export function resolveSubStep(sub: AreaSubStep, defaults: GuideSet | null): GuideStep | null {
+export function resolveSubStep(
+  sub: AreaSubStep,
+  defaults: GuideSet | null,
+  makeup?: Makeup,
+): GuideStep | null {
   switch (sub.status) {
     case "extracted":
       if (sub.guideSets.length === 0) return null;
       return {
         stepId: sub.subStepId,
+        earlyCheekEdgeTurn: makeup === "contour",
         order: sub.order,
         title: "",
         regions: [...new Set(sub.guideSets.map((set) => set.region))],
@@ -31,7 +36,15 @@ export function resolveSubStep(sub: AreaSubStep, defaults: GuideSet | null): Gui
       if (!defaults) return null;
       const step = defaults.steps.find((s) => s.stepId === sub.templateId);
       if (!step) console.warn(`${sub.subStepId}의 기본 가이드 ${sub.templateId}가 없어 뺍니다`);
-      return step ? { ...step, stepId: sub.subStepId, order: sub.order } : null;
+      return step
+        ? {
+            ...step,
+            stepId: sub.subStepId,
+            order: sub.order,
+            earlyCheekEdgeTurn:
+              makeup === undefined ? step.earlyCheekEdgeTurn : makeup === "contour",
+          }
+        : null;
     }
     case "notApplicable":
     case "failed":
@@ -49,6 +62,7 @@ export function resolveStep(
   stepId: string,
   subs: AreaSubStep[],
   defaults: GuideSet | null,
+  makeup?: Makeup,
 ): GuideStep | null {
   const eyeshadow = subs.some((sub) => sub.status === "template" && sub.templateId === "eyeshadow");
   const seen = new Set<string | null>();
@@ -61,10 +75,12 @@ export function resolveStep(
       seen.add(sub.templateId);
       return true;
     });
-  const steps = used.flatMap((sub) => resolveSubStep(sub, defaults) ?? []);
+  const steps = used.flatMap((sub) => resolveSubStep(sub, defaults, makeup) ?? []);
   if (steps.length === 0) return null;
   return {
     stepId,
+    earlyCheekEdgeTurn:
+      makeup === undefined ? steps.some((step) => step.earlyCheekEdgeTurn) : makeup === "contour",
     order: steps[0].order,
     title: "",
     regions: [...new Set(steps.flatMap((s) => s.regions))],

@@ -104,8 +104,13 @@ export default function DebugOverlayPage() {
     bySubId >= 0 ? bySubId : subKey === null ? 0 : /^\d+$/.test(subKey) ? Number(subKey) : -1;
   const sub = areaStep?.subSteps[subIndex] ?? null;
   const guideStep = useMemo(
-    () => (area ? (sub ? resolveSubStep(sub, guides) : null) : (guides?.steps[step] ?? null)),
-    [area, sub, guides, step],
+    () =>
+      area
+        ? sub
+          ? resolveSubStep(sub, guides, areaStep?.makeup)
+          : null
+        : (guides?.steps[step] ?? null),
+    [area, areaStep?.makeup, sub, guides, step],
   );
   const positions =
     area?.steps.flatMap((s, i) =>

@@ -6,6 +6,8 @@ export type GuideItem = GuideShape & { exclude?: RegionName[]; region?: RegionNa
 /** 튜토리얼 한 단계의 가이드 */
 export interface GuideStep {
   stepId: string;
+  /** 볼 가장자리 도형을 얼굴 윤곽처럼 일찍 숨기는 쉐딩 단계 */
+  earlyCheekEdgeTurn?: boolean;
   /** 1부터 */
   order: number;
   /** 화면에 띄우는 안내 문구 */

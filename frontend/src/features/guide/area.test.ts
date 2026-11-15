@@ -54,6 +54,12 @@ const extracted = (
 });
 
 describe("resolveStep 아이섀도 템플릿", () => {
+  it("쉐딩 단계의 분석 도형에만 볼 가장자리 이른 숨김을 표시한다", () => {
+    const area = extracted(1, [{ type: "arrow", from: anchor(0), to: anchor(1) }]);
+    expect(resolveStep("arbitrary-id", [area], defaults, "contour")?.earlyCheekEdgeTurn).toBe(true);
+    expect(resolveStep("arbitrary-id", [area], defaults, "blush")?.earlyCheekEdgeTurn).toBe(false);
+  });
+
   it("AI 영역 묶음의 부위 정보를 각 도형에 유지한다", () => {
     const polygon = {
       type: "polygon" as const,

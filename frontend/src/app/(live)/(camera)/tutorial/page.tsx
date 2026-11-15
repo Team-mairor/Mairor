@@ -113,8 +113,10 @@ function subsOf(s: TutorialStep, area: GuideArea | null) {
 
 /** 영역을 찾지 못한 단계도 화장 종류의 기본 가이드 부위를 써, 립 단계에서 입이 보일 때 입술을 찍는다 */
 function photoRegionsOf(s: TutorialStep, area: GuideArea | null, defaults: GuideSet | null) {
-  const drawn = resolveStep(s.stepId, subsOf(s, area), defaults)?.regions ?? [];
-  return drawn.length ? drawn : (resolveStep(s.stepId, [templateOf(s)], defaults)?.regions ?? []);
+  const drawn = resolveStep(s.stepId, subsOf(s, area), defaults, s.makeup)?.regions ?? [];
+  return drawn.length
+    ? drawn
+    : (resolveStep(s.stepId, [templateOf(s)], defaults, s.makeup)?.regions ?? []);
 }
 
 /**
@@ -263,8 +265,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const subs = useMemo(() => subsOf(info, area), [area, info]);
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
   const guideStep = useMemo(
-    () => resolveStep(info.stepId, subs, defaults),
-    [info.stepId, subs, defaults],
+    () => resolveStep(info.stepId, subs, defaults, info.makeup),
+    [info.stepId, info.makeup, subs, defaults],
   );
   // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
   // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
