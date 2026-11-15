@@ -13,7 +13,7 @@ if (major < 22 || (major === 22 && minor < 18)) {
 }
 const { crc32, deflateSync } = await import("node:zlib");
 const { REGIONS } = await import("../src/features/face/regions.ts");
-const { buildDefaultGuideSet, eyelinerPaths } =
+const { anchorTools, buildDefaultGuideSet, eyelinerPaths } =
   await import("../src/features/guide/default-guides.ts");
 // 추적기와 같은 판정 기준을 그대로 쓴다. 값을 바꾸면 픽스처를 다시 생성한다.
 const { MIN_IN_FRAME_RATIO } = await import("../src/features/face/visibility.ts");
@@ -485,6 +485,12 @@ const sub = (stepId, order, status, extra = {}) => ({
   ...extra,
 });
 const areaStep = (order, makeup, subSteps) => ({ stepId: `s${order}`, order, makeup, subSteps });
+// 원래 눈썹(랜드마크 테두리)보다 조금 위로 그린 눈썹. 두께는 AI 눈썹 영역 실측(0.027)과 비슷하다
+const { between } = anchorTools({ triangles, uv });
+const drawnBrow = (lower, upper) => [
+  ...lower.map((i, k) => between(i, upper[k], 0)),
+  ...upper.map((j, k) => between(lower[k], j, 1.2)).reverse(),
+];
 writeJson("guide-areas/sample.json", {
   videoId: "fixture",
   meshVersion: "v1",
@@ -520,6 +526,14 @@ writeJson("guide-areas/sample.json", {
           })),
           exclude: [],
         })),
+      }),
+    ]),
+    areaStep(7, "brow", [
+      sub("s7", 1, "extracted", {
+        guideSets: [
+          areaSet("rightBrow", drawnBrow([55, 65, 52, 53, 46], [107, 66, 105, 63, 70])),
+          areaSet("leftBrow", drawnBrow([285, 295, 282, 283, 276], [336, 296, 334, 293, 300])),
+        ],
       }),
     ]),
   ],

@@ -1,4 +1,5 @@
 export { buildDefaultGuideSet } from "./default-guides";
+export { alignBrowStep, browSpans, findBrows, fitBrowStep } from "./brow-fit";
 export { resolveStep, resolveSubStep } from "./area";
 export {
   abandonExecution,
@@ -50,6 +51,7 @@ export {
 export { GuideRenderer, isStepVisible, type Projection } from "./renderer";
 export type * from "./types";
 export { useGuide, useRunQuery, type GuideLoad } from "./use-guide";
+export { readPixels, saveBrowsFrom, useBrowFit } from "./use-brow-fit";
 
 export { CropView, TutorialViewport, useTutorialCrop } from "./tutorial-viewport";
 export { TUTORIAL_TOP, TUTORIAL_BOTTOM } from "./tutorial-crop";

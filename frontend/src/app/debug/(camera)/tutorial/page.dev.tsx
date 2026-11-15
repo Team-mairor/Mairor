@@ -1,18 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useCamera, useFaceFrame, type FaceBrows, type FaceFrame } from "@/features/face";
 import {
+  fitBrowStep,
+  browSpans,
+  findBrows,
   TutorialCropEditor,
   loadDefaultGuideSet,
   loadGuideArea,
   loadGuideSet,
+  readPixels,
   resolveSubStep,
   type AreaStatus,
   type GuideStep,
 } from "@/features/guide";
+import { loadFaceMesh, type FaceMesh } from "@/features/overlay";
 
 /** 한 화면에 보여 줄 가이드. AI 영역은 하위 단계마다 하나다 */
 interface Item {
@@ -37,6 +43,7 @@ const EMPTY_NOTE: Partial<Record<AreaStatus, string>> = {
 /**
  * 튜토리얼 가이드 확인 화면. 기본은 9개 부위 기본 가이드이고,
  * ?guides=경로 는 가이드 파일, ?area=경로 는 AI 가이드 영역 파일을 하위 단계마다 넘겨 본다.
+ * "원래 눈썹 찾기"는 지금 카메라 화면을 등록 사진처럼 써서 눈썹 가이드를 원래 눈썹 모양·앞머리·꼬리에 맞춘다.
  */
 export default function TutorialPage() {
   const [items, setItems] = useState<Item[] | null>(null);
@@ -44,6 +51,44 @@ export default function TutorialPage() {
   const [error, setError] = useState<string | null>(null);
   const [prediction, setPrediction] = useState(0.6);
   const [showStats, setShowStats] = useState(false);
+  // 등록 사진 대신 지금 카메라 화면으로 원래 눈썹을 찾아 눈썹 가이드를 맞춰 본다
+  const { videoRef } = useCamera();
+  const frameRef = useRef<FaceFrame | null>(null);
+  useFaceFrame((frame) => {
+    frameRef.current = frame;
+  });
+  const [mesh, setMesh] = useState<FaceMesh | null>(null);
+  const [brows, setBrows] = useState<FaceBrows | null>(null);
+  const [browNote, setBrowNote] = useState("");
+  useEffect(() => {
+    loadFaceMesh()
+      .then(setMesh)
+      .catch((e) => setBrowNote(`메시를 불러오지 못했어요: ${String(e)}`));
+  }, []);
+  const findOwnBrows = () => {
+    const video = videoRef.current;
+    const frame = frameRef.current;
+    if (!video || !mesh || !frame || frame.trackingState !== "tracking") {
+      setBrowNote("정면 얼굴이 잡힐 때 다시 눌러 주세요");
+      return;
+    }
+    const pixels = readPixels(video);
+    if (!pixels) return setBrowNote("카메라 영상을 읽지 못했어요");
+    const found = findBrows(pixels, frame, mesh);
+    setBrows(found);
+    // 랜드마크 눈썹 앞머리·꼬리에서 얼마나 옮겼는지(눈썹 길이 %). 앞머리 +는 안쪽(꼬리 쪽), 꼬리 +는 바깥쪽
+    const spans = browSpans(found, mesh);
+    const pct = (v: number) => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
+    const note = (["rightBrow", "leftBrow"] as const)
+      .map((side) => {
+        const name = side === "rightBrow" ? "오른쪽" : "왼쪽";
+        const span = spans[side];
+        if (span) return `${name} 앞머리 ${pct(span.head)} 꼬리 ${pct(span.tail - 1)}`;
+        return found[side] ? `${name} 길이가 이상해 안 맞춤` : `${name} 못 찾음`;
+      })
+      .join(" · ");
+    setBrowNote(note);
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -75,13 +120,23 @@ export default function TutorialPage() {
       const set = await (guides ? loadGuideSet(guides) : loadDefaultGuideSet());
       return set.steps.map((step) => ({ title: step.title, detail: step.stepId, step }));
     };
+    // ?sub=하위 단계 ID 로 그 하위 단계부터 본다
+    const sub = params.get("sub");
     load()
-      .then(setItems)
+      .then((loaded) => {
+        setItems(loaded);
+        const at = sub ? loaded.findIndex((x) => x.detail.startsWith(`${sub} `)) : -1;
+        if (at >= 0) setIndex(at);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
 
   const list = items ?? [];
   const item = list[index] ?? null;
+  const step = useMemo(
+    () => (item?.step && mesh ? fitBrowStep(item.step, brows, mesh) : (item?.step ?? null)),
+    [item, mesh, brows],
+  );
 
   return (
     // 스크롤 없이 한 화면에 맞춘다
@@ -100,7 +155,7 @@ export default function TutorialPage() {
       </header>
 
       <TutorialCropEditor
-        step={item?.step ?? null}
+        step={step}
         predictionStrength={prediction}
         showStats={showStats}
         footer={(reset) => (
@@ -118,6 +173,26 @@ export default function TutorialPage() {
                 onChange={(event) => setPrediction(Number(event.target.value))}
               />
             </label>
+            <div className="flex items-center gap-3">
+              <Button size="lg" variant="outline" onClick={findOwnBrows}>
+                원래 눈썹 찾기
+              </Button>
+              {brows && (
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  onClick={() => {
+                    setBrows(null);
+                    setBrowNote("");
+                  }}
+                >
+                  지우기
+                </Button>
+              )}
+              {browNote && (
+                <span className="rounded bg-black/70 p-2 text-sm text-white">{browNote}</span>
+              )}
+            </div>
             <div className="flex gap-3">
               <Button size="lg" variant="outline" asChild>
                 <Link href="/debug/preview">처음으로</Link>

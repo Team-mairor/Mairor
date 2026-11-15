@@ -10,6 +10,8 @@ import {
   type RegionName,
 } from "@/features/face";
 import {
+  fitBrowStep,
+  findBrows,
   GuideRenderer,
   loadDefaultGuideSet,
   loadGuideArea,
@@ -19,7 +21,13 @@ import {
   type GuideArea,
   type GuideSet,
 } from "@/features/guide";
-import { loadFaceMesh, loadLayerSet, OverlayRenderer, type FaceMesh } from "@/features/overlay";
+import {
+  loadFaceMesh,
+  loadLayerSet,
+  OverlayRenderer,
+  resolveAnchor,
+  type FaceMesh,
+} from "@/features/overlay";
 import { observeCanvasSize } from "@/lib/canvas-size";
 
 const FACES = ["front", "turned-left", "close-up", "far", "blink-hold", "lost"];
@@ -129,6 +137,8 @@ export default function DebugOverlayPage() {
     setSubKey(target.subStepId);
   };
   const [layersName, setLayersName] = useState(LAYERS[0]);
+  // 칠한 얼굴을 등록 사진으로 보고 원래 눈썹을 찾아 눈썹 가이드를 맞춘다
+  const [fitBrows, setFitBrows] = useState(false);
   const [mesh, setMesh] = useState<FaceMesh | null>(null);
   const [message, setMessage] = useState("");
   // 상태 문구에 덮이지 않도록 오류는 따로 둔다.
@@ -147,6 +157,7 @@ export default function DebugOverlayPage() {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (f && FACES.includes(f)) setFace(f);
     if (l && LAYERS.includes(l)) setLayersName(l);
+    setFitBrows(params.get("brows") === "1");
     setStepKey(params.get("step"));
     setSubKey(params.get("subStep"));
     const areaUrl = params.get("area");
@@ -223,9 +234,22 @@ export default function DebugOverlayPage() {
       if (cancelled) return;
 
       const { width, height, dpr } = size;
+      const painted = paintFace(frame);
+      let step = guideStep;
+      let browNote = "";
+      let browLines: { x: number; y: number }[][] = [];
+      if (fitBrows && guideStep) {
+        const { width: w, height: h } = frame.imageSize;
+        const brows = findBrows(painted.getContext("2d")!.getImageData(0, 0, w, h), frame, mesh);
+        step = fitBrowStep(guideStep, brows, mesh);
+        browNote = ` · 원래 눈썹 ${Object.keys(brows).join("·") || "못 찾음"}`;
+        browLines = Object.values(brows).map((outline) =>
+          outline.map((a) => resolveAnchor(a, mesh, frame.landmarks)),
+        );
+      }
       renderer.resize(width, height, dpr);
       renderer.render({
-        video: paintFace(frame),
+        video: painted,
         frame,
         view: containTransform(frame.imageSize, { width, height }, true),
         layers,
@@ -236,7 +260,7 @@ export default function DebugOverlayPage() {
       guide.resize(width, height, dpr);
       guide.render({
         frame,
-        step: guideStep,
+        step,
         mesh,
         projection: {
           toPx: (p) => toScreen(p, frame.imageSize, view),
@@ -244,8 +268,26 @@ export default function DebugOverlayPage() {
         },
         now: 0,
       });
+      // 찾은 원래 눈썹 테두리는 가이드와 구분되게 실선으로 긋는다
+      const ctx = guideRef.current?.getContext("2d");
+      if (ctx && browLines.length) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "#22c55e";
+        ctx.lineWidth = 1.5;
+        for (const line of browLines) {
+          ctx.beginPath();
+          line.forEach((p, k) => {
+            const { x, y } = toScreen(p, frame.imageSize, view);
+            if (k === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.closePath();
+          ctx.stroke();
+        }
+      }
       setError("");
-      setMessage(`${frame.trackingState} · 레이어 ${layers.length}개`);
+      setMessage(`${frame.trackingState} · 레이어 ${layers.length}개${browNote}`);
     })().catch((e) => {
       if (!cancelled) {
         // 새 선택을 그리지 못했을 때 이전 하위 단계가 현재 영역처럼 남지 않게 한다.
@@ -258,7 +300,7 @@ export default function DebugOverlayPage() {
     return () => {
       cancelled = true;
     };
-  }, [face, layersName, mesh, guideStep, size]);
+  }, [face, layersName, mesh, guideStep, size, fitBrows]);
 
   return (
     <main className="flex flex-1 flex-col gap-3 p-4">
@@ -340,6 +382,14 @@ export default function DebugOverlayPage() {
             </span>
           </>
         )}
+        <label className="flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={fitBrows}
+            onChange={(e) => setFitBrows(e.target.checked)}
+          />
+          원래 눈썹 맞춤
+        </label>
         <span className="text-muted-foreground">{message}</span>
         {error && <span className="text-destructive">{error}</span>}
         {guideError && <span className="text-destructive">{guideError}</span>}

@@ -25,13 +25,17 @@ export {
   faceBox,
   clearFacePhoto,
   faceBoxIn,
+  faceBrows,
   facePhoto,
   NO_CHECK,
+  saveFaceBrows,
   saveFacePhoto,
   snapMirrored,
+  subscribeFacePhoto,
   useFaceCheck,
   type CheckName,
   type DistanceHint,
+  type FaceBrows,
   type FaceCheck,
 } from "./face-register";
 export {

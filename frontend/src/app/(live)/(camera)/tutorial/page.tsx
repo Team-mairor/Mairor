@@ -15,6 +15,7 @@ import {
   loadDefaultGuideSet,
   resolveStep,
   toGuideArea,
+  useBrowFit,
   useGuide,
   useGuideTrackingIssue,
   useTutorialCrop,
@@ -264,10 +265,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다. 그릴 것이 없으면 설명만 보여 준다
   const subs = useMemo(() => subsOf(info, area), [area, info]);
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
-  const guideStep = useMemo(
+  const resolved = useMemo(
     () => resolveStep(info.stepId, subs, defaults, info.makeup),
     [info.stepId, info.makeup, subs, defaults],
   );
+  // 눈썹은 등록 사진의 원래 눈썹 모양·앞머리·꼬리에 맞춘다
+  const guideStep = useBrowFit(resolved, run.id);
   // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
   // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
   const photoRegions = useMemo(

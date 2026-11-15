@@ -18,6 +18,7 @@ import {
   useFaceCheck,
   type CheckName,
 } from "@/features/face";
+import { readPixels, saveBrowsFrom } from "@/features/guide";
 import { FaceStateProvider, useCameraErrorNote } from "@/features/live";
 import { MirrorFitView } from "@/features/mirror-fit";
 import { errorMessage } from "@/lib/api";
@@ -196,10 +197,13 @@ export function FaceRegisterModal({
         return;
       }
       capturing.current = true;
+      const shot = frame.current;
+      const pixels = shot ? readPixels(video) : null;
       captureFace(video)
         .then((photo) => {
           if (cancelled) return;
           saveFacePhoto(runId, photo);
+          if (shot && pixels) void saveBrowsFrom(runId, photo, pixels, shot);
           setRetake(null);
           setDone(true);
         })

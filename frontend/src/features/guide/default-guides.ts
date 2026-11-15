@@ -424,22 +424,32 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
   };
 }
 
-/** 결정된 기본 눈썹: 중앙은 숱을 늘리고 앞머리·꼬리는 줄인 결 40개. */
+/** 결정된 기본 눈썹: 중앙은 숱을 늘리고 앞머리·꼬리는 줄인 결 40개. 랜드마크 [아랫선, 윗선] 쌍을 따른다 */
 export function buildBrowHairs(mesh: FaceMesh, pairs: [number, number][]): GuideShape[] {
   const { uvPt, anchorAt } = anchorTools(mesh);
   const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) => ({
     x: a.x + (b.x - a.x) * t,
     y: a.y + (b.y - a.y) * t,
   });
-  const at = (s: number, h: number) => {
+  return browHairsAlong((s, f) => {
     const x = Math.min(0.999, s) * (pairs.length - 1),
       i = Math.floor(x);
     const lower = lerp(uvPt(pairs[i][0]), uvPt(pairs[i + 1][0]), x - i);
     const upper = lerp(uvPt(pairs[i][1]), uvPt(pairs[i + 1][1]), x - i);
+    return anchorAt(lerp(lower, upper, f));
+  });
+}
+
+/**
+ * 기본 눈썹 결 40개. place(s, f)는 앞머리 0 → 꼬리 1인 s와 아랫선 0 → 윗선 1인 f 자리의 기준점이다.
+ * 사용자 눈썹 윗선·아랫선을 주면 같은 결을 그 모양으로 그린다
+ */
+export function browHairsAlong(place: (s: number, f: number) => MeshAnchor): GuideShape[] {
+  const at = (s: number, h: number) => {
     // 기존 눈썹의 높이를 대부분 유지하고 끝부분만 완만하게 좁힌다.
     const tail = Math.max(0, (s - 0.65) / 0.35);
     const half = 0.46 * (1 - 0.45 * tail);
-    return anchorAt(lerp(lower, upper, 0.5 + (h * 2 - 1) * half));
+    return place(s, 0.5 + (h * 2 - 1) * half);
   };
   const jitter = (k: number) => {
     const v = Math.sin(k * 12.9898) * 43758.5453;
