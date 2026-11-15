@@ -84,6 +84,12 @@ from app.tasks.area.parts.eyeshadow_area import (
     paired_eyeshadow,
 )
 from app.tasks.area.parts.lip_area import LipArea, PhotoLoader, find_lip_area
+from app.tasks.area.parts.makeup_effect import (
+    effect_record,
+    light_base,
+    light_change,
+    makeup_effect,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +304,9 @@ def step_colors(step_id: str, sub_steps: Sequence[AreaSubStep], notes: StepNotes
     영역 묶음마다 보낸 테두리를 지도 칸으로 되돌려(set_mask) 그 부위의 직전·직후 지도에서
     색을 뽑는다. 좌우 짝 부위는 보낸 모양 안에서 그쪽이 실제로 찾은 칸에서만 낸다(_piece).
     기록마다 subStepId와 region이 붙는다.
+    색을 뽑은 기록에는 화장 효과와 진하기(effect, makeup_effect.effect_record)도 붙는다.
+    기준 색은 조명 변화를 자리마다 뺀 색(light_base)이고,
+    직후 지도가 없는 부위는 둘레 맨피부로 잡는다.
     그쪽에서 바른 곳을 못 찾아 반대쪽 모양을 뒤집어 쓴 영역은 mirrored가 참이다.
     그 칸은 이 단계에서 바르지 않았거나 색 변화가 없던 곳이라 화장 색이 아니다.
     영역 묶음이 좌우 둘이면 찾은 쪽(mirrored가 아닌 쪽) 칸만 합쳐 낸 색을 region 없이(None)
@@ -320,6 +329,7 @@ def step_colors(step_id: str, sub_steps: Sequence[AreaSubStep], notes: StepNotes
                         "region": None,
                         "mirrored": False,
                         **color_record(AreaColor(reason="noArea")),
+                        "effect": None,
                     }
                 )
             if sub_step.status != "extracted":
@@ -332,18 +342,22 @@ def step_colors(step_id: str, sub_steps: Sequence[AreaSubStep], notes: StepNotes
                 )
                 for guide_set in sub_step.guide_sets
             ]
+            changes = {id(piece): light_change(piece) for _, _, pieces in sides for piece in pieces}
             if len(sides) > 1:
                 found = [piece for _, mirrored, pieces in sides if not mirrored for piece in pieces]
                 sides.append((None, False, found))
-            records += [
-                {
-                    "subStepId": sub_step.sub_step_id,
-                    "region": region,
-                    "mirrored": mirrored,
-                    **color_record(area_color(pieces)),
-                }
-                for region, mirrored, pieces in sides
-            ]
+            for region, mirrored, pieces in sides:
+                color = area_color(pieces)
+                base = light_base(color, [changes[id(piece)] for piece in pieces])
+                records.append(
+                    {
+                        "subStepId": sub_step.sub_step_id,
+                        "region": region,
+                        "mirrored": mirrored,
+                        **color_record(color),
+                        "effect": effect_record(makeup_effect(color, base=base)),
+                    }
+                )
         return records
     except Exception:
         logger.exception("%s 단계 색 뽑기에서 오류", step_id)
