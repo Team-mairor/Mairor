@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GaugeStabilitySpec",
+  "description": "사용자 캠 게이지의 측정 불가 판정과 값 안정화 규칙의 값과 기대값 시험 데이터. ai/tools/gauge/export_stability_spec.py가 만든다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "frame", "window", "weakTargetMin", "smoothing", "holdMs", "nextStart", "labels", "frames", "windows", "sequences"],
+  "properties": {
+    "version": { "const": "v1" },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["yawMax", "rollMax", "pitchMax", "faceWidthMin", "brightness", "driftMax", "eyesOpenMin", "eyeMakeups", "areaCoverMax", "order"],
+      "properties": {
+        "yawMax": { "type": "number", "exclusiveMinimum": 0, "description": "|yaw|(라디안)가 이보다 크면 turned" },
+        "rollMax": { "type": "number", "exclusiveMinimum": 0, "description": "|roll|(라디안)이 이보다 크면 turned" },
+        "pitchMax": { "type": "number", "exclusiveMinimum": 0, "description": "|pitch|(라디안)가 이보다 크면 turned" },
+        "faceWidthMin": { "type": "number", "minimum": 0, "maximum": 1, "description": "얼굴 윤곽 폭 ÷ 영상 폭이 이보다 작으면 far" },
+        "brightness": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "얼굴 가운데 평균 밝기(0~255)가 [아래, 위] 밖이면 dark · bright" },
+        "driftMax": { "type": "number", "exclusiveMinimum": 0, "description": "맨피부가 단계 시작 기준에서 바뀐 크기(baseline.v1.json drift의 size, ΔE2000)가 이보다 크면 lightChanged" },
+        "eyesOpenMin": { "type": "number", "minimum": 0, "description": "eyeMakeups 단계에서 눈 뜬 정도가 이보다 작으면 eyesClosed" },
+        "eyeMakeups": { "type": "array", "items": { "type": "string" } },
+        "areaCoverMax": { "type": "number", "minimum": 0, "maximum": 1, "description": "지금 하위 단계 영역 칸의 가린 몫이 이보다 크면 covered. 이하면 가린 칸만 그 장에서 뺀다" },
+        "order": { "type": "array", "items": { "$ref": "#/$defs/frameReason" }, "description": "이유를 보는 순서. 먼저 걸린 이유 하나만 낸다" }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intervalMs", "medianWindowMs"],
+      "properties": {
+        "intervalMs": { "type": "integer", "minimum": 1, "description": "이 간격마다 잰다(measure.v1.json frames와 같음)" },
+        "medianWindowMs": { "type": "integer", "minimum": 1, "description": "최근 이 시간 동안 쓸 수 있는 사진으로 잰다. 한 장도 없으면 그 순간은 못 잰다" }
+      }
+    },
+    "weakTargetMin": { "type": "number", "minimum": 0, "description": "하위 단계에서 처음 잰 목표 효과 크기(measure.v1.json target)가 이보다 작으면 그 하위 단계는 weakReference로 숨긴다" },
+    "smoothing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alpha", "perMs"],
+      "properties": {
+        "alpha": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "perMs마다 새 값을 섞는 몫. 간격 dt면 1 − (1 − alpha)^(dt ÷ perMs)" },
+        "perMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "holdMs": { "type": "integer", "minimum": 0, "description": "못 재는 동안 마지막으로 잰 뒤 이 시간까지 마지막 값을 보인다(stale)" },
+    "nextStart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["windowMs", "minFrames", "maxFrames"],
+      "description": "묶음 둘째 단계부터 단계 시작 기준: 앞 단계 「다음」 직전 windowMs 안에서 측정 불가 판정(다음 단계 영역)을 통과한 사진 마지막 maxFrames장. minFrames장보다 적으면 안내 화면 동안 따로 잡는다",
+      "properties": {
+        "windowMs": { "type": "integer", "minimum": 0 },
+        "minFrames": { "type": "integer", "minimum": 1 },
+        "maxFrames": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["names", "bounds", "margin", "dwellMs"],
+      "properties": {
+        "names": { "type": "array", "items": { "$ref": "#/$defs/label" }, "minItems": 3, "maxItems": 3 },
+        "bounds": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "연해요 | 비슷해요 | 진해요 경계(진하기 비율). 실기기 시험에서 다시 정한다" },
+        "margin": { "type": "number", "minimum": 0, "description": "지금 문구를 떠나려면 경계를 경계 × margin만큼 더 넘어야 한다" },
+        "dwellMs": { "type": "integer", "minimum": 0, "description": "떠날 조건이 이 시간 이어져야 문구를 바꾼다" }
+      }
+    },
+    "frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "makeup", "state", "expected"],
+        "properties": {
+          "name": { "type": "string" },
+          "makeup": { "type": "string" },
+          "state": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["faces"],
+            "properties": {
+              "faces": { "type": "integer", "minimum": 0 },
+              "yaw": { "type": "number" },
+              "pitch": { "type": "number" },
+              "roll": { "type": "number" },
+              "eyes": { "type": "number" },
+              "faceWidth": { "type": "number" },
+              "brightness": { "type": "number" },
+              "drift": { "type": "number" },
+              "areaCover": { "type": "number" }
+            },
+            "description": "빠진 값은 문제없는 값(각도 0, 눈 1, 얼굴 폭 1, 가림 0, 밝기 · drift는 보지 않음)"
+          },
+          "expected": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/frameReason" }] }
+        }
+      }
+    },
+    "windows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reasons", "expected"],
+        "properties": {
+          "name": { "type": "string" },
+          "reasons": { "type": "array", "items": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/frameReason" }] }, "description": "최근 창 사진들의 이유(null은 쓸 수 있는 사진)" },
+          "expected": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/frameReason" }], "description": "쓸 수 있는 사진이 하나라도 있으면 null, 없으면 가장 많은 이유(같으면 먼저 나온 이유), 비었으면 lost" }
+        }
+      }
+    },
+    "sequences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "ticks", "expected"],
+        "properties": {
+          "name": { "type": "string" },
+          "ticks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["t", "ratio", "target", "reason", "hueSame", "chromaSame"],
+              "properties": {
+                "t": { "type": "number", "description": "ms" },
+                "ratio": { "$ref": "#/$defs/nullableNumber", "description": "그 순간 measure가 낸 진하기 비율. null이면 못 잼" },
+                "target": { "$ref": "#/$defs/nullableNumber", "description": "measure가 낸 목표 효과 크기" },
+                "reason": { "oneOf": [{ "type": "null" }, { "type": "string" }], "description": "못 쟀을 때 이유" },
+                "hueSame": { "type": ["boolean", "null"] },
+                "chromaSame": { "type": ["boolean", "null"] }
+              }
+            }
+          },
+          "expected": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ratio", "bar", "label", "reason", "stale", "hueSame", "chromaSame"],
+              "properties": {
+                "ratio": { "$ref": "#/$defs/nullableNumber", "description": "다듬은 진하기 비율. null이면 숨김" },
+                "bar": { "$ref": "#/$defs/nullableNumber" },
+                "label": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/label" }] },
+                "reason": { "oneOf": [{ "type": "null" }, { "type": "string" }] },
+                "stale": { "type": "boolean", "description": "못 재는 동안 마지막 값을 보이는 중" },
+                "hueSame": { "type": ["boolean", "null"] },
+                "chromaSame": { "type": ["boolean", "null"] }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nullableNumber": { "type": ["number", "null"] },
+    "frameReason": { "enum": ["lost", "turned", "far", "dark", "bright", "lightChanged", "eyesClosed", "covered"] },
+    "label": { "enum": ["lighter", "similar", "darker"] }
+  }
+}

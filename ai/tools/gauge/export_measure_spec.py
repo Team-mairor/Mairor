@@ -215,6 +215,7 @@ def expected(case: dict) -> dict:
         "chroma": num(out.chroma),
         "hueSame": out.hue_same,
         "chromaSame": out.chroma_same,
+        "target": num(out.target),
         "reason": out.reason,
         "sides": [
             {
@@ -222,6 +223,7 @@ def expected(case: dict) -> dict:
                 "ratio": num(s.ratio),
                 "hue": num(s.hue),
                 "chroma": num(s.chroma),
+                "target": num(s.target),
                 "reason": s.reason,
             }
             for s in out.sides

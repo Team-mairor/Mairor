@@ -253,3 +253,46 @@ def test_chroma_is_negative_for_a_duller_pigment():
     read = ms.measure_side(reference, dull, "lip", 100)
 
     assert read.chroma < -ms.CHROMA_SAME
+
+
+def _side_at(lab: np.ndarray) -> AreaSide:
+    before = np.clip(linear_of_lab(SKIN), 0, None)
+    return AreaSide(
+        before=before, after=np.clip(linear_of_lab(lab), 0, None), skin=before, white=WHITE
+    )
+
+
+def test_noise_off_the_reference_direction_does_not_read_as_makeup():
+    """바르기 전 카메라 잡음이 레퍼런스와 다른 쪽으로 가도 막대가 차오르지 않게 투영 길이를 쓴다.
+
+    효과 크기끼리 나누면(Comparison.ratio) 이 경우 0.5 가까이 읽혀 「반쯤 발랐다」가 된다.
+    """
+    reference = ms.reference_side(gauge(amount=0.15))
+    target = np.asarray(gauge(amount=0.15).effect.delta)
+    across = np.cross(target, [0.0, 0.0, 1.0])
+    across = across / np.linalg.norm(across) * np.linalg.norm(target) * 0.5
+    read = ms.measure_side(reference, _side_at(SKIN + across), "lip", 120)
+    lighter = ms.measure_side(reference, _side_at(SKIN - 0.5 * target), "lip", 120)
+
+    assert read.ratio == pytest.approx(0.0, abs=0.15)
+    assert lighter.ratio == 0.0
+
+
+def test_half_amount_with_off_direction_noise_still_reads_half():
+    reference = ms.reference_side(gauge(amount=0.15))
+    target = np.asarray(gauge(amount=0.15).effect.delta)
+    across = np.cross(target, [0.0, 0.0, 1.0])
+    across = across / np.linalg.norm(across) * np.linalg.norm(target) * 0.3
+    read = ms.measure_side(reference, _side_at(SKIN + 0.5 * target + across), "lip", 120)
+
+    assert read.ratio == pytest.approx(0.5, abs=0.15)
+
+
+def test_side_reports_target_effect_size():
+    reference = ms.reference_side(gauge(amount=0.15))
+    side, count = user(0.15)
+    read = ms.measure_side(reference, side, "lip", count)
+    out = ms.measure(gauge(amount=0.15), "lip", [("lipsOuter", side, count)])
+
+    assert read.target > 2.0
+    assert out.target == read.target

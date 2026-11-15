@@ -1,0 +1,1831 @@
+{
+  "version": "v1",
+  "frame": {
+    "yawMax": 0.2,
+    "rollMax": 0.15,
+    "pitchMax": 0.35,
+    "faceWidthMin": 0.4,
+    "brightness": [
+      100.0,
+      215.0
+    ],
+    "driftMax": 6.0,
+    "eyesOpenMin": 0.25,
+    "eyeMakeups": [
+      "eyeliner",
+      "eyeshadow",
+      "mascara"
+    ],
+    "areaCoverMax": 0.2,
+    "order": [
+      "lost",
+      "turned",
+      "far",
+      "dark",
+      "bright",
+      "lightChanged",
+      "eyesClosed",
+      "covered"
+    ]
+  },
+  "window": {
+    "intervalMs": 200,
+    "medianWindowMs": 1000
+  },
+  "weakTargetMin": 2.0,
+  "smoothing": {
+    "alpha": 0.3,
+    "perMs": 200
+  },
+  "holdMs": 1500,
+  "nextStart": {
+    "windowMs": 2000,
+    "minFrames": 3,
+    "maxFrames": 15
+  },
+  "labels": {
+    "names": [
+      "lighter",
+      "similar",
+      "darker"
+    ],
+    "bounds": [
+      0.837,
+      1.183
+    ],
+    "margin": 0.1,
+    "dwellMs": 200
+  },
+  "frames": [
+    {
+      "name": "frontOk",
+      "makeup": "eyeshadow",
+      "state": {
+        "faces": 1
+      },
+      "expected": null
+    },
+    {
+      "name": "noFace",
+      "makeup": "lip",
+      "state": {
+        "faces": 0
+      },
+      "expected": "lost"
+    },
+    {
+      "name": "twoFaces",
+      "makeup": "lip",
+      "state": {
+        "faces": 2
+      },
+      "expected": "lost"
+    },
+    {
+      "name": "yawEdgeOk",
+      "makeup": "lip",
+      "state": {
+        "faces": 1,
+        "yaw": 0.2
+      },
+      "expected": null
+    },
+    {
+      "name": "yawOver",
+      "makeup": "lip",
+      "state": {
+        "faces": 1,
+        "yaw": -0.21000000000000002
+      },
+      "expected": "turned"
+    },
+    {
+      "name": "rollOver",
+      "makeup": "lip",
+      "state": {
+        "faces": 1,
+        "roll": 0.16
+      },
+      "expected": "turned"
+    },
+    {
+      "name": "tabletPitchOk",
+      "makeup": "lip",
+      "state": {
+        "faces": 1,
+        "pitch": -0.3
+      },
+      "expected": null
+    },
+    {
+      "name": "pitchOver",
+      "makeup": "lip",
+      "state": {
+        "faces": 1,
+        "pitch": -0.36
+      },
+      "expected": "turned"
+    },
+    {
+      "name": "far",
+      "makeup": "blush",
+      "state": {
+        "faces": 1,
+        "faceWidth": 0.39
+      },
+      "expected": "far"
+    },
+    {
+      "name": "dark",
+      "makeup": "blush",
+      "state": {
+        "faces": 1,
+        "brightness": 99.0
+      },
+      "expected": "dark"
+    },
+    {
+      "name": "bright",
+      "makeup": "blush",
+      "state": {
+        "faces": 1,
+        "brightness": 216.0
+      },
+      "expected": "bright"
+    },
+    {
+      "name": "lightChanged",
+      "makeup": "blush",
+      "state": {
+        "faces": 1,
+        "drift": 6.1
+      },
+      "expected": "lightChanged"
+    },
+    {
+      "name": "lightSmallChangeOk",
+      "makeup": "blush",
+      "state": {
+        "faces": 1,
+        "drift": 6.0
+      },
+      "expected": null
+    },
+    {
+      "name": "eyesClosedShadow",
+      "makeup": "eyeshadow",
+      "state": {
+        "faces": 1,
+        "eyes": 0.24
+      },
+      "expected": "eyesClosed"
+    },
+    {
+      "name": "eyesClosedLipOk",
+      "makeup": "lip",
+      "state": {
+        "faces": 1,
+        "eyes": 0.24
+      },
+      "expected": null
+    },
+    {
+      "name": "coveredOver",
+      "makeup": "eyeshadow",
+      "state": {
+        "faces": 1,
+        "areaCover": 0.21000000000000002
+      },
+      "expected": "covered"
+    },
+    {
+      "name": "coveredEdgeOk",
+      "makeup": "eyeshadow",
+      "state": {
+        "faces": 1,
+        "areaCover": 0.2
+      },
+      "expected": null
+    },
+    {
+      "name": "turnedBeforeCovered",
+      "makeup": "eyeshadow",
+      "state": {
+        "faces": 1,
+        "yaw": 0.4,
+        "areaCover": 0.5
+      },
+      "expected": "turned"
+    }
+  ],
+  "windows": [
+    {
+      "name": "oneUsableIsEnough",
+      "reasons": [
+        "covered",
+        "covered",
+        null,
+        "covered",
+        "covered"
+      ],
+      "expected": null
+    },
+    {
+      "name": "mostCommon",
+      "reasons": [
+        "covered",
+        "eyesClosed",
+        "eyesClosed",
+        "covered",
+        "eyesClosed"
+      ],
+      "expected": "eyesClosed"
+    },
+    {
+      "name": "tieTakesFirst",
+      "reasons": [
+        "turned",
+        "covered",
+        "covered",
+        "turned"
+      ],
+      "expected": "turned"
+    },
+    {
+      "name": "empty",
+      "reasons": [],
+      "expected": "lost"
+    }
+  ],
+  "sequences": [
+    {
+      "name": "risingToReference",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 0.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 200,
+          "ratio": 0.1,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 400,
+          "ratio": 0.2,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 600,
+          "ratio": 0.35,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 800,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 1000,
+          "ratio": 0.7,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 1200,
+          "ratio": 0.9,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 1400,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 1600,
+          "ratio": 1.05,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 1800,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 2000,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 2200,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 2400,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 2600,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "t": 2800,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": true,
+          "chromaSame": false
+        }
+      ],
+      "expected": [
+        {
+          "ratio": 0.0,
+          "bar": 0.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.03,
+          "bar": 1.5,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.081,
+          "bar": 4.05,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.1617,
+          "bar": 8.085,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.2632,
+          "bar": 13.1595,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.3942,
+          "bar": 19.7117,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.546,
+          "bar": 27.2982,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.6822,
+          "bar": 34.1087,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.7925,
+          "bar": 39.6261,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.8548,
+          "bar": 42.7383,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.8983,
+          "bar": 44.9168,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.9288,
+          "bar": 46.4418,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.9502,
+          "bar": 47.5092,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.9651,
+          "bar": 48.2565,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        },
+        {
+          "ratio": 0.9756,
+          "bar": 48.7795,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": true,
+          "chromaSame": false
+        }
+      ]
+    },
+    {
+      "name": "jitterNearLowerBound",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 600,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 800,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1000,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1200,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1400,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1600,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1800,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2000,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2200,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2400,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2600,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2800,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3000,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3200,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3400,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3600,
+          "ratio": 0.88,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3800,
+          "ratio": 0.8,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": 0.88,
+          "bar": 44.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.856,
+          "bar": 42.8,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8632,
+          "bar": 43.16,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8442,
+          "bar": 42.212,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.855,
+          "bar": 42.7484,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8385,
+          "bar": 41.9239,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8509,
+          "bar": 42.5467,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8357,
+          "bar": 41.7827,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.849,
+          "bar": 42.4479,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8343,
+          "bar": 41.7135,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.848,
+          "bar": 42.3995,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8336,
+          "bar": 41.6796,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8475,
+          "bar": 42.3757,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8333,
+          "bar": 41.663,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8473,
+          "bar": 42.3641,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8331,
+          "bar": 41.6549,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8472,
+          "bar": 42.3584,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.833,
+          "bar": 41.6509,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.8471,
+          "bar": 42.3556,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.833,
+          "bar": 41.6489,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    },
+    {
+      "name": "singleSpike",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 600,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 800,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1000,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1200,
+          "ratio": 1.6,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1400,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1600,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1800,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2000,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2200,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2400,
+          "ratio": 0.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.83,
+          "bar": 41.5,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.731,
+          "bar": 36.55,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.6617,
+          "bar": 33.085,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.6132,
+          "bar": 30.6595,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5792,
+          "bar": 28.9616,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5555,
+          "bar": 27.7732,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.5388,
+          "bar": 26.9412,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    },
+    {
+      "name": "coveredThenBack",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 0.9,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": 0.9,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 0.9,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 600,
+          "ratio": 0.9,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 800,
+          "ratio": 0.9,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1000,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1200,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1400,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1600,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1800,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2000,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2200,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2400,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2600,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 2800,
+          "ratio": null,
+          "target": null,
+          "reason": "covered",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3000,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3200,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3400,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3600,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 3800,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9,
+          "bar": 45.0,
+          "label": "similar",
+          "reason": "covered",
+          "stale": true,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "covered",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "covered",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "covered",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.998,
+          "bar": 49.9011,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9986,
+          "bar": 49.9308,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.999,
+          "bar": 49.9516,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9993,
+          "bar": 49.9661,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.9995,
+          "bar": 49.9763,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    },
+    {
+      "name": "weakReference",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 0.5,
+          "target": 1.9,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": 1.0,
+          "target": 1.9,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 1.0,
+          "target": 1.9,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "weakReference",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "weakReference",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "weakReference",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    },
+    {
+      "name": "strongReference",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 0.5,
+          "target": 2.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": 1.0,
+          "target": 2.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 1.0,
+          "target": 2.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": 0.5,
+          "bar": 25.0,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.65,
+          "bar": 32.5,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 0.755,
+          "bar": 37.75,
+          "label": "lighter",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    },
+    {
+      "name": "startsUnmeasurable",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": null,
+          "target": null,
+          "reason": "turned",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": null,
+          "target": null,
+          "reason": "turned",
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 1.2,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 600,
+          "ratio": 1.25,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 800,
+          "ratio": 1.3,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "turned",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": null,
+          "bar": null,
+          "label": null,
+          "reason": "turned",
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.2,
+          "bar": 60.0,
+          "label": "darker",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.215,
+          "bar": 60.75,
+          "label": "darker",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.2405,
+          "bar": 62.025,
+          "label": "darker",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    },
+    {
+      "name": "darkerAfterDwell",
+      "ticks": [
+        {
+          "t": 0,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 200,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 400,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 600,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 800,
+          "ratio": 1.0,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1000,
+          "ratio": 1.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1200,
+          "ratio": 1.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1400,
+          "ratio": 1.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1600,
+          "ratio": 1.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "t": 1800,
+          "ratio": 1.5,
+          "target": 3.0,
+          "reason": null,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ],
+      "expected": [
+        {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.15,
+          "bar": 57.5,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.255,
+          "bar": 62.75,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.3285,
+          "bar": 66.425,
+          "label": "similar",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.38,
+          "bar": 68.9975,
+          "label": "darker",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        },
+        {
+          "ratio": 1.416,
+          "bar": 70.7982,
+          "label": "darker",
+          "reason": null,
+          "stale": false,
+          "hueSame": null,
+          "chromaSame": null
+        }
+      ]
+    }
+  ]
+}

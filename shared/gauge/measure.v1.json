@@ -86,6 +86,7 @@
         "chroma": 0.0,
         "hueSame": true,
         "chromaSame": true,
+        "target": 9.5288,
         "reason": null,
         "sides": [
           {
@@ -93,6 +94,7 @@
             "ratio": 1.0,
             "hue": 0.0,
             "chroma": 0.0,
+            "target": 9.5288,
             "reason": null
           }
         ]
@@ -132,19 +134,21 @@
         }
       ],
       "expected": {
-        "ratio": 0.5302,
-        "bar": 26.5091,
+        "ratio": 0.4766,
+        "bar": 23.8295,
         "hue": -0.0851,
         "chroma": -0.0378,
         "hueSame": true,
         "chromaSame": true,
+        "target": 9.5288,
         "reason": null,
         "sides": [
           {
             "region": "lipsOuter",
-            "ratio": 0.5302,
+            "ratio": 0.4766,
             "hue": -0.0851,
             "chroma": -0.0378,
+            "target": 9.5288,
             "reason": null
           }
         ]
@@ -184,19 +188,21 @@
         }
       ],
       "expected": {
-        "ratio": 0.9958,
-        "bar": 49.7886,
+        "ratio": 0.9921,
+        "bar": 49.6065,
         "hue": -0.0143,
         "chroma": -0.0339,
         "hueSame": true,
         "chromaSame": true,
+        "target": 9.1458,
         "reason": null,
         "sides": [
           {
             "region": "lipsOuter",
-            "ratio": 0.9958,
+            "ratio": 0.9921,
             "hue": -0.0143,
             "chroma": -0.0339,
+            "target": 9.1458,
             "reason": null
           }
         ]
@@ -236,19 +242,21 @@
         }
       ],
       "expected": {
-        "ratio": 0.9824,
-        "bar": 49.1189,
+        "ratio": 0.974,
+        "bar": 48.7002,
         "hue": -0.3441,
         "chroma": -0.0454,
         "hueSame": true,
         "chromaSame": true,
+        "target": 9.4922,
         "reason": null,
         "sides": [
           {
             "region": "lipsOuter",
-            "ratio": 0.9824,
+            "ratio": 0.974,
             "hue": -0.3441,
             "chroma": -0.0454,
+            "target": 9.4922,
             "reason": null
           }
         ]
@@ -303,12 +311,13 @@
         }
       ],
       "expected": {
-        "ratio": 0.5489,
-        "bar": 27.4455,
+        "ratio": 0.4901,
+        "bar": 24.5049,
         "hue": -0.0181,
         "chroma": -0.0043,
         "hueSame": true,
         "chromaSame": true,
+        "target": 8.1637,
         "reason": null,
         "sides": [
           {
@@ -316,13 +325,15 @@
             "ratio": 1.0,
             "hue": 0.0,
             "chroma": 0.0,
+            "target": 8.1637,
             "reason": null
           },
           {
             "region": "rightCheek",
-            "ratio": 0.5489,
+            "ratio": 0.4901,
             "hue": -0.0181,
             "chroma": -0.0043,
+            "target": 8.1637,
             "reason": null
           }
         ]
@@ -383,6 +394,7 @@
         "chroma": null,
         "hueSame": null,
         "chromaSame": null,
+        "target": 9.3877,
         "reason": null,
         "sides": [
           {
@@ -390,6 +402,7 @@
             "ratio": 1.0,
             "hue": null,
             "chroma": null,
+            "target": 9.3877,
             "reason": null
           },
           {
@@ -397,6 +410,7 @@
             "ratio": 1.0,
             "hue": null,
             "chroma": null,
+            "target": 9.3877,
             "reason": null
           }
         ]
@@ -436,19 +450,21 @@
         }
       ],
       "expected": {
-        "ratio": 1.7679,
-        "bar": 88.3965,
+        "ratio": 1.824,
+        "bar": 91.2005,
         "hue": 0.0448,
         "chroma": 0.5085,
         "hueSame": true,
         "chromaSame": true,
+        "target": 6.6464,
         "reason": null,
         "sides": [
           {
             "region": "faceOval",
-            "ratio": 1.7679,
+            "ratio": 1.824,
             "hue": 0.0448,
             "chroma": 0.5085,
+            "target": 6.6464,
             "reason": null
           }
         ]
@@ -488,19 +504,21 @@
         }
       ],
       "expected": {
-        "ratio": 0.8043,
-        "bar": 40.2138,
+        "ratio": 0.8852,
+        "bar": 44.2621,
         "hue": 8.8254,
         "chroma": 1.9408,
         "hueSame": false,
         "chromaSame": false,
+        "target": 9.5288,
         "reason": null,
         "sides": [
           {
             "region": "lipsOuter",
-            "ratio": 0.8043,
+            "ratio": 0.8852,
             "hue": 8.8254,
             "chroma": 1.9408,
+            "target": 9.5288,
             "reason": null
           }
         ]
@@ -546,6 +564,7 @@
         "chroma": null,
         "hueSame": null,
         "chromaSame": null,
+        "target": null,
         "reason": "noWhite",
         "sides": [
           {
@@ -553,6 +572,7 @@
             "ratio": null,
             "hue": null,
             "chroma": null,
+            "target": null,
             "reason": "noWhite"
           }
         ]
@@ -598,6 +618,7 @@
         "chroma": null,
         "hueSame": null,
         "chromaSame": null,
+        "target": null,
         "reason": "tooFewCells",
         "sides": [
           {
@@ -605,6 +626,7 @@
             "ratio": null,
             "hue": null,
             "chroma": null,
+            "target": null,
             "reason": "tooFewCells"
           }
         ]
@@ -638,6 +660,7 @@
         "chroma": null,
         "hueSame": null,
         "chromaSame": null,
+        "target": null,
         "reason": "noReference",
         "sides": [
           {
@@ -645,6 +668,7 @@
             "ratio": null,
             "hue": null,
             "chroma": null,
+            "target": null,
             "reason": "noReference"
           }
         ]
@@ -690,6 +714,7 @@
         "chroma": null,
         "hueSame": null,
         "chromaSame": null,
+        "target": null,
         "reason": "thinArea",
         "sides": []
       }

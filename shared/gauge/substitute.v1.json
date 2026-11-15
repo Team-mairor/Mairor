@@ -1,0 +1,792 @@
+{
+  "version": "v1",
+  "hide": {
+    "results": [
+      "NONE"
+    ],
+    "skipped": true,
+    "reason": "noProduct"
+  },
+  "basis": {
+    "reference": "gauge",
+    "product": "towardColor"
+  },
+  "color": {
+    "nearMax": 1.0,
+    "towardSteps": 30,
+    "hideEstimated": true,
+    "darkMakeups": [
+      "brow",
+      "eyeliner"
+    ]
+  },
+  "bar": {
+    "atReference": 50.0,
+    "max": 100.0
+  },
+  "cases": [
+    {
+      "name": "sameProduct",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SAME",
+        "selectedColor": {
+          "hex": "#BE283C",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": true,
+        "near": null,
+        "hideReason": null,
+        "colorReason": null,
+        "basis": "reference",
+        "measure": {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "hue": 0.0,
+          "chroma": 0.0,
+          "hueSame": true,
+          "chromaSame": true,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteNearColor",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#C12B3E",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": true,
+        "near": 0.2256,
+        "hideReason": null,
+        "colorReason": null,
+        "basis": "reference",
+        "measure": {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "hue": 0.0,
+          "chroma": 0.0,
+          "hueSame": true,
+          "chromaSame": true,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteFarColorSameLook",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#CD5528",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            58.31,
+            21.38,
+            20.53
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 3.9023,
+        "hideReason": null,
+        "colorReason": "farColor",
+        "basis": "product",
+        "measure": {
+          "ratio": 0.9971,
+          "bar": 49.8562,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteFarColorSameAmount",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#CD5528",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            59.22,
+            18.28,
+            18.28
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 3.9023,
+        "hideReason": null,
+        "colorReason": "farColor",
+        "basis": "product",
+        "measure": {
+          "ratio": 0.7487,
+          "bar": 37.4354,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteFarColorLight",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#CD5528",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            60.7,
+            13.31,
+            14.99
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 3.9023,
+        "hideReason": null,
+        "colorReason": "farColor",
+        "basis": "product",
+        "measure": {
+          "ratio": 0.3608,
+          "bar": 18.0388,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteBlushCoral",
+      "makeup": "blush",
+      "reference": {
+        "lab": [
+          62.58,
+          18.75,
+          12.92
+        ],
+        "delta": [
+          0.46,
+          10.18,
+          0.79
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#F08C82",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "leftCheek",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            63.86,
+            16.91,
+            14.74
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        },
+        {
+          "region": "rightCheek",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            63.86,
+            16.91,
+            14.74
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 2.2368,
+        "hideReason": null,
+        "colorReason": "farColor",
+        "basis": "product",
+        "measure": {
+          "ratio": 0.7849,
+          "bar": 39.2439,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteEstimatedColor",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#C12B3E",
+          "estimated": true
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 0.2256,
+        "hideReason": null,
+        "colorReason": "estimatedColor",
+        "basis": "reference",
+        "measure": {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteEstimatedFarColor",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#CD5528",
+          "estimated": true
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            58.31,
+            21.38,
+            20.53
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 3.9023,
+        "hideReason": null,
+        "colorReason": "estimatedColor",
+        "basis": "product",
+        "measure": {
+          "ratio": 0.9971,
+          "bar": 49.8562,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteNoColor",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": null,
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": null,
+        "hideReason": null,
+        "colorReason": "noColor",
+        "basis": "reference",
+        "measure": {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "noProduct",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "NONE",
+        "selectedColor": null,
+        "skipped": true
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": false,
+        "color": false,
+        "near": null,
+        "hideReason": "noProduct",
+        "colorReason": null,
+        "basis": "reference",
+        "measure": null
+      }
+    },
+    {
+      "name": "skippedStep",
+      "makeup": "lip",
+      "reference": {
+        "lab": [
+          57.29,
+          19.77,
+          14.2
+        ],
+        "delta": [
+          -4.83,
+          11.2,
+          2.07
+        ],
+        "white": "#CBBCB6"
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#C12B3E",
+          "estimated": false
+        },
+        "skipped": true
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            57.29,
+            19.77,
+            14.2
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": false,
+        "color": false,
+        "near": null,
+        "hideReason": "noProduct",
+        "colorReason": null,
+        "basis": "reference",
+        "measure": null
+      }
+    },
+    {
+      "name": "substituteBrow",
+      "makeup": "brow",
+      "reference": {
+        "lab": [
+          51.94,
+          7.87,
+          11.02
+        ],
+        "delta": [
+          -10.18,
+          -0.7,
+          -1.11
+        ],
+        "white": null
+      },
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#5A4032",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "leftBrow",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            51.94,
+            7.87,
+            11.02
+          ],
+          "white": null,
+          "cells": 120
+        },
+        {
+          "region": "rightBrow",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            51.94,
+            7.87,
+            11.02
+          ],
+          "white": null,
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": 0.4875,
+        "hideReason": null,
+        "colorReason": null,
+        "basis": "reference",
+        "measure": {
+          "ratio": 1.0,
+          "bar": 50.0,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "substituteTemplateStep",
+      "makeup": "lip",
+      "reference": null,
+      "product": {
+        "result": "SUBSTITUTE",
+        "selectedColor": {
+          "hex": "#CD5528",
+          "estimated": false
+        },
+        "skipped": false
+      },
+      "sides": [
+        {
+          "region": "lipsOuter",
+          "before": [
+            62.12,
+            8.57,
+            12.13
+          ],
+          "after": [
+            59.22,
+            18.28,
+            18.28
+          ],
+          "white": "#CBBCB6",
+          "cells": 120
+        }
+      ],
+      "expected": {
+        "show": true,
+        "color": false,
+        "near": null,
+        "hideReason": null,
+        "colorReason": null,
+        "basis": "reference",
+        "measure": {
+          "ratio": null,
+          "bar": null,
+          "hue": null,
+          "chroma": null,
+          "hueSame": null,
+          "chromaSame": null,
+          "reason": "noReference"
+        }
+      }
+    }
+  ]
+}

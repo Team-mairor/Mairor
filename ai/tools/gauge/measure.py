@@ -15,6 +15,10 @@
    (reference_side).
 6. color_match.compare에 화장 종류마다 고른 방법(method_for)으로 넘겨 진하기 비율(ratio, 1이면
    레퍼런스만큼)과 색감 차이(hue · chroma)를 낸다(measure_side).
+   진하기 비율은 사용자 효과를 목표 효과 방향으로 투영한 길이 ÷ 목표 효과 길이(Lab,
+   Comparison.along)이고 0보다 작으면 0이다. 효과 크기끼리 나누면 방향과 상관없는 카메라 잡음이
+   늘 더해져, 바르기 전에도 막대가 차오르고 효과가 작은 레퍼런스에서 양 순서가 뒤집힌다.
+   목표 효과 크기(target, ΔE2000)도 낸다. 레퍼런스 효과가 작은지 판정할 때 쓴다(stability).
 7. 좌우를 따로 잰 뒤 게이지 값은 덜 바른 쪽이다(measure). 한쪽이라도 덜 바르면 「연해요」가 나와야
    더 바를 곳을 놓치지 않는다.
 
@@ -29,7 +33,8 @@ hue는 Lab 색상 각도 차이(도, 노란 쪽이 +, 붉은 · 분홍 쪽이 �
 목표 효과의 a · b 길이가 HUE_MIN_CHROMA보다 작으면 색 계열(hue)도 내지 않는다.
 아이라인(THIN_MAKEUPS)은 재지 않는다. 128칸 얼굴 지도에서 선이 칸보다 얇아 맨피부가 섞여 늘 연하게
 읽히고, 실제 가이드 영역도 대부분 MIN_AREA_CELLS칸이 안 된다.
-근거 숫자는 docs/experiments/GAUGE_MEASURE.md에 있다.
+근거 숫자는 docs/experiments/GAUGE_MEASURE.md에 있고, 진하기 비율을 투영으로 바꾼 근거는
+docs/experiments/GAUGE_UNMEASURABLE_SMOOTHING.md에 있다.
 """
 
 import warnings
@@ -42,7 +47,7 @@ import numpy as np
 
 from app.schemas.guide_area import GaugeReference, GuideSet, RegionName
 from app.tasks.area.direction_finder import set_mask
-from tools.gauge.baseline import GRID, Baseline, light_change, measured_cells
+from tools.gauge.baseline import GRID, Baseline, delta_e_map, light_change, measured_cells
 from tools.gauge.color_match import (
     DARK_MAKEUPS,
     AreaSide,
@@ -78,8 +83,9 @@ TINY = 1e-6
 class SideMeasure:
     """영역 묶음 하나(좌우 짝이면 한쪽)를 잰 값.
 
-    ratio는 진하기 비율(사용자 효과 크기 ÷ 목표 효과 크기, 1이면 레퍼런스만큼),
-    hue · chroma는 색감 차이(모듈 설명), cells는 잰 칸 수다.
+    ratio는 진하기 비율(사용자 효과를 목표 효과 방향으로 투영한 길이 ÷ 목표 효과 길이, 0 아래는 0,
+    1이면 레퍼런스만큼), hue · chroma는 색감 차이(모듈 설명), cells는 잰 칸 수,
+    target은 목표 효과 크기(바탕에서 목표 색까지 ΔE2000)다.
     못 쟀으면 값은 None이고 reason에 이유가 든다.
     """
 
@@ -89,6 +95,7 @@ class SideMeasure:
     chroma: float | None
     cells: int
     reason: MeasureReason | None
+    target: float | None = None
 
 
 @dataclass(frozen=True)
@@ -96,7 +103,8 @@ class Measure:
     """하위 단계 하나의 게이지 값.
 
     ratio는 고른 쪽(COMBINE)의 진하기 비율, bar는 게이지 막대 0~BAR_MAX(위치선 BAR_AT_REFERENCE),
-    hue · chroma는 고른 쪽의 색감 차이, hue_same · chroma_same은 「비슷」 범위 안인지다.
+    hue · chroma는 고른 쪽의 색감 차이, hue_same · chroma_same은 「비슷」 범위 안인지,
+    target은 고른 쪽의 목표 효과 크기(ΔE2000)다.
     sides는 영역 묶음마다 잰 값이다. 어느 쪽도 못 쟀으면 값은 None이고 reason은 첫 이유다.
     """
 
@@ -108,6 +116,7 @@ class Measure:
     chroma_same: bool | None
     sides: tuple[SideMeasure, ...]
     reason: MeasureReason | None
+    target: float | None = None
 
 
 def area_cells(guide_set: GuideSet, grid: int = GRID) -> np.ndarray:
@@ -202,6 +211,7 @@ def measure_side(
 
     method가 없으면 화장 종류로 고른다(method_for). 흰자 기준 방법인데 어느 쪽이든 흰자가 없으면
     noWhite다. 검정 · 갈색 화장은 색감을 내지 않는다.
+    진하기 비율은 투영 길이 비율(Comparison.along)이고 0 아래는 0이다(모듈 설명 6번).
     """
     if reference is None:
         return SideMeasure(region, None, None, None, cells, "noReference")
@@ -215,11 +225,13 @@ def measure_side(
     ):
         return SideMeasure(region, None, None, None, cells, "noWhite")
     result = compare(reference, user, method)
-    ratio = float(result.ratio)
-    if np.isnan(ratio):
+    along = float(result.along)
+    if np.isnan(along):
         return SideMeasure(region, None, None, None, cells, "noReference")
+    ratio = max(along, 0.0)
+    target = float(delta_e_map(np.asarray(result.reference), np.asarray(result.base)))
     if makeup in DARK_MAKEUPS:
-        return SideMeasure(region, ratio, None, None, cells, None)
+        return SideMeasure(region, ratio, None, None, cells, None, target)
     hue, chroma = (float(value) for value in color_shift(result))
     return SideMeasure(
         region,
@@ -228,6 +240,7 @@ def measure_side(
         None if np.isnan(chroma) else chroma,
         cells,
         None,
+        target,
     )
 
 
@@ -297,6 +310,7 @@ def measure(
         chroma_same=None if chosen.chroma is None else abs(chosen.chroma) <= CHROMA_SAME,
         sides=measured,
         reason=None,
+        target=chosen.target,
     )
 
 

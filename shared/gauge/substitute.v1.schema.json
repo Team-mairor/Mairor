@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GaugeSubstituteSpec",
+  "description": "튜토리얼 단계에서 고른 제품(같은 제품 · 대체 제품 · 제품 없음)에 따라 게이지와 색감을 보일지 정하는 규칙의 값과 기대값 시험 데이터. ai/tools/gauge/export_substitute_spec.py가 만든다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "hide", "basis", "color", "bar", "cases"],
+  "properties": {
+    "version": { "const": "v1" },
+    "hide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["results", "skipped", "reason"],
+      "properties": {
+        "results": { "type": "array", "items": { "enum": ["SAME", "SUBSTITUTE", "NONE"] }, "description": "이 매칭 결과면 게이지를 숨김" },
+        "skipped": { "type": "boolean", "description": "참이면 skipped 단계도 숨김" },
+        "reason": { "const": "noProduct" }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "product"],
+      "description": "진하기를 잴 기준. reference는 가이드 결과 gauge 그대로, product는 레퍼런스 바르기 전 색에서 제품 색 쪽으로 레퍼런스 효과와 같은 ΔE2000만큼 간 색(towardColor)을 바른 뒤 색으로 둔 gauge",
+      "properties": {
+        "reference": { "const": "gauge" },
+        "product": { "const": "towardColor" }
+      }
+    },
+    "color": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nearMax", "towardSteps", "hideEstimated", "darkMakeups"],
+      "properties": {
+        "nearMax": { "type": "number", "exclusiveMinimum": 0, "description": "near(ΔE2000)가 이 값 이하면 진하기는 레퍼런스 기준 그대로(basis reference)이고 추정 색이 아니면 색감도 보임. 넘으면 옮긴 기준(basis product), 색감 숨김" },
+        "towardSteps": { "type": "integer", "minimum": 1, "description": "toward_color를 반씩 좁혀 찾는 횟수" },
+        "hideEstimated": { "type": "boolean", "description": "참이면 고른 색이 추정값(selectedColor.estimated)일 때 대체 제품 색감을 숨김" },
+        "darkMakeups": { "type": "array", "items": { "type": "string" }, "description": "색감을 내지 않는 화장 종류(measure.v1.json methods.darkMakeups와 같음)" }
+      }
+    },
+    "bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atReference", "max"],
+      "properties": {
+        "atReference": { "type": "number" },
+        "max": { "type": "number" }
+      }
+    },
+    "cases": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/case" } }
+  },
+  "$defs": {
+    "lab": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "hex": { "type": ["string", "null"], "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "nullableNumber": { "type": ["number", "null"] },
+    "nullableBoolean": { "type": ["boolean", "null"] },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "makeup", "reference", "product", "sides", "expected"],
+      "properties": {
+        "name": { "type": "string" },
+        "makeup": { "type": "string" },
+        "reference": {
+          "description": "measure.v1.json cases와 같은 레퍼런스 입력. null이면 기준 없음",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["lab", "delta", "white"],
+              "properties": {
+                "lab": { "$ref": "#/$defs/lab" },
+                "delta": { "$ref": "#/$defs/lab" },
+                "white": { "$ref": "#/$defs/hex" }
+              }
+            }
+          ]
+        },
+        "product": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["result", "selectedColor", "skipped"],
+          "description": "BE 실행 단계 스냅샷의 result · selectedColor · skipped",
+          "properties": {
+            "result": { "enum": ["SAME", "SUBSTITUTE", "NONE"] },
+            "selectedColor": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["hex", "estimated"],
+                  "properties": {
+                    "hex": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                    "estimated": { "type": "boolean" }
+                  }
+                }
+              ]
+            },
+            "skipped": { "type": "boolean" }
+          }
+        },
+        "sides": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["region", "before", "after", "white", "cells"],
+            "properties": {
+              "region": { "type": "string" },
+              "before": { "$ref": "#/$defs/lab" },
+              "after": { "$ref": "#/$defs/lab" },
+              "white": { "$ref": "#/$defs/hex" },
+              "cells": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["show", "color", "near", "hideReason", "colorReason", "basis", "measure"],
+          "properties": {
+            "show": { "type": "boolean" },
+            "color": { "type": "boolean" },
+            "near": { "$ref": "#/$defs/nullableNumber" },
+            "hideReason": { "enum": [null, "noProduct"] },
+            "colorReason": { "enum": [null, "farColor", "estimatedColor", "noColor"] },
+            "basis": { "enum": ["reference", "product"] },
+            "measure": {
+              "oneOf": [
+                { "type": "null" },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["ratio", "bar", "hue", "chroma", "hueSame", "chromaSame", "reason"],
+                  "properties": {
+                    "ratio": { "$ref": "#/$defs/nullableNumber" },
+                    "bar": { "$ref": "#/$defs/nullableNumber" },
+                    "hue": { "$ref": "#/$defs/nullableNumber" },
+                    "chroma": { "$ref": "#/$defs/nullableNumber" },
+                    "hueSame": { "$ref": "#/$defs/nullableBoolean" },
+                    "chromaSame": { "$ref": "#/$defs/nullableBoolean" },
+                    "reason": { "enum": [null, "noReference", "noWhite", "tooFewCells", "thinArea"] }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
