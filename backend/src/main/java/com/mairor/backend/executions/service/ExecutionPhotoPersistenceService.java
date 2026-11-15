@@ -105,6 +105,18 @@ public class ExecutionPhotoPersistenceService {
     return new PhotoDownload(photo.getStorageKey(), photo.getContentType());
   }
 
+  @Transactional(readOnly = true)
+  public PhotoDownload getShareDownload(UUID photoId) {
+    StoredPhoto photo = photos.findById(photoId).orElseThrow(this::notFound);
+    if (photo.getKind() != PhotoKind.PHOTO_BOOTH
+        || photo.getState() != PhotoState.AVAILABLE
+        || photo.getExpiresAt() == null
+        || !photo.getExpiresAt().isAfter(clock.instant())) {
+      throw notFound();
+    }
+    return new PhotoDownload(photo.getStorageKey(), photo.getContentType());
+  }
+
   private boolean readable(GuideExecution execution, String sessionId) {
     return execution.getStatus() != ExecutionStatus.ABANDONED
         && (execution.getStatus() == ExecutionStatus.COMPLETED

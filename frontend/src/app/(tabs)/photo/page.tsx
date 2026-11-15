@@ -56,10 +56,6 @@ export default function PhotoBoothPage() {
           <Camera className="size-5" aria-hidden />
           촬영 시작
         </Link>
-
-        <p className="text-center text-[15px] leading-[1.5] text-mute-2">
-          촬영한 사진은 이 브라우저에서만 다루며 서버에 저장하지 않아요.
-        </p>
       </section>
     </main>
   );

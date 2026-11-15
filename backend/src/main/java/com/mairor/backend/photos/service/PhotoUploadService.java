@@ -1,6 +1,7 @@
 package com.mairor.backend.photos.service;
 
 import com.mairor.backend.photos.entity.PhotoKind;
+import java.nio.file.Path;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -32,18 +33,33 @@ public class PhotoUploadService {
     try (ValidatedPhoto file = validator.validate(upload)) {
       UUID photoId =
           records.stage(userId, sessionId, kind, stepId, "photos/" + UUID.randomUUID(), file);
+      uploadOrDiscard(photoId, file.path());
+      return photoId;
+    }
+  }
+
+  @Transactional(propagation = Propagation.NEVER)
+  public UUID storePhotoBoothShare(MultipartFile upload) {
+    try (ValidatedPhoto file = validator.validate(upload)) {
+      UUID photoId =
+          records.stage(
+              null, null, PhotoKind.PHOTO_BOOTH, null, "photos/" + UUID.randomUUID(), file);
+      uploadOrDiscard(photoId, file.path());
+      return photoId;
+    }
+  }
+
+  private void uploadOrDiscard(UUID photoId, Path path) {
+    try {
+      transfers.upload(photoId, path);
+    } catch (RuntimeException failure) {
       try {
-        transfers.upload(photoId, file.path());
-        return photoId;
-      } catch (RuntimeException failure) {
-        try {
-          discard(photoId);
-        } catch (RuntimeException compensation) {
-          // 원장이 먼저 커밋됐으므로 DB 장애로 보상 예약이 실패해도 stagingTimeout 이후 정리된다.
-          failure.addSuppressed(compensation);
-        }
-        throw failure;
+        discard(photoId);
+      } catch (RuntimeException compensation) {
+        // 원장이 먼저 커밋됐으므로 DB 장애로 보상 예약이 실패해도 stagingTimeout 이후 정리된다.
+        failure.addSuppressed(compensation);
       }
+      throw failure;
     }
   }
 

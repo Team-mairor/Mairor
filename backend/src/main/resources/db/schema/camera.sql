@@ -1,12 +1,12 @@
 -- S15P31A306-396: 비공개 사진 메타데이터와 실행별 기준 얼굴 등록.
 -- users.sql → products.sql → analysis.sql 이후 적용한다. 이미지 바이트는 ObjectStorage에 저장한다.
 -- Spring Session 만료 후에도 삭제 재시도가 가능해야 하므로 session_id에는 세션 FK를 걸지 않는다.
--- 원래 세션 ID는 내부 인가용 비밀 값이며 API/로그에 노출하지 않는다.
+-- 원래 세션 ID는 내부 인가용 비밀 값이며 API/로그에 노출하지 않는다. PHOTO_BOOTH는 회원 없이 만드는 만료 공유 사진이다.
 -- SQL 전용 규칙: 사진 소유자/세션 복합 FK, 등록 상태/파일 검증 CHECK, 미연결 등록 부분 유일 인덱스.
 CREATE TABLE photos (
     id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    session_id varchar(128) NOT NULL,
+    user_id uuid,
+    session_id varchar(128),
     kind varchar(24) NOT NULL,
     step_id varchar(200),
     storage_key varchar(500) NOT NULL,
@@ -27,12 +27,13 @@ CREATE TABLE photos (
     CONSTRAINT uk_photos_storage_key UNIQUE (storage_key),
     CONSTRAINT uk_photos_owner_session UNIQUE (id, user_id, session_id),
     CONSTRAINT ck_photos_kind CHECK (
-        (kind = 'FACE_REGISTRATION' AND step_id IS NULL)
-        OR (kind = 'STEP' AND step_id IS NOT NULL AND btrim(step_id) <> '')),
+        (kind = 'FACE_REGISTRATION' AND user_id IS NOT NULL AND session_id IS NOT NULL AND step_id IS NULL)
+        OR (kind = 'STEP' AND user_id IS NOT NULL AND session_id IS NOT NULL AND step_id IS NOT NULL AND btrim(step_id) <> '')
+        OR (kind = 'PHOTO_BOOTH' AND user_id IS NULL AND session_id IS NULL AND step_id IS NULL)),
     CONSTRAINT ck_photos_file CHECK (
         content_type IN ('image/jpeg', 'image/png')
         AND byte_size BETWEEN 1 AND 5242880 AND width > 0 AND height > 0),
-    CONSTRAINT ck_photos_text CHECK (btrim(session_id) <> '' AND btrim(storage_key) <> ''),
+    CONSTRAINT ck_photos_text CHECK (btrim(storage_key) <> '' AND (session_id IS NULL OR btrim(session_id) <> '')),
     CONSTRAINT ck_photos_cleanup CHECK (
         cleanup_attempts >= 0 AND (
             (state IN ('PENDING_UPLOAD', 'AVAILABLE') AND cleanup_requested_at IS NULL

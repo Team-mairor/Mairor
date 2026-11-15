@@ -56,6 +56,33 @@ class CameraUpgradeSqlTest {
   }
 
   @Test
+  void photoBoothUpgradeAllowsAnonymousSharePhotos() throws Exception {
+    try (Connection connection = freshSchema()) {
+      upgrade(connection);
+      ScriptUtils.executeSqlScript(
+          connection, new ClassPathResource("db/upgrade/532-photo-booth-qr-share.sql"));
+
+      try (var statement = connection.createStatement()) {
+        statement.execute(
+            """
+            insert into photos (
+              id, user_id, session_id, kind, storage_key, content_type, byte_size,
+              width, height, state, expires_at, created_at, updated_at
+            ) values (
+              '00000000-0000-0000-0000-000000000001', null, null, 'PHOTO_BOOTH',
+              'photo-booth/test', 'image/jpeg', 1, 1, 1, 'AVAILABLE',
+              now() + interval '10 minutes', now(), now()
+            )
+            """);
+      }
+
+      assertThat(columnIsNullable(connection, "user_id")).isTrue();
+      assertThat(columnIsNullable(connection, "session_id")).isTrue();
+      assertThat(photoKindConstraintContainsBooth(connection)).isTrue();
+    }
+  }
+
+  @Test
   void laterCreateFailureRollsBackTheEarlierPhotosTable() throws Exception {
     try (Connection connection = freshSchema()) {
       try (var statement = connection.createStatement()) {
@@ -97,6 +124,32 @@ class CameraUpgradeSqlTest {
       try (var result = statement.executeQuery()) {
         result.next();
         return result.getString(1);
+      }
+    }
+  }
+
+  private boolean columnIsNullable(Connection connection, String columnName) throws SQLException {
+    try (var statement =
+        connection.prepareStatement(
+            "select is_nullable = 'YES' from information_schema.columns "
+                + "where table_schema = current_schema() and table_name = 'photos' and column_name = ?")) {
+      statement.setString(1, columnName);
+      try (var result = statement.executeQuery()) {
+        if (!result.next()) return false;
+        return result.getBoolean(1);
+      }
+    }
+  }
+
+  private boolean photoKindConstraintContainsBooth(Connection connection) throws SQLException {
+    try (var statement =
+        connection.prepareStatement(
+            "select pg_get_constraintdef(oid) like '%PHOTO_BOOTH%' "
+                + "from pg_constraint where conrelid = 'photos'::regclass "
+                + "and conname = 'ck_photos_kind'")) {
+      try (var result = statement.executeQuery()) {
+        if (!result.next()) return false;
+        return result.getBoolean(1);
       }
     }
   }

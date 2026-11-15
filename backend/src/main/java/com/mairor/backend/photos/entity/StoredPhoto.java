@@ -39,11 +39,11 @@ public class StoredPhoto {
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
-  @Column(name = "user_id", nullable = false)
+  @Column(name = "user_id")
   private UUID userId;
 
   /** Spring Session 식별자. 로그·응답·toString에 출력하지 않는다. */
-  @Column(name = "session_id", nullable = false, length = 128)
+  @Column(name = "session_id", length = 128)
   private String sessionId;
 
   @Enumerated(EnumType.STRING)
@@ -109,12 +109,18 @@ public class StoredPhoto {
       int width,
       int height,
       Instant expiresAt) {
-    this.userId = Objects.requireNonNull(userId, "userId");
-    this.sessionId = required(sessionId, 128);
+    this.userId = userId;
+    this.sessionId = sessionId == null ? null : required(sessionId, 128);
     this.kind = Objects.requireNonNull(kind, "kind");
     this.stepId = stepId == null ? null : required(stepId, 200);
-    if ((kind == PhotoKind.STEP) != (this.stepId != null)) {
-      throw new IllegalArgumentException("단계 사진만 stepId가 필요하다");
+    if (kind == PhotoKind.PHOTO_BOOTH) {
+      if (userId != null || sessionId != null || this.stepId != null) {
+        throw new IllegalArgumentException("네컷 공유 사진은 회원·세션·단계에 연결하지 않는다");
+      }
+    } else if (userId == null
+        || this.sessionId == null
+        || (kind == PhotoKind.STEP) != (this.stepId != null)) {
+      throw new IllegalArgumentException("사진 종류에 맞는 회원·세션·단계 정보가 필요하다");
     }
     this.storageKey = required(storageKey, 500);
     if (!"image/jpeg".equals(contentType) && !"image/png".equals(contentType)) {

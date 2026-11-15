@@ -73,6 +73,13 @@ public class SecurityConfig {
       PathPatternRequestMatcher.withDefaults()
           .matcher(HttpMethod.POST, "/v1/users/oauth/google/signup");
 
+  private static final RequestMatcher PUBLIC_PHOTO_SHARE =
+      PathPatternRequestMatcher.withDefaults()
+          .matcher(HttpMethod.GET, "/v1/photo-shares/{shareId}");
+
+  private static final RequestMatcher CREATE_PHOTO_SHARE =
+      PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/v1/photo-shares");
+
   /**
    * 세션·CSRF 토큰 없이 호출하는 공개 변경 요청(POST, 비밀번호 재설정 저장만 PUT). 인가·CSRF 제외·Origin 검증이 모두 이 목록을 따른다. 로그인한
    * 세션 쿠키가 함께 와도 CSRF 검사를 하지 않는다. 대신 허용 Origin 검증을 받는다.
@@ -87,7 +94,8 @@ public class SecurityConfig {
           PASSWORD_RESET_SEND,
           PASSWORD_RESET_VERIFY,
           PASSWORD_RESET_SAVE,
-          GOOGLE_SIGN_UP);
+          GOOGLE_SIGN_UP,
+          CREATE_PHOTO_SHARE);
 
   /**
    * 인증 컨텍스트 저장소. 필터 체인과 로그인 컨트롤러가 같은 인스턴스를 쓴다. 컨트롤러는 필터 체인 밖에서 로그인하므로 {@code SecurityContextHolder}
@@ -163,7 +171,12 @@ public class SecurityConfig {
   /** 인증 없이 열려 있는 경로 전체. 인가 규칙과 {@link SessionLifetimeFilter}(만료된 세션이어도 이 경로는 막지 않는다)가 같은 목록을 쓴다. */
   private static final RequestMatcher PERMIT_ALL =
       new OrRequestMatcher(
-          HEALTH, new OrRequestMatcher(PUBLIC_WRITES), GOOGLE_LOGIN, SWAGGER, INTERNAL);
+          HEALTH,
+          new OrRequestMatcher(PUBLIC_WRITES),
+          GOOGLE_LOGIN,
+          PUBLIC_PHOTO_SHARE,
+          SWAGGER,
+          INTERNAL);
 
   private static RequestMatcher path(String pattern) {
     return PathPatternRequestMatcher.withDefaults().matcher(pattern);

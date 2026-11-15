@@ -6,6 +6,7 @@ import com.mairor.backend.common.storage.ObjectNotFoundException;
 import com.mairor.backend.common.storage.ObjectStorage;
 import com.mairor.backend.common.storage.StorageException;
 import com.mairor.backend.photos.dto.PhotoResponse;
+import com.mairor.backend.photos.dto.PhotoShareResponse;
 import com.mairor.backend.photos.entity.PhotoKind;
 import com.mairor.backend.photos.repository.StoredPhotoRepository;
 import com.mairor.backend.photos.service.PhotoCleanupService;
@@ -92,6 +93,26 @@ public class ExecutionPhotoService {
 
   public PhotoContent get(UUID userId, String sessionId, UUID photoId) {
     var photo = persistence.getDownload(userId, sessionId, photoId);
+    return read(photo);
+  }
+
+  @Transactional(propagation = Propagation.NEVER)
+  public PhotoShareResponse createShare(MultipartFile image) {
+    UUID photoId;
+    try {
+      photoId = uploads.storePhotoBoothShare(image);
+    } catch (StorageException failure) {
+      throw unavailable();
+    }
+    var photo = photos.findById(photoId).orElseThrow(() -> unavailable());
+    return new PhotoShareResponse(photoId, photo.getExpiresAt());
+  }
+
+  public PhotoContent getShared(UUID photoId) {
+    return read(persistence.getShareDownload(photoId));
+  }
+
+  private PhotoContent read(ExecutionPhotoPersistenceService.PhotoDownload photo) {
     try (var lease = temporaryFiles.create()) {
       storage.download(photo.storageKey(), lease.path());
       byte[] bytes = Files.readAllBytes(lease.path());

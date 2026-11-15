@@ -1,11 +1,15 @@
 "use client";
 
+import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState } from "react";
 
+import { errorMessage } from "@/lib/api";
+
 import { MAX_PHOTO_ZOOM, type PhotoPlacement } from "./crop";
-import { createPhotoJpegBlob, createPhotoJpegFilename, PhotoJpegError } from "./export-jpeg";
+import { createPhotoJpegBlob, PhotoJpegError } from "./export-jpeg";
 import { BASIC_PHOTO_FRAME, type PhotoSlotId } from "./frame";
 import { renderPhotoFrame, type FramePhotos } from "./render";
+import { createPhotoShare } from "./share-api";
 
 type CapturedPhotos = Record<PhotoSlotId, Blob>;
 type PhotoPlacements = Partial<Record<PhotoSlotId, PhotoPlacement>>;
@@ -37,22 +41,18 @@ export function PhotoEditPreview({
   const [renderedSignature, setRenderedSignature] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<PhotoSlotId>(SLOT_IDS[0]);
   const [mode, setMode] = useState<PreviewMode>("edit");
-  const [downloadPending, setDownloadPending] = useState(false);
-  const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
-  const [downloadError, setDownloadError] = useState(false);
-  const downloadTimersRef = useRef(new Map<string, number>());
+  const [sharePending, setSharePending] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [shareError, setShareError] = useState(false);
+  const [share, setShare] = useState<{ shareId: string; expiresAt: string; url: string } | null>(
+    null,
+  );
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
-    const downloadTimers = downloadTimersRef.current;
     return () => {
       mountedRef.current = false;
-      for (const [url, timer] of downloadTimers) {
-        window.clearTimeout(timer);
-        URL.revokeObjectURL(url);
-      }
-      downloadTimers.clear();
     };
   }, []);
 
@@ -105,12 +105,12 @@ export function PhotoEditPreview({
     return () => window.cancelAnimationFrame(frame);
   }, [images, placements]);
 
-  const download = async () => {
+  const createShare = async () => {
     const canvas = canvasRef.current;
     const currentSignature = JSON.stringify(placements);
     if (
       !canvas ||
-      downloadPending ||
+      sharePending ||
       !images ||
       renderError ||
       renderedSignature !== currentSignature
@@ -118,50 +118,33 @@ export function PhotoEditPreview({
       return;
     }
 
-    setDownloadPending(true);
-    setDownloadMessage(null);
-    setDownloadError(false);
-    let url: string | null = null;
+    setSharePending(true);
+    setShareMessage(null);
+    setShareError(false);
     try {
       const blob = await createPhotoJpegBlob(canvas);
       if (!mountedRef.current) return;
-      url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = createPhotoJpegFilename();
-      anchor.hidden = true;
-      document.body.appendChild(anchor);
-      try {
-        anchor.click();
-      } finally {
-        anchor.remove();
-      }
-
-      const objectUrl = url;
-      const timer = window.setTimeout(() => {
-        URL.revokeObjectURL(objectUrl);
-        downloadTimersRef.current.delete(objectUrl);
-      }, 1000);
-      downloadTimersRef.current.set(objectUrl, timer);
-      setDownloadMessage("JPG 다운로드를 시작했어요.");
+      const result = await createPhotoShare(blob);
+      if (!mountedRef.current) return;
+      const url = new URL("/share/photo", window.location.origin);
+      url.searchParams.set("id", result.shareId);
+      setShare({ ...result, url: url.toString() });
+      setShareMessage("QR 코드를 스캔해 사진을 확인하고 저장해 주세요.");
     } catch (error) {
-      if (url) URL.revokeObjectURL(url);
       if (mountedRef.current) {
-        setDownloadError(true);
-        setDownloadMessage(
-          error instanceof PhotoJpegError
-            ? error.message
-            : "JPG 파일을 저장하지 못했어요. 다시 시도해 주세요.",
-        );
+        setShareError(true);
+        setShareMessage(error instanceof PhotoJpegError ? error.message : errorMessage(error));
       }
     } finally {
-      if (mountedRef.current) setDownloadPending(false);
+      if (mountedRef.current) setSharePending(false);
     }
   };
 
   const placement = placements[selectedSlot] ?? {};
   const updatePlacement = (change: PhotoPlacement) => {
     setRenderError(false);
+    setShare(null);
+    setShareMessage(null);
     setPlacements((current) => ({
       ...current,
       [selectedSlot]: { ...current[selectedSlot], ...change },
@@ -191,12 +174,12 @@ export function PhotoEditPreview({
           </button>
         </section>
       ) : (
-        <section className="mx-auto flex w-full max-w-[680px] flex-1 flex-col gap-4 overflow-y-auto">
-          <div className="relative flex min-h-[200px] flex-1 items-center justify-center">
+        <section className="mx-auto flex min-h-0 w-full max-w-[680px] flex-1 flex-col gap-4 overflow-y-auto">
+          <div className="relative flex shrink-0 items-center justify-center overflow-hidden">
             <canvas
               ref={canvasRef}
               aria-label="네 장의 사진이 들어간 합성 미리보기"
-              className="h-auto max-h-[min(calc(var(--screen-h)*0.78),900px)] w-auto max-w-full object-contain"
+              className="h-auto w-[min(100%,calc(var(--screen-h)*0.56),640px)] max-w-full object-contain md:w-[min(100%,calc(var(--screen-h)*0.6),640px)]"
             />
             {!images && <p className="absolute text-mute">사진을 합치고 있어요</p>}
           </div>
@@ -289,25 +272,55 @@ export function PhotoEditPreview({
           ) : (
             <>
               <p
-                role={downloadError ? "alert" : "status"}
-                className={`text-center text-[16px] ${downloadError ? "text-red-700" : "text-mute"}`}
+                role={shareError ? "alert" : "status"}
+                className={`text-center text-[16px] ${shareError ? "text-red-700" : "text-mute"}`}
               >
-                {downloadMessage ?? "네 컷 사진을 확인하고 JPG로 저장할 수 있어요."}
+                {shareMessage ?? "네 컷 사진을 QR 코드로 공유하고 휴대폰에 저장할 수 있어요."}
               </p>
-              <button
-                type="button"
-                disabled={
-                  !images ||
-                  renderError ||
-                  downloadPending ||
-                  renderedSignature !== JSON.stringify(placements)
-                }
-                onClick={() => void download()}
-                aria-busy={downloadPending}
-                className="flex h-14 shrink-0 items-center justify-center rounded-full bg-navy text-[17px] font-bold text-white disabled:opacity-50"
-              >
-                {downloadPending ? "JPG 만드는 중" : "JPG 다운로드"}
-              </button>
+              {share ? (
+                <div className="flex flex-col items-center gap-3 rounded-2xl border border-line bg-white p-4">
+                  <QRCodeSVG
+                    value={share.url}
+                    size={240}
+                    level="M"
+                    includeMargin
+                    aria-label="네 컷 사진 공유 QR 코드"
+                  />
+                  <p className="text-center text-[14px] text-mute">
+                    {new Date(share.expiresAt).toLocaleTimeString("ko-KR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                    까지 스캔할 수 있어요.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShare(null);
+                      setShareMessage(null);
+                    }}
+                    className="text-[15px] font-semibold text-navy underline"
+                  >
+                    새 QR 코드 만들기
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={
+                    !images ||
+                    renderError ||
+                    sharePending ||
+                    renderedSignature !== JSON.stringify(placements)
+                  }
+                  onClick={() => void createShare()}
+                  aria-busy={sharePending}
+                  className="flex h-14 shrink-0 items-center justify-center rounded-full bg-navy text-[17px] font-bold text-white disabled:opacity-50"
+                >
+                  {sharePending ? "QR 코드 준비 중" : "QR 코드 만들기"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setMode("edit")}

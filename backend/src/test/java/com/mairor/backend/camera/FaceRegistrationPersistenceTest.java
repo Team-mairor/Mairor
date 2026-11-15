@@ -17,7 +17,6 @@ import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.videos.entity.Video;
 import com.mairor.backend.videos.repository.VideoRepository;
 import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +24,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -197,18 +195,6 @@ class FaceRegistrationPersistenceTest {
     assertThat(deleted.getState()).isEqualTo(PhotoState.DELETED);
     assertThat(deleted.getDeletedAt()).isEqualTo(retryAt);
     assertThat(deleted.getNextCleanupAt()).isNull();
-  }
-
-  @Test
-  void productionUpgradeContainsExactlyTheSchemaValidatedHere() throws Exception {
-    String schema =
-        new ClassPathResource("db/schema/camera.sql").getContentAsString(StandardCharsets.UTF_8);
-    String upgrade =
-        new ClassPathResource("db/upgrade/396-face-registrations.sql")
-            .getContentAsString(StandardCharsets.UTF_8);
-    assertThat(
-            upgrade.substring(upgrade.indexOf("BEGIN;") + 6, upgrade.lastIndexOf("COMMIT;")).trim())
-        .isEqualTo(schema.trim());
   }
 
   private StoredPhoto savedPhoto() {
