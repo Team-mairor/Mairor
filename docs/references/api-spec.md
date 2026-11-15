@@ -461,7 +461,7 @@ API-RECOMMEND-001 · POST /api/v1/users/me/guide-matches
 - 회원·CSRF 필요. Body guideId:UUID 필수. 201 GuideMatch. guideId 누락·형식 오류는 400 VALIDATION\_FAILED, 승인되지 않았거나 없는 가이드는 404 NOT\_FOUND.
 - <b>로컬 수정 -325</b>: 매칭 생성과 조회는 REPEATABLE\_READ 스냅샷에서 처리한다. `makeup=other` 단계는 결과에서 제외하고, 나머지 단계는 SAME/SUBSTITUTE/NONE 결과를 저장한다. SAME은 LINK\_CONFLICT가 아닌 대조 결과에서 productId·shadeId가 모두 확인되고 두 ID가 파우치 항목과 일치할 때 색상과 무관하게 판정한다. 따라서 SAME이어도 기준색이 없으면 `comparisonAvailable=false`일 수 있다.
 - <b>로컬 수정 -325</b>: 기준색은 연결이 SLOT 수준이고 실제 사용 가능한 색이 있을 때 이를 우선한다. 그 외에는 `targetColor.hex`가 유효한 `#RRGGBB`이면 VIDEO\_ESTIMATE 색을 사용한다. 문자열로 제품·칸을 추정하지 않는다. 기준색이 없으면 `comparisonAvailable=false`; 색 기준이 있어도 후보가 없으면 NO\_SUITABLE\_ITEM, 파우치가 비어 있으면 NO\_ITEMS다.
-- <b>로컬 수정 -325</b>: 대체 후보는 파우치 본인 항목 중 호환 type과 색을 가진 항목이다. USER\_INPUT 색은 저장값, 그 외 CATALOG 항목은 연결 호수의 현재 사용 가능한 색 칸을 사용한다. 항목별 가장 가까운 색 하나를 고르고 CIEDE2000(ΔE2000) 거리 오름차순으로 정렬한다. 칸 거리가 같으면 colorId, 항목 간 거리가 같으면 pouchItemId 오름차순이며 최대 3개·거리 임계값 없음이다. 호환 type 표는 기능명세 RECOMMEND-002를 따른다. 유사도·거리 수치는 응답하지 않는다.
+- <b>로컬 수정 -325 · S15P31A306-532</b>: 대체 후보는 파우치 본인 항목 중 호환 type과 색을 가진 항목이다. USER\_INPUT 색은 저장값, 그 외 CATALOG 항목은 연결 호수의 현재 사용 가능한 색 칸을 사용한다. 항목별 가장 가까운 색 하나를 고르고 CIEDE2000(ΔE2000) 거리 오름차순으로 정렬한다. ΔE00 ≤ 15.0인 항목만 후보로 통과시키고 최대 3개를 제공한다. 칸 거리가 같으면 colorId, 항목 간 거리가 같으면 pouchItemId 오름차순이다. 호환 type 표는 기능명세 RECOMMEND-002를 따른다. 유사도·거리 수치는 응답하지 않는다.
 - <b>로컬 수정 -325 · 스냅샷</b>: 매칭 생성 시 파우치 제품 표시값·비교 색·후보 색 칸·버전을 저장한다. 응답은 `steps`를 반환하며 기준색 내부 기록은 노출하지 않는다. 같은 매칭의 후속 조회는 현재값으로 재계산하지 않는다.
 </toggle>
 

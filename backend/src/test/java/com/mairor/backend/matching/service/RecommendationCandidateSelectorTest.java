@@ -57,6 +57,26 @@ class RecommendationCandidateSelectorTest {
   }
 
   @Test
+  void excludesColorsBeyondTheMaximumDistance() {
+    UUID closeId = UUID.randomUUID();
+    UUID farId = UUID.randomUUID();
+
+    var result =
+        selector.select(
+            "lip",
+            "#FF0000",
+            List.of(
+                candidate(closeId, "LIP_TINT", "#E00000"),
+                candidate(farId, "LIPSTICK", "#0000FF")));
+
+    assertThat(result)
+        .extracting(ranked -> ranked.candidate().pouchItemId())
+        .containsExactly(closeId);
+    assertThat(result.getFirst().distance())
+        .isLessThanOrEqualTo(RecommendationCandidateSelector.MAX_COLOR_DISTANCE);
+  }
+
+  @Test
   void resolvesEqualDistanceByPouchItemId() {
     UUID firstId = UUID.fromString("00000000-0000-0000-0000-000000000001");
     UUID secondId = UUID.fromString("00000000-0000-0000-0000-000000000002");

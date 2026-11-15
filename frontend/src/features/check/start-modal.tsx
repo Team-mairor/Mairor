@@ -9,6 +9,7 @@ export function StartModal({
   open,
   missing,
   noun = "없는 제품",
+  counts,
   onRecheck,
   onStart,
   onClose,
@@ -19,6 +20,8 @@ export function StartModal({
   /** 제품을 생략할 단계 */
   missing: { key: string; label: string; color: string | null }[];
   noun?: string;
+  /** 가이드 시작 전 현재 파우치 매칭 결과 */
+  counts: { same: number; sub: number; none: number };
   /** 없음 목록으로 돌아가 다시 확인 */
   onRecheck: () => void;
   onStart: () => void;
@@ -41,6 +44,9 @@ export function StartModal({
         </h2>
         <p className="text-[20px] leading-[1.5] text-mute">
           {n ? "이 단계들은 설명만 보여 드리고 넘어가요. " : ""}시작하면 제품을 바꿀 수 없어요.
+        </p>
+        <p className="text-[17px] font-semibold text-mute">
+          보유 제품 {counts.same}단계 · 비슷한 제품 {counts.sub}단계 · 없는 제품 {counts.none}단계
         </p>
       </div>
       {n > 0 && (

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { PillButton } from "@/components/ui/pill-button";
+import { useGuideMatch } from "@/features/check/match-api";
 import { useGuide, useRunQuery } from "@/features/guide";
 import {
   GlassPanel,
@@ -13,9 +14,10 @@ import {
   useLiveState,
   type LiveReason,
 } from "@/features/live";
+import { usePouchSync } from "@/features/pouch";
 import { runHref, useSession } from "@/features/session";
 
-import { previewSummary } from "./preview-summary";
+import { previewMatchGroups, previewSummary } from "./preview-summary";
 
 /** 그린 것이 없으므로 숨김·색 정확도 대신 할 일만 안내한다. 카메라 상태 안내는 그대로 둔다 */
 const PLAIN_DESC: Record<Exclude<LiveReason, "error" | "starting">, string> = {
@@ -34,12 +36,28 @@ export function GuidePreview() {
   const query = useRunQuery();
   const { load } = useGuide();
   const { state } = useSession();
+  const pouchSync = usePouchSync();
+  const pouchReady = !state.loggedIn || pouchSync.status === "ready";
+  const { load: matching, retry } = useGuideMatch(
+    load.status === "ready" && pouchReady ? load.guide.guideId : null,
+    JSON.stringify(state.pouch),
+  );
   const live = useLiveState(parseAlert(query?.get("alert")));
   const reason = live.reason;
   const plain = reason && reason !== "error" && reason !== "starting" ? PLAIN_DESC[reason] : null;
   const note = live.note && plain ? { ...live.note, desc: plain } : live.note;
   if (load.status !== "ready") return null;
   const s = previewSummary(load.guide);
+  const groups = previewMatchGroups(
+    load.guide,
+    matching.status === "ready" ? matching.byStep : new Map(),
+  );
+  const groupRows = [
+    { key: "owned", label: "가지고 있는 제품", steps: groups.owned },
+    { key: "substitutes", label: "비슷한 제품", steps: groups.substitutes },
+    { key: "none", label: "없는 제품", steps: groups.none },
+  ] as const;
+  const pouchById = new Map(state.pouch.map((item) => [item.id, item]));
 
   return (
     <main className="relative flex flex-1 flex-col">
@@ -74,6 +92,78 @@ export function GuidePreview() {
             </span>
           )}
         </div>
+        <section
+          aria-label="제품 매칭 결과"
+          className="flex max-h-[32vh] flex-col gap-3 overflow-y-auto"
+        >
+          {matching.status === "ready" ? (
+            groupRows.map((group) => (
+              <div
+                key={group.key}
+                className="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3"
+              >
+                <h2 className="font-bold text-white">
+                  {group.label} · {group.steps.length}단계
+                </h2>
+                {group.steps.length > 0 && (
+                  <ul className="mt-1 text-[16px] leading-[1.5] text-line-2">
+                    {group.steps.map((step) => {
+                      const match = matching.byStep.get(step.stepId);
+                      const itemId =
+                        group.key === "owned"
+                          ? match?.samePouchItemId
+                          : group.key === "substitutes"
+                            ? match?.candidates[0]?.pouchItemId
+                            : null;
+                      const item = itemId ? pouchById.get(itemId) : undefined;
+                      const itemName = item
+                        ? [item.brand, item.name, item.shade].filter(Boolean).join(" ")
+                        : null;
+                      return (
+                        <li key={step.stepId}>
+                          {step.label}
+                          {step.product?.name ? ` · ${step.product.name}` : ""}
+                          {itemName ? ` → ${itemName}` : ""}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ))
+          ) : matching.status === "error" ? (
+            <div
+              role="alert"
+              className="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3 text-line-2"
+            >
+              제품 매칭 결과를 불러오지 못했어요.{" "}
+              <button type="button" className="font-bold underline" onClick={retry}>
+                다시 시도
+              </button>
+            </div>
+          ) : state.loggedIn && pouchSync.status === "error" ? (
+            <div
+              role="alert"
+              className="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3 text-line-2"
+            >
+              파우치 정보를 불러오지 못했어요.{" "}
+              <button type="button" className="font-bold underline" onClick={pouchSync.retry}>
+                다시 시도
+              </button>
+            </div>
+          ) : (
+            <p className="rounded-[18px] border border-white/8 bg-white/4 px-4 py-3 text-line-2">
+              {pouchReady
+                ? "파우치와 가이드 제품을 비교하고 있어요."
+                : "파우치 정보를 불러오고 있어요."}
+            </p>
+          )}
+          {matching.status === "ready" && groups.unresolved.length > 0 && (
+            <p className="text-[15px] text-line-2">
+              일부 단계는 제품 정보를 받지 못해 분류하지 않았어요.
+            </p>
+          )}
+        </section>
         <div className="flex items-center gap-3">
           <RoundBack onClick={() => router.push("/select")} label="영상 목록으로" />
           <PillButton

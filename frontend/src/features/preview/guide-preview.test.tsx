@@ -3,13 +3,14 @@ import { act, useLayoutEffect, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { StepMatch } from "@/features/check/match-api";
 import type { GuideModel, GuideStepModel } from "@/features/guide";
 import { RunGuideContext } from "@/features/guide/use-guide";
 import { SessionProvider, useSession } from "@/features/session/session-provider";
 import { api } from "@/lib/api";
 
 import { GuidePreview } from "./guide-preview";
-import { previewSummary } from "./preview-summary";
+import { previewMatchGroups, previewSummary } from "./preview-summary";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 const live = vi.hoisted(() => ({
@@ -95,6 +96,49 @@ describe("previewSummary", () => {
   });
 });
 
+describe("previewMatchGroups", () => {
+  it("보유·대체·없음을 나누고 매칭이 없는 단계는 보류한다", () => {
+    const matches = new Map<string, StepMatch>([
+      [
+        "s2",
+        { stepId: "s2", result: "SAME", samePouchItemId: "p1", noneReason: null, candidates: [] },
+      ],
+      [
+        "s3",
+        {
+          stepId: "s3",
+          result: "SUBSTITUTE",
+          samePouchItemId: null,
+          noneReason: null,
+          candidates: [{ pouchItemId: "p2", rank: 1 }],
+        },
+      ],
+      [
+        "s5",
+        {
+          stepId: "s5",
+          result: "NONE",
+          samePouchItemId: null,
+          noneReason: "NO_SUITABLE_ITEM",
+          candidates: [],
+        },
+      ],
+    ]);
+
+    expect(previewMatchGroups(guide(STEPS), matches)).toMatchObject({
+      owned: [{ stepId: "s2" }],
+      substitutes: [{ stepId: "s3" }],
+      none: [{ stepId: "s5" }],
+      unresolved: [],
+    });
+    expect(previewMatchGroups(guide(STEPS), new Map()).unresolved.map((s) => s.stepId)).toEqual([
+      "s2",
+      "s3",
+      "s5",
+    ]);
+  });
+});
+
 let root: Root;
 let element: HTMLDivElement;
 let session: ReturnType<typeof useSession>;
@@ -142,6 +186,36 @@ describe("실제 가이드 미리보기", () => {
     vi.clearAllMocks();
     live.state = { note: null, reason: null, canRender: true };
     vi.spyOn(api, "get").mockResolvedValue({ user: { email: "t@example.com" }, csrfToken: "c" });
+    vi.spyOn(api, "post").mockImplementation(
+      async () =>
+        ({
+          matchId: "match-1",
+          guideId: GUIDE_ID,
+          steps: [
+            {
+              stepId: "s2",
+              result: "SAME",
+              samePouchItemId: "p1",
+              noneReason: null,
+              candidates: [],
+            },
+            {
+              stepId: "s3",
+              result: "SUBSTITUTE",
+              samePouchItemId: null,
+              noneReason: null,
+              candidates: [{ pouchItemId: "p2", rank: 1 }],
+            },
+            {
+              stepId: "s5",
+              result: "NONE",
+              samePouchItemId: null,
+              noneReason: "NO_SUITABLE_ITEM",
+              candidates: [],
+            },
+          ],
+        }) as never,
+    );
   });
   afterEach(async () => {
     await act(async () => root.unmount());
@@ -156,6 +230,9 @@ describe("실제 가이드 미리보기", () => {
     expect(text()).toContain("색 비교가 어려운 베이스 · 마스카라 단계는 빠져요");
     expect(text()).toContain("색상 정보가 없어");
     expect(text()).not.toMatch(/입혀보는 중|입혀 볼게요|민낯으로 보기/);
+    expect(text()).toContain("가지고 있는 제품 · 1단계");
+    expect(text()).toContain("비슷한 제품 · 1단계");
+    expect(text()).toContain("없는 제품 · 1단계");
   });
 
   it.each([

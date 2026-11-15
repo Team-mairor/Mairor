@@ -13,6 +13,9 @@ public final class RecommendationCandidateSelector {
 
   public static final int MAX_CANDIDATES = 3;
 
+  /** Maximum accepted CIEDE2000 distance for a product to count as a color substitute. */
+  public static final double MAX_COLOR_DISTANCE = 15.0;
+
   private static final Comparator<RankedCandidate> ORDER =
       Comparator.comparingDouble(RankedCandidate::distance)
           .thenComparing(candidate -> candidate.candidate().pouchItemId());
@@ -28,6 +31,7 @@ public final class RecommendationCandidateSelector {
         .filter(candidate -> PouchCompatibilityPolicy.supports(makeup, candidate.typeCode()))
         .map(candidate -> closestColor(candidate, referenceHex))
         .filter(Objects::nonNull)
+        .filter(candidate -> candidate.distance() <= MAX_COLOR_DISTANCE)
         .sorted(ORDER)
         .limit(MAX_CANDIDATES)
         .toList();

@@ -451,6 +451,7 @@ export function GuideCheck() {
       {/* 시작하면 직접 고르지 않은 단계에 화면에 보이는 결과를 자동 선택으로 저장한다. 없음은 생략 */}
       <StartModal
         open={startAsk}
+        counts={counts}
         missing={rows
           .filter((r) => r.pick.kind === "none")
           .map((r) => ({
