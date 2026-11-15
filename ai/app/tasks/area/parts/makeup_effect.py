@@ -20,12 +20,13 @@ from typing import Literal
 
 import numpy as np
 
+from app.schemas.guide_area import GaugeDirection
 from app.tasks.area.parts.area_color import AreaColor, Piece, _grown, not_skin
 from app.tasks.area.parts.area_preparation import remove_lighting, rgb_to_lab
 
 Lab = Sequence[float]
 EffectMethod = Literal["around", "change", "relative", "light"]
-EffectDirection = Literal["darker", "lighter", "same"]
+EffectDirection = GaugeDirection
 
 EFFECT_METHODS: tuple[EffectMethod, ...] = ("around", "change", "relative", "light")
 FALLBACK_METHOD: EffectMethod = "relative"

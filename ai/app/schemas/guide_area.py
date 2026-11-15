@@ -35,6 +35,12 @@ AreaStatus = Literal["extracted", "template", "notApplicable", "failed"]
 
 GuideSetSource = Literal["extracted", "manual"]
 
+GaugeReason = Literal[
+    "noArea", "noMaps", "tooFewCells", "colorSpread", "sidesDisagree", "notDarker"
+]
+GaugeDirection = Literal["darker", "lighter", "same"]
+HEX_PATTERN = r"^#[0-9A-Fa-f]{6}$"
+
 
 class MeshAnchor(CamelModel):
     """얼굴 주소. FE 얼굴 구조 스키마(face/types.ts)의 MeshAnchor와 같다.
@@ -93,6 +99,61 @@ class GuideSet(CamelModel):
         return guides
 
 
+class GaugeColor(CamelModel):
+    """색 하나. hex는 sRGB #RRGGBB다.
+
+    lab은 같은 sRGB 색을 D65 흰색 기준 CIELAB으로 바꾼 (L 밝기 0~100, a 초록-빨강, b 파랑-노랑)이다.
+    """
+
+    hex: str = Field(pattern=HEX_PATTERN)
+    lab: tuple[float, float, float]
+
+
+class GaugeEffect(CamelModel):
+    """화장 효과. 화장이 그 자리 색을 얼마나, 어느 쪽으로 바꿨나다.
+
+    delta는 바른 뒤 색 − 기준 색의 (ΔL, Δa, Δb)다.
+    기준 색은 화장이 없었다면 그 자리에 있었을 색으로, 바르기 전 색에서 단계 동안 바뀐 조명을
+    덜어 잡는다.
+    size는 두 색의 ΔE2000 거리다.
+    direction은 밝기가 어두워졌으면 darker(쉐딩·눈썹·아이라인), 밝아졌으면 lighter(하이라이트),
+    거의 그대로면 same(색만 바뀜)이다.
+    """
+
+    delta: tuple[float, float, float]
+    size: float = Field(ge=0)
+    direction: GaugeDirection
+
+
+class GaugeReference(CamelModel):
+    """하위 단계의 게이지 기준. 레퍼런스 영상에서 바른 자리의 색과 화장 효과·진하기다.
+
+    값을 냈으면 color·effect·strength가 모두 있고 reason은 null이다.
+    못 냈으면 셋 다 null이고 reason에 이유가 든다.
+    noArea는 찾은 영역이 없음(기본 가이드 단계), noMaps는 쓸 사진이 없음,
+    tooFewCells는 색을 낼 칸이 너무 적음, colorSpread는 사진마다 색이 화장으로 바뀐 양보다
+    더 흔들려 화장 색인지 알 수 없음, sidesDisagree는 좌우 짝 부위에서 한쪽은 어두워지고
+    다른 쪽은 밝아져 적어도 한쪽이 화장 색이 아님, notDarker는 어두워지는 화장(아이라인·눈썹·쉐딩)이
+    어두워지지 않아 찾은 칸이 그린 자리가 아님이다.
+    color는 바른 뒤 색이다. 좌우 짝 부위는 찾은 쪽 칸만 합쳐 낸 색이다.
+    strength는 effect.size를 0~100으로 바꾼 진하기다.
+    """
+
+    color: GaugeColor | None
+    effect: GaugeEffect | None
+    strength: float | None = Field(ge=0, le=100)
+    reason: GaugeReason | None
+
+    @model_validator(mode="after")
+    def check_reason(self) -> "GaugeReference":
+        values = (self.color, self.effect, self.strength)
+        if self.reason is None and any(value is None for value in values):
+            raise ValueError("reason이 없으면 color·effect·strength가 모두 있어야 합니다")
+        if self.reason is not None and any(value is not None for value in values):
+            raise ValueError("reason이 있으면 color·effect·strength가 모두 null이어야 합니다")
+        return self
+
+
 class AreaSubStep(CamelModel):
     """하위 단계. status에 따라 guideSets · templateId · reasons를 채우는 규칙이 정해져 있다.
 
@@ -104,6 +165,9 @@ class AreaSubStep(CamelModel):
     eyeliner는 꼬리까지 그린 윗라인이다.
     블러셔는 코(코끝·콧등·콧대)에 바르는 단계의 키 blushNose가 있고, blush는 두 볼이다.
     쉐딩은 콧대 옆에 바르는 단계의 키 contourNose가 있고, contour는 옆광대에서 턱선까지다.
+    gauge는 게이지 기준이다. extracted는 값, 또는 영역은 찾았지만 값을 못 낸 이유이고,
+    template은 noArea, notApplicable·failed는 null이다.
+    게이지 기준을 넣기 전 결과와 색 뽑기가 실패한 결과에는 없다(null).
     """
 
     sub_step_id: str = Field(min_length=1)
@@ -112,6 +176,7 @@ class AreaSubStep(CamelModel):
     reasons: list[str]
     template_id: TemplateId | None
     guide_sets: list[GuideSet]
+    gauge: GaugeReference | None = None
 
     @model_validator(mode="after")
     def check_status(self) -> "AreaSubStep":
@@ -130,7 +195,19 @@ class AreaSubStep(CamelModel):
             raise ValueError(f"{status}이면 reasons가 1개 이상이어야 합니다")
         if status in ("extracted", "notApplicable") and self.reasons:
             raise ValueError(f"{status}이면 reasons가 비어 있어야 합니다")
+        self.check_gauge()
         return self
+
+    def check_gauge(self) -> None:
+        gauge = self.gauge
+        if gauge is None:
+            return
+        if self.status in ("notApplicable", "failed"):
+            raise ValueError(f"{self.status}이면 gauge가 null이어야 합니다")
+        if self.status == "template" and gauge.reason != "noArea":
+            raise ValueError("template이면 gauge의 reason이 noArea여야 합니다")
+        if self.status == "extracted" and gauge.reason == "noArea":
+            raise ValueError("extracted이면 gauge의 reason이 noArea일 수 없습니다")
 
 
 class AreaStep(CamelModel):

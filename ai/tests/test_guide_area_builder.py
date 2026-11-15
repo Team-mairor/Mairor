@@ -108,6 +108,32 @@ def test_each_kind_of_step_gets_its_status(monkeypatch):
     assert len(guide_set.guides[0].outline) >= 3
 
 
+def test_result_carries_gauge_for_each_kind_of_step(monkeypatch):
+    """게이지 기준은 기록에만 있으면 BE·FE에 안 간다.
+
+    돌려주는 가이드 영역에 상태별로 들어가는지 본다.
+
+    립 분석을 바꿔 끼워 지도가 없으니, 찾은 영역은 값 대신 쓸 사진 없음(noMaps) 이유가 든다.
+    """
+    other, foundation, lip = (s.sub_steps[0] for s in build(monkeypatch, lips_found).steps)
+
+    assert other.gauge is None
+    assert foundation.gauge.reason == "noArea"
+    assert (lip.gauge.color, lip.gauge.reason) == (None, "noMaps")
+
+
+def test_failed_step_has_no_gauge(monkeypatch, caplog):
+    """분석이 실패한 단계는 기준을 말할 수 없어 gauge를 비운다."""
+
+    def broken(*_, **__):
+        raise OSError("사진 파일이 깨짐")
+
+    with caplog.at_level(logging.ERROR):
+        lip = build(monkeypatch, broken).steps[2].sub_steps[0]
+
+    assert (lip.status, lip.gauge) == ("failed", None)
+
+
 def test_lip_step_start_and_end_are_passed_in_milliseconds(monkeypatch):
     seen = []
 

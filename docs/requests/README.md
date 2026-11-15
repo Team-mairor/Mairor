@@ -30,10 +30,12 @@
 | [Google 로그인 시작 오류도 로그인 화면으로 보내기](2026-11-10-seoyun-seoyeon-google-start-error-redirect.md) | 2026-11-10 | 한서윤 → 김서연 | 완료 |
 | [운영 단계 추출에서 어긋난 종류·나누기·경계 고치기](2026-11-10-hyeonsoo-hyeongjun-step-extraction-misses.md) | 2026-11-10 | 김현수 → 박형준 | 요청 |
 | [코 블러셔 기본 가이드(blushNose) 추가](2026-11-10-hyeonsoo-seoyun-blush-nose-template.md) | 2026-11-10 | 김현수 → 한서윤 | 요청 |
-| [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md) | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 요청 대기 |
+| [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md) | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 회신함(2026-11-15 문서), 승인 뒤 지움 |
 | [노트북 처리기에서 분석 단계 동안의 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-middle-photos.md) | 2026-11-14 | 김현수 → 박형준 | 요청 |
 | [찾은 영역에 바른 방향 화살표(arrow)가 함께 올 수 있음](2026-11-14-hyeonsoo-seoyun-area-arrow.md) | 2026-11-14 | 김현수 → 한서윤 | 요청 |
 | [노트북 처리기에서 쉐딩 단계의 직전·직후 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-contour-window.md) | 2026-11-14 | 김현수 → 박형준 | 요청 |
 | [코 쉐딩 기본 가이드(contourNose)를 AI가 직접 보내고 컨실러 단계는 영역 없이 보냄](2026-11-14-hyeonsoo-seoyun-contour-nose-and-concealer.md) | 2026-11-14 | 김현수 → 한서윤 | 요청 |
 | [AI 서버 크기 올리기와 가이드 영역 줄 수 설정](2026-11-14-hyeonsoo-jungyoon-ai-server-size.md) | 2026-11-14 | 김현수 → 김정윤 | 요청 |
+| [가이드 게이지 기준 전달 계약 회신](2026-11-15-hyeonsoo-seoyeon-guide-gauge-reply.md) | 2026-11-15 | 김현수 → 김서연 | 확인 요청 |
+| [튜토리얼 게이지에 AI 게이지 기준(gauge) 쓰기와 게이지 계산 · 단계 끝 평가 형식](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [게이지용 사용자 캠 기준 잡기: 언제 잡을지 · 카메라 잠금 · 저장하지 않기](2026-11-15-hyeonsoo-seoyun-gauge-baseline.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |

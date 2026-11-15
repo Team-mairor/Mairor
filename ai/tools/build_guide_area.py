@@ -4,7 +4,8 @@
 서비스와 같게 가림 찾기 모델로 사진마다 가린 칸을 빼고 만든다.
 서비스와 같게 편 지도를 기억해(RememberedPhotos), 흐린 사진을 잴 때 편 지도를 다시 쓴다.
 샘플 폴더에 BE 형식 가이드 입력(guide_input.json)이 있으면 그 단계로 만든다(guide_steps).
-찾은 영역마다 뽑은 대표 색은 가이드 영역에 들어가지 않아 output/area_colors.json에 따로 저장한다.
+찾은 영역마다 뽑은 대표 색은 output/area_colors.json에 따로 저장한다. 가이드 영역에는 하위 단계마다
+그중 하나를 고른 게이지 기준(gauge)만 들어가고, 좌우 따로 낸 색·바르기 전 색은 이 파일에만 있다.
 색 표와 견본 그림은 tools/area_color_report.py로 만든다.
 실행 (ai/ 폴더에서): uv run python tools/build_guide_area.py samples/local_01_lip_seq
 """

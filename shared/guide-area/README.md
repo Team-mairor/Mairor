@@ -10,14 +10,15 @@ AI가 레퍼런스 영상에서 찾아 넘기는 튜토리얼 가이드 영역(`
 ```txt
 영상        videoId · meshVersion · steps
  └ 단계      stepId · order · makeup · subSteps
-    └ 하위 단계  subStepId · order · status · reasons · templateId · guideSets
-       └ 부위별 묶음  region · source · guides · exclude
-          └ 도형    polygon (outline = MeshAnchor[]) · arrow (from · to = MeshAnchor)
+    └ 하위 단계  subStepId · order · status · reasons · templateId · guideSets · gauge
+       ├ 부위별 묶음  region · source · guides · exclude
+       │  └ 도형    polygon (outline = MeshAnchor[]) · arrow (from · to = MeshAnchor)
+       └ 게이지 기준  color (hex · lab) · effect (delta · size · direction) · strength · reason
 ```
 
 ## 사용 위치
 
-- AI: `ai/tests/test_guide_area_schema.py`가 이 파일이 모델과 같은지, 샘플(`ai/samples/local_01/guide_area.json`)이 통과하는지, 규칙을 어긴 예를 잡는지 본다. 샘플의 상태·이유·삼각형 번호는 형식을 보이기 위한 예시다.
+- AI: `ai/tests/test_guide_area_schema.py`가 이 파일이 모델과 같은지, 샘플(`ai/samples/local_01/guide_area.json`)이 통과하는지, 규칙을 어긴 예를 잡는지 본다. 샘플의 상태·이유·삼각형 번호는 형식을 보이기 위한 예시다. 샘플은 `s17`(찾은 영역)·`s18`(기본 가이드)에만 `gauge`를 넣어, 게이지 기준이 있는 결과와 넣기 전에 만든 결과를 한 파일로 보인다. `gauge` 값은 시험 영상 GO지승 립 단계(`s27a`)에서 나온 숫자다.
 - FE: 스키마 파일을 직접 읽지 않고 같은 모양의 타입으로 받는다(`frontend/src/features/guide/types.ts`, 얼굴 주소 · 부위 이름 · 도형은 `frontend/src/features/face/types.ts`). 튜토리얼은 가이드 조회 응답(`GET /v1/guides/{guideId}`)의 `subSteps`를 그리기 전에 `checkGuideArea`(`frontend/src/features/guide/guide-overlay.tsx`)로 메시 판 · 도형 · 얼굴 주소 · 부위 이름을 검사하고, 쓸 수 없는 도형만 뺀다. FE에 없는 기본 가이드 키를 받은 하위 단계는 그리지 않는다.
 - BE: 가이드 작업 콜백에서 필수 칸, 영상 ID, 설명 단계 ID가 가이드 입력과 같은지만 본다(`backend/src/main/java/com/mairor/backend/analysis/service/AiResultCheck.java`). 영역은 이 스키마로 검사하지 않고 받은 그대로 저장해 가이드 조회 응답의 `subSteps`로 넘긴다.
 
@@ -27,12 +28,14 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
 
 - 하위 단계 상태마다 채우는 칸
 
-  | `status` | `guideSets` | `templateId` | `reasons` |
-  | --- | --- | --- | --- |
-  | `extracted` | 1개 이상 | `null` | 빈 목록 |
-  | `template` | 빈 목록 | `other`가 아닌 기본 가이드 키 (아래 표) | 1개 이상 |
-  | `notApplicable` | 빈 목록 | `null` | 빈 목록 |
-  | `failed` | 빈 목록 | `null` | 1개 이상 |
+  | `status` | `guideSets` | `templateId` | `reasons` | `gauge` |
+  | --- | --- | --- | --- | --- |
+  | `extracted` | 1개 이상 | `null` | 빈 목록 | 값, 또는 `noArea`가 아닌 이유, 또는 `null` |
+  | `template` | 빈 목록 | `other`가 아닌 기본 가이드 키 (아래 표) | 1개 이상 | 이유 `noArea`, 또는 `null` |
+  | `notApplicable` | 빈 목록 | `null` | 빈 목록 | `null` |
+  | `failed` | 빈 목록 | `null` | 1개 이상 | `null` |
+
+- `gauge`는 값(`color` · `effect` · `strength`가 모두 있고 `reason`이 `null`)이거나 이유(셋 다 `null`이고 `reason`이 있음) 둘 중 하나
 
 - `makeup`이 `other`인 단계는 `notApplicable`이다. 그 밖에는 컨실러 단계에만 쓴다. 컨실러는 영역을 띄우지 않으며, 가이드 입력이 `foundation` · `highlight`로 보내므로 이 두 종류에서만 `notApplicable`이 나올 수 있다. 마스카라처럼 영역을 분석하지 않는 부위는 `template`(`notAnalyzed`)로 보낸다
 - `subStepId`는 `<stepId>-<order>`이고, 하위 단계 `order`는 1부터 차례대로
@@ -56,6 +59,45 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 | `orderLikeChance` | 시각 순서를 섞어도 나오는 점수라 바른 순서로 볼 수 없음 |
 
 기본 가이드(`template`) 단계의 방향은 FE 기본 가이드에 들어 있어 AI가 보내지 않는다.
+
+## 게이지 기준 (`gauge`)
+
+튜토리얼 진하기 게이지가 「레퍼런스만큼」을 알도록, 레퍼런스 영상에서 그 하위 단계에 바른 자리의 색과 화장 효과·진하기를 담는다. 사용자 카메라에서 잰 값은 여기 없다. 그 값은 FE가 브라우저에서 재고, AI·BE로 보내지 않는다.
+
+```json
+"gauge": {
+  "color": { "hex": "#D77F7E", "lab": [62.62, 33.87, 15.3] },
+  "effect": { "delta": [-3.96, 9.13, 2.76], "size": 5.18, "direction": "darker" },
+  "strength": 25.9,
+  "reason": null
+}
+```
+
+| 칸 | 뜻 |
+| --- | --- |
+| `color.hex` | 바른 뒤 색, sRGB `#RRGGBB` |
+| `color.lab` | 같은 색의 CIELAB (sRGB → D65 흰색 기준). L 밝기 0~100, a 초록(−)~빨강(+), b 파랑(−)~노랑(+) |
+| `effect.delta` | 바른 뒤 색 − 기준 색의 (ΔL, Δa, Δb). 기준 색은 화장이 없었다면 그 자리에 있었을 색으로, 바르기 전 색에서 단계 동안 바뀐 조명을 덜어 잡는다 |
+| `effect.size` | 두 색의 ΔE2000 거리. 화장이 색을 바꾼 크기다 |
+| `effect.direction` | 밝기가 어두워졌으면 `darker`(쉐딩 · 눈썹 · 아이라인), 밝아졌으면 `lighter`(하이라이트), ΔL이 ±1 안이면 `same`(색만 바뀜) |
+| `strength` | `effect.size`를 0~100으로 바꾼 진하기. ΔE2000 20이 100이고 넘으면 100이다. 부위끼리 얼마나 진한지 견주는 값이다 |
+| `reason` | 값을 못 냈을 때의 이유 (아래 표) |
+
+좌우 짝 부위(볼 · 눈 · 눈썹)는 두 쪽에서 찾은 칸을 합쳐 기준 하나를 낸다. 한쪽만 바른 단계에서 못 찾아 반대쪽 모양을 뒤집어 쓴 쪽은 빼서, 안 바른 쪽 색이 기준을 옅게 만들지 않는다. 쪽마다 따로 낸 색은 AI 서버 `area_step` 기록의 `colors`에만 남는다.
+
+| `reason` | 뜻 |
+| --- | --- |
+| `noArea` | 찾은 영역이 없음. `template` 단계는 늘 이 이유다 |
+| `noMaps` | 쓸 사진이 없어 색을 못 뽑음 |
+| `tooFewCells` | 가려진 칸을 빼고 남은 칸이 너무 적음 |
+| `colorSpread` | 사진마다 색이 화장으로 바뀐 양보다 더 흔들려 화장 색인지 알 수 없음 |
+| `sidesDisagree` | 좌우 짝 부위에서 한쪽은 어두워지고 다른 쪽은 밝아짐. 합치면 서로 지워져 어느 쪽보다도 작게 나오고, 적어도 한쪽은 화장 색이 아니다 |
+| `notDarker` | 어두워지는 화장(아이라인 · 눈썹 · 쉐딩)인데 고른 값이 어두워지지 않음(`lighter` · `same`). 찾은 칸이 그린 자리가 아니라 밝아진 칸이거나 색만 바뀐 칸이다 |
+
+`gauge`가 `null`이면 기준이 없다는 뜻이다. `notApplicable` · `failed` 단계, 게이지 기준을 넣기 전에 만든 결과, 색 뽑기 중 오류가 난 결과가 그렇다.
+
+한 단계에 하위 단계가 여럿이면(아이섀도 윗눈두덩 · 눈 밑, 코 쉐딩 · 코 밖 쉐딩) 기준도 하위 단계마다 따로다. FE는 화면에 지금 보이는 하위 단계(제목 옆 「영역 1/3」)의 `gauge`를 쓴다. 그 하위 단계의 `gauge`가 없거나 `reason`이 있으면, 같은 단계의 다른 하위 단계 값을 빌리지 않고 그 하위 단계 동안 게이지를 숨긴다. 자리마다 색과 진하기가 달라서다.
+색 · 효과 · 진하기를 내는 방법과 근거 숫자는 [GAUGE_REFERENCE_COLOR.md](../../docs/experiments/GAUGE_REFERENCE_COLOR.md) · [GAUGE_MAKEUP_EFFECT_SCALE.md](../../docs/experiments/GAUGE_MAKEUP_EFFECT_SCALE.md)에 있다.
 
 ## 기본 가이드 키 (`templateId`)
 

@@ -27,6 +27,9 @@ from app.schemas.guide_area import (
     NO_AREA_MAKEUPS,
     AreaStep,
     AreaSubStep,
+    GaugeColor,
+    GaugeEffect,
+    GaugeReference,
     GuideArea,
     GuideSet,
     MeshAnchor,
@@ -145,6 +148,7 @@ LINE_EXCLUSION_PATTERN = re.compile(
 SURROUND_SHARE = 0.5
 MIN_COLOR_CELLS = 20
 
+DARKENING_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow", "contour")
 ORDERED_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow")
 STEP_MAKEUPS: tuple[Makeup, ...] = (*ORDERED_MAKEUPS, "eyeshadow", "contour")
 
@@ -183,7 +187,8 @@ def build_guide_area(
     찾은 영역마다 단계 동안의 사진으로 바른 방향을 찾아 화살표를 더하고(_with_directions),
     area_step 기록의 directions에 영역 묶음마다 화살표를 넣었는지와 안 넣은 이유를 남긴다.
     찾은 영역마다 대표 색도 뽑아(step_colors) area_step 기록의 colors에 남긴다.
-    색은 기록에만 남고 돌려주는 가이드 영역에는 넣지 않는다.
+    돌려주는 가이드 영역에는 하위 단계마다 그중 하나를 골라
+    게이지 기준(gauge)으로 넣는다(step_gauges).
     단계마다 area_step 기록에 결과 상태·이유와, 판정을 통과했는데 부위 분석에서 빠진 사진 번호를
     이유별로(area_preparation.recording_dropped) 남긴다.
     부위 분석은 앞 단계 끝과 다음 단계 시작 사이의 사진만 쓴다(area_preparation.within_step).
@@ -255,6 +260,7 @@ def build_guide_area(
             if colors:
                 record["colors"] = colors
             note_colors(step.step_id, colors)
+            sub_steps = step_gauges(sub_steps, colors, step.makeup)
             set_output(span, record)
         area_steps.append(
             AreaStep(
@@ -362,6 +368,78 @@ def step_colors(step_id: str, sub_steps: Sequence[AreaSubStep], notes: StepNotes
     except Exception:
         logger.exception("%s 단계 색 뽑기에서 오류", step_id)
         return []
+
+
+def step_gauges(
+    sub_steps: Sequence[AreaSubStep], colors: Sequence[dict], makeup: Makeup
+) -> list[AreaSubStep]:
+    """하위 단계마다 색 기록(step_colors)에서 고른 게이지 기준(gauge_reference)을 붙인다.
+
+    makeup은 그 단계의 화장 종류다. 색 기록이 없는 하위 단계(notApplicable·failed,
+    색 뽑기 오류)는 gauge 없이 그대로다.
+    """
+    records: dict[str, list[dict]] = {}
+    for record in colors:
+        records.setdefault(record["subStepId"], []).append(record)
+    return [
+        AreaSubStep.model_validate(
+            {
+                **sub_step.model_dump(),
+                "gauge": gauge_reference(records.get(sub_step.sub_step_id, []), makeup),
+            }
+        )
+        for sub_step in sub_steps
+    ]
+
+
+def gauge_reference(records: Sequence[dict], makeup: Makeup) -> GaugeReference | None:
+    """하위 단계 하나의 색 기록들에서 게이지 기준을 고른다. 기록이 없으면 None이다.
+
+    좌우 짝 부위는 찾은 쪽 칸만 합친 기록(region None)을, 영역 묶음이 하나뿐이면 그 기록을 쓴다.
+    FE가 양쪽을 따로 재더라도 한 기준과 견주면 되고, 한쪽만 바른 단계에서 안 바른 쪽 색이
+    기준을 옅게 만들지 않는다. 좌우 따로 낸 색은 area_step 기록에만 남는다.
+    색을 못 뽑은 기록은 그 이유를 reason에 옮긴다.
+    찾은 두 쪽 중 한쪽은 어두워지고 다른 쪽은 밝아졌으면 sidesDisagree 이유를 보낸다.
+    두 쪽 칸을 합치면 반대 방향 변화가 서로 지워져 어느 쪽보다도 작은 값이 나오고,
+    같은 화장이 한쪽만 밝게 바꿀 수는 없어 적어도 한쪽은 화장 색이 아니기 때문이다.
+    어두워지는 화장(DARKENING_MAKEUPS)인데 고른 기록이 어두워지지 않았으면 notDarker 이유를 보낸다.
+    찾은 칸이 그린 선이 아니라 밝아진 칸이거나 색만 바뀐 칸이라 기준으로 쓸 수 없다.
+    """
+    merged = [record for record in records if record["region"] is None]
+    chosen = merged[0] if merged else records[0] if len(records) == 1 else None
+    if chosen is None:
+        return None
+    reason = chosen["reason"] or ("sidesDisagree" if sides_disagree(records) else None)
+    applied, effect = chosen["applied"], chosen["effect"]
+    if reason is None and effect is not None and not_darker(effect, makeup):
+        reason = "notDarker"
+    if reason is not None:
+        return GaugeReference(color=None, effect=None, strength=None, reason=reason)
+    if applied is None or effect is None:
+        return None
+    return GaugeReference(
+        color=GaugeColor(hex=applied["hex"], lab=applied["lab"]),
+        effect=GaugeEffect(
+            delta=effect["delta"], size=effect["size"], direction=effect["direction"]
+        ),
+        strength=effect["strength"],
+        reason=None,
+    )
+
+
+def sides_disagree(records: Sequence[dict]) -> bool:
+    """찾은 쪽(뒤집어 쓰지 않은 쪽) 기록 중 어두워진 쪽과 밝아진 쪽이 함께 있는지."""
+    directions = {
+        record["effect"]["direction"]
+        for record in records
+        if record["region"] is not None and not record["mirrored"] and record["effect"]
+    }
+    return {"darker", "lighter"} <= directions
+
+
+def not_darker(effect: dict, makeup: Makeup) -> bool:
+    """어두워지는 화장(DARKENING_MAKEUPS)의 효과가 darker가 아닌지."""
+    return makeup in DARKENING_MAKEUPS and effect["direction"] != "darker"
 
 
 def _piece(guide_set: GuideSet, notes: StepNotes) -> Piece:

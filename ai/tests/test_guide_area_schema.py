@@ -9,6 +9,7 @@ from tests.test_guide_area import (
     broken_sample,
     eyeshadow_key_sample,
     load_sample,
+    without_gauge,
 )
 from tools.export_guide_area_schema import SCHEMA_PATH, build_schema
 
@@ -19,6 +20,10 @@ SCHEMA_CATCHES = [
     "끝점 없는 arrow",
     "단계 화장 종류에 기본 가이드 키",
     "없는 기본 가이드 키",
+    "진하기가 100을 넘음",
+    "hex 모양이 다름",
+    "없는 게이지 이유",
+    "없는 밝기 방향",
 ]
 
 
@@ -33,6 +38,10 @@ def test_shared_schema_matches_model():
 
 def test_sample_passes_shared_schema():
     load_validator().validate(load_sample())
+
+
+def test_result_made_before_gauge_passes_shared_schema():
+    load_validator().validate(without_gauge())
 
 
 def test_arrow_beside_polygon_passes_shared_schema():

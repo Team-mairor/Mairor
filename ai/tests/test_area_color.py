@@ -1,11 +1,20 @@
+from typing import get_args
+
 import numpy as np
 import pytest
 
+from app.schemas.guide_area import GaugeReason
 from app.tasks.area import guide_area_builder
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
-from app.tasks.area.guide_area_builder import pair_sub_step, step_colors, template_sub_step
+from app.tasks.area.guide_area_builder import (
+    gauge_reference,
+    pair_sub_step,
+    step_colors,
+    step_gauges,
+    template_sub_step,
+)
 from app.tasks.area.parts import area_color as colors
 from app.tasks.area.parts import blush_area
 from app.tasks.area.parts.area_color import (
@@ -15,6 +24,7 @@ from app.tasks.area.parts.area_color import (
     MIN_SPREAD_PHOTOS,
     SPREAD_OVER_CHANGE_MAX,
     AreaColor,
+    ColorReason,
     Piece,
     StepMaps,
     StepNotes,
@@ -418,3 +428,169 @@ def test_step_colors_error_does_not_break_area(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(guide_area_builder, "area_color", broken)
 
     assert step_colors("s1", [cheek_sub_step()], cheek_maps()) == []
+
+
+def test_step_gauges_uses_color_of_both_sides_together() -> None:
+    """FE는 볼 두 쪽을 재도 한 기준과 견준다. 좌우를 합친 기록이 기준이 되는지 본다."""
+    sub_step = cheek_sub_step()
+    records = step_colors("s1", [sub_step], cheek_maps())
+
+    gauge = step_gauges([sub_step], records, "blush")[0].gauge
+
+    both = records[2]
+    assert gauge.color.hex == both["applied"]["hex"]
+    assert list(gauge.color.lab) == both["applied"]["lab"]
+    assert gauge.effect.size == both["effect"]["size"]
+    assert list(gauge.effect.delta) == both["effect"]["delta"]
+    assert gauge.effect.direction == both["effect"]["direction"]
+    assert gauge.strength == both["effect"]["strength"]
+    assert gauge.reason is None
+
+
+def test_step_gauges_leaves_mirrored_side_out_of_reference() -> None:
+    """한쪽만 바른 단계에서 안 바른 쪽 색이 섞이면 기준이 옅어져 덜 발라도 비슷해요가 뜬다."""
+    sub_step = cheek_sub_step()
+    notes = cheek_maps()
+    notes.mirrored.append(("rightCheek", sub_step.guide_sets[1].guides[0].outline))
+    records = step_colors("s1", [sub_step], notes)
+
+    gauge = step_gauges([sub_step], records, "blush")[0].gauge
+
+    assert gauge.color.hex == records[0]["applied"]["hex"]
+
+
+def test_step_gauges_gives_no_area_to_template_steps() -> None:
+    """기본 가이드 단계는 기준이 없다. 빠진 값이 아니라 이유로 보내야 FE가 게이지를 숨길 수 있다."""
+    sub_step = template_sub_step("s1-1", "blush", ["blushColorNotFound"])
+    records = step_colors("s1", [sub_step], cheek_maps())
+
+    gauge = step_gauges([sub_step], records, "blush")[0].gauge
+
+    assert (gauge.color, gauge.effect, gauge.strength, gauge.reason) == (None, None, None, "noArea")
+
+
+def test_step_gauges_moves_reason_when_color_is_missing() -> None:
+    """찾은 영역인데 색을 못 뽑으면(쓸 사진 없음) 그 이유가 기준 자리에 가야 한다."""
+    sub_step = cheek_sub_step()
+    notes = cheek_maps()
+    notes.maps.clear()
+    records = step_colors("s1", [sub_step], notes)
+
+    gauge = step_gauges([sub_step], records, "blush")[0].gauge
+
+    assert (gauge.color, gauge.reason) == (None, "noMaps")
+
+
+def test_step_gauges_keeps_sub_steps_when_color_fails() -> None:
+    """색 뽑기가 실패하면 기록이 비고, 영역 안내는 gauge 없이 그대로 나가야 한다."""
+    sub_step = cheek_sub_step()
+
+    out = step_gauges([sub_step], [], "blush")[0]
+
+    assert out.gauge is None
+    assert out.model_dump(exclude={"gauge"}) == sub_step.model_dump(exclude={"gauge"})
+
+
+def effect_record(region: str | None, direction: str, size: float, mirrored: bool = False) -> dict:
+    lightness = {"darker": -size, "lighter": size, "same": 0.0}[direction]
+    return {
+        "subStepId": "s1-1",
+        "region": region,
+        "mirrored": mirrored,
+        **color_record(AreaColor()),
+        "applied": {"rgb": [215, 127, 126], "hex": "#D77F7E", "lab": [62.0, 35.0, 18.0]},
+        "effect": {
+            "method": "light",
+            "delta": [lightness, 4.0, 1.0],
+            "base": [65.0, 31.0, 17.0],
+            "size": size,
+            "direction": direction,
+            "strength": round(size * 5, 1),
+        },
+    }
+
+
+def test_gauge_reference_uses_only_record_of_single_region() -> None:
+    """입술처럼 영역 묶음이 하나면 합친 기록 없이 그 부위 기록 하나가 기준이다."""
+    gauge = gauge_reference([effect_record("lipsOuter", "darker", 5.18)], "lip")
+
+    assert (gauge.color.hex, gauge.effect.size, gauge.strength) == ("#D77F7E", 5.18, 25.9)
+
+
+def test_gauge_reference_is_none_without_records() -> None:
+    """기록이 없는 하위 단계(해당 없음·실패)는 기준 자리를 비워 둔다."""
+    assert gauge_reference([], "lip") is None
+
+
+def test_gauge_reference_rejects_sides_that_changed_opposite_ways() -> None:
+    """한쪽은 어두워지고 다른 쪽은 밝아지면 합친 값이 서로 지워져 어느 쪽보다도 작아진다.
+
+    시험 영상 아이라인에서 왼쪽 22.81(밝아짐)·오른쪽 14.47(어두워짐)이 합쳐 7.2로 나온 경우다.
+    """
+    records = [
+        effect_record("leftEye", "lighter", 22.81),
+        effect_record("rightEye", "darker", 14.47),
+        effect_record(None, "darker", 7.2),
+    ]
+
+    gauge = gauge_reference(records, "eyeliner")
+
+    assert (gauge.color, gauge.reason) == (None, "sidesDisagree")
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [("darker", "same"), ("same", "same"), ("lighter", "lighter")],
+)
+def test_gauge_reference_keeps_sides_that_do_not_oppose(left: str, right: str) -> None:
+    """한쪽이 거의 그대로(same)인 것은 옅게 바른 것일 수 있어 반대로 보지 않는다."""
+    records = [
+        effect_record("leftEye", left, 3.0),
+        effect_record("rightEye", right, 1.0),
+        effect_record(None, left, 2.0),
+    ]
+
+    assert gauge_reference(records, "eyeshadow").reason is None
+
+
+def test_gauge_reference_ignores_mirrored_side_direction() -> None:
+    """못 찾아 반대쪽 모양을 뒤집어 쓴 쪽은 바른 곳이 아니라 방향을 보지 않는다."""
+    records = [
+        effect_record("leftEye", "lighter", 2.0, mirrored=True),
+        effect_record("rightEye", "darker", 8.0),
+        effect_record(None, "darker", 8.0),
+    ]
+
+    assert gauge_reference(records, "eyeliner").effect.size == 8.0
+
+
+def test_color_reasons_are_gauge_reasons() -> None:
+    """색 기록의 이유는 그대로 게이지 기준 이유로 나가므로, 형식이 모르는 이유가 없어야 한다."""
+    assert set(get_args(ColorReason)) <= set(get_args(GaugeReason))
+
+
+@pytest.mark.parametrize(
+    ("makeup", "direction"),
+    [("eyeliner", "lighter"), ("eyeliner", "same"), ("brow", "lighter"), ("contour", "same")],
+)
+def test_gauge_reference_rejects_darkening_makeup_that_did_not_darken(
+    makeup: str, direction: str
+) -> None:
+    """아이라인·눈썹·쉐딩은 어두워지는 화장이다. 어두워지지 않았으면 찾은 칸이 그린 자리가 아니다.
+
+    시연 영상 아이라인 step_28-1(same)·step_28-2(lighter)가 이 경우다.
+    """
+    gauge = gauge_reference([effect_record("leftEye", direction, 5.6)], makeup)
+
+    assert (gauge.color, gauge.reason) == (None, "notDarker")
+
+
+@pytest.mark.parametrize(
+    ("makeup", "direction"),
+    [("eyeliner", "darker"), ("blush", "lighter"), ("eyeshadow", "same"), ("lip", "same")],
+)
+def test_gauge_reference_keeps_direction_that_fits_makeup(makeup: str, direction: str) -> None:
+    """어두워진 아이라인과, 밝아지거나 색만 바뀔 수 있는 블러셔·섀도·립은 값을 그대로 보낸다."""
+    gauge = gauge_reference([effect_record("leftEye", direction, 4.0)], makeup)
+
+    assert gauge.reason is None

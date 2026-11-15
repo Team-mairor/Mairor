@@ -34,11 +34,17 @@
                 ] }
               ]
             }
-          ]
+          ],
+          "gauge": {
+            "color": { "hex": "#D77F7E", "lab": [62.62, 33.87, 15.3] },
+            "effect": { "delta": [-3.96, 9.13, 2.76], "size": 5.18, "direction": "darker" },
+            "strength": 25.9,
+            "reason": null
+          }
         }
       ]
     },
-    { "stepId": "s18", "order": 18, "makeup": "lip", "subSteps": [{ "subStepId": "s18-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "lip", "guideSets": [] }] },
+    { "stepId": "s18", "order": 18, "makeup": "lip", "subSteps": [{ "subStepId": "s18-1", "order": 1, "status": "template", "reasons": ["noUsableFrame"], "templateId": "lip", "guideSets": [], "gauge": { "color": null, "effect": null, "strength": null, "reason": "noArea" } }] },
     { "stepId": "s19", "order": 19, "makeup": "lip", "subSteps": [{ "subStepId": "s19-1", "order": 1, "status": "failed", "reasons": ["analysisError"], "templateId": null, "guideSets": [] }] }
   ]
 }

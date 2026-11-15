@@ -26,6 +26,17 @@ GUIDE_SETS = [
     }
 ]
 ARROW = {"type": "arrow", "from": ANCHORS[0], "to": ANCHORS[2]}
+GAUGE = {
+    "color": {"hex": "#D77F7E", "lab": [62.62, 33.87, 15.3]},
+    "effect": {"delta": [-3.96, 9.13, 2.76], "size": 5.18, "direction": "darker"},
+    "strength": 25.9,
+    "reason": None,
+}
+NO_AREA = {"color": None, "effect": None, "strength": None, "reason": "noArea"}
+
+
+def gauge(**changes) -> dict:
+    return json.loads(json.dumps(GAUGE)) | changes
 
 
 def load_sample() -> dict:
@@ -61,6 +72,21 @@ BROKEN: dict[str, Callable[[dict], None]] = {
     "끝점 없는 arrow": lambda s: lip_polygon(s).update(type="arrow"),
     "화살표만 있는 묶음": lambda s: sub_step(s, LIP)["guideSets"][0].update(guides=[ARROW]),
     "이유 없는 failed": lambda s: sub_step(s, LIP_FAILED).update(reasons=[]),
+    "template에 값이 든 gauge": lambda s: sub_step(s, LIP_TEMPLATE).update(gauge=gauge()),
+    "extracted에 noArea gauge": lambda s: sub_step(s, LIP).update(gauge=NO_AREA),
+    "failed에 gauge": lambda s: sub_step(s, LIP_FAILED).update(gauge=NO_AREA),
+    "이유와 값이 같이 든 gauge": lambda s: sub_step(s, LIP).update(
+        gauge=gauge(reason="colorSpread")
+    ),
+    "값 없이 이유도 없는 gauge": lambda s: sub_step(s, LIP).update(gauge=gauge(strength=None)),
+    "진하기가 100을 넘음": lambda s: sub_step(s, LIP).update(gauge=gauge(strength=120)),
+    "hex 모양이 다름": lambda s: sub_step(s, LIP).update(
+        gauge=gauge(color={"hex": "D77F7E", "lab": [62.62, 33.87, 15.3]})
+    ),
+    "없는 게이지 이유": lambda s: sub_step(s, LIP_TEMPLATE).update(
+        gauge=NO_AREA | {"reason": "noFace"}
+    ),
+    "없는 밝기 방향": lambda s: sub_step(s, LIP)["gauge"]["effect"].update(direction="up"),
 }
 
 
@@ -106,6 +132,30 @@ def test_arrow_beside_polygon_passes_model_and_keeps_its_keys():
     arrow = area.steps[LIP].sub_steps[0].guide_sets[0].guides[-1]
     assert arrow.type == "arrow"
     assert arrow.model_dump(by_alias=True, mode="json") == ARROW
+
+
+def without_gauge() -> dict:
+    sample = load_sample()
+    for step in sample["steps"]:
+        for one in step["subSteps"]:
+            one.pop("gauge", None)
+    return sample
+
+
+def test_sample_gauge_passes_model_and_keeps_its_keys():
+    area = GuideArea.model_validate(load_sample())
+
+    dumped = area.model_dump(by_alias=True, mode="json")
+    assert sub_step(dumped, LIP)["gauge"] == GAUGE
+    assert sub_step(dumped, LIP_TEMPLATE)["gauge"] == NO_AREA
+    assert sub_step(dumped, LIP_FAILED)["gauge"] is None
+
+
+def test_result_made_before_gauge_still_passes_model():
+    """게이지 기준을 넣기 전에 만든 결과(BE에 저장된 것)도 그대로 읽혀야 한다."""
+    area = GuideArea.model_validate(without_gauge())
+
+    assert all(one.gauge is None for step in area.steps for one in step.sub_steps)
 
 
 @pytest.mark.parametrize("name", BROKEN)
