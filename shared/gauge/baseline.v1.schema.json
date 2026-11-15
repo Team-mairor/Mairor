@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GaugeBaselineSpec",
+  "description": "사용자 캠 화장 효과를 잴 때 쓰는 기준(맨얼굴 기준 · 단계 시작 기준)의 값과 칸 표. ai/tools/gauge/export_baseline_spec.py가 만든다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "meshVersion", "grid", "frames", "light", "cells"],
+  "properties": {
+    "version": { "const": "v1" },
+    "meshVersion": { "const": "v1", "description": "shared/face-mesh의 uv · triangles 버전" },
+    "grid": { "type": "integer", "minimum": 8, "description": "얼굴 지도(UV 0~1)를 grid × grid 칸으로 나눈다" },
+    "frames": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "pitchCenterFrames", "frontMax", "rollMax", "eyesOpenMin"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 1, "description": "기준 하나를 만드는 좋은 사진 수" },
+        "pitchCenterFrames": { "type": "integer", "minimum": 1, "description": "튜토리얼 시작 때 그 사람 정면 pitch(가운데 값)를 정하는 사진 수. 좌우 고개 · 기울기 · 눈 뜸 조건을 지킨 앞 사진들이다" },
+        "frontMax": { "type": "number", "exclusiveMinimum": 0, "description": "좋은 사진의 |yaw| 최댓값, 그리고 |pitch − 그 사람 정면 pitch| 최댓값(라디안)" },
+        "rollMax": { "type": "number", "exclusiveMinimum": 0, "description": "좋은 사진의 |roll| 최댓값(라디안)" },
+        "eyesOpenMin": { "type": "number", "minimum": 0, "description": "좋은 사진의 눈 뜬 정도 최솟값" }
+      }
+    },
+    "light": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "sigmaCells", "marginCells", "minWeight"],
+      "properties": {
+        "method": { "enum": ["none", "foreheadChin", "skin", "local"] },
+        "sigmaCells": { "type": "number", "exclusiveMinimum": 0, "description": "조명 변화를 넓게 흐리는 가우스 시그마(칸)" },
+        "marginCells": { "type": "integer", "minimum": 0, "description": "바르는 칸 둘레에서 조명 재기에서 더 빼는 칸 수" },
+        "minWeight": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "cells": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shareMin", "measured", "skin"],
+      "properties": {
+        "shareMin": { "type": "number", "minimum": 0, "maximum": 1 },
+        "measured": { "$ref": "#/$defs/cellRows", "description": "색을 재는 칸(얼굴 안, 두 눈 구멍 밖)" },
+        "skin": { "$ref": "#/$defs/cellRows", "description": "조명을 재는 맨피부 칸(입술 · 눈 · 눈썹과 그 둘레 밖)" }
+      }
+    }
+  },
+  "$defs": {
+    "cellRows": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[01]+$" },
+      "description": "grid줄. 줄 i의 j번째 글자는 UV v가 i/grid~(i+1)/grid, u가 j/grid~(j+1)/grid인 칸이다(1이면 씀)."
+    }
+  }
+}

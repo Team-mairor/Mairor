@@ -36,3 +36,4 @@
 | [노트북 처리기에서 쉐딩 단계의 직전·직후 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-contour-window.md) | 2026-11-14 | 김현수 → 박형준 | 요청 |
 | [코 쉐딩 기본 가이드(contourNose)를 AI가 직접 보내고 컨실러 단계는 영역 없이 보냄](2026-11-14-hyeonsoo-seoyun-contour-nose-and-concealer.md) | 2026-11-14 | 김현수 → 한서윤 | 요청 |
 | [AI 서버 크기 올리기와 가이드 영역 줄 수 설정](2026-11-14-hyeonsoo-jungyoon-ai-server-size.md) | 2026-11-14 | 김현수 → 김정윤 | 요청 |
+| [게이지용 사용자 캠 기준 잡기: 언제 잡을지 · 카메라 잠금 · 저장하지 않기](2026-11-15-hyeonsoo-seoyun-gauge-baseline.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
