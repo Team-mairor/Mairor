@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from app.tasks.area.landmarks.occlusion_finder import INPUT_NAME, MODEL_PATH, check_model_file
+from app.tasks.area.landmarks.occlusion_finder import INPUT_NAME, MODEL_PATH
 
 onnx = pytest.importorskip("onnx")
 onnxruntime = pytest.importorskip("onnxruntime")
@@ -9,24 +9,32 @@ onnxruntime = pytest.importorskip("onnxruntime")
 
 @pytest.fixture(scope="module")
 def sessions():
-    from tools.gauge.export_occlusion_web import flexible
+    from tools.gauge.export_occlusion_web import SOURCE_PATH, flexible, source_problem
 
-    try:
-        check_model_file(MODEL_PATH)
-    except Exception as error:
-        pytest.skip(f"가림 찾기 모델 파일이 없다: {error}")
+    problem = source_problem()
+    if problem:
+        pytest.skip(f"줄이기 전 가림 찾기 모델을 쓸 수 없다: {problem}")
     options = onnxruntime.SessionOptions()
     options.log_severity_level = 3
     original = onnxruntime.InferenceSession(
-        str(MODEL_PATH), options, providers=["CPUExecutionProvider"]
+        str(SOURCE_PATH), options, providers=["CPUExecutionProvider"]
     )
-    changed = flexible(onnx.load(str(MODEL_PATH))).SerializeToString()
+    changed = flexible(onnx.load(str(SOURCE_PATH))).SerializeToString()
     flex = onnxruntime.InferenceSession(changed, options, providers=["CPUExecutionProvider"])
     return original, flex
 
 
-def test_same_answer_as_the_service_model_at_512(sessions):
-    """학습한 값은 그대로라 512에서는 서비스 모델과 같은 가림 표가 나와야 한다."""
+def test_builds_from_the_model_before_quantizing():
+    """서버는 8비트 판을 쓰지만 브라우저 모델은 줄이기 전 모델에서 만든다."""
+    from tools.gauge.export_occlusion_web import SOURCE_PATH
+
+    assert SOURCE_PATH.name == "occlusion_bisenet.v1.onnx"
+    assert SOURCE_PATH.parent == MODEL_PATH.parent
+    assert SOURCE_PATH != MODEL_PATH
+
+
+def test_same_answer_as_the_original_model_at_512(sessions):
+    """학습한 값은 그대로라 512에서는 줄이기 전 모델과 같은 가림 표가 나와야 한다."""
     original, flex = sessions
     x = np.random.default_rng(0).normal(size=(1, 3, 512, 512)).astype(np.float32)
     a = original.run(None, {INPUT_NAME: x})[0]

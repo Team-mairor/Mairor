@@ -97,6 +97,8 @@ GO지승 립 직전(입술 그대로)의 입 벌림별 립 오차는 0~0.05 3.9 
 
 ### 가림 모델 입력 크기 · 브라우저 시간
 
+모두 줄이기 전 모델(`occlusion_bisenet.v1.onnx`, 32비트)로 쟀다. 서버는 숫자를 8비트로 줄인 판(`occlusion_bisenet.v1.int8.onnx`)을 쓰지만, 8비트 판은 줄이면서 Resize 목표 크기가 상수 하나로 접혀 `export_occlusion_web.py`로 입력 크기를 바꿀 수 없다.
+
 | 입력 | 「20% 넘게 가림」 판정이 512와 같음 (놓침 · 더 걸림) | 가린 몫 차이 | 브라우저 wasm 한 스레드 | 브라우저 WebGPU (+라벨 고르기) | 파이썬 한 스레드 |
 | --- | --- | --- | --- | --- | --- |
 | 512 | – | – | 1,862ms | 139ms (+58) | 314ms |
@@ -268,4 +270,4 @@ uv run python tools/gauge/export_measure_spec.py
 uv run --group train python tools/gauge/export_occlusion_web.py <저장할 onnx>
 ```
 
-첫 줄은 시험, 둘째 · 셋째 줄은 `stability.py` · `measure.py` 값을 바꾼 뒤 `shared/gauge/` 시험 데이터를 다시 만든다. 넷째 줄은 브라우저용 가림 모델을 만든다(512에서 서비스 모델과 같은 답, 입력은 32의 배수).
+첫 줄은 시험, 둘째 · 셋째 줄은 `stability.py` · `measure.py` 값을 바꾼 뒤 `shared/gauge/` 시험 데이터를 다시 만든다. 넷째 줄은 줄이기 전 모델에서 브라우저용 가림 모델을 만든다(512에서 줄이기 전 모델과 같은 답, 입력은 32의 배수).

@@ -1,6 +1,9 @@
 """가림 찾기 모델(app/weights/occlusion_bisenet.v1.onnx)을 작은 입력으로도 돌게 바꿔 저장한다.
 
 사용자 캠 게이지는 사진을 서버로 보내지 않아 브라우저가 이 모델을 돌린다.
+서버는 숫자를 8비트로 줄인 판(occlusion_finder.MODEL_PATH)을 쓰지만, 이 도구는 줄이기 전
+모델(SOURCE_PATH)에서 만든다. 8비트 판은 줄이면서 Resize 목표 크기가 상수 하나로 접혀
+아래 2번 고치기가 바꿀 자리가 없고, 브라우저 정확도 · 시간도 줄이기 전 모델로 쟀다.
 
 실행 (ai/ 폴더에서):
   uv run --group train python tools/gauge/export_occlusion_web.py <저장할 onnx>
@@ -15,6 +18,7 @@
 docs/experiments/GAUGE_UNMEASURABLE_SMOOTHING.md에 있다.
 """
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -25,8 +29,11 @@ import numpy as np
 import onnx
 from onnx import helper, numpy_helper
 
-from app.tasks.area.landmarks.occlusion_finder import INPUT_SIZE, MODEL_PATH
+from app.core.paths import WEIGHTS_DIR
+from app.tasks.area.landmarks.occlusion_finder import INPUT_SIZE
 
+SOURCE_PATH = WEIGHTS_DIR / "occlusion_bisenet.v1.onnx"
+SOURCE_SHA256 = "14ccbd897384b1f3ebd92365bcdc0b7f593df74adc6ec3d9dc610c428259280c"
 STRIDE_NAMES = ("flex_hw_start", "flex_hw_end", "flex_hw_axis")
 
 
@@ -119,12 +126,28 @@ def _sort(graph: onnx.GraphProto) -> None:
     graph.node.extend(ordered)
 
 
+def source_problem() -> str | None:
+    """줄이기 전 모델 파일을 쓸 수 없으면 그 까닭을, 쓸 수 있으면 None을 돌려준다.
+
+    Git LFS 포인터만 받은 자리면 파일은 있어도 지문이 SOURCE_SHA256(app/weights/README.md)과 다르다.
+    """
+    if not SOURCE_PATH.is_file():
+        return f"파일이 없다: {SOURCE_PATH}"
+    digest = hashlib.sha256(SOURCE_PATH.read_bytes()).hexdigest()
+    if digest != SOURCE_SHA256:
+        return f"지문이 다르다: {SOURCE_PATH} ({digest})"
+    return None
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("python tools/gauge/export_occlusion_web.py <저장할 onnx>")
+    problem = source_problem()
+    if problem:
+        raise SystemExit(f"줄이기 전 가림 찾기 모델을 쓸 수 없다: {problem}")
     target = Path(sys.argv[1])
     target.parent.mkdir(parents=True, exist_ok=True)
-    onnx.save(flexible(onnx.load(str(MODEL_PATH))), str(target))
+    onnx.save(flexible(onnx.load(str(SOURCE_PATH))), str(target))
     print(target)
 
 
