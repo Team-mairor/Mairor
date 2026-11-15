@@ -23,6 +23,7 @@ from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask, span
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
+from app.tasks.area.parts.area_color import note_maps
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     drop_blurry,
@@ -98,7 +99,9 @@ def find_blush_area(
     zone = cheek_range(cheek)
     before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
     after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)
-    return blush_area_on_maps(before, after, cheek, before_unknown | after_unknown)
+    unknown = before_unknown | after_unknown
+    note_maps([cheek], before, after, unknown, after_rows, load_photo, occlusion)
+    return blush_area_on_maps(before, after, cheek, unknown)
 
 
 @cache

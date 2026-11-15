@@ -30,6 +30,7 @@ from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
+from app.tasks.area.parts.area_color import note_maps
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     drop_blurry,
@@ -139,6 +140,7 @@ def find_eyeliner_area(
         slice_ms: [rows_to_known_map(rows, load_photo, occlusion, zone) for rows in pieces]
         for slice_ms, pieces in after_groups(after_rows, step_end_ms).items()
     }
+    note_maps([eye], before, None, before_unknown, after_rows, load_photo, occlusion)
     changed, unknown = zone_change(before, afters, eye, before_unknown)
     return check_eyeliner_area(changed, eye, unknown)
 
@@ -358,14 +360,7 @@ def paired_eyeliner(
     아이라인은 한 눈씩 그리는 일이 많아 한 눈만 찾은 단계도 쓴다. 두 눈을 다 찾으면 창마다
     두 눈이 서로 다른 곳에서 빠져, 합치면 서로 채워 흔들림이 줄었다.
     """
-    masks = {eye: areas[eye].zone(zone).mask for eye in EYES if eye in areas}
-    masks = {eye: mask for eye, mask in masks.items() if mask is not None}
-    if drawn is not None:
-        size = 2 * DRAWN_GROW_CELLS + 1
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
-        grown = cv2.dilate(drawn.astype(np.uint8), kernel) > 0
-        masks = {eye: mask & ~grown for eye, mask in masks.items()}
-    found = {eye: mask for eye, mask in masks.items() if int(mask.sum()) >= FOUND_MIN_CELLS[zone]}
+    found = used_eyeliner(areas, zone, drawn)
     if not found:
         return None
     left = found.get(EYES[0])
@@ -380,6 +375,26 @@ def paired_eyeliner(
         EYES[0]: merged & eyeliner_range(EYES[0], zone),
         EYES[1]: merged[:, ::-1] & eyeliner_range(EYES[1], zone),
     }
+
+
+def used_eyeliner(
+    areas: Mapping[RegionName, EyelinerArea],
+    zone: Zone,
+    drawn: np.ndarray | None = None,
+) -> dict[RegionName, np.ndarray]:
+    """자리 하나에서 paired_eyeliner가 쓰는 눈과 그 마스크. 쓸 눈이 없으면 빈 표다.
+
+    찾은 마스크에서 drawn(앞 단계들에서 안내한 칸) 둘레 DRAWN_GROW_CELLS칸까지 빼고,
+    남은 칸이 FOUND_MIN_CELLS칸 이상인 눈만 남긴다. 여기 없는 눈은 반대쪽 눈 모양을 뒤집어 쓴다.
+    """
+    masks = {eye: areas[eye].zone(zone).mask for eye in EYES if eye in areas}
+    masks = {eye: mask for eye, mask in masks.items() if mask is not None}
+    if drawn is not None:
+        size = 2 * DRAWN_GROW_CELLS + 1
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
+        grown = cv2.dilate(drawn.astype(np.uint8), kernel) > 0
+        masks = {eye: mask & ~grown for eye, mask in masks.items()}
+    return {eye: mask for eye, mask in masks.items() if int(mask.sum()) >= FOUND_MIN_CELLS[zone]}
 
 
 def _change_without_lighting(change: np.ndarray, unknown: np.ndarray | None) -> np.ndarray:

@@ -139,6 +139,7 @@ def test_each_area_step_is_recorded_under_the_area_build(backend, provider):
     """영역을 여러 줄(스레드)로 나눠 만들어도 단계 기록이 이 작업의 영역 만들기 기록 밑에 붙는다.
 
     단계 기록에는 결과와, 판정을 통과했는데 부위 분석에서 빠진 사진이 이유별로 남는다.
+    영역 색도 남는다. 이 요청의 단계는 사진이 없어 기본 가이드라 색 대신 noArea 이유다.
     """
     make_client(passing_llm()).post(JOBS, json=frames_request(backend))
 
@@ -149,7 +150,8 @@ def test_each_area_step_is_recorded_under_the_area_build(backend, provider):
     for span in steps.values():
         assert span.parent.span_id == build.context.span_id
         assert span.context.trace_id == build.context.trace_id
-        assert set(output(span)) == {"status", "reasons", "droppedPhotos"}
+        assert set(output(span)) == {"status", "reasons", "droppedPhotos", "colors"}
+        assert [color["reason"] for color in output(span)["colors"]] == ["noArea"]
     assert metadata(steps["area_step s2"])["step_id"] == "s2"
     assert output(steps["area_step s2"])["droppedPhotos"] == {}
 

@@ -35,6 +35,7 @@ from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import fill_holes, largest_piece, open_close, polygon_mask
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
+from app.tasks.area.parts.area_color import note_maps
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     drop_blurry,
@@ -150,6 +151,7 @@ def find_eyeshadow_area(
     before, before_unknown = rows_to_known_map(before_rows, load_photo, occlusion, zone)
     after, after_unknown = rows_to_known_map(after_rows, load_photo, occlusion, zone)
     unknown = before_unknown | after_unknown
+    note_maps([eye], before, after, unknown, after_rows, load_photo, occlusion)
     reddening = eyeshadow_reddening(before, after, unknown)
     area = check_eyeshadow_area(reddening, eye, unknown)
     if area.reason == "noUsableFrame" or area.zone("under").mask is not None:

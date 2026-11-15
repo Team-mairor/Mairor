@@ -4,9 +4,12 @@
 서비스와 같게 가림 찾기 모델로 사진마다 가린 칸을 빼고 만든다.
 서비스와 같게 편 지도를 기억해(RememberedPhotos), 흐린 사진을 잴 때 편 지도를 다시 쓴다.
 샘플 폴더에 BE 형식 가이드 입력(guide_input.json)이 있으면 그 단계로 만든다(guide_steps).
+찾은 영역마다 뽑은 대표 색은 가이드 영역에 들어가지 않아 output/area_colors.json에 따로 저장한다.
+색 표와 견본 그림은 tools/area_color_report.py로 만든다.
 실행 (ai/ 폴더에서): uv run python tools/build_guide_area.py samples/local_01_lip_seq
 """
 
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -22,11 +25,13 @@ from app.tasks.area.guide_area_builder import build_guide_area
 from app.tasks.area.landmarks.occlusion import remember_by_frame
 from app.tasks.area.landmarks.occlusion_finder import find_occlusion
 from app.tasks.area.landmarks.reference_input import load_reference_input, read_frame_rgb
+from app.tasks.area.parts.area_color import recording_colors
 from app.tasks.area.parts.area_preparation import RememberedPhotos
 from app.tasks.area.reference_area import FACE_MAP_KEEP, OCCLUSION_KEEP
 
 CHECKED_FILE = Path("output") / "frames_checked.json"
 OUTPUT_FILE = Path("output") / "guide_area.json"
+COLORS_FILE = Path("output") / "area_colors.json"
 GUIDE_INPUT_FILE = "guide_input.json"
 
 
@@ -57,16 +62,18 @@ def main() -> None:
     reference = load_reference_input(folder)
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
     result = LandmarksResult.model_validate_json(checked_path.read_text(encoding="utf-8"))
-    area = build_guide_area(
-        reference.manifest.video_id,
-        guide_steps(folder, reference.manifest.steps),
-        result,
-        RememberedPhotos(
-            lambda row: read_frame_rgb(reference, frames[row.frame_index]), FACE_MAP_KEEP
-        ),
-        occlusion=remember_by_frame(find_occlusion, OCCLUSION_KEEP),
-    )
+    with recording_colors() as colors:
+        area = build_guide_area(
+            reference.manifest.video_id,
+            guide_steps(folder, reference.manifest.steps),
+            result,
+            RememberedPhotos(
+                lambda row: read_frame_rgb(reference, frames[row.frame_index]), FACE_MAP_KEEP
+            ),
+            occlusion=remember_by_frame(find_occlusion, OCCLUSION_KEEP),
+        )
     path = save(area, folder)
+    colors_path = save_colors(area, colors, folder)
 
     for step in area.steps:
         for sub_step in step.sub_steps:
@@ -80,6 +87,26 @@ def main() -> None:
             )
             print(f"{sub_step.sub_step_id} {step.makeup}: {sub_step.status} ({detail})")
     print(f"저장: {path}")
+    print(f"저장: {colors_path}")
+
+
+def save_colors(area: GuideArea, colors: dict[str, list[dict]], folder: Path) -> Path:
+    """단계마다 뽑은 색 기록을 <샘플 폴더>/output/area_colors.json에 저장하고 경로를 돌려준다.
+
+    colors는 빌더가 단계 ID별로 모은 색 기록(area_color.recording_colors)이다.
+    단계 순서대로 stepId·makeup·colors를 적고, 색을 뽑지 않은 단계는 colors가 빈 목록이다.
+    """
+    steps = [
+        {"stepId": step.step_id, "makeup": step.makeup, "colors": colors.get(step.step_id, [])}
+        for step in area.steps
+    ]
+    path = folder / COLORS_FILE
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(
+        json.dumps({"videoId": area.video_id, "steps": steps}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return path
 
 
 def save(area: GuideArea, folder: Path) -> Path:

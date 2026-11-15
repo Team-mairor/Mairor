@@ -25,6 +25,7 @@ from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import polygon_mask, span
 from app.tasks.area.common.region_points import REGION_POINTS
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
+from app.tasks.area.parts.area_color import note_maps
 from app.tasks.area.parts.area_preparation import (
     PhotoLoader,
     drop_blurry,
@@ -95,6 +96,7 @@ def find_lip_area(
     before, before_unknown = rows_to_known_map(before_photos, load_photo, occlusion, zone)
     after, after_unknown = rows_to_known_map(after_photos, load_photo, occlusion, zone)
     unknown = before_unknown | after_unknown
+    note_maps(["lipsOuter"], before, after, unknown, after_photos, load_photo, occlusion)
     return check_lip_area(lip_area_on_maps(before, after, unknown), unknown)
 
 

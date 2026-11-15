@@ -39,7 +39,7 @@ from app.schemas.manifest import Makeup, Step
 from app.tasks.area.common.face_map import MAP_SIZE, points_to_anchors
 from app.tasks.area.common.mask_outline import smooth_outlines
 from app.tasks.area.common.region_mask import polygon_mask
-from app.tasks.area.direction_finder import add_directions
+from app.tasks.area.direction_finder import add_directions, set_mask
 from app.tasks.area.landmarks.occlusion import OcclusionFinder
 from app.tasks.area.parts import (
     blush_area,
@@ -48,6 +48,17 @@ from app.tasks.area.parts import (
     eyeliner_area,
     eyeshadow_area,
     lip_area,
+)
+from app.tasks.area.parts.area_color import (
+    AreaColor,
+    Piece,
+    StepNotes,
+    area_color,
+    color_record,
+    note_colors,
+    note_mirrored,
+    note_own,
+    recording_maps,
 )
 from app.tasks.area.parts.area_preparation import (
     StepBounds,
@@ -62,6 +73,7 @@ from app.tasks.area.parts.eyeliner_area import (
     EyelinerArea,
     find_eyeliner_area,
     paired_eyeliner,
+    used_eyeliner,
 )
 from app.tasks.area.parts.eyeshadow_area import (
     EYES,
@@ -125,6 +137,7 @@ LINE_EXCLUSION_PATTERN = re.compile(
     rf"(?:{'|'.join(EYE_EXCLUSION_WORDS)})"
 )
 SURROUND_SHARE = 0.5
+MIN_COLOR_CELLS = 20
 
 ORDERED_MAKEUPS: tuple[Makeup, ...] = ("eyeliner", "brow")
 STEP_MAKEUPS: tuple[Makeup, ...] = (*ORDERED_MAKEUPS, "eyeshadow", "contour")
@@ -163,6 +176,8 @@ def build_guide_area(
     None이면 가림을 따로 빼지 않고 사진 여러 장의 중앙값에만 맡긴다.
     찾은 영역마다 단계 동안의 사진으로 바른 방향을 찾아 화살표를 더하고(_with_directions),
     area_step 기록의 directions에 영역 묶음마다 화살표를 넣었는지와 안 넣은 이유를 남긴다.
+    찾은 영역마다 대표 색도 뽑아(step_colors) area_step 기록의 colors에 남긴다.
+    색은 기록에만 남고 돌려주는 가이드 영역에는 넣지 않는다.
     단계마다 area_step 기록에 결과 상태·이유와, 판정을 통과했는데 부위 분석에서 빠진 사진 번호를
     이유별로(area_preparation.recording_dropped) 남긴다.
     부위 분석은 앞 단계 끝과 다음 단계 시작 사이의 사진만 쓴다(area_preparation.within_step).
@@ -186,6 +201,7 @@ def build_guide_area(
                 f"area_step {step.step_id}", {"makeup": step.makeup}, step_id=step.step_id
             ) as span,
             recording_dropped() as dropped,
+            recording_maps() as notes,
             within_step(*bounds[step.step_id]),
         ):
             concealer = concealer_step(step)
@@ -229,6 +245,10 @@ def build_guide_area(
                 ]
             if directions:
                 record["directions"] = directions
+            colors = step_colors(step.step_id, sub_steps, notes)
+            if colors:
+                record["colors"] = colors
+            note_colors(step.step_id, colors)
             set_output(span, record)
         area_steps.append(
             AreaStep(
@@ -270,6 +290,88 @@ def _with_directions(
     except Exception:
         logger.exception("%s 단계 바른 방향 찾기에서 오류", step.step_id)
         return sub_steps, []
+
+
+def step_colors(step_id: str, sub_steps: Sequence[AreaSubStep], notes: StepNotes) -> list[dict]:
+    """찾은 영역(extracted)마다 대표 색을 뽑은 기록(area_color.color_record)들.
+
+    영역 묶음마다 보낸 테두리를 지도 칸으로 되돌려(set_mask) 그 부위의 직전·직후 지도에서
+    색을 뽑는다. 좌우 짝 부위는 보낸 모양 안에서 그쪽이 실제로 찾은 칸에서만 낸다(_piece).
+    기록마다 subStepId와 region이 붙는다.
+    그쪽에서 바른 곳을 못 찾아 반대쪽 모양을 뒤집어 쓴 영역은 mirrored가 참이다.
+    그 칸은 이 단계에서 바르지 않았거나 색 변화가 없던 곳이라 화장 색이 아니다.
+    영역 묶음이 좌우 둘이면 찾은 쪽(mirrored가 아닌 쪽) 칸만 합쳐 낸 색을 region 없이(None)
+    하나 더 적는다. 한쪽만 바른 단계에서 안 바른 쪽 색이 섞이지 않게 하려는 것이다.
+    notes는 이 단계에서 모은 지도와 뒤집어 쓴 영역(recording_maps)이고, 지도가 없는 부위는 noMaps다.
+    앞 단계 영역을 그대로 쓴 눈썹도 이 단계 지도에서 뽑는다.
+    기본 가이드(template) 하위 단계는 색을 뽑지 않고 noArea 이유만 한 줄 적는다.
+    찾은 영역이 없으면 어느 칸이 바른 칸인지 몰라서, 살펴볼 범위 전체의 전후 색 차이가
+    조명 변화와 구별되지 않는다.
+    색 뽑기에서 오류가 나면 로그를 남기고 빈 목록을 돌려준다. 색은 덧붙이는 정보라,
+    못 구해도 영역 안내는 그대로 나가야 한다.
+    """
+    try:
+        records = []
+        for sub_step in sub_steps:
+            if sub_step.status == "template":
+                records.append(
+                    {
+                        "subStepId": sub_step.sub_step_id,
+                        "region": None,
+                        "mirrored": False,
+                        **color_record(AreaColor(reason="noArea")),
+                    }
+                )
+            if sub_step.status != "extracted":
+                continue
+            sides = [
+                (
+                    guide_set.region,
+                    _is_mirrored(guide_set, notes),
+                    [_piece(guide_set, notes)] if guide_set.region in notes.maps else [],
+                )
+                for guide_set in sub_step.guide_sets
+            ]
+            if len(sides) > 1:
+                found = [piece for _, mirrored, pieces in sides if not mirrored for piece in pieces]
+                sides.append((None, False, found))
+            records += [
+                {
+                    "subStepId": sub_step.sub_step_id,
+                    "region": region,
+                    "mirrored": mirrored,
+                    **color_record(area_color(pieces)),
+                }
+                for region, mirrored, pieces in sides
+            ]
+        return records
+    except Exception:
+        logger.exception("%s 단계 색 뽑기에서 오류", step_id)
+        return []
+
+
+def _piece(guide_set: GuideSet, notes: StepNotes) -> Piece:
+    """영역 묶음 하나의 색 조각. 그 부위가 실제로 찾은 칸(note_own)이 있으면 그 칸에서만 색을 낸다.
+
+    찾은 칸이 보낸 모양과 MIN_COLOR_CELLS칸도 겹치지 않으면 보낸 모양 전체에서 낸다.
+    """
+    mask = set_mask(guide_set)
+    own = [
+        notes.own_cells(guide_set.region, shape.outline)
+        for shape in guide_set.guides
+        if shape.type == "polygon"
+    ]
+    own = [cells for cells in own if cells is not None]
+    if own:
+        cells = mask & np.any(own, axis=0)
+        if cells.sum() >= MIN_COLOR_CELLS:
+            return Piece(cells, notes.maps[guide_set.region], around=mask)
+    return Piece(mask, notes.maps[guide_set.region])
+
+
+def _is_mirrored(guide_set: GuideSet, notes: StepNotes) -> bool:
+    outlines = [shape.outline for shape in guide_set.guides if shape.type == "polygon"]
+    return any(notes.is_mirrored(guide_set.region, outline) for outline in outlines)
 
 
 def failed_guide_area(video_id: str, steps: Sequence[Step | GuideInputStep]) -> GuideArea:
@@ -581,6 +683,13 @@ def eyeliner_sub_steps(
         if masks is not None:
             sub_step = eyeliner_sub_step(step_id, masks)
             if sub_step is not None:
+                used = used_eyeliner(areas, zone, drawn)
+                for guide_set in sub_step.guide_sets:
+                    for shape in guide_set.guides:
+                        if guide_set.region in used:
+                            note_own(guide_set.region, shape.outline, used[guide_set.region])
+                        else:
+                            note_mirrored(guide_set.region, shape.outline)
                 picked[zone] = sub_step
                 found = np.any(list(masks.values()), axis=0)
                 guided = found if guided is None else guided | found
@@ -1021,6 +1130,11 @@ def pair_sub_step(
     outlines = {side: outline_anchors(masks[side], smooth_cells) for side in areas}
     if not all(outlines.values()):
         return template_sub_step(sub_step_id, makeup, [not_found])
+    for side, area in areas.items():
+        if area.mask is None:
+            note_mirrored(side, outlines[side])
+        else:
+            note_own(side, outlines[side], area.mask)
     return AreaSubStep(
         sub_step_id=sub_step_id,
         order=1,
