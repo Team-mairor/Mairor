@@ -10,6 +10,7 @@
 | 측정 불가 · 값 안정화 · 진하기 비율을 투영 길이로 바꿈 | [GAUGE_UNMEASURABLE_SMOOTHING.md](../../docs/experiments/GAUGE_UNMEASURABLE_SMOOTHING.md) |
 | 고른 제품(같은 제품 · 대체 제품 · 제품 없음) | [GAUGE_SUBSTITUTE_PRODUCT.md](../../docs/experiments/GAUGE_SUBSTITUTE_PRODUCT.md) |
 | 대체 제품 진하기 목표 · 사진부터 시험 데이터 · 허용 오차 · 계산량 | [GAUGE_BROWSER_SPEC.md](../../docs/experiments/GAUGE_BROWSER_SPEC.md) |
+| 단계 끝 평가(덮음 · 넘침 · 진하기) | [GAUGE_STEP_EVALUATION.md](../../docs/experiments/GAUGE_STEP_EVALUATION.md) |
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
@@ -23,6 +24,8 @@
 | `substitute.v1.schema.json` | 위 파일의 JSON Schema (draft 2020-12) | 손으로 쓴다 |
 | `pipeline.v1.json` | 카메라 사진부터 게이지 값까지 한 번에 재는 시험 데이터(사진 · 얼굴 점 · guideSets · gauge → 중간값 · 게이지 값)와 허용 오차 | `ai/tools/gauge/export_pipeline_spec.py`가 만든다 |
 | `fixtures/pipeline/*.png` | 위 시험 데이터의 480 × 640 사진. 사람 얼굴이 아니라 얼굴 메시로 그린 합성 얼굴이다 | 같은 스크립트가 만든다 |
+| `step_evaluation.v1.json` | 단계 끝 평가(덮음 · 넘침 · 진하기)의 화장 방향 · 바른 칸 문턱 · 둘레 띠 · 좌우 합치기 · 가림 · 조명 값, 안내 문장 첫 기준값과 기대값 시험 데이터 | `ai/tools/gauge/export_step_evaluation_spec.py`가 `ai/tools/gauge/step_evaluation.py` 값으로 만든다 |
+| `step_evaluation.v1.schema.json` | 위 파일의 JSON Schema (draft 2020-12) | 손으로 쓴다 |
 
 ## 한눈에 보는 순서
 
@@ -31,6 +34,7 @@
 | 튜토리얼 시작 | 그 사람 정면 pitch(앞 30장) · 맨얼굴 기준 15장 · 흰자 색 | 기준 두 가지, 흰자 색 |
 | 하위 단계 시작 | 단계 시작 기준 15장(묶음 둘째 단계부터는 앞 단계 「다음」 직전 사진), 영역 칸 · 조명 재는 칸 · 고른 제품 규칙 | 기준 두 가지, 영역 칸, 고른 제품에 따라 보이기 |
 | 0.2초마다 | 사진 → 얼굴 지도로 펴기 → 칸 색 → 사진 거르기(가림 포함) → 최근 5장 가운데 값 → 조명 빼기 → 영역 색 → 색 맞추기 → 진하기 비율 · 색감 → 좌우 고르기 → 다듬기 · 문구 | 계산 순서, 게이지 값 계산, 측정 불가 판정과 값 안정화 |
+| 「다음」을 누를 때 | 그 직전 사진으로 칸 색 기준 하나 남기기(방금 하위 단계의 끝 = 다음 하위 단계의 시작), 묶음 끝에 하위 단계마다 덮음 · 넘침 · 진하기 | 단계 끝 평가 |
 
 ## 기준 두 가지
 
@@ -239,8 +243,29 @@ function fillPolygon(ixy, width, height, hline) {
 | `stability` `labels.bounds` · `margin` · `dwellMs` | 0.837 · 1.183 · 0.1 · 200 | 문구 경계 · 여유 · 버티기 | GAUGE_UNMEASURABLE_SMOOTHING (경계는 실기기 시험 뒤 다시 정함) |
 | `stability` `nextStart.windowMs` · `minFrames` · `maxFrames` | 2000 · 3 · 15 | 묶음 둘째 단계 시작 기준 | GAUGE_UNMEASURABLE_SMOOTHING |
 | `substitute` `color.nearMax` · `towardSteps` · `hideEstimated` | 1.0 · 30 · true | 대체 제품 색감 보이기 | GAUGE_SUBSTITUTE_PRODUCT |
+| `step_evaluation` `paint.floor` · `share` · `deltaFallback` | 3 · 0.5 · 6 | 바른 칸 문턱(Lab 투영 길이) · 레퍼런스 효과 길이에 곱할 몫 · 방향 모를 때 ΔE2000 | GAUGE_STEP_EVALUATION |
+| `step_evaluation` `band.width` · `gap` · `sideMethod` | 4 · 1 · edge | 둘레 띠 두께 · 띄우는 칸 · 방향 나누기 | GAUGE_STEP_EVALUATION |
+| `step_evaluation` `combine` · `coveredMax` · `minSideCells` | weaker · 0.4 · 3 | 좌우 합치기 · 영역 빈 칸 몫 · 방향 최소 칸 | GAUGE_STEP_EVALUATION |
+| `step_evaluation` `drift.ratioMax` · `allMax` | 6 · 8 | 진하기만 뺄 맨피부 변화 · 평가하지 않을 맨피부 변화(ΔE2000) | GAUGE_STEP_EVALUATION |
+| `step_evaluation` `thresholds.coverageLow` · `sideCoverageLow` · `sideOverflowHigh` | 0.4 · 0.1 · 0.3 | 안내 문장 첫 기준값 | GAUGE_STEP_EVALUATION |
 
 기준 사진 조건과 사진 거르기는 위아래 고개를 다르게 본다. 기준은 그 사람 정면 pitch에서 ±0.2, 사진 거르기는 |pitch| ≤ 0.35(카메라 기준)다. 눈 뜬 정도도 기준은 모든 화장에 0.2, 사진 거르기는 눈 화장 단계에서만 0.25다.
+
+## 단계 끝 평가 (`step_evaluation.v1.json`)
+
+한 하위 단계를 마쳤을 때 한 번 낸다. 사진이 아니라 칸 색 기준 두 개를 견준다. 정한 이유와 숫자는 [docs/experiments/GAUGE_STEP_EVALUATION.md](../../docs/experiments/GAUGE_STEP_EVALUATION.md)에 있다.
+
+1. **입력**: 단계 시작 기준과 끝 기준(위 「기준 두 가지」와 같은 방법). 「다음」을 누를 때마다 `stability.v1.json`의 `nextStart` 규칙으로 고른 사진의 칸 색 기준을 하나 남기면, 그것이 이 하위 단계의 끝이자 다음 하위 단계의 시작이다. 묶음 첫 단계의 시작은 단계 시작 기준이다. 영역 칸은 위 「게이지 값 계산」 2번과 같다(지금 하위 단계 `guideSets`). `guideSets`가 없는 하위 단계(기본 가이드 `template`)는 평가하지 않는다(`noArea`).
+2. **평가하지 않는 경우**: 시작 기준이 없으면 `noStart`, 끝 기준이 없으면 `noEnd`, 영역이 없으면 `noArea`, 아이라인(`measure.v1.json` `area.thinMakeups`)은 `thinArea`, 맨피부가 단계 시작 기준에서 바뀐 크기(위 「계산 순서」 5번 카메라 흔들림의 ΔE2000)가 `drift.allMax`보다 크면 `lightChanged`다.
+3. **조명 빼기**: 끝 칸 색에서 위 「계산 순서」 3번 조명 변화를 뺀다(그 하위 단계 모든 묶음 칸이 바르는 칸).
+4. **바른 칸**: 칸마다 (조명을 뺀 끝 색 − 시작 색)을 화장 방향으로 투영한 길이가 문턱 이상인 칸이다. 화장 방향은 `gauge.effect.delta`를 길이 1로 맞춘 것이고, `gauge`에 값이 없으면 `directions`의 그 화장 종류 값(길이 1로 맞춤)이다. `directions`에 없는 화장 종류는 ΔE2000이 `paint.deltaFallback` 이상인 칸이다. 문턱 = max(`paint.floor`, `paint.share` × `gauge.effect.delta`의 길이), `gauge`가 없으면 `paint.floor`다. 시작 · 끝 어느 쪽이든 색이 없는 칸은 잴 수 없는 칸이다.
+5. **묶음마다 덮음 · 넘침**: 좌우 짝은 묶음마다 따로 잰다. 영역 칸이 `minAreaCells`보다 적으면 그 묶음은 `tooFewCells`, 영역 칸 중 잴 수 없는 칸 몫이 `coveredMax`보다 크면 `covered`다. 덮음 = 잴 수 있는 영역 칸 중 바른 칸 몫. 둘레 띠 = 영역을 (`band.gap` + `band.width`)칸 넓힌 범위에서 `band.gap`칸 넓힌 범위를 뺀 칸(`band.gap`이 0이면 영역을 뺀 칸)이고, 넓히기는 지름 2r + 1 타원 커널(OpenCV `MORPH_ELLIPSE`) 팽창이다. `cells.measured`가 1이고 같은 하위 단계 다른 묶음 칸이 아니며 잴 수 있는 칸만 쓴다. 넘침 = 둘레 띠 칸 중 바른 칸 몫.
+6. **방향**: 안쪽은 얼굴 가운데 선(u = 0.5) 쪽, 바깥쪽은 귀 쪽이다. 영역 칸은 잴 수 있는 영역 칸의 가운데에서 위아래 거리를 (행 범위 ÷ 2)로, 가운데 선에서 멀어진 거리를 (가운데 선과의 거리 범위 ÷ 2)로 나눠 큰 쪽으로 정한다. 둘레 띠 칸은 가장 가까운 영역 칸(OpenCV `distanceTransformWithLabels`, L2, 마스크 5, 픽셀마다 라벨)에서 그 칸까지 간 위아래 거리와 가운데 선에서 멀어진 거리 중 큰 쪽이다. 같으면 위아래다. 방향마다 칸이 `minSideCells`보다 적으면 그 방향 값은 null이다.
+7. **좌우 합치기**: `combine`이 `weaker`면 덮음은 묶음 중 가장 작은 값, 넘침은 가장 큰 값이다(방향별 값도 같다). 묶음마다 값은 `regions`에 따로 낸다.
+8. **진하기**: 위 「게이지 값 계산」 4~7번과 9번(좌우는 덜 바른 쪽)을 끝 칸 색(조명 뺀 값)으로 한 번 한 비율이다. 고른 제품 규칙(`substitute.v1.json`)과 작은 레퍼런스 효과(`stability.v1.json` `weakTargetMin`, `weakReference`)도 같다. 맨피부 변화가 `drift.ratioMax`보다 크면 진하기만 null이고 `ratioReason`이 `lightChanged`다.
+9. **안내 문장 첫 기준값**: 덮음 < `thresholds.coverageLow`면 덜 바름, 방향 덮음 < `thresholds.sideCoverageLow`면 그쪽이 빔, 방향 넘침 ≥ `thresholds.sideOverflowHigh`면 그쪽으로 넘침. 문장 규칙과 설정 탐색에서 다시 고른다.
+
+`cases`의 시작 칸 색은 `cells.measured`가 1인 칸이 모두 `skin`이고, 끝 칸 색은 거기에 `light`(모든 칸)와 `paint`(칸 묶음마다 `delta`)를 더하고 `covered` 칸을 비운 것이다. 칸 묶음은 [행, 시작 열, 끝 열(포함)] 줄 목록이다. 같은 입력에서 소수 넷째 자리까지 같은 값이 나와야 한다.
 
 ## 칸 표 읽는 법
 
