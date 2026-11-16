@@ -48,6 +48,16 @@ class GuideStepTests(unittest.TestCase):
         unknown = normalize_steps([step(productKind=None)])
         self.assertEqual(unknown[0]["makeup"], "other")
 
+    def test_eye_corners_follow_the_other_eye_area(self):
+        def zone(kind, *areas):
+            events = [{"faceArea": a} for a in areas]
+            return normalize_steps([step(productKind=kind, faceArea=areas[0], events=events)])[0]
+
+        self.assertEqual(zone("eyeshadow", "애교살", "눈 앞머리")["eyeZone"], "under")
+        self.assertEqual(zone("eyeliner", "눈꼬리", "윗라인")["eyeZone"], "upper")
+        self.assertEqual(zone("eyeliner", "아랫점막", "눈꼬리")["eyeZone"], "under")
+        self.assertNotIn("eyeZone", zone("eyeshadow", "눈꼬리"))
+
     def test_only_concealer_follows_where_it_is_applied(self):
         under_eye = normalize_steps([step(productKind="concealer", faceArea="눈 밑")])[0]
         self.assertEqual((under_eye["makeup"], under_eye.get("eyeZone")), ("foundation", None))

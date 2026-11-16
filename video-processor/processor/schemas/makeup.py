@@ -39,8 +39,9 @@ FACE_AREAS: dict[str, tuple[str, str | None, str]] = {
     "눈썹": ("눈썹", None, "foundation"),
     "윗눈두덩": ("눈두덩", "upper", "foundation"),
     "쌍꺼풀 라인": ("눈두덩", "upper", "foundation"),
-    "눈꼬리": ("눈꼬리", "both", "foundation"),
-    "눈 앞머리": ("눈 앞머리", "both", "foundation"),
+    # 눈꼬리·눈 앞머리는 위아래를 가르지 않아 eyeZone이 없다. 같이 거친 자리가 있으면 그 자리를 따른다
+    "눈꼬리": ("눈꼬리", None, "foundation"),
+    "눈 앞머리": ("눈 앞머리", None, "foundation"),
     "눈 밑": ("눈 밑", "under", "foundation"),
     "애교살": ("눈 밑", "under", "foundation"),
     "윗눈두덩과 눈 밑": ("눈두덩과 눈 밑", "both", "foundation"),
