@@ -12,6 +12,7 @@
 | 대체 제품 진하기 목표 · 사진부터 시험 데이터 · 허용 오차 · 계산량 | [GAUGE_BROWSER_SPEC.md](../../docs/experiments/GAUGE_BROWSER_SPEC.md) |
 | 단계 끝 평가(덮음 · 넘침 · 진하기) | [GAUGE_STEP_EVALUATION.md](../../docs/experiments/GAUGE_STEP_EVALUATION.md) |
 | 단계 끝 안내 문장(기준값 · 좌우 · 순서 · 문장 수 · 문장 틀) | [GAUGE_STEP_FEEDBACK_TEXT.md](../../docs/experiments/GAUGE_STEP_FEEDBACK_TEXT.md) |
+| 위 값들을 축끼리 같이 바꿔 다시 고른 결과(바꾼 값 없음) | [GAUGE_TUNING.md](../../docs/experiments/GAUGE_TUNING.md) |
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
@@ -112,7 +113,7 @@ function fillPolygon(ixy, width, height, hline) {
 
 입력은 지금 하위 단계의 `gauge`(가이드 조회 응답, [shared/guide-area 「게이지 기준」](../guide-area/README.md#게이지-기준-gauge))와 `guideSets`, 위 기준 두 가지, 맨얼굴 기준 때 잰 흰자 색이다. 화장 종류는 가이드 단계의 `makeup`이다(`foundation` · `eyeshadow` · `eyeliner` · `blush` · `lip` · `brow` · `mascara` · `contour` · `highlight` · `other`).
 
-1. **흰자 색**: 맨얼굴 기준을 잡는 사진 `white.frames`장을 펴서 지도 픽셀마다 · 채널마다 가운데 값을 낸다(짝수 장이면 0.5를 버려 정수로). 두 눈 구멍(얼굴 안이고 `leftEye` · `rightEye` 테두리 안) 픽셀의 밝기 0.2126 R + 0.7152 G + 0.0722 B(감마 sRGB 0~255)를 잰다. 그 밝기들의 위 `white.share` 경계값(numpy `percentile(…, 75)`, 선형 보간)보다 밝거나 같고, 세 채널이 모두 `white.clip`보다 작은 픽셀만 남긴다. 남은 픽셀의 채널별 가운데 값을 선형으로 바꾼 것이 사용자 흰자다(반올림하지 않는다). 남은 픽셀이 없으면 없음이다. 사용자 쪽은 최소 픽셀 수를 보지 않고, 맨얼굴 기준 사진은 가리지 않은 사진이라 가린 픽셀도 빼지 않는다. 레퍼런스 흰자는 AI가 같은 규칙(픽셀 20개 이상, 가린 픽셀 뺌)으로 재서 `gauge.white.hex`에 넣는다. `gauge.white`는 hex만 쓴다.
+1. **흰자 색**: 맨얼굴 기준을 잡는 사진 `white.frames`장을 펴서 지도 픽셀마다 · 채널마다 가운데 값을 낸다(짝수 장이면 0.5를 버려 정수로). 두 눈 구멍(얼굴 안이고 `leftEye` · `rightEye` 테두리 안) 픽셀의 밝기 0.2126 R + 0.7152 G + 0.0722 B(감마 sRGB 0~255)를 잰다. 그 밝기들의 위 `white.share` 경계값(numpy `percentile(…, 75)`, 선형 보간)보다 밝거나 같고, 세 채널이 모두 `white.clip`보다 작은 픽셀만 남긴다. 남은 픽셀의 채널별 가운데 값을 선형으로 바꾼 것이 사용자 흰자다(반올림하지 않는다). 남은 픽셀이 없으면 없음이다. 사용자 쪽은 최소 픽셀 수를 보지 않고, 맨얼굴 기준 사진은 가리지 않은 사진이라 가린 픽셀도 빼지 않는다. 맨얼굴 기준을 다 모으지 못했으면 눈 화장 단계(아이섀도 · 아이라인 · 마스카라)가 나오기 전의 다음 단계 시작 기준 사진으로 같은 규칙으로 재고, 눈 화장이 시작된 뒤에는 재지 않는다(아이라인 · 속눈썹이 흰자 둘레를 덮어 어둡게 읽힌다). 레퍼런스 흰자는 AI가 같은 규칙(픽셀 20개 이상, 가린 픽셀 뺌)으로 재서 `gauge.white.hex`에 넣는다. `gauge.white`는 hex만 쓴다.
 2. **영역 칸**: 지금 하위 단계 `guideSets` 하나가 묶음 하나다. 묶음의 polygon 도형마다 얼굴 주소를 지도 좌표 Σ bary_k × uv[삼각형 꼭짓점 k] × 1024 − 0.5로 바꾸고, 0 쪽으로 잘라 정수로 만든 좌표로 1024 지도에 칠하고(1번 칠하기 규칙) 합친다. arrow와 `exclude`는 쓰지 않는다. 8 × 8 블록 중 칠한 픽셀이 `area.share` 이상(32개 이상)이고 `cells.measured`가 1인 칸이 영역 칸이다. 단계 전체가 아니라 지금 하위 단계만 잰다. 그 단계 모든 하위 단계의 영역 칸을 합친 것이 위 3번에서 넓혀 빼는 칸이다.
 3. **지금 칸 색**: `frames.intervalMs`마다 찍은 사진 중 지금 사진을 포함한 최근 `frames.medianWindowMs` ÷ `frames.intervalMs` = 5장(찍은 장 수로 센다)을 보고, 그중 사진 거르기를 통과한 사진의 칸 색을 칸마다 · 채널마다 가운데 값으로 모은다. 가린 칸과 빈 칸은 그 장만 뺀다. 여기서 위 3번 조명 변화를 뺀다.
 4. **영역 색**: 영역 칸 중 기준 칸이고 지금 값이 있는 칸이 `area.minCells`보다 적으면 `tooFewCells`. 아니면 그 칸들의 단계 시작 기준 색과 조명을 뺀 지금 색을 채널마다 가운데 값(Lab)으로 낸다. 둘 다 선형으로 바꾸고 0 아래를 0으로 자른다(위는 자르지 않는다). 사용자 바르기 전 색 Ub, 바른 뒤 색 Ua다.
