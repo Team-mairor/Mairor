@@ -91,7 +91,7 @@ FE는 화면에 지금 보이는 하위 단계의 `gauge`를 씁니다. 그 값�
 | 사용자 카메라 진하기 · 색감 | FE가 브라우저에서 실시간으로 잼 | FE 안에서만 씀. **AI · BE로 보내지 않고 저장하지 않음** |
 | 단계 끝 AI 평가 결과와 안내 문장 | FE가 브라우저에서 계산 | FE 안에서만 씀 |
 
-FE 쪽 입력 · 출력 형식은 [튜토리얼 게이지 요청 문서](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md)에 적었습니다.
+FE 쪽 계산 규격은 [`shared/gauge/README.md`](../../shared/gauge/README.md), 화면 동작은 [`frontend/README.md`](../../frontend/README.md)에 적었습니다.
 
 ## 회신물 위치
 

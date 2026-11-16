@@ -1696,6 +1696,143 @@
       "source": "template"
     },
     {
+      "stepId": "blushNose",
+      "title": "코 블러셔: 코끝에서 콧대 위까지 가볍게 톡톡 얹어요",
+      "regions": [
+        "rightEye",
+        "leftEye"
+      ],
+      "guides": [
+        {
+          "type": "polygon",
+          "outline": [
+            {
+              "triangle": 159,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 158,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 382,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 170,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 170,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 116,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 114,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 556,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 274,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 557,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 115,
+              "bary": [
+                0,
+                0,
+                1
+              ]
+            },
+            {
+              "triangle": 117,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 171,
+              "bary": [
+                1,
+                0,
+                0
+              ]
+            },
+            {
+              "triangle": 171,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            },
+            {
+              "triangle": 383,
+              "bary": [
+                0,
+                1,
+                0
+              ]
+            }
+          ]
+        }
+      ],
+      "order": 6,
+      "source": "template"
+    },
+    {
       "stepId": "brow",
       "title": "눈썹: 결을 따라 빈 곳만 가볍게 채워요",
       "regions": [
@@ -2760,7 +2897,7 @@
         {
           "type": "polyline",
           "brush": true,
-          "width": 0.012087569918576008,
+          "width": 0.01208756991857601,
           "path": [
             {
               "triangle": 249,
@@ -4000,7 +4137,7 @@
         {
           "type": "polyline",
           "brush": true,
-          "width": 0.012087569918576008,
+          "width": 0.01208756991857601,
           "path": [
             {
               "triangle": 248,
@@ -4184,7 +4321,7 @@
           ]
         }
       ],
-      "order": 6,
+      "order": 7,
       "source": "template"
     },
     {
@@ -4766,7 +4903,7 @@
           ]
         }
       ],
-      "order": 7,
+      "order": 8,
       "source": "template"
     },
     {
@@ -5050,7 +5187,7 @@
           }
         }
       ],
-      "order": 8,
+      "order": 9,
       "source": "template"
     },
     {
@@ -5360,7 +5497,7 @@
           ]
         }
       ],
-      "order": 9,
+      "order": 10,
       "source": "template"
     },
     {
@@ -5518,7 +5655,7 @@
           "width": 0.03
         }
       ],
-      "order": 10,
+      "order": 11,
       "source": "template"
     },
     {
@@ -5708,7 +5845,7 @@
           "width": 0.03
         }
       ],
-      "order": 11,
+      "order": 12,
       "source": "template"
     },
     {
@@ -5834,7 +5971,7 @@
           "width": 0.03
         }
       ],
-      "order": 12,
+      "order": 13,
       "source": "template"
     },
     {
@@ -6590,7 +6727,7 @@
           "brush": true
         }
       ],
-      "order": 13,
+      "order": 14,
       "source": "template"
     },
     {
@@ -6818,7 +6955,7 @@
           }
         }
       ],
-      "order": 14,
+      "order": 15,
       "source": "template"
     }
   ]

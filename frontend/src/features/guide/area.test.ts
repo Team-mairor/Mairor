@@ -29,6 +29,8 @@ const defaults: GuideSet = {
     { ...template("eyeshadowUpper", 0), guides: [upper] },
     { ...template("eyeshadowUnder", 0), guides: [under] },
     { ...template("eyelinerUnder", 0), guides: [lowerLine] },
+    { ...template("blush", 0), guides: [point(7)] },
+    { ...template("blushNose", 0), guides: [point(8)] },
   ],
 };
 
@@ -148,6 +150,13 @@ describe("resolveStep 아이섀도 템플릿", () => {
     expect(resolveStep("s1", [extracted(1, [polygon, arrow])], defaults)?.guides).toEqual([
       { ...polygon, region: "rightEye", group: "s1-1:rightEye" },
       { ...arrow, region: "rightEye", group: "s1-1:rightEye" },
+    ]);
+  });
+
+  it("볼 블러셔와 코 블러셔 키는 서로 다른 기본 가이드를 그린다", () => {
+    expect(resolveStep("s21", [sub(1, "blush")], defaults, "blush")?.guides).toEqual([point(7)]);
+    expect(resolveStep("s22b", [sub(1, "blushNose")], defaults, "blush")?.guides).toEqual([
+      point(8),
     ]);
   });
 

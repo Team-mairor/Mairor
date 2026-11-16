@@ -1128,7 +1128,8 @@
             "color": null,
             "effect": null,
             "strength": null,
-            "reason": "noArea"
+            "reason": "noArea",
+            "white": null
           }
         }
       ]

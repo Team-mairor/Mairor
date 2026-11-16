@@ -3,8 +3,7 @@
 AI는 분석하는 단계(립·블러셔·눈썹·섀도·아이라인·쉐딩)의 시작 직전 창과 끝 직후 창 사진만 비교하고,
 사진 판정에 창 앞뒤 1초를 더 본다(ai/app/tasks/area/reference_area.py photo_ranges).
 쉐딩은 AI가 단계 글에 코가 있을 때만 찾지만, 처리기는 글을 보지 않고 쉐딩 단계 전부를 분석 단계로 둔다.
-노트북 처리기는 그 구간만 BE FramePlan과 같은 번호 규칙(n % round(fps/10) == 0)으로 뽑는다
-(docs/requests/2026-11-09-hyeonsoo-hyeongjun-processor-frame-rule.md).
+노트북 처리기는 그 구간만 BE FramePlan과 같은 번호 규칙(n % round(fps/10) == 0)으로 뽑는다.
 창 길이는 AI 부위 코드의 BEFORE_WINDOW_MS · AFTER_WINDOW_MS(reference_area.py PART_WINDOWS),
 앞뒤 1초는 frame_checker.RATIO_WINDOW_MS다. AI가 바꾸면 여기도 바꾼다. 어긋나면 test_frames가 실패한다.
 """

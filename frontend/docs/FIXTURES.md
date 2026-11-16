@@ -43,7 +43,7 @@
 | `empty.json`      | 단계 없음                                                                                 | "이 영상에는 가이드가 없어요" 안내                                                          |
 | `right-only.json` | 기본 가이드에서 본인 기준 오른쪽 도형만 남긴 것 (가운데·왼쪽 도형이 있는 단계는 오른쪽만) | 거울 화면이라 화면 **오른쪽** 얼굴에만 표시. 왼쪽에 보이면 좌우 반전이 잘못된 것            |
 
-- `/debug/overlay?step=blush`처럼 단계 이름(`stepId`)이나 순서(0~10)로 카메라 없이 기본 가이드를 부위별로 볼 수 있다
+- `/debug/overlay?step=blush`처럼 단계 이름(`stepId`)이나 순서(0~14)로 카메라 없이 기본 가이드를 부위별로 볼 수 있다
 - `?guides=/fixtures/guides/right-only.json`을 붙이면 기본 가이드 대신 그 파일을 쓴다. 단계 수가 달라 순서가 어긋나므로 단계 이름으로 고른다
 
 ## 가이드 영역 (`guide-areas/`)
@@ -69,6 +69,7 @@ AI가 넘기는 가이드 영역 형식(`shared/guide-area`)이다. `npm run fix
 | `local_01.json`          | AI 샘플(`ai/samples/local_01/guide_area.json`)을 바탕으로 만들고, `extracted` 영역 좌표만 화면에서 알아볼 수 있는 같은 부위 랜드마크 테두리로 바꿈            | `/tutorial`이 단계 ID로 찾아 그림. 립 `s17`은 입술 테두리와 게이지 기준(AI 샘플 값), `s18`은 기준 없음(`noArea`)이라 게이지를 숨김, `s19`는 영역 없음 안내, 나머지는 기본 가이드. 하위 단계 전환을 보려고 아이섀도 `s10`은 눈두덩(눈 빼기) → 기본 영역(위아래 · 위 · 아래) → 애교살 다섯 하위 단계로 나눔. 하위 단계마다 보려면 `/debug/tutorial?area=/fixtures/guide-areas/local_01.json` |
 | `sample.json`            | 상태 네 가지, 한 단계 안의 하위 단계 전환(`s4`·`s6`), 빼는 영역(아이섀도의 눈, 립의 입 안), 눈 하나에 도형 두 개인 아이라인(`s6-2`, 앞머리 쪽 띠와 눈꼬리 띠) | `/debug/tutorial?area=/fixtures/guide-areas/sample.json`에서 하위 단계마다 상태와 안내 표시                                                                                                                                                                                                                                                                                                |
 | `contour-concealer.json` | 컨실러 베이스 `s1`·하이라이트 `s4`는 영역 없음(`notApplicable`), 코 + 광대 `s2`는 찾은 콧대 양옆 띠 뒤에 옆광대 기본 가이드, 코 `s3`는 코 쉐딩 기본 가이드    | `s1`·`s4`는 영역 없이 안내만 보이고, `s2`는 콧대 양옆 띠 다음에 옆광대 가이드가 보이며, `s3`는 코 쉐딩 기본 가이드가 보임                                                                                                                                                                                                                                                                  |
+| `blush-nose.json`        | 볼 블러셔 `s21`(`blush`), 코 블러셔 `s22b`(코끝 · 콧등) · `s22c`(콧대 위)(`blushNose`, 이유 `notAnalyzed`), 영역 없는 `s24`(`notApplicable`)                  | `/debug/tutorial?area=/fixtures/guide-areas/blush-nose.json`에서 `s21`은 볼 타원, `s22b` · `s22c`는 코끝 ~ 콧대 위 가운데 영역, `s24`는 영역 없음 안내. 기본 가이드가 없다는 경고가 나오지 않음                                                                                                                                                                                            |
 
 ## 기본 가이드 비교
 

@@ -623,4 +623,25 @@ writeJson("guide-areas/contour-concealer.json", {
   ],
 });
 
+// 코 블러셔 확인용. 시험 영상의 s22b(코끝 · 콧등) · s22c(콧대 위)는 AI가 blushNose 기본 가이드 키를 보낸다.
+// 볼 블러셔(blush)와 영역이 없는 단계(notApplicable)를 함께 두어 서로 다른 가이드로 그려지는지 본다
+const noseStep = (stepId, order) => ({
+  stepId,
+  order,
+  makeup: "blush",
+  subSteps: [{ ...sub(stepId, 1, "template"), reasons: ["notAnalyzed"], templateId: "blushNose" }],
+});
+writeJson("guide-areas/blush-nose.json", {
+  videoId: "fixture",
+  meshVersion: "v1",
+  steps: [
+    areaStep(21, "blush", [
+      sub("s21", 1, "template", { reasons: ["noUsableFrame"], templateId: "blush" }),
+    ]),
+    noseStep("s22b", 22),
+    noseStep("s22c", 23),
+    areaStep(24, "other", [sub("s24", 1, "notApplicable")]),
+  ],
+});
+
 console.log(`[generate-fixtures] ${outDir}에 픽스처를 만들었습니다.`);

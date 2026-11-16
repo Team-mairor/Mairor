@@ -24,4 +24,11 @@ describe("기본 가이드 고르기", () => {
       "contour",
     );
   });
+
+  it("코 블러셔 키와 영역 없는 단계의 볼 블러셔 키를 구분한다", () => {
+    expect(templateFor("blushNose", "코 블러셔")).toBe("blushNose");
+    expect(templateFor("blush", "코 블러셔")).toBe("blush");
+    const sub = templateOf({ stepId: "s22b", makeup: "blush", short: "코 블러셔" });
+    expect(sub.templateId).toBe("blush");
+  });
 });

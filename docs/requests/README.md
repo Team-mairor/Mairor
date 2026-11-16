@@ -20,28 +20,14 @@
 | 문서 | 날짜 | 요청 → 대상 | 상태 |
 |---|---|---|---|
 | [BE 로그 JSON 형식과 작업 ID 남기기](2026-10-29-hyeongjun-jungyoon-be-logging.md) | 2026-10-29 | 박형준 → 김정윤 | 요청 |
-| [Google 최초 로그인 추가 정보·약관 입력 흐름](2026-11-02-juyeon-seoyeon-google-signup.md) | 2026-11-02 | 최주연 → 김서연 | 정책 확정·MR 리뷰 대기 |
 | [가이드 작업 진행 알림·SSE 회신과 진행 알림 보완 제안](2026-11-04-seoyeon-hyeongjun-guide-job-progress-reply.md) | 2026-11-04 | 김서연 → 박형준 | 요청 |
 | [화장품 소분류(종류) 추가 논의](2026-11-04-seoyeon-juyeon-missing-product-types.md) | 2026-11-04 | 김서연 → 최주연·팀 | 논의 대기 |
-| [눈 화장 단계에 바른 자리(eyeZone) 보내기](2026-11-05-hyeonsoo-hyeongjun-eye-zone.md) | 2026-11-05 | 김현수 → 박형준 | 요청 |
-| [영상 전처리(video-processor)를 BE 분석 작업에 연결하는 계약 제안](2026-11-06-jungyoon-hyeongjun-video-processor-be-contract.md) | 2026-11-06 | 김정윤 → 박형준 | 요청 |
 | [AI 서버 가이드 영역 설정(줄 수·일꾼 수) 확인](2026-11-08-hyeonsoo-hyeongjun-area-server-settings.md) | 2026-11-08 | 김현수 → 박형준 | 요청 |
-| [노트북 처리기의 사진 뽑기 규칙을 BE FramePlan과 맞추기](2026-11-09-hyeonsoo-hyeongjun-processor-frame-rule.md) | 2026-11-09 | 김현수 → 박형준(김정윤 함께) | 요청 |
-| [Google 로그인 시작 오류도 로그인 화면으로 보내기](2026-11-10-seoyun-seoyeon-google-start-error-redirect.md) | 2026-11-10 | 한서윤 → 김서연 | 완료 |
-| [운영 단계 추출에서 어긋난 종류·나누기·경계 고치기](2026-11-10-hyeonsoo-hyeongjun-step-extraction-misses.md) | 2026-11-10 | 김현수 → 박형준 | 요청 |
-| [코 블러셔 기본 가이드(blushNose) 추가](2026-11-10-hyeonsoo-seoyun-blush-nose-template.md) | 2026-11-10 | 김현수 → 한서윤 | 요청 |
 | [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md) | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 회신함(2026-11-15 문서), 승인 뒤 지움 |
 | [노트북 처리기에서 분석 단계 동안의 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-middle-photos.md) | 2026-11-14 | 김현수 → 박형준 | 요청 |
-| [노트북 처리기에서 쉐딩 단계의 직전·직후 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-contour-window.md) | 2026-11-14 | 김현수 → 박형준 | 요청 |
-| [AI 서버 크기 올리기와 가이드 영역 줄 수 설정](2026-11-14-hyeonsoo-jungyoon-ai-server-size.md) | 2026-11-14 | 김현수 → 김정윤 | 요청 |
 | [가이드 게이지 기준 전달 계약 회신](2026-11-15-hyeonsoo-seoyeon-guide-gauge-reply.md) | 2026-11-15 | 김현수 → 김서연 | 확인 요청 |
-| [튜토리얼 게이지에 AI 게이지 기준(gauge) 쓰기와 게이지 계산 · 단계 끝 평가 형식](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
-| [게이지 색감 맞추기: 맨얼굴 기준 때 흰자 색도 잡기 · 부위별 맞추는 법](2026-11-15-hyeonsoo-seoyun-gauge-color-match.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [가이드 게이지 기준(gauge)에 레퍼런스 흰자 색(white) 칸 추가](2026-11-15-hyeonsoo-seoyeon-gauge-white.md) | 2026-11-15 | 김현수 → 김서연 | 확인 요청 |
-| [튜토리얼 게이지 계산: 맞춘 색으로 진하기 · 색감 재기와 시험 데이터](2026-11-15-hyeonsoo-seoyun-gauge-measure.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [튜토리얼 게이지: 측정 불가 판정 · 값 안정화 · 진하기 비율 식 변경과 가림 모델](2026-11-15-hyeonsoo-seoyun-gauge-unmeasurable.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
-| [튜토리얼 게이지: 대체 제품 · 제품 없음 단계에서 게이지와 색감 보이기](2026-11-15-hyeonsoo-seoyun-gauge-substitute.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
-| [튜토리얼 게이지: 브라우저 계산 규격 확정 · 사진부터 시험 데이터 · 맞춰 보는 법 · 계산량](2026-11-15-hyeonsoo-seoyun-gauge-browser-spec.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [튜토리얼 단계 끝 AI 평가: 입력은 「다음」마다 남긴 칸 색 · 결과 형식 확정 · 계산 규격](2026-11-15-hyeonsoo-seoyun-step-evaluation.md) | 2026-11-15 | 김현수 → 한서윤 | 요청 |
 | [튜토리얼 단계 끝 안내 문장: 문장 규칙 · 결과 형식에 sides 더하기 · 묶음 끝 3줄 · 기능명세 반영](2026-11-16-hyeonsoo-seoyun-step-feedback-text.md) | 2026-11-16 | 김현수 → 한서윤 | 요청 |
 | [게이지 눈 뜸 문턱과 사용자 흰자 고르기 다시 보기](2026-11-16-seoyun-hyeonsoo-gauge-eye-open-white.md) | 2026-11-16 | 한서윤 → 김현수 | 요청 |

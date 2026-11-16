@@ -325,6 +325,14 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       guides: buildBlushGuides(mesh, regions),
     },
     {
+      // 코끝(19 위)에서 콧대 위 눈 앞머리 사이(193·417)까지 얼굴 가운데 한 덩어리.
+      // 하이라이트 콧대 도형을 코끝까지 늘린 모양이고, 옆 부위(눈)로 숨김을 판정한다
+      stepId: "blushNose",
+      title: "코 블러셔: 코끝에서 콧대 위까지 가볍게 톡톡 얹어요",
+      regions: ["rightEye", "leftEye"],
+      guides: [outline([193, 417, 351, 419, 248, 281, 275, 457, 19, 237, 45, 51, 3, 196, 122])],
+    },
+    {
       // 앞머리(55·107)에서 꼬리(46·70)까지 결 방향 붓 자국. 결이 채울 영역을 보여 주므로 윤곽은 따로 그리지 않는다
       stepId: "brow",
       title: "눈썹: 결을 따라 빈 곳만 가볍게 채워요",

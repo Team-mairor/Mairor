@@ -8,7 +8,7 @@
 
 ## 요청 배경
 
-MR !233에서 주신 의견(같은 부위 단계를 묶어 사진은 묶음 끝에만 찍으니, 단계 끝 평가 입력을 단계마다 시작 · 끝 칸 색으로 받고 결과는 묶음 끝에 모아 보이기)대로 정했습니다. 앞서 보낸 [튜토리얼 게이지 계약 문서](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md) 3번 「단계 끝 AI 평가 결과(형식 초안)」을 이 문서가 대신합니다. 계산 규격과 시험 데이터는 [`shared/gauge/step_evaluation.v1.json`](../../shared/gauge/README.md#단계-끝-평가-step_evaluationv1json), 근거는 [GAUGE_STEP_EVALUATION.md](../experiments/GAUGE_STEP_EVALUATION.md)에 있습니다. **BE 쪽 변경은 없습니다.** 칸 색과 평가 결과는 브라우저 안에서만 쓰고 서버로 보내거나 저장하지 않습니다.
+MR !233에서 주신 의견(같은 부위 단계를 묶어 사진은 묶음 끝에만 찍으니, 단계 끝 평가 입력을 단계마다 시작 · 끝 칸 색으로 받고 결과는 묶음 끝에 모아 보이기)대로 정했습니다. 이전 튜토리얼 게이지 계약의 「단계 끝 AI 평가 결과(형식 초안)」은 이 문서가 대신합니다. 계산 규격과 시험 데이터는 [`shared/gauge/step_evaluation.v1.json`](../../shared/gauge/README.md#단계-끝-평가-step_evaluationv1json), 근거는 [GAUGE_STEP_EVALUATION.md](../experiments/GAUGE_STEP_EVALUATION.md)에 있습니다. **BE 쪽 변경은 없습니다.** 칸 색과 평가 결과는 브라우저 안에서만 쓰고 서버로 보내거나 저장하지 않습니다.
 
 ## 1. 입력: 「다음」마다 칸 색 기준 하나 남기기
 

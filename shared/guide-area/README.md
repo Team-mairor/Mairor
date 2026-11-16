@@ -103,7 +103,7 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 
 ## 기본 가이드 키 (`templateId`)
 
-`status`가 `template`일 때 FE가 그릴 기본 가이드를 고르는 키다. FE `frontend/src/features/guide/types.ts`의 `TemplateId`와 같다. 다만 `blushNose`는 FE에 아직 없어([요청 문서](../../docs/requests/2026-11-10-hyeonsoo-seoyun-blush-nose-template.md)), FE가 키를 더하기 전까지 그 단계에는 기본 가이드가 보이지 않는다.
+`status`가 `template`일 때 FE가 그릴 기본 가이드를 고르는 키다. FE `frontend/src/features/guide/types.ts`의 `TemplateId`와 같다.
 
 | 키 | 기본 가이드 |
 | --- | --- |

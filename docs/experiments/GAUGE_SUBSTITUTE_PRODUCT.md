@@ -12,7 +12,7 @@
 - **대체 제품 색과 견주는 색감은 받지 않았다.** 제품 색이 정확하면 헛경보 35%로 같은 제품과 같지만, 5 · 10 · 20도 틀리면 37 · 43 · 54%로 오른다. 그래서 옮긴 기준으로 잴 때는 색감을 숨긴다.
 - **색이 없으면 레퍼런스 기준 그대로 진하기만 보인다(`noColor`).** BE가 레퍼런스 기준 색이 없어 칸을 못 정한 단계다.
 - **제품 없음 · 건너뛴 단계는 게이지를 숨긴다(`noProduct`).** BE가 이미 `result: NONE` · `skipped: true`를 준다. measure의 측정 이유와 따로 둔다. 사진마다가 아니라 단계 전체에 정해진 일이기 때문이다.
-- **BE 변경은 없다.** 실행 단계 스냅샷(`ExecutionSelectionAssembler`)에 `result` · `selectedColor` · `skipped`가 이미 있다. FE는 튜토리얼에서 이 세 칸을 읽는다([요청 문서](../requests/2026-11-15-hyeonsoo-seoyun-gauge-substitute.md)).
+- **BE 변경은 없다.** 실행 단계 스냅샷(`ExecutionSelectionAssembler`)에 `result` · `selectedColor` · `skipped`가 있고, FE는 튜토리얼에서 이 세 칸을 읽는다.
 - **가이드 결과에 넣지 않고 튜토리얼 실행 때 정한다.** 가이드는 여러 사용자가 같이 쓰고 고른 제품은 사람마다 다르다.
 
 ## 흐름과 코드

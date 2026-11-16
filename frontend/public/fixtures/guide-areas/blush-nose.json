@@ -1,0 +1,72 @@
+{
+  "videoId": "fixture",
+  "meshVersion": "v1",
+  "steps": [
+    {
+      "stepId": "s21",
+      "order": 21,
+      "makeup": "blush",
+      "subSteps": [
+        {
+          "subStepId": "s21-1",
+          "order": 1,
+          "status": "template",
+          "reasons": [
+            "noUsableFrame"
+          ],
+          "templateId": "blush",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s22b",
+      "order": 22,
+      "makeup": "blush",
+      "subSteps": [
+        {
+          "subStepId": "s22b-1",
+          "order": 1,
+          "status": "template",
+          "reasons": [
+            "notAnalyzed"
+          ],
+          "templateId": "blushNose",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s22c",
+      "order": 23,
+      "makeup": "blush",
+      "subSteps": [
+        {
+          "subStepId": "s22c-1",
+          "order": 1,
+          "status": "template",
+          "reasons": [
+            "notAnalyzed"
+          ],
+          "templateId": "blushNose",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s24",
+      "order": 24,
+      "makeup": "other",
+      "subSteps": [
+        {
+          "subStepId": "s24-1",
+          "order": 1,
+          "status": "notApplicable",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": []
+        }
+      ]
+    }
+  ]
+}
