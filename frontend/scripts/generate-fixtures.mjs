@@ -590,4 +590,31 @@ writeJson("guide-areas/local_01.json", {
   })),
 });
 
+// 코 쉐딩·컨실러 단계 확인용. AI가 코 쉐딩을 찾으면 콧대 양옆 띠를 눈 영역 이름(rightEye·leftEye)으로 보내고,
+// 코 + 광대 단계는 뒤에 옆광대 기본 가이드(contour) 하위 단계를 더한다. 컨실러 단계는 영역 없이(notApplicable) 온다.
+// 띠 모양은 기본 코 쉐딩 띠를 그대로 쓴다.
+const noseBands = defaultGuides.steps
+  .find((step) => step.stepId === "contourNose")
+  .guides.filter((guide) => guide.type === "polygon");
+writeJson("guide-areas/contour-concealer.json", {
+  videoId: "fixture-contour-concealer",
+  meshVersion: "v1",
+  steps: [
+    areaStep(1, "foundation", [sub("s1", 1, "notApplicable")]),
+    areaStep(2, "contour", [
+      sub("s2", 1, "extracted", {
+        guideSets: [
+          { region: "rightEye", source: "extracted", guides: [noseBands[0]] },
+          { region: "leftEye", source: "extracted", guides: [noseBands[1]] },
+        ],
+      }),
+      sub("s2", 2, "template", { reasons: ["notAnalyzed"], templateId: "contour" }),
+    ]),
+    areaStep(3, "contour", [
+      sub("s3", 1, "template", { reasons: ["noUsableFrame"], templateId: "contourNose" }),
+    ]),
+    areaStep(4, "highlight", [sub("s4", 1, "notApplicable")]),
+  ],
+});
+
 console.log(`[generate-fixtures] ${outDir}에 픽스처를 만들었습니다.`);

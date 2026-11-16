@@ -60,6 +60,17 @@ describe("resolveStep 아이섀도 템플릿", () => {
     expect(resolveStep("arbitrary-id", [area], defaults, "blush")?.earlyCheekEdgeTurn).toBe(false);
   });
 
+  it("아이라인 단계에만 화살표 위치 보정을 지정한다", () => {
+    const area = extracted(1, [{ type: "arrow", from: anchor(0), to: anchor(1) }]);
+    expect(resolveStep("arbitrary-id", [area], defaults, "eyeliner")?.eyelinerArrowOffset).toBe(
+      true,
+    );
+    expect(resolveStep("arbitrary-id", [area], defaults, "eyeshadow")?.eyelinerArrowOffset).toBe(
+      undefined,
+    );
+    expect(resolveSubStep(area, defaults, "eyeliner")?.eyelinerArrowOffset).toBe(true);
+  });
+
   it("AI 영역 묶음의 부위 정보를 각 도형에 유지한다", () => {
     const polygon = {
       type: "polygon" as const,
@@ -75,7 +86,12 @@ describe("resolveStep 아이섀도 템플릿", () => {
       },
       defaults,
     );
-    expect(resolved?.guides[0]).toEqual({ ...polygon, region: "rightEye", exclude: ["rightEye"] });
+    expect(resolved?.guides[0]).toEqual({
+      ...polygon,
+      region: "rightEye",
+      group: "s1-1:rightEye",
+      exclude: ["rightEye"],
+    });
   });
   it("eyeshadow와 바른 자리별 템플릿이 함께 오면 띠를 한 번만 그린다", () => {
     const step = resolveStep("s1", [sub(1, "eyeshadow"), sub(2, "eyeshadowUpper")], defaults);
@@ -94,7 +110,10 @@ describe("resolveStep 아이섀도 템플릿", () => {
     };
     const step = resolveStep("s1", [extracted(1, [polygon]), sub(2, "eyeshadowUnder")], defaults);
 
-    expect(step?.guides).toEqual([{ ...polygon, region: "rightEye" }, under]);
+    expect(step?.guides).toEqual([
+      { ...polygon, region: "rightEye", group: "s1-1:rightEye" },
+      under,
+    ]);
     expect(step?.source).toBe("template");
   });
 
@@ -105,7 +124,10 @@ describe("resolveStep 아이섀도 템플릿", () => {
     };
     const step = resolveStep("s1", [extracted(1, [polygon]), sub(2, "eyelinerUnder")], defaults);
 
-    expect(step?.guides).toEqual([{ ...polygon, region: "rightEye" }, lowerLine]);
+    expect(step?.guides).toEqual([
+      { ...polygon, region: "rightEye", group: "s1-1:rightEye" },
+      lowerLine,
+    ]);
     expect(step?.source).toBe("template");
   });
 
@@ -124,8 +146,8 @@ describe("resolveStep 아이섀도 템플릿", () => {
     const arrow = { type: "arrow" as const, from: anchor(3), to: anchor(4) };
 
     expect(resolveStep("s1", [extracted(1, [polygon, arrow])], defaults)?.guides).toEqual([
-      { ...polygon, region: "rightEye" },
-      { ...arrow, region: "rightEye" },
+      { ...polygon, region: "rightEye", group: "s1-1:rightEye" },
+      { ...arrow, region: "rightEye", group: "s1-1:rightEye" },
     ]);
   });
 

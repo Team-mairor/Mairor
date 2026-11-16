@@ -55,7 +55,6 @@ import {
   reachableStep,
   TutorialTopBar,
   useStepShot,
-  withStepTemplate,
   type StepProduct,
   SelfiePreview,
 } from "@/features/tutorial";
@@ -105,10 +104,7 @@ function stepsOf(guide: GuideModel): TutorialStep[] {
 
 /** 단계의 가이드 영역 하위 단계. 영역에 없는 단계는 화장 종류의 기본 가이드를 쓴다 */
 function subsOf(s: TutorialStep, area: GuideArea | null) {
-  return withStepTemplate(
-    area?.steps.find((a) => a.stepId === s.stepId)?.subSteps ?? [templateOf(s)],
-    s.short,
-  );
+  return area?.steps.find((a) => a.stepId === s.stepId)?.subSteps ?? [templateOf(s)];
 }
 
 /** 영역을 찾지 못한 단계도 화장 종류의 기본 가이드 부위를 써, 립 단계에서 입이 보일 때 입술을 찍는다 */

@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
-import type { FaceFrame } from "@/features/face";
-import type { FaceMesh } from "@/features/overlay";
+import { REGIONS, type FaceFrame } from "@/features/face";
+import { resolveAnchor, type FaceMesh } from "@/features/overlay";
 
+import { buildDefaultGuideSet } from "./default-guides";
 import { GuideRenderer, hiddenSideFor, leftNormal } from "./renderer";
 import type { GuideStep } from "./types";
 import data from "../../../public/fixtures/faces/front.json";
@@ -54,6 +57,148 @@ const render = (instance: GuideRenderer, frame: FaceFrame, now = 0, observed = f
   });
 
 describe("부위별 가이드 실제 그리기", () => {
+  it("같은 눈 화살표라도 아이라인 단계의 윗라인만 눈 위로 옮긴다", () => {
+    const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
+    const realMesh = {
+      ...read("../../../../shared/face-mesh/triangles.v1.json"),
+      ...read("../../../../shared/face-mesh/uv.v1.json"),
+    } as FaceMesh;
+    const eyeshadow = buildDefaultGuideSet(realMesh, REGIONS).steps.find(
+      (item) => item.stepId === "eyeshadowUpper",
+    );
+    const arrow = eyeshadow?.guides.find((guide) => guide.type === "arrow");
+    if (!eyeshadow || arrow?.type !== "arrow") throw new Error("아이섀도 가이드가 없습니다");
+    const renderEye = (eyelinerArrowOffset: boolean) => {
+      const { renderer: instance, ctx } = renderer();
+      instance.render({
+        frame: data as FaceFrame,
+        step: { ...eyeshadow, ...(eyelinerArrowOffset ? { eyelinerArrowOffset } : {}) },
+        mesh: realMesh,
+        projection: { toPx: (p) => ({ x: p.x * 640, y: p.y * 480 }), unit: 100 },
+        now: 0,
+      });
+      return ctx.moveTo.mock.calls.at(-4);
+    };
+    const original = renderEye(false);
+    const adjusted = renderEye(true);
+    const from = resolveAnchor(arrow.from, realMesh, (data as FaceFrame).landmarks);
+    expect(original).toEqual([from.x * 640, from.y * 480]);
+    if (!original || !adjusted) throw new Error("눈 화살표가 그려지지 않았습니다");
+    expect(adjusted[1]).toBeLessThan(original[1]);
+  });
+
+  it("아랫라인은 같은 눈의 모든 띠보다 아래로 화살표를 옮긴다", () => {
+    const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
+    const realMesh = {
+      ...read("../../../../shared/face-mesh/triangles.v1.json"),
+      ...read("../../../../shared/face-mesh/uv.v1.json"),
+    } as FaceMesh;
+    const under = buildDefaultGuideSet(realMesh, REGIONS).steps.find(
+      (item) => item.stepId === "eyelinerUnder",
+    );
+    const line = under?.guides.find((guide) => guide.type === "polyline");
+    if (!under || line?.type !== "polyline") throw new Error("아랫라인 가이드가 없습니다");
+    const sorted = [...line.path].sort(
+      (a, b) =>
+        resolveAnchor(a, realMesh, (data as FaceFrame).landmarks).y -
+        resolveAnchor(b, realMesh, (data as FaceFrame).landmarks).y,
+    );
+    const upperBand = {
+      type: "polygon" as const,
+      region: "rightEye" as const,
+      outline: sorted.slice(0, 3),
+    };
+    const lowerBand = {
+      type: "polygon" as const,
+      region: "rightEye" as const,
+      outline: sorted.slice(-3),
+    };
+    const direction = {
+      type: "arrow" as const,
+      region: "rightEye" as const,
+      from: line.path[0],
+      to: line.path.at(-1)!,
+    };
+    const draw = (guides: GuideStep["guides"]) => {
+      const { renderer: instance, ctx } = renderer();
+      instance.render({
+        frame: data as FaceFrame,
+        step: { ...under, eyelinerArrowOffset: true, guides },
+        mesh: realMesh,
+        projection: { toPx: (p) => ({ x: p.x * 640, y: p.y * 480 }), unit: 100 },
+        now: 0,
+      });
+      return ctx.moveTo.mock.calls.at(-2)?.[1] as number;
+    };
+    expect(draw([upperBand, lowerBand, direction])).toBeGreaterThan(draw([upperBand, direction]));
+  });
+
+  it("윗라인 · 아랫라인을 한 번에 그려도 화살표는 자기 묶음 띠만 보고 옮긴다", () => {
+    const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
+    const realMesh = {
+      ...read("../../../../shared/face-mesh/triangles.v1.json"),
+      ...read("../../../../shared/face-mesh/uv.v1.json"),
+    } as FaceMesh;
+    const set = buildDefaultGuideSet(realMesh, REGIONS);
+    const under = set.steps.find((item) => item.stepId === "eyelinerUnder");
+    const line = under?.guides.find((guide) => guide.type === "polyline");
+    const lid = set.steps
+      .find((item) => item.stepId === "eyeshadowUpper")
+      ?.guides.find((guide) => guide.type === "polygon");
+    if (!under || line?.type !== "polyline" || lid?.type !== "polygon")
+      throw new Error("눈 가이드가 없습니다");
+    // 윗라인 하위 단계 띠(눈두덩)와 아랫라인 하위 단계 띠 · 화살표
+    const upperBand = { ...lid, region: "rightEye" as const, group: "s12-1:rightEye" };
+    const lowerBand = {
+      type: "polygon" as const,
+      region: "rightEye" as const,
+      group: "s13-1:rightEye",
+      outline: line.path,
+    };
+    const lowerArrow = {
+      type: "arrow" as const,
+      region: "rightEye" as const,
+      group: "s13-1:rightEye",
+      from: line.path[0],
+      to: line.path.at(-1)!,
+    };
+    const draw = (guides: GuideStep["guides"]) => {
+      const { renderer: instance, ctx } = renderer();
+      instance.render({
+        frame: data as FaceFrame,
+        step: { ...under, eyelinerArrowOffset: true, guides },
+        mesh: realMesh,
+        projection: { toPx: (p) => ({ x: p.x * 640, y: p.y * 480 }), unit: 100 },
+        now: 0,
+      });
+      return ctx.moveTo.mock.calls.at(-2)?.[1] as number;
+    };
+    expect(draw([upperBand, lowerBand, lowerArrow])).toBeCloseTo(draw([lowerBand, lowerArrow]), 6);
+  });
+
+  it("코 쉐딩 화살표는 눈 아래로 옮기지 않는다", () => {
+    const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
+    const realMesh = {
+      ...read("../../../../shared/face-mesh/triangles.v1.json"),
+      ...read("../../../../shared/face-mesh/uv.v1.json"),
+    } as FaceMesh;
+    const nose = buildDefaultGuideSet(realMesh, REGIONS).steps.find(
+      (item) => item.stepId === "contourNose",
+    );
+    const arrow = nose?.guides.findLast((guide) => guide.type === "arrow");
+    if (!nose || arrow?.type !== "arrow") throw new Error("코 쉐딩 가이드가 없습니다");
+    const { renderer: instance, ctx } = renderer();
+    instance.render({
+      frame: data as FaceFrame,
+      step: nose,
+      mesh: realMesh,
+      projection: { toPx: (p) => ({ x: p.x * 640, y: p.y * 480 }), unit: 100 },
+      now: 0,
+    });
+    const from = resolveAnchor(arrow.from, realMesh, (data as FaceFrame).landmarks);
+    expect(ctx.moveTo.mock.calls.at(-2)).toEqual([from.x * 640, from.y * 480]);
+  });
+
   it("한 눈이 잘리면 그 눈 도형만 숨기고 보이는 눈은 그린다", () => {
     const { renderer: instance, ctx } = renderer();
     const frame = structuredClone(data) as FaceFrame;

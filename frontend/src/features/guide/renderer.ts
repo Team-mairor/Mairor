@@ -204,12 +204,53 @@ export class GuideRenderer {
     this.hiddenSide = nearSideOnly ? hiddenSideFor(this.hiddenSide, yaw) : null;
     const hidden = this.hiddenSide;
     const toPx = (i: number) => projection.toPx(frame.landmarks[i]);
+    const forehead = toPx(MIDLINE[0]);
+    const chin = toPx(MIDLINE[1]);
+    const faceHeight = Math.hypot(chin.x - forehead.x, chin.y - forehead.y);
+    const faceDown = faceHeight
+      ? { x: (chin.x - forehead.x) / faceHeight, y: (chin.y - forehead.y) / faceHeight }
+      : { x: 0, y: 1 };
+    const down = (p: Px) => p.x * faceDown.x + p.y * faceDown.y;
     for (const { guide, wide, thin, region, side, edge, between } of this.prepared) {
       const areaDot = thin ? Math.max(STYLE.dot.min, dot * STYLE.thinDot.scale) : dot;
       const draw = () => {
         if (guide.type === "polygon" && guide.exclude?.length)
           this.drawPolygonWithHoles(guide, guide.exclude.map(holeOf), at, areaDot);
-        else this.drawGuide(guide, at, projection.unit, dashOffset, areaDot, brushMin);
+        else {
+          const eyeAreas =
+            step.eyelinerArrowOffset &&
+            guide.type === "arrow" &&
+            (region === "rightEye" || region === "leftEye")
+              ? // 윗라인 · 아랫라인을 한 번에 그려도 화살표마다 자기 묶음 띠만 보고 옮길 쪽을 정한다
+                this.prepared.filter(
+                  (item) =>
+                    item.region === region &&
+                    item.guide.type === "polygon" &&
+                    (guide.group === undefined || item.guide.group === guide.group),
+                )
+              : [];
+          let eyeArea: { points: Px[]; outside: -1 | 1 } | undefined;
+          if (guide.type === "arrow" && eyeAreas.length) {
+            const points = eyeAreas.flatMap((item) =>
+              item.guide.type === "polygon" ? item.guide.outline.map(at) : [],
+            );
+            const eye = REGIONS[region].indices.map((i) => down(toPx(i)));
+            const area = points.map(down);
+            const eyeMiddle = (Math.min(...eye) + Math.max(...eye)) / 2;
+            const areaMiddle = (Math.min(...area) + Math.max(...area)) / 2;
+            eyeArea = { points, outside: areaMiddle < eyeMiddle ? -1 : 1 };
+          }
+          this.drawGuide(
+            guide,
+            at,
+            projection.unit,
+            dashOffset,
+            areaDot,
+            brushMin,
+            eyeArea,
+            faceDown,
+          );
+        }
       };
       // 얼굴 윤곽처럼 양쪽 끝까지 걸친 도형은 먼 쪽 절반만 옅게 한다
       if (wide && (!guide.region || guide.region === "faceOval")) {
@@ -342,6 +383,8 @@ export class GuideRenderer {
     dashOffset: number,
     areaDot: number,
     brushMin: number,
+    eyeArea?: { points: Px[]; outside: -1 | 1 },
+    faceDown?: Px,
   ) {
     const ctx = this.ctx;
     const dot = sized(unit, STYLE.dot);
@@ -368,12 +411,35 @@ export class GuideRenderer {
       }
       case "arrow": {
         // 바르는 방향: 영역 테두리(점선)와 헷갈리지 않게 실선
-        const from = at(guide.from);
-        const to = at(guide.to);
+        let from = at(guide.from);
+        let to = at(guide.to);
+        if (eyeArea?.points.length) {
+          const extraX = (to.x - from.x) * 0.125;
+          const extraY = (to.y - from.y) * 0.125;
+          from = { x: from.x - extraX, y: from.y - extraY };
+          to = { x: to.x + extraX, y: to.y + extraY };
+        }
         const width = sized(unit, STYLE.line);
+        const length = Math.hypot(to.x - from.x, to.y - from.y);
+        if (eyeArea?.points.length && length < 1) return;
+        const headSize = eyeArea?.points.length
+          ? Math.min(Math.max(width * 3, STYLE.arrowHead * unit), length * 0.45)
+          : Math.max(width * 3, STYLE.arrowHead * unit);
+        if (eyeArea?.points.length && faceDown) {
+          const along = (p: Px) => p.x * faceDown.x + p.y * faceDown.y;
+          const area = eyeArea.points.map(along);
+          const arrow = [along(from), along(to)];
+          const gap = headSize * 0.6 + width * 2;
+          const shift =
+            eyeArea.outside > 0
+              ? Math.max(...area) - Math.min(...arrow) + gap
+              : Math.min(...area) - Math.max(...arrow) - gap;
+          from = { x: from.x + faceDown.x * shift, y: from.y + faceDown.y * shift };
+          to = { x: to.x + faceDown.x * shift, y: to.y + faceDown.y * shift };
+        }
         tracePath(ctx, [from, to], false);
         this.solid(width, MOTION_INK);
-        const head = arrowHead(from, to, Math.max(width * 3, STYLE.arrowHead * unit));
+        const head = arrowHead(from, to, headSize);
         if (!head) return;
         tracePath(ctx, head, false);
         this.solid(width, MOTION_INK);

@@ -123,7 +123,7 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 
 쉐딩은 단계 글(`partLabel` · `facts.area`)에 코(코 · 콧 · 노즈, 코렉터 · 코랄 제외)가 있을 때만 콧대 양옆을 사진으로 찾는다. 두 쪽 모두 찾으면 `extracted`이고 영역 이름은 그쪽 눈(`leftEye` · `rightEye`)이다(코 부위 이름이 없어 FE 코 쉐딩 기본 가이드와 같은 이름을 쓴다). 못 찾으면 그 이유(`contourColorNotFound` · `lightingChanged` · `noUsableFrame` · `faceSizeMismatch`)로 `contourNose`다.
 같은 단계 글에 광대 · 턱 · 이마 같은 코 밖 자리도 있으면 하위 단계를 하나 더 두어 `contour`(이유 `notAnalyzed`)를 보낸다. 코 밖 쉐딩은 사진으로 찾지 않는다. 글에 코가 없는 쉐딩 단계는 전처럼 `contour` 하나다.
-FE는 지금 `contour` 단계의 이름에 코가 있으면 `contour`를 `contourNose`로 바꿔 그린다(`frontend/src/features/tutorial/template.ts`). AI가 `contourNose`를 직접 보내므로 이 바꾸기는 빼야 하고([요청 문서](../../docs/requests/2026-11-14-hyeonsoo-seoyun-contour-nose-and-concealer.md)), 빼기 전에는 코와 광대를 같이 바르는 단계의 둘째 하위 단계(`contour`)도 코 가이드로 그려진다.
+FE는 AI 하위 단계의 기본 가이드 키를 바꾸지 않는다. 그래서 코와 광대를 같이 바르는 단계의 둘째 하위 단계(`contour`)는 옆광대 가이드로 그린다. 영역 파일에 없는 단계만 단계 이름에 코가 있는지로 `contourNose`를 고른다.
 
 ## 형식을 바꿀 때
 

@@ -3,6 +3,7 @@
   "steps": [
     {
       "stepId": "contour",
+      "earlyCheekEdgeTurn": true,
       "title": "쉐딩: 옆광대 아래부터 턱선까지 바깥쪽에서 안쪽으로 짧게 쓸어요",
       "regions": [
         "rightCheek"
@@ -238,19 +239,19 @@
         {
           "type": "arrow",
           "from": {
-            "triangle": 159,
+            "triangle": 23,
             "bary": [
-              1,
-              0,
-              0
+              0.8166,
+              0.1435,
+              0.0399
             ]
           },
           "to": {
-            "triangle": 171,
+            "triangle": 209,
             "bary": [
-              0.3952,
-              0.5153,
-              0.0895
+              0.789,
+              0.1827,
+              0.0283
             ]
           }
         }
@@ -1696,7 +1697,7 @@
         {
           "type": "polyline",
           "brush": true,
-          "width": 0.01208756991857601,
+          "width": 0.012087569918576008,
           "path": [
             {
               "triangle": 249,

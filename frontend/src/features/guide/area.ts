@@ -18,6 +18,7 @@ export function resolveSubStep(
       if (sub.guideSets.length === 0) return null;
       return {
         stepId: sub.subStepId,
+        ...(makeup === "eyeliner" ? { eyelinerArrowOffset: true } : {}),
         earlyCheekEdgeTurn: makeup === "contour",
         order: sub.order,
         title: "",
@@ -27,6 +28,7 @@ export function resolveSubStep(
           set.guides.map((g) => ({
             ...g,
             region: set.region,
+            group: `${sub.subStepId}:${set.region}`,
             ...(set.exclude?.length ? { exclude: set.exclude } : {}),
           })),
         ),
@@ -40,6 +42,7 @@ export function resolveSubStep(
         ? {
             ...step,
             stepId: sub.subStepId,
+            ...(makeup === "eyeliner" ? { eyelinerArrowOffset: true } : {}),
             order: sub.order,
             earlyCheekEdgeTurn:
               makeup === undefined ? step.earlyCheekEdgeTurn : makeup === "contour",
@@ -79,6 +82,7 @@ export function resolveStep(
   if (steps.length === 0) return null;
   return {
     stepId,
+    ...(makeup === "eyeliner" ? { eyelinerArrowOffset: true } : {}),
     earlyCheekEdgeTurn:
       makeup === undefined ? steps.some((step) => step.earlyCheekEdgeTurn) : makeup === "contour",
     order: steps[0].order,

@@ -140,6 +140,24 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
     type: "polygon",
     outline: [...edge.map(at), ...[...edge].reverse().map((i) => between(i, 4, 0.12))],
   });
+  /**
+   * 코 쉐딩 방향 화살표. 띠 안쪽 테두리(콧대 옆선)에 그으면 점선을 덮으므로, 띠 바깥 테두리보다 조금 더
+   * 바깥(눈 앞머리·콧볼 쪽)으로 옮겨 띠 옆에 나란히 긋는다. top·bottom은 옆선, topOut·bottomOut은 바깥 점이다
+   */
+  const noseArrow = (top: number, bottom: number, topOut: number, bottomOut: number) => {
+    const lerp = (a: Uv, b: Uv, t: number) => ({
+      x: a.x + (b.x - a.x) * t,
+      y: a.y + (b.y - a.y) * t,
+    });
+    // 띠 위쪽 끝은 눈 앞머리와 같은 높이라, 조금 내려와서 시작한다
+    const along = (t: number) =>
+      lerp(
+        lerp(uvPt(top), uvPt(bottom), t),
+        lerp(uvPt(topOut), uvPt(bottomOut), t),
+        NOSE_ARROW.out,
+      );
+    return arrow(anchorAt(along(NOSE_ARROW.from)), anchorAt(along(NOSE_ARROW.to)));
+  };
   /** 콧대 옆선(위 → 아래)과, 그 점들을 바깥 점 쪽으로 조금 벌린 선 사이의 가는 띠 */
   const noseBand = (side: number[], outward: number[]): GuideShape => ({
     type: "polygon",
@@ -281,9 +299,9 @@ export function buildDefaultGuideSet(mesh: FaceMesh, regions: RegionIndices): Gu
       regions: ["rightEye", "leftEye"],
       guides: [
         noseBand([193, 122, 196, 3, 51, 45], [133, 133, 133, 129, 129, 129]),
-        arrow(at(193), between(193, 45, 0.6)),
+        noseArrow(193, 45, 133, 129),
         noseBand([417, 351, 419, 248, 281, 275], [362, 362, 362, 358, 358, 358]),
-        arrow(at(417), between(417, 275, 0.6)),
+        noseArrow(417, 275, 362, 358),
       ],
     },
     {
@@ -484,6 +502,9 @@ export function browHairsAlong(place: (s: number, f: number) => MeshAnchor): Gui
     };
   });
 }
+
+/** 코 쉐딩 화살표: 콧대 옆선에서 바깥 점 쪽으로 옮기는 정도(띠 폭은 0.25)와 옆선을 따라 시작·끝 자리 */
+const NOSE_ARROW = { out: 0.85, from: 0.25, to: 0.8 };
 
 /** 블러셔 타원을 볼 부위 세로 반지름의 몇 배만큼 올릴지와 세로 크기 배율 */
 const BLUSH_LIFT = 0.45;

@@ -1,11 +1,19 @@
 import type { GuideShape, RegionName } from "@/features/face";
 
-/** 가이드 도형. exclude는 영역(polygon)에서 빼고 그릴 부위로, 아이섀도의 눈처럼 바르면 안 되는 곳이다 */
-export type GuideItem = GuideShape & { exclude?: RegionName[]; region?: RegionName };
+/**
+ * 가이드 도형. exclude는 영역(polygon)에서 빼고 그릴 부위로, 아이섀도의 눈처럼 바르면 안 되는 곳이다.
+ * group은 같은 하위 단계 · 같은 영역 묶음에서 온 도형끼리 같은 값이다
+ */
+export type GuideItem = GuideShape & {
+  exclude?: RegionName[];
+  region?: RegionName;
+  group?: string;
+};
 
 /** 튜토리얼 한 단계의 가이드 */
 export interface GuideStep {
   stepId: string;
+  eyelinerArrowOffset?: boolean;
   /** 볼 가장자리 도형을 얼굴 윤곽처럼 일찍 숨기는 쉐딩 단계 */
   earlyCheekEdgeTurn?: boolean;
   /** 1부터 */

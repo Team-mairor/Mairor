@@ -1,0 +1,293 @@
+{
+  "videoId": "fixture-contour-concealer",
+  "meshVersion": "v1",
+  "steps": [
+    {
+      "stepId": "s1",
+      "order": 1,
+      "makeup": "foundation",
+      "subSteps": [
+        {
+          "subStepId": "s1-1",
+          "order": 1,
+          "status": "notApplicable",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s2",
+      "order": 2,
+      "makeup": "contour",
+      "subSteps": [
+        {
+          "subStepId": "s2-1",
+          "order": 1,
+          "status": "extracted",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": [
+            {
+              "region": "rightEye",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 159,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 383,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 171,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 171,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 117,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 115,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 649,
+                      "bary": [
+                        0.1575,
+                        0.0918,
+                        0.7507
+                      ]
+                    },
+                    {
+                      "triangle": 855,
+                      "bary": [
+                        0.7086,
+                        0.0824,
+                        0.209
+                      ]
+                    },
+                    {
+                      "triangle": 281,
+                      "bary": [
+                        0.4425,
+                        0.0146,
+                        0.5429
+                      ]
+                    },
+                    {
+                      "triangle": 583,
+                      "bary": [
+                        0.0422,
+                        0.5651,
+                        0.3927
+                      ]
+                    },
+                    {
+                      "triangle": 563,
+                      "bary": [
+                        0.0338,
+                        0.5339,
+                        0.4323
+                      ]
+                    },
+                    {
+                      "triangle": 159,
+                      "bary": [
+                        0.5567,
+                        0.3096,
+                        0.1337
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "region": "leftEye",
+              "source": "extracted",
+              "guides": [
+                {
+                  "type": "polygon",
+                  "outline": [
+                    {
+                      "triangle": 158,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 382,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 170,
+                      "bary": [
+                        0,
+                        0,
+                        1
+                      ]
+                    },
+                    {
+                      "triangle": 170,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 116,
+                      "bary": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 114,
+                      "bary": [
+                        0,
+                        1,
+                        0
+                      ]
+                    },
+                    {
+                      "triangle": 648,
+                      "bary": [
+                        0.2189,
+                        0.7228,
+                        0.0583
+                      ]
+                    },
+                    {
+                      "triangle": 854,
+                      "bary": [
+                        0.7045,
+                        0.2238,
+                        0.0717
+                      ]
+                    },
+                    {
+                      "triangle": 280,
+                      "bary": [
+                        0.4427,
+                        0.5328,
+                        0.0245
+                      ]
+                    },
+                    {
+                      "triangle": 582,
+                      "bary": [
+                        0.0355,
+                        0.3988,
+                        0.5657
+                      ]
+                    },
+                    {
+                      "triangle": 562,
+                      "bary": [
+                        0.0273,
+                        0.434,
+                        0.5387
+                      ]
+                    },
+                    {
+                      "triangle": 158,
+                      "bary": [
+                        0.5551,
+                        0.1353,
+                        0.3096
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "subStepId": "s2-2",
+          "order": 2,
+          "status": "template",
+          "reasons": [
+            "notAnalyzed"
+          ],
+          "templateId": "contour",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s3",
+      "order": 3,
+      "makeup": "contour",
+      "subSteps": [
+        {
+          "subStepId": "s3-1",
+          "order": 1,
+          "status": "template",
+          "reasons": [
+            "noUsableFrame"
+          ],
+          "templateId": "contourNose",
+          "guideSets": []
+        }
+      ]
+    },
+    {
+      "stepId": "s4",
+      "order": 4,
+      "makeup": "highlight",
+      "subSteps": [
+        {
+          "subStepId": "s4-1",
+          "order": 1,
+          "status": "notApplicable",
+          "reasons": [],
+          "templateId": null,
+          "guideSets": []
+        }
+      ]
+    }
+  ]
+}
