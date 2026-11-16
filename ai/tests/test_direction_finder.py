@@ -236,6 +236,17 @@ def test_eyeshadow_under_uses_brightening_only_when_it_was_found_that_way():
     assert target_for("foundation", "faceOval", under, False) is None
 
 
+def test_eyeshadow_zone_found_by_darkening_gets_no_arrow():
+    """어두워진 양으로 찾은 자리는 방향을 재지 않고, 다른 자리는 그대로 붉어진 양으로 잰다."""
+    under = eyeshadow_area.eyeshadow_range("leftEye", "under")
+    upper = eyeshadow_area.eyeshadow_range("leftEye", "upper")
+    dark = frozenset({"upper"})
+    assert target_for("eyeshadow", "leftEye", upper, False, dark) is None
+    assert target_for("eyeshadow", "leftEye", under, False, dark).change is (
+        eyeshadow_area.eyeshadow_reddening
+    )
+
+
 def lips_found(result, step_start_ms, step_end_ms, load_photo, occlusion=None) -> LipArea:
     return LipArea(mask=polygon_mask(map_points(REGION_POINTS["lipsOuter"]), MAP_SIZE, MAP_SIZE))
 

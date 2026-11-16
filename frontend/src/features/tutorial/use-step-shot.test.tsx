@@ -5,13 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FaceFrame, RegionName } from "@/features/face";
 
-import {
-  reachableStep,
-  SHOT_FALLBACK_MS,
-  STILL_MAX_WAIT_MS,
-  STILL_MS,
-  useStepShot,
-} from "./use-step-shot";
+import { SHOT_FALLBACK_MS, STILL_MAX_WAIT_MS, STILL_MS, useStepShot } from "./use-step-shot";
 import frontJson from "../../../public/fixtures/faces/front.json";
 
 const face = vi.hoisted(() => ({
@@ -174,19 +168,5 @@ describe("useStepShot", () => {
     await act(async () => shot.start());
     expect(shot.state).toBe("waiting");
     expect(shot.error).toBeNull();
-  });
-});
-
-describe("reachableStep", () => {
-  const ids = ["s1", "s2", "s3", "s4"];
-  it("처음으로 사진이 없는 단계까지만 갈 수 있다", () => {
-    expect(reachableStep(ids, (id) => id === "s1")).toBe(1);
-    expect(reachableStep(ids, () => false)).toBe(0);
-  });
-  it("뒤 단계 사진이 있어도 중간 사진이 없으면 그 단계에서 막는다", () => {
-    expect(reachableStep(ids, (id) => id !== "s2")).toBe(1);
-  });
-  it("모두 찍었으면 마지막 단계까지", () => {
-    expect(reachableStep(ids, () => true)).toBe(3);
   });
 });

@@ -28,7 +28,7 @@ export function categoryOfPart(part: string): MatchCategory | null {
   return Object.hasOwn(MAKEUP_CATEGORY, part) ? MAKEUP_CATEGORY[part as Makeup] : null;
 }
 
-/** 연속한 같은 카테고리 단계 묶음. end는 묶음 다음 단계의 순번이다 */
+/** 연속한 같은 묶음 키 단계 묶음. 부위 이름은 첫 단계 카테고리로 정한다. end는 묶음 다음 단계의 순번이다 */
 export interface StepGroup {
   category: MatchCategory | null;
   label: string;
@@ -36,17 +36,22 @@ export interface StepGroup {
   end: number;
 }
 
+type GroupedStep = { category: MatchCategory | null; title: string };
+
 /**
- * 영상 순서를 바꾸지 않고 연속한 같은 카테고리 단계만 묶는다.
- * 카테고리를 모르는 단계는 하나씩 따로 두고 단계 이름을 묶음 이름으로 쓴다.
+ * 영상 순서를 바꾸지 않고 연속한 같은 묶음 키 단계만 묶는다. 키를 주지 않으면 카테고리로 묶는다.
+ * 키가 없는 단계는 하나씩 따로 두고, 카테고리를 모르는 묶음은 단계 이름을 묶음 이름으로 쓴다.
  */
-export function groupSteps(
-  steps: readonly { category: MatchCategory | null; title: string }[],
+export function groupSteps<S extends GroupedStep>(
+  steps: readonly S[],
+  keyOf: (s: S) => string | null = (s) => s.category,
 ): StepGroup[] {
   const groups: StepGroup[] = [];
+  let prevKey: string | null = null;
   steps.forEach((s, i) => {
+    const key = keyOf(s);
     const prev = groups.at(-1);
-    if (prev && s.category && prev.category === s.category) prev.end = i + 1;
+    if (prev && key !== null && key === prevKey) prev.end = i + 1;
     else
       groups.push({
         category: s.category,
@@ -54,6 +59,7 @@ export function groupSteps(
         start: i,
         end: i + 1,
       });
+    prevKey = key;
   });
   return groups;
 }

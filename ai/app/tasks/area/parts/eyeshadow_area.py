@@ -20,8 +20,8 @@ paired_eyeshadow가 두 눈 모두 찾은 자리만 양쪽에 쓴다. 바르지 
 합친 같은 모양을 쓰고, 덜 겹치면 눈마다 자기 모양을 쓴다.
 """
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from typing import Literal
 
@@ -29,7 +29,7 @@ import cv2
 import numpy as np
 
 from app.schemas.guide_area import RegionName
-from app.schemas.landmarks import LandmarksResult
+from app.schemas.landmarks import FrameLandmarks, LandmarksResult
 from app.tasks.area.common.eye_line import above_eye_line
 from app.tasks.area.common.face_map import MAP_SIZE, map_points
 from app.tasks.area.common.region_mask import fill_holes, largest_piece, open_close, polygon_mask
@@ -74,8 +74,12 @@ BRIGHTENING_TOP_MIN = 4.0
 UNKNOWN_BRIGHTENING_TOP_MIN = 4.25
 BRIGHTENING_MIN = 1
 
+DARKENING_TOP_MIN = 2.5
+DARKENING_MIN = 1
+OPENNESS_TOLERANCE = 0.15
+
 EyeshadowAreaReason = Literal["noUsableFrame", "faceSizeMismatch", "eyeshadowColorNotFound"]
-Color = Literal["reddening", "brightening"]
+Color = Literal["reddening", "brightening", "darkening"]
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,7 @@ class ZoneArea:
     strength는 자리 안 바뀐 양(color)의 TOP_PERCENTILE 백분위 값이고, 자리를 모를 때의 관문에 다시
     쓴다.
     color는 어느 변화로 찾았는지다. 붉어진 양(reddening)이 기본이고, 눈 밑을 밝아진 양으로
-    찾았으면 brightening이다.
+    찾았으면 brightening, 어두워진 양으로 찾았으면 darkening이다.
     못 찾으면 mask는 None이고 reason에 이유가 든다.
     """
 
@@ -105,11 +109,15 @@ class EyeshadowArea:
     faceSizeMismatch는 직전·직후 얼굴 크기를 맞출 사진이 없음(match_sizes),
     eyeshadowColorNotFound는 붉어진 양이 기준에 못 미침이다.
     사진이 없어 지도를 못 만든 눈은 zones가 비어 있다.
+    darkened는 눈 뜬 정도가 비슷한 사진끼리 어두워진 양으로 자리마다 찾은 결과다
+    (check_darkened_zone). zones와 따로 두고, 붉은 기 등으로 두 눈 모두 찾지 못한 자리에서만
+    쓴다(paired_darkened). 눈 뜬 정도가 맞는 사진이 없으면 비어 있다.
     """
 
     mask: np.ndarray | None
     reason: EyeshadowAreaReason | None = None
     zones: Mapping[Zone, ZoneArea] = field(default_factory=dict)
+    darkened: Mapping[Zone, ZoneArea] = field(default_factory=dict)
 
     def zone(self, zone: Zone) -> ZoneArea:
         """자리 하나의 결과. 그 자리를 재지 못했으면 이 눈의 이유로 못 찾은 결과다."""
@@ -135,6 +143,9 @@ def find_eyeshadow_area(
     occlusion이 있으면 사진마다 가린 칸을 빼고, 울타리를 많이 가린 사진은 통째로 빼며,
     직전이나 직후 어느 한쪽에서라도 모든 사진에 가려진 칸(모름 칸)은 보지 않는다.
     붉은 기로 눈 밑을 찾으면 밝아진 양 지도는 만들지 않는다(눈 하나 약 0.7초가 더 든다).
+    어두워진 양(darkened)은 직전·직후 중 눈 뜬 정도가 비슷한 사진만 골라(openness_matched)
+    따로 만든 지도로 잰다. 눈을 더 크게 뜨면 쌍꺼풀 주름과 속눈썹 선이 드러나 바르지 않아도
+    어두워진 것처럼 보였다(시험 영상 RBm4rzufBV0 step_10 윗눈두덩 3.9·5.2 → 맞추면 1.9).
     """
     regions = [eye, EYE_BROWS[eye]]
     before_rows = usable_rows(result, step_start_ms - BEFORE_WINDOW_MS, step_start_ms, regions)
@@ -154,11 +165,63 @@ def find_eyeshadow_area(
     note_maps([eye], before, after, unknown, after_rows, load_photo, occlusion)
     reddening = eyeshadow_reddening(before, after, unknown)
     area = check_eyeshadow_area(reddening, eye, unknown)
-    if area.reason == "noUsableFrame" or area.zone("under").mask is not None:
+    if area.reason == "noUsableFrame":
         return area
-    return check_eyeshadow_area(
-        reddening, eye, unknown, eyeshadow_brightening(before, after, unknown)
-    )
+    if area.zone("under").mask is None:
+        area = check_eyeshadow_area(
+            reddening, eye, unknown, eyeshadow_brightening(before, after, unknown)
+        )
+    matched_before, matched_after = openness_matched(before_rows, after_rows, eye)
+    if not matched_before:
+        return area
+    if len(matched_before) < len(before_rows):
+        before, before_unknown = rows_to_known_map(matched_before, load_photo, occlusion, zone)
+    if len(matched_after) < len(after_rows):
+        after, after_unknown = rows_to_known_map(matched_after, load_photo, occlusion, zone)
+    unknown = before_unknown | after_unknown
+    darkening = eyeshadow_darkening(before, after, unknown)
+    darkened = {zone: check_darkened_zone(darkening, eye, zone, unknown) for zone in ZONES}
+    return replace(area, darkened=darkened)
+
+
+def eye_openness(row: FrameLandmarks, eye: RegionName) -> float:
+    """사진 한 장에서 눈 하나를 뜬 정도. 눈 점 테두리 넓이 ÷ 눈 가로(가장 먼 두 점 거리)²이다.
+
+    고개 기울기와 얼굴 크기에 상관없이 눈을 크게 뜰수록 크다. 시험 영상에서 0.15(내리깔기)~0.34
+    (크게 뜨기)였다.
+    """
+    width, height = row.image_size.width, row.image_size.height
+    marks = row.face.landmarks
+    points = np.array([(marks[i].x * width, marks[i].y * height) for i in REGION_POINTS[eye]])
+    xs, ys = points[:, 0], points[:, 1]
+    area = 0.5 * abs(float(np.dot(xs, np.roll(ys, 1)) - np.dot(ys, np.roll(xs, 1))))
+    span = float(np.linalg.norm(points[:, None] - points[None], axis=-1).max())
+    return area / span**2 if span > 0 else 0.0
+
+
+def openness_matched(
+    before_rows: Sequence[FrameLandmarks], after_rows: Sequence[FrameLandmarks], eye: RegionName
+) -> tuple[list[FrameLandmarks], list[FrameLandmarks]]:
+    """직전·직후에서 눈 뜬 정도(eye_openness)가 비슷한 사진만 (직전, 직후)로 돌려준다.
+
+    직후 가운데 값과 OPENNESS_TOLERANCE 비율 안인 직전 사진을 고르고, 고른 직전 사진의 가운데 값과
+    그 비율 안인 직후 사진을 고른다. 어느 쪽이든 남는 사진이 없으면 둘 다 빈 목록이다.
+    """
+    after_mid = float(np.median([eye_openness(row, eye) for row in after_rows]))
+    before = [
+        row
+        for row in before_rows
+        if abs(eye_openness(row, eye) - after_mid) <= OPENNESS_TOLERANCE * after_mid
+    ]
+    if not before:
+        return [], []
+    before_mid = float(np.median([eye_openness(row, eye) for row in before]))
+    after = [
+        row
+        for row in after_rows
+        if abs(eye_openness(row, eye) - before_mid) <= OPENNESS_TOLERANCE * before_mid
+    ]
+    return (before, after) if after else ([], [])
 
 
 @lru_cache
@@ -206,8 +269,26 @@ def eyeshadow_brightening(
     밑으로
     번졌다(시험 영상 s17 오른눈 눈 밑 상위 10% 값이 눈 구멍을 빼면 4.46에서 3.95로 줄었다).
     """
+    return _lightness_change(before, after, unknown, 1)
+
+
+def eyeshadow_darkening(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None = None
+) -> np.ndarray:
+    """직전·직후 얼굴 지도(RGB)에서 칸마다 어두워진 양(L이 줄어든 양)을 조명을 빼고 낸다.
+
+    eyeshadow_brightening과 부호만 다르다. 베이지·고동색 음영은 붉은 기가 거의 늘지 않고
+    어두워지기만 해서 붉어진 양으로 못 찾았다(시험 영상 RBm4rzufBV0 step_18 눈 밑 붉어진 양 0.7~0.8,
+    어두워진 양 3.3~4.6).
+    """
+    return _lightness_change(before, after, unknown, -1)
+
+
+def _lightness_change(
+    before: np.ndarray, after: np.ndarray, unknown: np.ndarray | None, sign: int
+) -> np.ndarray:
     holes = _eye_holes() if unknown is None else _eye_holes() | unknown
-    change = rgb_to_lab(after)[..., 0] - rgb_to_lab(before)[..., 0]
+    change = sign * (rgb_to_lab(after)[..., 0] - rgb_to_lab(before)[..., 0])
     corrected = remove_lighting(change, _light_exclude(), holes)
     return cv2.GaussianBlur(corrected.astype(np.float32), (0, 0), BLUR_SIGMA)
 
@@ -293,6 +374,56 @@ def check_brightened_under(
             mask=None, strength=strength, reason="eyeshadowColorNotFound", color="brightening"
         )
     return ZoneArea(mask=shape, strength=strength, color="brightening")
+
+
+def check_darkened_zone(
+    darkening: np.ndarray, eye: RegionName, zone: Zone, unknown: np.ndarray | None = None
+) -> ZoneArea:
+    """눈 하나·자리 하나를 어두워진 양으로 고른다. 베이지·고동색 음영처럼 붉은 기가 늘지 않는
+    색이다.
+
+    check_zone과 같은 순서로, 자리 안 TOP_PERCENTILE 백분위 값이 DARKENING_TOP_MIN보다 작으면
+    eyeshadowColorNotFound이고, 아니면 DARKENING_MIN보다 어두워진 칸을 eyeshadow_shape로 다듬고
+    윗눈두덩은 속눈썹 선까지 채운다. 관문은 시험 영상에서 눈에 바르지 않은 구간(블러셔·립 단계,
+    애교살 단계의 윗눈두덩)과 local_03 바르기 전 두 묶음의 최댓값(2.2)보다 높게 잡았다.
+    결과의 color는 darkening이다.
+    """
+    zone_cells = eyeshadow_range(eye, zone)
+    if mostly_unknown(zone_cells, unknown):
+        return ZoneArea(mask=None, reason="noUsableFrame", color="darkening")
+    cells = known_cells(zone_cells, unknown)
+    strength = float(np.percentile(darkening[cells], TOP_PERCENTILE))
+    shape = (
+        eyeshadow_shape((darkening > DARKENING_MIN) & cells, cells)
+        if strength >= DARKENING_TOP_MIN
+        else None
+    )
+    if shape is None or not shape.any():
+        return ZoneArea(
+            mask=None, strength=strength, reason="eyeshadowColorNotFound", color="darkening"
+        )
+    if zone == "upper":
+        shape = filled_to_lash(shape, eye)
+    return ZoneArea(mask=shape, strength=strength, color="darkening")
+
+
+def paired_darkened(
+    areas: Mapping[RegionName, EyeshadowArea], zone: Zone
+) -> tuple[dict[RegionName, ZoneArea], dict[RegionName, np.ndarray]] | None:
+    """두 눈의 어두워진 양 결과(darkened)로 자리 하나에 양쪽 눈에 쓸 (자리 결과, 마스크)를 만든다.
+
+    paired_eyeshadow와 같게 두 눈 모두 찾았을 때만 쓰고, 모양이 많이 겹치면 합친다.
+    바른 자리를 아는 단계에서만 부른다. 자리를 모를 때 두 자리의 헛것이 더해지는 관문은
+    아직 재지 않았다.
+    """
+    darkened = {
+        eye: EyeshadowArea(mask=None, reason=areas[eye].reason, zones=areas[eye].darkened)
+        for eye in EYES
+    }
+    masks = paired_eyeshadow(darkened, zone)
+    if masks is None:
+        return None
+    return {eye: darkened[eye].zone(zone) for eye in EYES}, masks
 
 
 def filled_to_lash(mask: np.ndarray, eye: RegionName) -> np.ndarray:

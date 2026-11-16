@@ -38,6 +38,32 @@ describe("groupSteps", () => {
   it("단계가 없으면 묶음도 없다", () => {
     expect(groupSteps([])).toEqual([]);
   });
+
+  it("묶음 키를 주면 연속한 같은 키만 묶고 키가 없는 단계는 따로 둔다", () => {
+    const withProduct = (category: Parameters<typeof step>[0], product: string | null) => ({
+      ...step(category),
+      product,
+    });
+    const steps = [
+      withProduct("EYE", "애교빔 펜슬"),
+      withProduct("EYE", "리얼아이팔레트"),
+      withProduct("EYE", "리얼아이팔레트"),
+      withProduct("EYE", "펜슬 라이너"),
+      withProduct(null, null),
+      withProduct(null, null),
+      withProduct("BASE", "컨실러 팔레트"),
+      withProduct("CHEEK", "컨실러 팔레트"),
+    ];
+    const groups = groupSteps(steps, (s) => s.product);
+    expect(groups.map((g) => [g.label, g.start, g.end])).toEqual([
+      ["눈", 0, 1],
+      ["눈", 1, 3],
+      ["눈", 3, 4],
+      ["", 4, 5],
+      ["", 5, 6],
+      ["피부", 6, 8],
+    ]);
+  });
 });
 
 describe("groupIndexOf", () => {

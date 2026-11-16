@@ -69,15 +69,16 @@ export function GuideDone() {
   }, [ready]);
   if (!guide) return null;
 
-  // 촬영 기록이 아니라 실제로 남은 사진으로 판단한다
-  const last = guide.steps.at(-1)?.stepId;
+  // 촬영 기록이 아니라 실제로 남은 사진으로 판단한다. 원하는 단계까지만 하고 완성할 수 있어
+  // 가이드의 마지막 단계가 아니라 마지막으로 찍은 단계 사진이 완성 사진이다
+  const last = run.captures.at(-1) ?? guide.steps.at(-1)?.stepId;
   const finalShot = last ? stepPhoto(run.id, last) : null;
   const hasPhoto = guide.steps.some((s) => stepPhoto(run.id, s.stepId));
 
   // 이동만 한다. 실행은 실행 화면을 벗어날 때 끝난다
   return (
     <DoneView
-      total={guide.steps.length}
+      total={run.captures.length || guide.steps.length}
       title={guide.title}
       channel={guide.channelTitle}
       hasFinal={!!finalShot}

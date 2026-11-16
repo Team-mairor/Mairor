@@ -501,7 +501,7 @@ export interface PhotoMeta {
   createdAt: string;
 }
 
-/** 리포트 목록 한 줄 (ReportSummary). completedPhoto는 마지막 단계 사진이 없으면 null */
+/** 리포트 목록 한 줄 (ReportSummary). completedPhoto는 가장 나중에 찍은 단계 사진이고, 찍은 사진이 없으면 null */
 export interface ReportSummaryDto {
   recordId: string;
   guideId: string;

@@ -37,7 +37,7 @@
 
 - 395 범위는 실행 생성/조회·동의·단계 사진·완료·포기·사진 GET의 7개 API다. 얼굴 등록 CRUD와 리포트 목록/상세/삭제는 별도다.
 - 완료는 최초 201, 재요청은 200과 동일 recordId다. 상태·기록 한 건·사진 관계·얼굴 RETAINED는 같은 DB 트랜잭션으로 처리한다.
-- 단계 사진이 없어도 완료할 수 있다. completedPhoto는 마지막 GUIDE 단계의 사진만 사용하며 없으면 null이다.
+- 단계 사진이 없어도 완료할 수 있다. completedPhoto는 실행에서 가장 나중에 찍은 GUIDE 단계 사진이며 없으면 null이다(원하는 단계까지만 하고 완성할 수 있다).
 - 미완료 실행/사진은 원래 세션에 귀속된다. 사진 GET에서 완료 기록에 연결된 사진은 본인 계정으로 인가한다.
 - FaceRegistrationExecutionService.link/retain/abandon은 MANDATORY다. 회원 → 실행/등록 → 사진 잠금 순서와 실행 트랜잭션을 지킨다.
 - PhotoUploadService.store/discard는 NEVER다. 외부 I/O와 DB 연결 트랜잭션을 분리하고 연결 시 상태·동의·세션을 다시 검증한다.

@@ -14,6 +14,7 @@ from app.tasks.area.parts import eyeshadow_area
 from app.tasks.area.parts.area_preparation import remove_lighting, rgb_to_lab
 from app.tasks.area.parts.eyeshadow_area import (
     BRIGHTENING_TOP_MIN,
+    DARKENING_TOP_MIN,
     EYES,
     FILL_JOIN_COLS,
     FILL_REACH_CELLS,
@@ -27,15 +28,19 @@ from app.tasks.area.parts.eyeshadow_area import (
     EyeshadowArea,
     ZoneArea,
     check_brightened_under,
+    check_darkened_zone,
     check_eyeshadow_area,
     check_zone,
     eyeshadow_brightening,
+    eyeshadow_darkening,
     eyeshadow_range,
     eyeshadow_reddening,
     eyeshadow_shape,
     filled_to_lash,
     find_eyeshadow_area,
     mirror_agreement,
+    openness_matched,
+    paired_darkened,
     paired_eyeshadow,
 )
 from tests.test_area_preparation import DARK_SKIN, make_row
@@ -753,3 +758,106 @@ def test_white_under_eye_on_sample_video_is_found_by_brightening():
         assert not (masks["under"][eye] & holes).any()
     faint = eyeshadow_on_maps(before, with_white_under_eyes(before, WHITE_ALPHA_FAINT))
     assert faint["under"] is None
+
+
+def test_darker_lid_without_redness_is_found_by_darkening():
+    """붉은 기 없이 어두워지기만 한 윗눈두덩(고동색 음영)은 어두워진 양으로 찾는다."""
+    darkening = eyeshadow_darkening(skin_map(), painted_on(["leftEye"], DARK_SKIN))
+    upper = check_darkened_zone(darkening, "leftEye", "upper")
+    assert upper.mask is not None
+    assert upper.color == "darkening"
+    assert upper.strength >= DARKENING_TOP_MIN
+    assert check_darkened_zone(darkening, "rightEye", "upper").mask is None
+
+
+def test_unchanged_eye_is_not_found_by_darkening():
+    darkening = eyeshadow_darkening(skin_map(), skin_map())
+    for zone in ZONES:
+        found = check_darkened_zone(darkening, "leftEye", zone)
+        assert found.mask is None
+        assert found.reason == "eyeshadowColorNotFound"
+
+
+def test_unchanged_eyes_are_not_found_by_darkening_on_sample_video():
+    """바르기 전 두 묶음은 어두워진 양으로도 찾지 않는다."""
+    darkening = eyeshadow_darkening(load_map("unchanged_s10"), load_map("before_s10"))
+    for eye in EYES:
+        for zone in ZONES:
+            assert check_darkened_zone(darkening, eye, zone).mask is None
+
+
+def test_openness_matched_keeps_photos_with_similar_eye_opening(monkeypatch):
+    rows = {ms: make_row(ms) for ms in (9000, 9500, 20500, 21000)}
+    opening = {9000: 0.18, 9500: 0.26, 20500: 0.25, 21000: 0.34}
+    monkeypatch.setattr(eyeshadow_area, "eye_openness", lambda row, eye: opening[row.timestamp_ms])
+    before, after = openness_matched(
+        [rows[9000], rows[9500]], [rows[20500], rows[21000]], "leftEye"
+    )
+    assert [row.timestamp_ms for row in before] == [9500]
+    assert [row.timestamp_ms for row in after] == [20500]
+
+
+def test_openness_matched_gives_nothing_when_eyes_open_differently(monkeypatch):
+    """직후에 눈을 크게 떴는데 직전에는 그만큼 뜬 사진이 없으면 어두워진 양을 재지 않는다."""
+    rows = {ms: make_row(ms) for ms in (9000, 21000)}
+    opening = {9000: 0.24, 21000: 0.34}
+    monkeypatch.setattr(eyeshadow_area, "eye_openness", lambda row, eye: opening[row.timestamp_ms])
+    assert openness_matched([rows[9000]], [rows[21000]], "leftEye") == ([], [])
+
+
+def test_eye_openness_is_bigger_for_a_wider_open_eye():
+    row = make_row(START_MS)
+    wide = row.model_copy(deep=True)
+    top = min(REGION_POINTS["leftEye"], key=lambda i: row.face.landmarks[i].y)
+    wide.face.landmarks[top].y -= 0.01
+    assert eyeshadow_area.eye_openness(wide, "leftEye") > eyeshadow_area.eye_openness(
+        row, "leftEye"
+    )
+
+
+def darkened_eye(found: bool) -> EyeshadowArea:
+    zone = ZoneArea(mask=eyeshadow_range("leftEye", "upper"), strength=3.0, color="darkening")
+    missed = ZoneArea(mask=None, strength=1.0, reason="eyeshadowColorNotFound", color="darkening")
+    return EyeshadowArea(
+        mask=None, reason="eyeshadowColorNotFound", darkened={"upper": zone if found else missed}
+    )
+
+
+def test_paired_darkened_needs_both_eyes():
+    both = {eye: darkened_eye(True) for eye in EYES}
+    pair = paired_darkened(both, "upper")
+    assert pair is not None
+    found, masks = pair
+    assert all(found[eye].color == "darkening" for eye in EYES)
+    assert set(masks) == set(EYES)
+    one = {"leftEye": darkened_eye(True), "rightEye": darkened_eye(False)}
+    assert paired_darkened(one, "upper") is None
+
+
+def test_find_eyeshadow_area_skips_darkening_when_eye_opening_differs(monkeypatch):
+    before_row, after_row = make_row(START_MS - 500), make_row(END_MS + 500)
+    maps = {
+        before_row.timestamp_ms: skin_map(),
+        after_row.timestamp_ms: painted_on(["leftEye", "rightEye"], DARK_SKIN),
+    }
+
+    def rows_in(result, start_ms, end_ms, regions):
+        return [row for row in (before_row, after_row) if start_ms <= row.timestamp_ms <= end_ms]
+
+    def as_map(rows, load_photo, occlusion, zone):
+        return maps[rows[0].timestamp_ms], np.zeros((MAP_SIZE, MAP_SIZE), dtype=bool)
+
+    monkeypatch.setattr(eyeshadow_area, "usable_rows", rows_in)
+    monkeypatch.setattr(eyeshadow_area, "match_sizes", lambda before, after: (before, after))
+    monkeypatch.setattr(
+        eyeshadow_area, "drop_blurry", lambda before, after, load, occ: (before, after)
+    )
+    monkeypatch.setattr(eyeshadow_area, "rows_to_known_map", as_map)
+    result = LandmarksResult(video_id="test_01", frames=[before_row, after_row])
+    same = find_eyeshadow_area(result, START_MS, END_MS, lambda row: None, "leftEye")
+    assert same.zone("upper").mask is None
+    assert same.darkened["upper"].mask is not None
+    opening = {before_row.timestamp_ms: 0.2, after_row.timestamp_ms: 0.34}
+    monkeypatch.setattr(eyeshadow_area, "eye_openness", lambda row, eye: opening[row.timestamp_ms])
+    differ = find_eyeshadow_area(result, START_MS, END_MS, lambda row: None, "leftEye")
+    assert differ.darkened == {}

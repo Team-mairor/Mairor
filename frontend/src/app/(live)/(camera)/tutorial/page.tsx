@@ -62,11 +62,11 @@ import {
   PrepCard,
   ProductChip,
   templateOf,
-  reachableStep,
   TutorialTopBar,
   useStepShot,
   type StepProduct,
   SelfiePreview,
+  StepList,
 } from "@/features/tutorial";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useTimeout } from "@/lib/hooks/use-timeout";
@@ -282,7 +282,8 @@ function useExecutionProducts(executionId: string | null) {
 }
 
 /**
- * 상단 바는 연속한 같은 부위 단계를 한 칸으로 묶고, 묶음의 마지막 단계를 넘길 때 확인 창 없이 사진을 한 장 남긴다.
+ * 상단 바는 연속한 같은 제품 단계를 한 칸으로 묶고, 묶음의 마지막 단계를 넘길 때 확인 창 없이 사진을 한 장 남긴다.
+ * 단계 목록에서 아무 묶음으로나 가고, 원하는 단계까지만 하고 지금 단계에서 완성할 수 있다.
  * 사진 저장 동의는 필수이고 튜토리얼 안내에서 받는다.
  * 진하기 게이지는 카메라에서 잰 이번 단계 화장 효과를 레퍼런스와 견준 값이다(features/gauge).
  */
@@ -301,6 +302,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // false면 단계 준비 카드(제품·할 일·끝내는 기준)를 띄운다. 앞으로 갈 때만 띄우고, 이전 단계로 돌아갈 때는 띄우지 않는다
   const [ready, setReady] = useState(false);
   const [exitAsk, setExitAsk] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
+  // 목록에서 지금 단계에서 완성하기를 골랐는지. 마지막 단계처럼 얼굴 전체 사진을 찍고 끝낸다
+  const [finishing, setFinishing] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   // 미러필름에서 마지막 사진 전에 카메라 화면을 띄우고 자세를 맞추는 중인지
   const [posing, setPosing] = useState(false);
@@ -334,7 +338,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   useEffect(loadDefaults, [loadDefaults]);
 
   const info = steps[step];
-  const groups = useMemo(() => groupSteps(steps), [steps]);
+  // 섀도 사이에 애교살·아이라인이 끼지 않게, 같은 부위가 아니라 같은 제품이 이어질 때만 묶는다
+  const groups = useMemo(() => groupSteps(steps, (s) => s.product?.full ?? null), [steps]);
   const g = groupIndexOf(groups, step);
   const group = groups[g];
   const groupLast = step === group.end - 1;
@@ -345,7 +350,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const hasProduct = !!pr && pr.kind !== "none";
   // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다
   const paced = hasProduct || !pr;
-  const last = step >= steps.length - 1;
+  const last = step >= steps.length - 1 || finishing;
   // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다. 그릴 것이 없으면 설명만 보여 준다
   const subs = useMemo(() => subsOf(info, area), [area, info]);
   // 레퍼런스 게이지 기준이 있는 단계만 게이지를 띄우고, 고른 제품에 따라 숨기거나 색감을 뺀다
@@ -411,11 +416,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     ],
     [steps, group.start, group.end, area, defaults],
   );
-  // 촬영 기록이 아니라 실제로 남은 사진으로 상단 바의 이동 범위를 정한다. 사진은 묶음 마지막 단계에 있다
-  const reachable = reachableStep(
-    groups.map((x) => steps[x.end - 1].stepId),
-    (id) => !!stepPhoto(run.id, id),
-  );
   // 가이드가 있는 단계는 지금 단계 부위의 판정(놓침·고개 돌림·잘림·너무 멂)으로 안내하고 측정을 멈춘다
   const { crop } = useTutorialCrop();
   // 미러필름은 크롭 없이 그리므로 판정도 크롭 없이 한다
@@ -452,8 +452,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     }
     if (!isCurrentRun(run.id)) return;
     saveStepPhoto(run.id, info.stepId, photo);
+    // 저장한 순서로 둔다. 완료 화면은 마지막으로 찍은 단계 사진을 완성 사진으로 쓴다
     updateRun(
-      (r) => (r.captures.includes(info.stepId) ? {} : { captures: [...r.captures, info.stepId] }),
+      (r) => ({ captures: [...r.captures.filter((id) => id !== info.stepId), info.stepId] }),
       run.id,
     );
     if (last) {
@@ -568,8 +569,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 변수 이름을 그대로 적어야 Tailwind가 테마 변수를 CSS에 넣는다
   const meterColor = meterBlocked || !gaugeLabel ? "var(--color-ash)" : LABEL_COLOR[gaugeLabel];
   const lastAct = !paced || act >= info.acts.length - 1;
-  // 사진은 묶음 마지막 단계에서만 찍으므로, 촬영 부위를 다시 불러오는 것도 그 단계에서만 한다
-  const reloadRegions = groupLast && defaultsFailed && photoRegions.length === 0;
+  // 사진은 묶음 마지막 단계(또는 완성하는 단계)에서만 찍으므로, 촬영 부위를 다시 불러오는 것도 그때만 한다
+  const reloadRegions = (groupLast || finishing) && defaultsFailed && photoRegions.length === 0;
   // 묶음 안 위치. 한 단계뿐인 묶음이면 띄우지 않는다
   const groupSize = group.end - group.start;
   const groupDetail =
@@ -599,7 +600,30 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setAct(0);
     setReady(!prep);
     setEntered(null);
+    setFinishing(false);
+    setListOpen(false);
   }
+  const openList = () => {
+    // 촬영을 기다리는 중에 목록을 열면 뒤에서 단계가 넘어가지 않게 대기를 접는다
+    cancelCountdown();
+    cancelShot();
+    setPosing(false);
+    setListOpen(true);
+  };
+  // 목록에서 고른 묶음의 첫 단계로 간다. 바르기 전 얼굴로 게이지 기준을 잡도록 준비 카드부터 띄운다.
+  // 지금 묶음을 고르면 완성하기를 거두고 이어서 한다
+  const goGroup = (i: number) => {
+    if (i !== g) return goStep(groups[i].start);
+    setFinishing(false);
+    setListOpen(false);
+  };
+  // 지금 단계의 할 일을 다 한 것으로 보고, 다음 버튼을 완성하기로 바꾼다
+  const finishHere = () => {
+    setListOpen(false);
+    setFinishing(true);
+    setReady(true);
+    setAct(Math.max(0, info.acts.length - 1));
+  };
   /** 단계에서 쓸 내 제품 이름. 제품 없이 하면 null */
   const productNameOf = (s: TutorialStep) => {
     const picked = pickOf(s.stepId, run.choice, state.pouch);
@@ -627,7 +651,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       setAct((a) => a + 1);
       return;
     }
-    if (!groupLast) return enterNextInGroup();
+    if (!groupLast && !finishing) return enterNextInGroup();
     if (reloadRegions) {
       setDefaultsFailed(false);
       return loadDefaults();
@@ -705,10 +729,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           setPosing(false);
           setExitAsk(true);
         }}
-        reachable={shot.saving || reviewSaving ? -1 : reachable}
-        onGoGroup={(i) =>
-          !shot.saving && !reviewSaving && i <= reachable && goStep(groups[i].start, i > g)
-        }
+        listDisabled={shot.saving || reviewSaving}
+        onList={openList}
       />
       {/* 같은 자리에 알림이 뜨면 숨긴다 */}
       {/* 영상 제품 정보가 없어도 고른 제품이 있으면 보여 준다 */}
@@ -952,6 +974,22 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         </div>
       )}
 
+      <StepList
+        open={listOpen}
+        items={groups.map((x) => ({
+          title: steps
+            .slice(x.start, x.end)
+            .map((s) => s.title)
+            .join(" · "),
+          product: steps[x.start].product?.full ?? null,
+          // 사진은 묶음 마지막 단계에 남는다
+          done: !!stepPhoto(run.id, steps[x.end - 1].stepId),
+        }))}
+        current={g}
+        onGo={goGroup}
+        onFinish={finishHere}
+        onClose={() => setListOpen(false)}
+      />
       <ExitModal open={exitAsk} onQuit={quit} onClose={() => setExitAsk(false)} />
     </main>
   );

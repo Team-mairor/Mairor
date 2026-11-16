@@ -1,5 +1,6 @@
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
@@ -459,6 +460,54 @@ def test_eyeshadow_sub_steps_follow_the_step_zones_from_upper_to_under(monkeypat
     assert [s.region for s in under] == list(EYES)
     for guide_set in under:
         assert guide_set.exclude == [guide_set.region]
+
+
+def with_darkened(finder, zones: dict[str, float]):
+    """finder 결과에 두 눈 모두 zones의 자리를 어두워진 양으로 찾은 결과(darkened)를 더한다."""
+
+    def found(result, step_start_ms, step_end_ms, load_photo, eye, occlusion=None):
+        area = finder(result, step_start_ms, step_end_ms, load_photo, eye, occlusion)
+        darkened = {
+            zone: ZoneArea(mask=eyeshadow_range(eye, zone), strength=strength, color="darkening")
+            for zone, strength in zones.items()
+        }
+        return replace(area, darkened=darkened)
+
+    return found
+
+
+def test_eyeshadow_zone_missed_by_reddening_uses_darkening_of_both_eyes(monkeypatch):
+    """윗눈두덩을 한 눈만 붉은 기로 찾았으면, 두 눈 모두 어두워진 양으로 찾은 결과를 쓴다."""
+    step = input_step("eyeshadow", "음영 섀도", "윗눈두덩과 애교살")
+    finder = with_darkened(shadow_found({"upper": STRONG}, eyes=EYES[:1]), {"upper": 3.0})
+    sub_steps = shadow_sub_steps(monkeypatch, finder, step)
+    assert [(s.sub_step_id, s.status, s.template_id) for s in sub_steps] == [
+        ("s5-1", "extracted", None),
+        ("s5-2", "template", "eyeshadowUnder"),
+    ]
+    assert [s.region for s in sub_steps[0].guide_sets] == list(EYES)
+
+
+def test_eyeshadow_zone_found_by_darkening_gets_no_arrow(monkeypatch):
+    """어두워진 양으로 찾은 자리는 바른 방향을 재지 않는다(add_directions에 그 자리를 넘긴다)."""
+    step = input_step("eyeshadow", "음영 섀도", "윗눈두덩과 애교살")
+    finder = with_darkened(shadow_found({"under": STRONG}), {"upper": 3.0})
+    passed = {}
+
+    def directions(makeup, sub_steps, *args):
+        passed["dark"] = args[-1]
+        return list(sub_steps), []
+
+    monkeypatch.setattr(guide_area_builder, "add_directions", directions)
+    shadow_sub_steps(monkeypatch, finder, step)
+    assert passed["dark"] == frozenset({"upper"})
+
+
+def test_eyeshadow_darkening_is_not_used_when_the_zone_is_unknown(monkeypatch):
+    step = input_step("eyeshadow", "섀도", "눈")
+    finder = with_darkened(shadow_found({}), {"upper": 3.0, "under": 3.0})
+    sub_steps = shadow_sub_steps(monkeypatch, finder, step)
+    assert [(s.status, s.template_id) for s in sub_steps] == [("template", "eyeshadow")]
 
 
 def test_eyeshadow_with_both_zones_found_sends_both(monkeypatch):

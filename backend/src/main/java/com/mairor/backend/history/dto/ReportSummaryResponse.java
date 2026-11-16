@@ -23,7 +23,7 @@ public record ReportSummaryResponse(
             example = "https://i.ytimg.com/vi/VxAXD6PP76I/hqdefault.jpg")
         String thumbnailUrl,
     @Schema(description = "완료 시각(UTC)", example = "2026-11-11T09:00:00Z") Instant completedAt,
-    @Schema(description = "완성 사진(마지막 단계 사진). 없거나 지우는 중이면 null") PhotoResponse completedPhoto,
+    @Schema(description = "완성 사진(가장 나중에 찍은 단계 사진). 없거나 지우는 중이면 null") PhotoResponse completedPhoto,
     @Schema(description = "단계 수", example = "12") int stepCount,
     @Schema(description = "대체 제품으로 따라 한 단계 수", example = "3") int substituteCount) {
 

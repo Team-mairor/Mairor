@@ -149,6 +149,7 @@ public class ExecutionCompletionService {
     int substitutes = (int) executionSteps.stream().filter(this::isSubstitute).count();
     report.put("substituteCount", substitutes);
     ArrayNode reportSteps = report.putArray("steps");
+    StoredPhoto latest = null;
     for (ExecutionStep step : executionSteps) {
       ObjectNode snapshot = (ObjectNode) mapper.readTree(step.getStepSnapshot());
       if (snapshot.has("result")) {
@@ -163,17 +164,15 @@ public class ExecutionCompletionService {
       snapshot.remove("selectedPouchItemId");
       snapshot.putNull("photo");
       StoredPhoto photo = availableStepPhoto(execution, step);
-      if (photo != null) snapshot.set("photo", mapper.valueToTree(PhotoResponse.from(photo)));
+      if (photo != null) {
+        snapshot.set("photo", mapper.valueToTree(PhotoResponse.from(photo)));
+        if (latest == null || photo.getCreatedAt().isAfter(latest.getCreatedAt())) latest = photo;
+      }
       reportSteps.add(snapshot);
     }
-    ObjectNode completedPhoto = null;
-    if (!executionSteps.isEmpty()) {
-      ExecutionStep last = executionSteps.getLast();
-      StoredPhoto photo = availableStepPhoto(execution, last);
-      if (photo != null) completedPhoto = mapper.valueToTree(PhotoResponse.from(photo));
-    }
-    if (completedPhoto == null) report.putNull("completedPhoto");
-    else report.set("completedPhoto", completedPhoto);
+    // 단계 목록에서 원하는 단계까지만 하고 완성할 수 있어, 마지막 단계가 아니라 가장 나중에 찍은 단계 사진을 완성 사진으로 쓴다
+    if (latest == null) report.putNull("completedPhoto");
+    else report.set("completedPhoto", mapper.valueToTree(PhotoResponse.from(latest)));
     return report;
   }
 

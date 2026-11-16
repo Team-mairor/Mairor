@@ -7,4 +7,5 @@ export { ActCard, PrepCard, type StepProduct } from "./step-cards";
 export { templateOf } from "./template";
 export { TutorialTopBar } from "./top-bar";
 export { SelfiePreview } from "./selfie-preview";
-export { reachableStep, useStepShot, type ShotState } from "./use-step-shot";
+export { StepList, type StepListItem } from "./step-list";
+export { useStepShot, type ShotState } from "./use-step-shot";

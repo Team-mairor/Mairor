@@ -25,7 +25,7 @@
 | `video_id`, `youtube_video_id` | 내부 영상 ID와 외부 YouTube 식별자 |
 | `video_title`, `channel_title`, `thumbnail_url` | 목록에 쓸 영상 메타데이터의 완료 시점 스냅샷 |
 | `completed_at` | 최초 완료 시각 |
-| `completed_photo_id` | 마지막 GUIDE 단계에 연결된 유효 STEP 사진. 없으면 NULL. FACE_REGISTRATION은 금지 |
+| `completed_photo_id` | 가장 나중에 찍은 GUIDE 단계의 유효 STEP 사진. 없으면 NULL. FACE_REGISTRATION은 금지 |
 | `step_count`, `substitute_count` | 완료 단계 수와 SUBSTITUTE 수 |
 | `record_snapshot` | `ReportRecord` JSONB 전체 불변 스냅샷(단계·선택 제품/색·단계 사진 포함) |
 | `created_at` | 기록 원장 행 생성 시각 |
@@ -34,7 +34,7 @@ DB는 실행·회원·가이드·영상·완료 사진 FK와 `execution_id` 유�
 
 ## `record_snapshot` JSON 계약
 
-JSON은 API-REPORT-002 `ReportRecord`와 같다. top-level은 `recordId`, `executionId`, `videoId`, `videoTitle`, `channelTitle`, `guideId`, `guideVersion`, `completedAt`, `completedPhoto`, `stepCount`, `substituteCount`, `steps`다. 각 `steps[]`는 실행 시 고정된 GuideStep 필드에 `matchingResult`, `selectedProduct`, `selectedColorId`, `selectedColor`, `skipped`, `photo`를 더한다. 미촬영 사진은 null이다. `completedPhoto`는 마지막 단계의 같은 Photo 메타데이터 또는 null이다.
+JSON은 API-REPORT-002 `ReportRecord`와 같다. top-level은 `recordId`, `executionId`, `videoId`, `videoTitle`, `channelTitle`, `guideId`, `guideVersion`, `completedAt`, `completedPhoto`, `stepCount`, `substituteCount`, `steps`다. 각 `steps[]`는 실행 시 고정된 GuideStep 필드에 `matchingResult`, `selectedProduct`, `selectedColorId`, `selectedColor`, `skipped`, `photo`를 더한다. 미촬영 사진은 null이다. `completedPhoto`는 가장 나중에 찍은 단계의 같은 Photo 메타데이터 또는 null이다.
 
 예시(축약):
 
@@ -61,5 +61,5 @@ JSON은 API-REPORT-002 `ReportRecord`와 같다. top-level은 `recordId`, `execu
 
 - POST `/api/v1/users/me/executions/{executionId}/completion`은 회원 → 실행 행을 잠그고, 처음 완료할 때 `history_records` 한 행 생성, 실행 COMPLETED/recordId/completedAt 기록, 얼굴 등록 RETAINED 전환을 한 DB 트랜잭션에서 커밋한다.
 - 최초 성공은 201, 완료 재시도는 200과 같은 `recordId`·`completedAt`이다. UNIQUE(execution_id)와 실행 행 잠금으로 동시 완료도 한 기록만 만든다.
-- 완료 단계 사진·제품은 선택 사항이다. 마지막 GUIDE 단계 사진만 completedPhoto로 쓴다. 실패하면 기록·실행·얼굴 상태를 함께 롤백해 같은 요청을 재시도할 수 있다.
+- 완료 단계 사진·제품은 선택 사항이다. 가장 나중에 찍은 GUIDE 단계 사진을 completedPhoto로 쓴다. 실패하면 기록·실행·얼굴 상태를 함께 롤백해 같은 요청을 재시도할 수 있다.
 - API-GUIDE-006은 기록을 생성한다. 구현된 API-REPORT-001/002/003은 이 원장을 읽고 삭제한다. 삭제는 사진·보관 얼굴 자원 정리가 완료된 뒤 성공 응답한다.

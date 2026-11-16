@@ -49,6 +49,7 @@ export function guideReportRows(report: GuideReport, runId?: string): ReportRow[
 
 /** 리포트의 단계 사진 칸 하나. 보통은 연속한 같은 부위 단계 묶음이다 */
 export interface CaptureTile {
+  /** 사진을 보여 줄 단계의 번호. 아래 단계 목록 번호와 같다 */
   no: number;
   label: string;
   /** 사진을 보여 줄 단계. 묶음에서 사진을 남긴 마지막 단계, 없으면 마지막 단계 */
@@ -60,6 +61,7 @@ const taken = (r: ReportRow) => r.photo === "shot" || r.photo === "slot";
 /**
  * 단계 사진은 묶음마다 한 장이라 묶음 단위로 보여 준다.
  * 찍은 사진이 여러 장인 묶음은 단계마다 찍던 이전 기록이라 사진마다 한 칸으로 나눈다
+ * 원하는 단계만 골라 할 수 있어, 사진을 찍지 않은 칸(none)은 보여 주지 않는다
  */
 export function captureTiles(rows: readonly ReportRow[]): CaptureTile[] {
   return groupSteps(rows)
@@ -70,5 +72,6 @@ export function captureTiles(rows: readonly ReportRow[]): CaptureTile[] {
       const last = [...inGroup].reverse();
       return [{ label: g.label, row: shots[0] ?? last.find((r) => r.photo !== "none") ?? last[0] }];
     })
-    .map((t, i) => ({ no: i + 1, ...t }));
+    .filter((t) => t.row.photo !== "none")
+    .map((t) => ({ no: t.row.no, ...t }));
 }

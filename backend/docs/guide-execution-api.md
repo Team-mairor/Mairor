@@ -75,7 +75,7 @@ POST 최초 성공은 201, GET은 200과 Cache-Control:no-store다. Execution의
 
 `POST /api/v1/users/me/executions/{executionId}/completion`은 요청 본문 없이 호출한다. 최초 완료는 201, 반복 완료는 200이며 두 응답은 동일한 recordId와 completedAt을 반환한다. 실행·기록 한 건·얼굴 등록 RETAINED 전환을 한 트랜잭션으로 처리한다.
 
-완료 순간의 ReportRecord JSONB와 목록 요약은 `history_records`에 저장한다. `execution_id` UNIQUE와 실행 잠금이 재시도·동시 요청을 직렬화한다. 완료 사진은 마지막 GUIDE 단계의 현재 유효 STEP 사진만 사용하고 없으면 null이며, 얼굴 등록 사진은 대체하지 않는다. 리포트 팀의 목록·상세·삭제 API 연동 요청은 [리포트 계약 문서](report-api-integration-request.md)에 정리했다.
+완료 순간의 ReportRecord JSONB와 목록 요약은 `history_records`에 저장한다. `execution_id` UNIQUE와 실행 잠금이 재시도·동시 요청을 직렬화한다. 완료 사진은 가장 나중에 찍은 GUIDE 단계의 현재 유효 STEP 사진을 사용하고 없으면 null이며, 얼굴 등록 사진은 대체하지 않는다. 리포트 팀의 목록·상세·삭제 API 연동 요청은 [리포트 계약 문서](report-api-integration-request.md)에 정리했다.
 
 ## 오류 대응
 

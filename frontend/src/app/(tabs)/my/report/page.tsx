@@ -94,7 +94,7 @@ export default function ReportPage() {
   const last = steps.at(-1);
   const finalShot = last?.photo === "shot" ? last.shot : null;
   // 단계 사진 목록. 실제 가이드 기록은 보여 줄지를 따로 정한다
-  const showSteps = !rep?.guide || SHOW_STEP_PHOTOS;
+  const showSteps = (!rep?.guide || SHOW_STEP_PHOTOS) && tiles.length > 0;
 
   if (remoteError && !missing)
     return (
@@ -168,7 +168,7 @@ export default function ReportPage() {
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 bg-cream">
               <span className="font-display text-[26px] text-ink">미촬영</span>
               <span className="text-[17px] text-mute">
-                {rep.noPhoto ? "사진 없이 완료한 메이크업이에요" : "마지막 단계 사진이 없어요"}
+                {rep.noPhoto ? "사진 없이 완료한 메이크업이에요" : "완성 사진이 없어요"}
               </span>
             </div>
           ) : finalShot ? (

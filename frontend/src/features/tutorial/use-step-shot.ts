@@ -40,12 +40,6 @@ const inView = (frame: FaceFrame, regions: readonly RegionName[], whole: boolean
 const isFresh = (frame: FaceFrame, now: number) =>
   now - (frame.detectedAt ?? frame.timestamp) <= FRAME_STALE_MS;
 
-/** 상단 단계 바로 갈 수 있는 마지막 단계. 사진 없이 앞으로 건너뛰지 않게 처음으로 사진이 없는 단계까지 */
-export function reachableStep(stepIds: readonly string[], hasPhoto: (stepId: string) => boolean) {
-  const i = stepIds.findIndex((id) => !hasPhoto(id));
-  return i === -1 ? stepIds.length - 1 : i;
-}
-
 /**
  * 단계 사진 한 장을 찍는다. start로 기다리기 시작해, 부위가 보이고 얼굴이 멈추면 onShot을 부른다.
  * 추적이 끊기거나 프레임이 오래됐거나 부위가 잘린 채로는 찍지 않고 failed가 된다.

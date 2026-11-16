@@ -64,8 +64,8 @@ const button = (label: string) => {
 
 const shot = (stepId: string) => ({ url: `data:image/jpeg;base64,${stepId}`, box: null });
 
-/** shots: 실제로 남은 단계 사진. 촬영 기록(captures)은 늘 s2·s8 */
-async function mount(search = "", shots = ["s2", "s8"]) {
+/** shots: 실제로 남은 단계 사진. captures: 촬영 기록(찍은 순서) */
+async function mount(search = "", shots = ["s2", "s8"], captures = ["s2", "s8"]) {
   element = document.createElement("div");
   document.body.append(element);
   root = createRoot(element);
@@ -111,7 +111,7 @@ async function mount(search = "", shots = ["s2", "s8"]) {
   });
   await act(async () => {
     for (const s of shots) saveStepPhoto(id, s, shot(s));
-    session.updateRun({ captures: ["s2", "s8"] }, id);
+    session.updateRun({ captures }, id);
     session.completeRun(id);
   });
   await act(async () => render(true));
@@ -152,12 +152,18 @@ afterEach(async () => {
 });
 
 describe("실제 가이드 완료", () => {
-  it("가이드 단계 수와 제목으로 완료를 보여 주고 마지막 단계의 실제 사진을 띄운다", async () => {
+  it("찍은 단계 수와 제목으로 완료를 보여 주고 마지막으로 찍은 단계의 실제 사진을 띄운다", async () => {
     await mount();
-    expect(text()).toContain("LOOK COMPLETE · 3 / 3");
+    expect(text()).toContain("LOOK COMPLETE · 2 / 2");
     expect(text()).toContain("실제 가이드 · 완성했어요");
     expect(text()).toContain("FINAL · 마지막 단계 사진");
     expect(element.querySelector("img")?.getAttribute("src")).toBe(shot("s8").url);
+  });
+
+  it("원하는 단계까지만 하고 완성하면 가이드 마지막 단계가 아니라 마지막으로 찍은 사진을 띄운다", async () => {
+    await mount("", ["s2", "s5"], ["s5", "s2"]);
+    expect(text()).toContain("LOOK COMPLETE · 2 / 2");
+    expect(element.querySelector("img")?.getAttribute("src")).toBe(shot("s2").url);
   });
 
   it("촬영 기록이 있어도 사진이 남아 있지 않으면 미촬영으로 보여 준다", async () => {

@@ -68,6 +68,7 @@ def add_directions(
     load_photo: PhotoLoader,
     occlusion: OcclusionFinder | None = None,
     bright_under: bool = False,
+    dark_zones: frozenset[str] = frozenset(),
 ) -> tuple[list[AreaSubStep], list[dict]]:
     """찾은 영역(extracted)마다 바른 방향을 찾아 화살표를 더한 하위 단계들과 기록을 돌려준다.
 
@@ -77,6 +78,9 @@ def add_directions(
     좌우 짝 부위도 쪽마다 따로 찾는다. 두 눈썹을 화면의 같은 쪽으로 그리는 단계가 있어,
     한쪽을 뒤집어 맞추면 맞는 방향을 버리게 된다.
     bright_under는 섀도 눈 밑을 밝아진 양으로 찾았는지다. 그러면 눈 밑 방향도 밝아진 양으로 잰다.
+    dark_zones는 섀도를 어두워진 양으로 찾은 자리(upper·under)다. 단계 동안의 사진은 눈 뜬
+    정도를 맞추지 않아 어두워진 양으로 방향을 재면 눈꺼풀 움직임이 섞이므로, 그 자리는 화살표를
+    달지 않는다.
     여기서 빠진 사진은 단계의 빠진 사진 기록(recording_dropped)에 넣지 않는다.
     """
     out, records = [], []
@@ -89,7 +93,7 @@ def add_directions(
             found = {}
             for guide_set in sub_step.guide_sets:
                 area = set_mask(guide_set)
-                target = target_for(makeup, guide_set.region, area, bright_under)
+                target = target_for(makeup, guide_set.region, area, bright_under, dark_zones)
                 if target is None or not area.any():
                     continue
                 found[guide_set.region] = find_direction(
@@ -117,7 +121,11 @@ def set_mask(guide_set: GuideSet) -> np.ndarray:
 
 
 def target_for(
-    makeup: Makeup, region: RegionName, area: np.ndarray, bright_under: bool
+    makeup: Makeup,
+    region: RegionName,
+    area: np.ndarray,
+    bright_under: bool,
+    dark_zones: frozenset[str] = frozenset(),
 ) -> Target | None:
     """화장 종류와 부위에 맞는 색 값 함수·범위·창을 고른다. 방향을 재지 않는 부위는 None이다.
 
@@ -155,6 +163,8 @@ def target_for(
         )
     if makeup == "eyeshadow" and region in eyeshadow_area.EYES:
         under = _mostly_in(area, eyeshadow_area.eyeshadow_range(region, "under"))
+        if ("under" if under else "upper") in dark_zones:
+            return None
         change = (
             eyeshadow_area.eyeshadow_brightening
             if under and bright_under

@@ -97,17 +97,14 @@ const row = (
 });
 
 describe("captureTiles", () => {
-  it("연속한 같은 부위를 한 칸으로 묶고 묶음에서 사진을 남긴 마지막 단계를 쓴다", () => {
+  it("연속한 같은 부위를 한 칸으로 묶고 묶음에서 사진을 남긴 마지막 단계를 쓰며, 찍지 않은 칸은 뺀다", () => {
     const tiles = captureTiles([
       row(1, "BASE", "none"),
       row(2, "BASE", "slot"),
       row(3, "BASE", "none"),
       row(4, "LIP", "none"),
     ]);
-    expect(tiles.map((t) => [t.no, t.label, t.row.no])).toEqual([
-      [1, "피부", 2],
-      [2, "입술", 4],
-    ]);
+    expect(tiles.map((t) => [t.no, t.label, t.row.no])).toEqual([[2, "피부", 2]]);
   });
 
   it("찍은 사진이 여러 장인 묶음은 단계마다 찍던 이전 기록이라 사진마다 한 칸이다", () => {
@@ -119,8 +116,8 @@ describe("captureTiles", () => {
     ]);
     expect(tiles.map((t) => [t.no, t.label, t.row.no])).toEqual([
       [1, "단계 1", 1],
-      [2, "단계 3", 3],
-      [3, "입술", 4],
+      [3, "단계 3", 3],
+      [4, "입술", 4],
     ]);
   });
 

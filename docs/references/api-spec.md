@@ -526,7 +526,7 @@ API-GUIDE-006 · POST /api/v1/users/me/executions/\{executionId\}/completion
 
 - 회원·CSRF 필요. Path executionId:string 필수, Body 없음. 최초 201 ExecutionCompletion, 같은 실행 완료 재요청 200 동일 recordId.
 - 404 NOT\_FOUND, 409 GUIDE\_EXECUTION\_NOT\_ACTIVE(ABANDONED). 원자적으로 완료 상태·리포트 1개 생성·사진 연결·얼굴 등록 RETAINED 전환. 저장 실패 시 진행 상태와 임시 데이터를 유지해 재시도.
-- 단계 사진·제품 없어도 완료 가능. FE는 모든 단계 사진이 저장된 뒤에만 완료를 부르고(업로드가 계속 실패하면 '나가기' → API-GUIDE-007), 서버는 사진 수를 완료 조건으로 다시 검사하지 않는다. 마지막 GUIDE 단계 사진만 completedPhoto, 없으면 null. 얼굴 등록 이미지를 완성 사진으로 대신 사용하지 않는다. 진하기 측정값 미저장.
+- 단계 사진·제품 없어도 완료 가능. FE는 모든 단계 사진이 저장된 뒤에만 완료를 부르고(업로드가 계속 실패하면 '나가기' → API-GUIDE-007), 서버는 사진 수를 완료 조건으로 다시 검사하지 않는다. 가장 나중에 찍은 GUIDE 단계 사진이 completedPhoto, 없으면 null. 얼굴 등록 이미지를 완성 사진으로 대신 사용하지 않는다. 진하기 측정값 미저장.
 - 저장 중 FE는 리포트 보기 비활성, 성공 후 조회. 리포트 보기 클릭으로 재생성 금지.
 </toggle>
 

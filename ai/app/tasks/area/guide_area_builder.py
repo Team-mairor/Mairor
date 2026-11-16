@@ -86,6 +86,7 @@ from app.tasks.area.parts.eyeshadow_area import (
     EyeshadowArea,
     Zone,
     find_eyeshadow_area,
+    paired_darkened,
     paired_eyeshadow,
 )
 from app.tasks.area.parts.lip_area import LipArea, PhotoLoader, find_lip_area
@@ -213,6 +214,7 @@ def build_guide_area(
     for step in ordered:
         reused_from = None
         bright_under = False
+        dark_zones: frozenset[Zone] = frozenset()
         zones: tuple[Zone, ...] | tuple[LineZone, ...] | None = None
         with (
             traced(
@@ -237,13 +239,13 @@ def build_guide_area(
                 sub_steps = [sub_step]
             elif step.makeup == "eyeshadow":
                 zones = eyeshadow_zones(step)
-                sub_steps, bright_under = _eyeshadow_step(
+                sub_steps, bright_under, dark_zones = _eyeshadow_step(
                     step, result, load_photo, occlusion, zones
                 )
             else:
                 sub_steps = [_sub_step(step, result, load_photo, occlusion)]
             sub_steps, directions = _with_directions(
-                step, sub_steps, result, load_photo, occlusion, bright_under
+                step, sub_steps, result, load_photo, occlusion, bright_under, dark_zones
             )
             record = {
                 "status": sub_steps[0].status,
@@ -289,8 +291,11 @@ def _with_directions(
     load_photo: PhotoLoader,
     occlusion: OcclusionFinder | None,
     bright_under: bool,
+    dark_zones: frozenset[Zone] = frozenset(),
 ) -> tuple[list[AreaSubStep], list[dict]]:
     """찾은 영역에 바른 방향 화살표를 더한 하위 단계들과 기록(direction_finder.add_directions).
+
+    dark_zones는 섀도를 어두워진 양으로 찾은 자리이고, 그 자리는 화살표를 달지 않는다.
 
     방향 찾기에서 오류가 나면 로그를 남기고 화살표 없이 찾은 영역 그대로 돌려준다.
     방향은 덧붙이는 정보라, 못 구해도 영역 안내는 그대로 나가야 한다.
@@ -305,6 +310,7 @@ def _with_directions(
             load_photo,
             occlusion,
             bright_under,
+            dark_zones,
         )
     except Exception:
         logger.exception("%s 단계 바른 방향 찾기에서 오류", step.step_id)
@@ -1147,8 +1153,8 @@ def _eyeshadow_step(
     load_photo: PhotoLoader,
     occlusion: OcclusionFinder | None,
     zones: tuple[Zone, ...] | None,
-) -> tuple[list[AreaSubStep], bool]:
-    """아이섀도 단계의 (하위 단계들, 눈 밑을 밝아진 양으로 찾았는지).
+) -> tuple[list[AreaSubStep], bool, frozenset[Zone]]:
+    """아이섀도 단계의 (하위 단계들, 눈 밑을 밝아진 양으로 찾았는지, 어두워진 양으로 찾은 자리).
 
     눈마다 찾아 eyeshadow_sub_steps로 바른 자리마다 적는다.
     zones는 단계의 바른 자리(eyeshadow_zones)이고 None이면 모른다.
@@ -1169,10 +1175,27 @@ def _eyeshadow_step(
         }
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
-        return [_failed(f"{step.step_id}-1")], False
+        return [_failed(f"{step.step_id}-1")], False, frozenset()
     under = [area.zone("under") for area in areas.values()]
     bright_under = any(zone.mask is not None and zone.color == "brightening" for zone in under)
-    return eyeshadow_sub_steps(step.step_id, areas, zones), bright_under
+    return (
+        eyeshadow_sub_steps(step.step_id, areas, zones),
+        bright_under,
+        darkened_zones(areas, zones),
+    )
+
+
+def darkened_zones(
+    areas: Mapping[RegionName, EyeshadowArea], zones: tuple[Zone, ...] | None
+) -> frozenset[Zone]:
+    """eyeshadow_sub_steps가 어두워진 양으로 찾아 보내는 자리. 바른 자리를 모르면 없다."""
+    if zones is None:
+        return frozenset()
+    return frozenset(
+        zone
+        for zone in zones
+        if paired_eyeshadow(areas, zone) is None and paired_darkened(areas, zone) is not None
+    )
 
 
 def eyeshadow_sub_steps(
@@ -1181,7 +1204,10 @@ def eyeshadow_sub_steps(
     """두 눈의 찾기 결과를 바른 자리마다 하위 단계로 적는다. 하위 단계 순서는 위 → 아래다.
 
     zones(단계 글의 바른 자리)가 있으면 그 자리만 본다. 자리마다 두 눈 모두 찾았으면
-    (paired_eyeshadow) 눈마다 영역 하나씩 적은 extracted, 못 찾았으면 그 자리 기본 가이드
+    (paired_eyeshadow) 눈마다 영역 하나씩 적은 extracted다. 붉은 기 등으로 두 눈 모두 찾지 못하면
+    눈 뜬 정도를 맞춘 어두워진 양으로 두 눈 모두 찾았는지 다시 본다(paired_darkened, 자리를
+    알 때만).
+    그래도 못 찾았으면 그 자리 기본 가이드
     (eyeshadowUpper·eyeshadowUnder)다. 글에 없는 자리에서 찾은 조각은 버린다.
     zones가 None(모름)이면 두 자리를 다 보고 찾은 자리만 적는다.
     어느 자리도 찾지 못하면 하위 단계 하나만 쓴다. 자리가 하나면 그 자리 기본 가이드,
@@ -1194,12 +1220,17 @@ def eyeshadow_sub_steps(
     picked: dict[Zone, AreaSubStep] = {}
     reasons: dict[Zone, list[str]] = {}
     for zone in looked:
+        found = {eye: areas[eye].zone(zone) for eye in EYES}
         masks = paired_eyeshadow(areas, zone, zone_known=zones is not None)
+        darkened = paired_darkened(areas, zone) if masks is None and zones is not None else None
+        if darkened is not None:
+            found, masks = darkened
+            logger.info("%s 아이섀도 %s 자리를 어두워진 양으로 찾음", step_id, zone)
         if masks is not None:
             sub_step = pair_sub_step(
                 step_id,
                 "eyeshadow",
-                {eye: areas[eye].zone(zone) for eye in EYES},
+                found,
                 masks,
                 "eyeshadowColorNotFound",
                 True,

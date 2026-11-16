@@ -96,6 +96,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.WebApplicationContext;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 @Import(TestcontainersConfiguration.class)
@@ -488,6 +489,72 @@ class GuideExecutionApiTest {
     assertThat(report.path("steps").get(0).path("selectedProduct").isNull()).isTrue();
     assertThat(faces.findById(faceId).orElseThrow().getStatus())
         .isEqualTo(FaceRegistrationStatus.RETAINED);
+  }
+
+  @Test
+  void completedPhotoIsTheLatestStepPhotoEvenWhenTheLastStepHasNone() throws Exception {
+    jdbc.update(
+        "update guides set guide_input = jsonb_set(guide_input, '{steps,2}', '{\"stepId\":\"eye\",\"order\":2,\"makeup\":\"eyeshadow\"}'::jsonb) where id = ?",
+        guide);
+    UUID faceId = face(user, login.id(), video);
+    ObjectNode body = body(match(), faceId, null);
+    ObjectNode eye = ((ArrayNode) body.path("selections")).addObject();
+    eye.put("stepId", "eye");
+    eye.putNull("selectedPouchItemId");
+    String executionId = created(body).path("executionId").asString();
+    mvc.perform(
+            patch(PATH + "/" + executionId + "/photo-consent")
+                .cookie(login.cookie())
+                .secure(true)
+                .with(csrf())
+                .contentType("application/json")
+                .content("{\"enabled\":true}"))
+        .andExpect(status().isOk());
+    String eyePhoto = uploadStepPhoto(executionId, "eye");
+    String lipPhoto = uploadStepPhoto(executionId, "lip");
+    assertThat(lipPhoto).isNotEqualTo(eyePhoto);
+
+    JsonNode report = completedReport(executionId);
+    assertThat(report.path("completedPhoto").path("photoId").asString()).isEqualTo(lipPhoto);
+    assertThat(report.path("steps").get(1).path("photo").path("photoId").asString())
+        .isEqualTo(eyePhoto);
+  }
+
+  private String uploadStepPhoto(String executionId, String stepId) throws Exception {
+    MvcResult result =
+        mvc.perform(
+                multipart(PATH + "/" + executionId + "/steps/" + stepId + "/photo")
+                    .file(new MockMultipartFile("image", "capture.png", "image/png", imageBytes()))
+                    .cookie(login.cookie())
+                    .secure(true)
+                    .with(csrf())
+                    .with(
+                        (RequestPostProcessor)
+                            request -> {
+                              request.setMethod("PUT");
+                              return request;
+                            }))
+            .andExpect(status().isOk())
+            .andReturn();
+    return mapper.readTree(result.getResponse().getContentAsString()).path("photoId").asString();
+  }
+
+  private JsonNode completedReport(String executionId) throws Exception {
+    MvcResult completed =
+        mvc.perform(
+                post(PATH + "/" + executionId + "/completion")
+                    .cookie(login.cookie())
+                    .secure(true)
+                    .with(csrf()))
+            .andExpect(status().isCreated())
+            .andReturn();
+    String recordId =
+        mapper.readTree(completed.getResponse().getContentAsString()).path("recordId").asString();
+    return mapper.readTree(
+        jdbc.queryForObject(
+            "select record_snapshot::text from history_records where id = ?",
+            String.class,
+            UUID.fromString(recordId)));
   }
 
   @Test
