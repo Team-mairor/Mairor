@@ -22,7 +22,6 @@ import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -88,14 +87,10 @@ public class AnalysisRequestService {
     Instant resetAt = today.plusDays(1).toInstant();
     int limit = properties.dailyLimitPerUser();
 
-    AnalysisJobWriter.MemberRegistration registration;
-    try {
-      registration = writer.registerForMember(videoId, userId, limit, dayStart, resetAt);
-    } catch (DataIntegrityViolationException conflict) {
-      // 다른 회원이 같은 영상의 새 작업을 먼저 만들었다. 다시 하면 그 작업에 합류한다
-      log.info("분석 요청이 동시 요청과 겹쳐 다시 시도합니다. videoId={}", videoId);
-      registration = writer.registerForMember(videoId, userId, limit, dayStart, resetAt);
-    }
+    AnalysisJobWriter.MemberRegistration registration =
+        AnalysisRegistrationRetry.onceAfterConflict(
+            () -> writer.registerForMember(videoId, userId, limit, dayStart, resetAt),
+            () -> log.info("분석 요청이 동시 요청과 겹쳐 다시 시도합니다. videoId={}", videoId));
     try (var ignored =
         AnalysisLogContext.of(registration.jobId(), video.getYoutubeVideoId(), null)) {
       log.info(

@@ -2,7 +2,6 @@ package com.mairor.backend.analysis.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,13 +28,12 @@ public class AnalysisJobService {
    * @throws IllegalArgumentException 영상 파일 키가 형식에 맞지 않으면
    */
   public AnalysisJobReceipt register(AnalysisJobRequest request) {
-    AnalysisJobReceipt receipt;
-    try {
-      receipt = writer.register(request);
-    } catch (DataIntegrityViolationException conflict) {
-      log.info("분석 작업 접수가 동시 요청과 겹쳐 다시 읽습니다. youtubeVideoId={}", request.youtubeVideoId());
-      receipt = writer.register(request);
-    }
+    AnalysisJobReceipt receipt =
+        AnalysisRegistrationRetry.onceAfterConflict(
+            () -> writer.register(request),
+            () ->
+                log.info(
+                    "분석 작업 접수가 동시 요청과 겹쳐 다시 읽습니다. youtubeVideoId={}", request.youtubeVideoId()));
     log.info(
         "분석 작업 접수 jobId={} videoId={} receipt={}",
         receipt.jobId(),
