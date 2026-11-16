@@ -69,7 +69,9 @@ import {
   SelfiePreview,
 } from "@/features/tutorial";
 import { ApiError, errorMessage } from "@/lib/api";
+import { useTimeout } from "@/lib/hooks/use-timeout";
 import { isMirror, subscribeMirror } from "@/lib/mirror";
+import { cn } from "@/lib/utils";
 
 /** 튜토리얼 한 단계에 필요한 실제 가이드 조회 응답 */
 interface TutorialStep {
@@ -221,6 +223,32 @@ const LABEL_COLOR: Record<GaugeLabel, string> = {
   darker: "var(--color-blush)",
 };
 
+/** 묶음 안 다음 단계로 넘어갈 때 단계 제목 · 할 일(제품이 바뀌면 제품도)을 강조하는 시간(ms) */
+const ENTER_FLASH_MS = 1800;
+
+interface EnteredStep {
+  step: number;
+  product: string | null;
+  changed: boolean;
+}
+
+function enteredStepNotice({ product, changed }: EnteredStep) {
+  if (changed) return product ? `제품을 바꿔 주세요 · ${product}` : "이 단계는 제품 없이 해요";
+  return product ? "같은 제품으로 이어서 발라요" : "다음 단계예요";
+}
+
+/**
+ * 게이지에 쓸 고른 제품. 실행 정보를 못 받으면(모의 실행 · 조회 실패) 제품 체크에서 건너뛴 단계만 숨기고
+ * 같은 제품으로 본다
+ */
+function selectedProduct(
+  products: Record<string, SelectedProduct> | null,
+  stepId: string,
+  skipped: boolean,
+): SelectedProduct {
+  return products?.[stepId] ?? { result: skipped ? "NONE" : "SAME", selectedColor: null, skipped };
+}
+
 /** 실행 시작 때 서버가 확정한 단계별 제품 선택. 못 받으면 null이고 제품 체크 선택으로 대신한다 */
 function useExecutionProducts(executionId: string | null) {
   const [products, setProducts] = useState<Record<string, SelectedProduct> | null>(null);
@@ -281,6 +309,9 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const [reviewError, setReviewError] = useState<unknown>(null);
   const countdownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countdownActive = useRef(false);
+  // 준비 카드 없이 들어온 묶음 안 단계. 잠깐 제목 · 할 일을 강조하고, 앞 단계와 제품이 다르면 제품도 띄운다
+  const [entered, setEntered] = useState<EnteredStep | null>(null);
+  const enteredTimer = useTimeout();
 
   // 나가기로 실행을 끝낸 뒤에는 동의 카드로 보내지 않는다 (홈으로 가는 중)
   const leaving = useRef(false);
@@ -320,17 +351,11 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 레퍼런스 게이지 기준이 있는 단계만 게이지를 띄우고, 고른 제품에 따라 숨기거나 색감을 뺀다
   const reference = useMemo(() => stepGauge(subs), [subs]);
   const products = useExecutionProducts(run.executionId);
-  // 실행 정보를 못 받으면(모의 실행 · 조회 실패) 제품 체크에서 건너뛴 단계만 숨기고 같은 제품으로 본다
-  const product = useMemo<SelectedProduct>(() => {
-    const skipped = pick?.kind === "skipped";
-    return (
-      products?.[info.stepId] ?? {
-        result: skipped ? "NONE" : "SAME",
-        selectedColor: null,
-        skipped,
-      }
-    );
-  }, [products, info.stepId, pick?.kind]);
+  const skipped = pick?.kind === "skipped";
+  const product = useMemo(
+    () => selectedProduct(products, info.stepId, skipped),
+    [products, info.stepId, skipped],
+  );
   const rule = useMemo(
     () => (reference ? productRule(reference.gauge, info.makeup, product) : null),
     [reference, info.makeup, product],
@@ -354,12 +379,27 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   );
   // 눈썹은 등록 사진의 원래 눈썹 모양·앞머리·꼬리에 맞춘다
   const guideStep = useBrowFit(resolved, run.id);
-  // 게이지가 이번 단계 화장만 재도록 단계 준비 카드가 떠 있는 동안 바르기 전 얼굴을 모은다
+  const paused = run.mode === "guide" && (load.status !== "ready" || load.checking || !!load.error);
+  // 묶음 안 다음 단계가 게이지를 띄우면 그 단계 시작 기준이 필요하다
+  const nextInfo = groupLast ? null : steps[step + 1];
+  const nextSkipped =
+    !!nextInfo && pickOf(nextInfo.stepId, run.choice, state.pouch).kind === "skipped";
+  const nextNeedsBaseline = useMemo(() => {
+    if (!nextInfo) return false;
+    const ref = stepGauge(subsOf(nextInfo, area));
+    const chosen = selectedProduct(products, nextInfo.stepId, nextSkipped);
+    return !!ref && productRule(ref.gauge, nextInfo.makeup, chosen).show;
+  }, [nextInfo, area, products, nextSkipped]);
+  const gaugeActive = ready && showGauge && !exitAsk && !paused;
+  // 게이지가 이번 단계 화장만 재도록 단계 준비 카드가 떠 있는 동안 바르기 전 얼굴을 모은다.
+  // 묶음 안 다음 단계는 카드 없이 시작하므로 이번 단계 동안 사진을 남겨 두었다가 그 단계 기준으로 쓴다
   const baseline = useGaugeBaseline({
     runId: run.id,
     step,
     collecting: !ready,
     makeup: info.makeup,
+    recording: ready && nextNeedsBaseline && !paused,
+    measuring: gaugeActive,
   });
   // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
   // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
@@ -388,7 +428,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     guideStep ? { issue: guideIssue } : undefined,
   );
   // 카메라 오류·준비 중·알림·얼굴 없음·거리 부족이면 측정 불가
-  const paused = run.mode === "guide" && (load.status !== "ready" || load.checking || !!load.error);
   const blocked = !canMeasure || paused;
 
   // 실제 가이드는 단계 사진을 서버에 저장한 뒤 화면 상태를 확정하고 다음으로 간다.
@@ -508,7 +547,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 개발 도구에서 ?gauge를 붙이면 잰 값과 못 잰 이유를 띄운다
   const gaugeDebug = process.env.DEV_TOOLS === "1" && !!query?.has("gauge");
   const gaugeMeasure = useGaugeMeasure({
-    active: ready && showGauge && !exitAsk && !paused,
+    active: gaugeActive,
     // 기준이 대체 제품 쪽으로 바뀌면 다듬던 값을 이어 쓰지 않는다
     key: reference ? `${run.id}:${reference.subStepId}:${rule?.basis}` : null,
     makeup: info.makeup,
@@ -518,6 +557,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     start: baseline.stepBaseline(step),
     white: baseline.status.white,
     debug: gaugeDebug,
+    onShot: baseline.record,
   });
   const { display } = gaugeMeasure;
   // 이 하위 단계 동안 잴 수 없는 이유면 게이지를 숨기고, 카메라가 잠깐 못 잴 때는 회색으로 비운다
@@ -534,6 +574,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const groupSize = group.end - group.start;
   const groupDetail =
     groupSize > 1 ? `${group.label} ${step - group.start + 1}/${groupSize}` : null;
+  // 묶음 첫 카드에는 몇 단계로 나눠 바르는지만 알린다. 카드 없이 이어지는 단계는 들어갈 때 강조한다
+  const prepDetail =
+    groupSize > 1 && step === group.start
+      ? `${group.label} · ${groupSize}단계로 나눠 발라요`
+      : groupDetail;
+  const flash = entered?.step === step ? entered : null;
   // 화면에 띄우고 읽어 줄 동작. 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
   const shownActs = paced ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
 
@@ -552,7 +598,27 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setStep(i);
     setAct(0);
     setReady(!prep);
+    setEntered(null);
   }
+  /** 단계에서 쓸 내 제품 이름. 제품 없이 하면 null */
+  const productNameOf = (s: TutorialStep) => {
+    const picked = pickOf(s.stepId, run.choice, state.pouch);
+    if (picked.kind === "skipped") return null;
+    const matched = s.ref ? matchFor(s.ref, run, state.pouch).p : null;
+    const item = picked.kind === "picked" ? picked.item : matched;
+    return item ? `${item.brand} ${item.name}` : null;
+  };
+  // 묶음 안 다음 단계는 준비 카드 없이 시작한다. 게이지 기준을 앞 단계 사진으로 못 잡으면 그 단계만 카드에서 모은다
+  const enterNextInGroup = () => {
+    const nextStep = step + 1;
+    const needsCard = nextNeedsBaseline && !baseline.takeNext(nextStep, steps[nextStep].makeup);
+    goStep(nextStep, needsCard);
+    if (needsCard) return;
+    const before = productNameOf(info);
+    const after = productNameOf(steps[nextStep]);
+    setEntered({ step: nextStep, product: after, changed: after !== before });
+    enteredTimer.set(() => setEntered(null), ENTER_FLASH_MS);
+  };
   // 모든 묶음(제품 없는 단계·생략한 단계 포함)의 끝에서 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
   const next = () => {
     if (countdownActive.current) return cancelCountdown();
@@ -561,7 +627,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       setAct((a) => a + 1);
       return;
     }
-    if (!groupLast) return goStep(step + 1);
+    if (!groupLast) return enterNextInGroup();
     if (reloadRegions) {
       setDefaultsFailed(false);
       return loadDefaults();
@@ -657,7 +723,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       {/* 셀카 화면에서는 카메라 오류·켜는 중 안내만 띄운다 */}
       <LiveNote note={selfie && reason !== "error" && reason !== "starting" ? null : note} />
 
-      {/* 하단 안내는 상자 없이 띄워, 지금 할 일 한 줄과 얇은 게이지만 보여 준다 */}
+      {/* 밝은 카메라 영상 위에서도 제목과 할 일이 읽히도록 하단 안내에 어두운 배경을 둔다 */}
       {/* 셀카 화면은 카메라 가까이 위쪽에 모으되, 떠 있는 상단 바(top-5 + h-12) 아래에서 시작한다 */}
       <div
         className={`relative flex flex-col gap-3.5 px-7 pb-[18px] ${selfie ? "pt-[84px]" : "pt-2"}`}
@@ -677,7 +743,17 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           </SelfiePreview>
         )}
         {!selfie && (
-          <>
+          <div
+            className={cn(
+              "-mx-3 flex flex-col gap-3.5 rounded-[22px] bg-night/85 px-4 py-4 shadow-modal backdrop-blur-xl transition-[background,box-shadow] duration-500",
+              flash && "bg-night/95 ring-2 ring-blush",
+            )}
+          >
+            {flash && (
+              <span role="status" className="text-[17px] font-bold text-blush">
+                {enteredStepNotice(flash)}
+              </span>
+            )}
             <div className="flex items-end gap-3">
               <span className="shrink-0 font-serif text-[34px] leading-[.9] text-blush italic tabular">
                 {String(g + 1).padStart(2, "0")}
@@ -729,7 +805,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                 made={gaugeMeasure.made}
               />
             )}
-          </>
+          </div>
         )}
 
         {selfie && countdown === null && shot.state === "idle" && (
@@ -823,7 +899,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
         <PrepCard
           step={g}
           total={groups.length}
-          detail={groupDetail ?? undefined}
+          detail={prepDetail ?? undefined}
           info={info}
           refProduct={info.product}
           match={pr}

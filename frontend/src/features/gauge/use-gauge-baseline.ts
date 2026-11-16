@@ -15,14 +15,16 @@ import { loadFaceMesh } from "@/features/overlay";
 
 import {
   BaselineCollector,
+  FRAME_GAP_MS,
   FrontCenter,
   qualityOf,
   type Baseline,
   type FrameQuality,
 } from "./baseline";
-import { cellSampler, readCells, type CellSampler, type Pixels } from "./cells";
-import { eyeAspect } from "./frame";
-import { FRAME } from "./stability";
+import { cellSampler, readCells, type CellLab, type CellSampler, type Pixels } from "./cells";
+import { eyeAspect, frameState } from "./frame";
+import { nextStartBaseline, trimTail, type TailShot } from "./next-start";
+import { FRAME, type FrameState } from "./stability";
 import { eyeSampler, readEyePixels, whiteOfFrames, type EyeSampler } from "./white";
 
 export interface Samplers {
@@ -88,6 +90,10 @@ export interface GaugeBaselineOptions {
   collecting: boolean;
   /** 지금 단계 화장 종류. 눈 화장 단계에 들어서면 그 뒤로는 흰자를 재지 않는다 */
   makeup?: string;
+  /** 묶음 안 다음 단계 시작 기준에 쓸 사진을 남기는 중인지 */
+  recording?: boolean;
+  /** 게이지가 재는 중이면 그 사진을 record로 받아 따로 읽지 않는다 */
+  measuring?: boolean;
 }
 
 /** 한 실행 동안 모은 기준 */
@@ -109,6 +115,9 @@ const freshStore = (runId: string) => ({
   steps: new Map<number, Baseline | null>(),
   collector: null as BaselineCollector | null,
   step: 0,
+  /** 지금 단계 동안 남긴 최근 사진. 묶음 안 다음 단계 시작 기준을 여기서 고른다 */
+  tail: [] as TailShot[],
+  tailAt: -Infinity,
 });
 type Store = ReturnType<typeof freshStore>;
 
@@ -154,7 +163,14 @@ async function lockCamera(video: HTMLVideoElement, track: MediaStreamTrack, sign
  * 준비 카드가 닫힐 때까지 다 모으지 못한 단계는 기준이 null이고, 첫 단계에서 못 모으면 맨얼굴 기준도 없다.
  * 흰자는 눈 화장 단계 전에 처음 다 모은 기준 사진으로 잰다
  */
-export function useGaugeBaseline({ runId, step, collecting, makeup }: GaugeBaselineOptions) {
+export function useGaugeBaseline({
+  runId,
+  step,
+  collecting,
+  makeup,
+  recording = false,
+  measuring = false,
+}: GaugeBaselineOptions) {
   const { videoRef } = useCamera();
   const [status, setStatus] = useState<GaugeBaselineStatus>({
     center: null,
@@ -256,9 +272,48 @@ export function useGaugeBaseline({ runId, step, collecting, makeup }: GaugeBasel
     }
   }, [collecting, step, runId, startLock, videoRef]);
 
+  const record = useCallback((at: number, state: FrameState, grid: CellLab | null) => {
+    const s = store.current;
+    if (!s.lockReady || s.locking) return;
+    s.tailAt = at;
+    if (grid) s.tail = [...trimTail(s.tail, at), { at, state, grid }];
+  }, []);
+  const recordingRef = useRef({ recording, measuring });
+  useEffect(() => {
+    recordingRef.current = { recording, measuring };
+  }, [recording, measuring]);
+  // 단계가 바뀌면 앞 단계 사진을 버린다
+  useEffect(() => {
+    store.current.tail = [];
+  }, [step, runId]);
+
   useFaceFrame((frame: FaceFrame | null) => {
     const s = store.current;
     if (!frame || frame.trackingState !== "tracking") return;
+    const rec = recordingRef.current;
+    const video = videoRef.current;
+    const at = performance.now();
+    // 잠근 카메라 설정으로 찍은 사진만 남긴다. 게이지가 재는 동안은 그쪽이 읽은 사진을 받는다
+    if (
+      rec.recording &&
+      !rec.measuring &&
+      video &&
+      sampler.current &&
+      s.lockReady &&
+      !s.locking &&
+      at - s.tailAt >= FRAME_GAP_MS &&
+      at - (frame.detectedAt ?? frame.timestamp) <= FRAME_STALE_MS
+    ) {
+      const pixels = read.current(video);
+      const state = frameState(frame, pixels);
+      record(
+        at,
+        state,
+        state.faces === 1 && pixels
+          ? readCells(pixels, frame.landmarks, sampler.current.cells)
+          : null,
+      );
+    }
     const q = qualityOf(frame);
     if (s.collector && performance.now() - shown.current > 500) {
       shown.current = performance.now();
@@ -269,7 +324,6 @@ export function useGaugeBaseline({ runId, step, collecting, makeup }: GaugeBasel
     const center = s.center.value;
     if (before === null && center !== null) setStatus((prev) => ({ ...prev, center }));
     const collector = s.collector;
-    const video = videoRef.current;
     const now = performance.now();
     if (!collector || !video) return;
     if (!s.lockReady) {
@@ -299,5 +353,18 @@ export function useGaugeBaseline({ runId, step, collecting, makeup }: GaugeBasel
 
   /** 그 단계 시작 기준. 아직 없거나 모으지 못했으면 null */
   const stepBaseline = useCallback((i: number) => store.current.steps.get(i) ?? null, []);
-  return { status, stepBaseline, sampler };
+  /**
+   * 묶음 안 다음 단계(next)의 시작 기준을 「다음」을 누르기 직전 사진으로 잡는다.
+   * 이미 있으면 그대로 두고, 사진이 모자라면 false라 준비 카드에서 따로 모은다
+   */
+  const takeNext = useCallback((next: number, makeup: string) => {
+    const s = store.current;
+    if (s.steps.has(next)) return true;
+    const base = nextStartBaseline(s.tail, makeup, performance.now(), s.center.value);
+    s.tail = [];
+    if (!base) return false;
+    s.steps.set(next, base);
+    return true;
+  }, []);
+  return { status, stepBaseline, takeNext, record, sampler };
 }

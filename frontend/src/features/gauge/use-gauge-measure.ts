@@ -25,6 +25,7 @@ import {
   WINDOW,
   windowReason,
   type FrameReason,
+  type FrameState,
   type GaugeDisplay,
 } from "./stability";
 import { loadCellSampler, videoReader, type Samplers } from "./use-gauge-baseline";
@@ -46,6 +47,8 @@ export interface GaugeMeasureInput {
   white: [number, number, number] | null;
   /** 디버그에 띄울 한 번 잰 값(reading)을 낼지 */
   debug?: boolean;
+  /** 0.2초마다 읽은 사진. 묶음 안 다음 단계 시작 기준을 잡으려고 넘긴다 */
+  onShot?: (at: number, state: FrameState, grid: CellLab | null) => void;
 }
 
 /** 디버그에 띄우는 한 번 잰 값 */
@@ -132,7 +135,7 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
 
   useFaceFrame((frame: FaceFrame | null) => {
     const now = performance.now();
-    const { active, makeup, gauge, start, white, guideSets, debug } = latest.current;
+    const { active, makeup, gauge, start, white, guideSets, debug, onShot } = latest.current;
     const video = videoRef.current;
     if (!active || !video || !samplers.current) return;
     // 얼굴 지도를 막 불러와 영역을 아직 못 고른 틱은 건너뛴다
@@ -151,6 +154,7 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
       if (start) skinDrift = drift(grid, start, areasRef.current.made).size;
       state.drift = Number.isNaN(skinDrift) ? null : skinDrift;
     }
+    onShot?.(now, state, grid);
     const reason = frameReason(state, makeup);
     const kept = shots.current.filter((s) => now - s.at < WINDOW.medianWindowMs);
     kept.push({ at: now, reason, grid: reason ? null : grid });

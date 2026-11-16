@@ -3,12 +3,7 @@ import { CircleCheck, Lightbulb, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
 import type { StepPick } from "@/features/check";
-import {
-  REF_STATE_LABEL,
-  type GuideStepInfo,
-  type MatchResult,
-  type RefState,
-} from "@/features/session";
+import { type GuideStepInfo, type MatchResult, type RefState } from "@/features/session";
 import { cn } from "@/lib/utils";
 
 /** 단계에 보여 줄 영상 속 제품 */
@@ -170,17 +165,11 @@ export function PrepCard({
               영상 속 제품 · {refProduct.full}
               {refProduct.shade && ` ${refProduct.shade}`}
             </span>
-            {refProduct.state && (
-              <span className="shrink-0 rounded-full border border-dashed border-navy px-2 text-[13px] text-navy">
-                {REF_STATE_LABEL[refProduct.state]}
-              </span>
-            )}
           </div>
         )}
       </div>
 
       <div className="flex flex-col gap-2.5">
-        <span className="text-[15px] font-semibold text-mute">할 일 {info.acts.length}가지</span>
         <ol className="flex flex-col gap-2">
           {info.acts.map((a, i) => (
             <li key={a.text} className="flex items-start gap-3 text-[19px] leading-[1.4]">

@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FaceFrame } from "@/features/face";
 
 import { FRAME_GAP_MS } from "./baseline";
+import type { CellLab } from "./cells";
 import { GRID } from "./spec";
+import type { FrameState } from "./stability";
 import { useGaugeBaseline, type GaugeBaselineStatus } from "./use-gauge-baseline";
 
 const mocks = vi.hoisted(() => ({
@@ -72,7 +74,12 @@ async function feed(n: number) {
   });
 }
 
-type Result = { status: GaugeBaselineStatus; stepBaseline: (i: number) => unknown };
+type Result = {
+  status: GaugeBaselineStatus;
+  stepBaseline: (i: number) => unknown;
+  takeNext: (next: number, makeup: string) => boolean;
+  record: (at: number, state: FrameState, grid: CellLab | null) => void;
+};
 const probe: { current: Result | null } = { current: null };
 type ProbeProps = { run: string; step: number; collecting: boolean; makeup?: string };
 function Probe({ run, step, collecting, makeup }: ProbeProps) {
@@ -137,6 +144,18 @@ describe("게이지 기준 모으기", () => {
     await act(async () => done({ exposure: "고정됨" }));
     await feed(15);
     expect(latest().status.bare?.frames).toBe(15);
+  });
+
+  it("잠그는 동안 측정에서 받은 사진도 다음 단계 시작 기준에 남기지 않는다", async () => {
+    mocks.match.mockImplementationOnce(() => new Promise(() => {}));
+    await render("run", 0, true);
+    await feed(0);
+    const grid = new Float32Array(GRID * GRID * 3).fill(50);
+    latest().record(now - 800, { faces: 1 }, grid);
+    latest().record(now - 400, { faces: 1 }, grid);
+    latest().record(now, { faces: 1 }, grid);
+
+    expect(latest().takeNext(1, "lip")).toBe(false);
   });
 
   it("잠금이 실패하면 잠금 결과에 실패를 띄우고 자동 상태로 기준을 모은다", async () => {

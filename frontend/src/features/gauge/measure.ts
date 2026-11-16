@@ -22,7 +22,7 @@ export type MatchMethod =
 export const MIN_AREA_CELLS: number = raw.area.minCells;
 /** 재지 않는 화장 종류(thinArea) */
 export const THIN_MAKEUPS: readonly string[] = raw.area.thinMakeups;
-/** 흰자 재기. 눈 구멍 픽셀 중 밝기 위 share이고 채널이 모두 clip 아래인 픽셀을 쓴다 */
+/** 흰자를 기준으로 레퍼런스와 사용자 화면의 색·밝기를 맞추는 방법 */
 export const COLOR_METHOD: MatchMethod = {
   name: "mix",
   anchor: raw.methods.color.anchor as "white",
