@@ -199,7 +199,7 @@ describe("toGuideModel", () => {
       { ...sub, subStepId: "s1-3", gauge: null },
     ];
     const [s] = toGuideModel(guide([step("s1", 1, { subSteps })]), ID).steps;
-    expect(s.subSteps.map((x) => x.gauge)).toEqual([gauge, null, null]);
+    expect(s.subSteps.map((x) => x.gauge)).toEqual([{ ...gauge, white: null }, null, null]);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 

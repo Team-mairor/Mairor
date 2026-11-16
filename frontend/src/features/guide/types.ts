@@ -108,6 +108,8 @@ export interface GaugeReference {
   /** 부위끼리 견주는 진하기 0~100. 게이지 막대에는 쓰지 않는다 */
   strength: number | null;
   reason: string | null;
+  /** 레퍼런스 영상의 흰자 색. 못 쟀거나 흰자 칸이 없던 결과면 null이다 */
+  white: { hex: string; lab: [number, number, number] } | null;
 }
 
 export interface AreaGuideSet {

@@ -1097,7 +1097,15 @@
               "direction": "darker"
             },
             "strength": 25.9,
-            "reason": null
+            "reason": null,
+            "white": {
+              "hex": "#C3A8A2",
+              "lab": [
+                71.02,
+                8.84,
+                6.73
+              ]
+            }
           }
         }
       ]

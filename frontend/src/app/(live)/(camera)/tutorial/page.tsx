@@ -6,7 +6,16 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { PillButton } from "@/components/ui/pill-button";
 import { pickOf } from "@/features/check";
 import { type RegionName } from "@/features/face";
-import { useGaugeBaseline } from "@/features/gauge";
+import {
+  GaugeDebug,
+  productRule,
+  substituteReference,
+  useGaugeBaseline,
+  useGaugeMeasure,
+  type GaugeLabel,
+  type GaugeReason,
+  type SelectedProduct,
+} from "@/features/gauge";
 import {
   categoryOfPart,
   checkGuideArea,
@@ -30,6 +39,7 @@ import {
 import {
   abandonExecution,
   deleteFaceRegistration,
+  getExecution,
   uploadStepPhoto,
   useRunQuery as useQuery,
 } from "@/features/guide";
@@ -47,7 +57,6 @@ import {
 import {
   ActCard,
   DensityMeter,
-  GAUGE_REFERENCE,
   ExitModal,
   GuideStatus,
   PrepCard,
@@ -193,10 +202,61 @@ function GuideTutorial() {
   }
 }
 
+/** 이 하위 단계 동안 잴 수 없는 이유. 게이지를 아예 숨긴다 */
+const HIDE_GAUGE = new Set<GaugeReason>([
+  "noReference",
+  "weakReference",
+  "thinArea",
+  "noWhite",
+  "noBaseline",
+]);
+const LABEL_TEXT: Record<GaugeLabel, string> = {
+  lighter: "레퍼런스보다 연해요",
+  similar: "레퍼런스와 비슷해요",
+  darker: "레퍼런스보다 진해요",
+};
+const LABEL_COLOR: Record<GaugeLabel, string> = {
+  lighter: "var(--color-sky)",
+  similar: "var(--color-mint)",
+  darker: "var(--color-blush)",
+};
+
+/** 실행 시작 때 서버가 확정한 단계별 제품 선택. 못 받으면 null이고 제품 체크 선택으로 대신한다 */
+function useExecutionProducts(executionId: string | null) {
+  const [products, setProducts] = useState<Record<string, SelectedProduct> | null>(null);
+  useEffect(() => {
+    if (!executionId) return;
+    let live = true;
+    getExecution(executionId)
+      .then((execution) => {
+        if (!live) return;
+        setProducts(
+          Object.fromEntries(
+            execution.steps.map((s) => [
+              s.stepId,
+              {
+                result: s.result,
+                selectedColor: s.selectedColor,
+                skipped: s.skipped,
+              },
+            ]),
+          ),
+        );
+      })
+      .catch((e) =>
+        console.warn("실행의 제품 선택을 불러오지 못해 게이지는 제품 체크 선택으로 정합니다", e),
+      );
+    return () => {
+      live = false;
+    };
+  }, [executionId]);
+  return products;
+}
+
 /**
  * 상단 바는 연속한 같은 부위 단계를 한 칸으로 묶고, 묶음의 마지막 단계를 넘길 때 확인 창 없이 사진을 한 장 남긴다.
  * 사진 저장 동의는 필수이고 튜토리얼 안내에서 받는다.
- * ponytail: 진하기 게이지는 레퍼런스 위치선까지 서서히 차오르는 연출. 진하기 측정이 생기면 gauge를 측정값으로 바꾼다.
+ * 진하기 게이지는 카메라에서 잰 이번 단계 화장 효과를 레퍼런스와 견준 값이다(features/gauge).
  */
 function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea | null }) {
   const router = useRouter();
@@ -212,7 +272,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const [act, setAct] = useState(0);
   // false면 단계 준비 카드(제품·할 일·끝내는 기준)를 띄운다. 앞으로 갈 때만 띄우고, 이전 단계로 돌아갈 때는 띄우지 않는다
   const [ready, setReady] = useState(false);
-  const [gauge, setGauge] = useState(10);
   const [exitAsk, setExitAsk] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   // 미러필름에서 마지막 사진 전에 카메라 화면을 띄우고 자세를 맞추는 중인지
@@ -258,9 +317,36 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const last = step >= steps.length - 1;
   // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다. 그릴 것이 없으면 설명만 보여 준다
   const subs = useMemo(() => subsOf(info, area), [area, info]);
-  // 레퍼런스 게이지 기준이 있고 제품 없이 진행하지 않는 단계만 게이지를 띄운다
+  // 레퍼런스 게이지 기준이 있는 단계만 게이지를 띄우고, 고른 제품에 따라 숨기거나 색감을 뺀다
   const reference = useMemo(() => stepGauge(subs), [subs]);
-  const target = reference && pick?.kind !== "skipped" ? GAUGE_REFERENCE : null;
+  const products = useExecutionProducts(run.executionId);
+  // 실행 정보를 못 받으면(모의 실행 · 조회 실패) 제품 체크에서 건너뛴 단계만 숨기고 같은 제품으로 본다
+  const product = useMemo<SelectedProduct>(() => {
+    const skipped = pick?.kind === "skipped";
+    return (
+      products?.[info.stepId] ?? {
+        result: skipped ? "NONE" : "SAME",
+        selectedColor: null,
+        skipped,
+      }
+    );
+  }, [products, info.stepId, pick?.kind]);
+  const rule = useMemo(
+    () => (reference ? productRule(reference.gauge, info.makeup, product) : null),
+    [reference, info.makeup, product],
+  );
+  // 대체 제품 색이 레퍼런스와 멀면 그 제품 색 쪽으로 옮긴 기준으로 잰다
+  const measureGauge = useMemo(() => {
+    const hex = product.selectedColor?.hex;
+    if (!reference || rule?.basis !== "product" || !hex) return reference?.gauge ?? null;
+    return substituteReference(reference.gauge, hex);
+  }, [reference, rule?.basis, product]);
+  const showGauge = !!rule?.show;
+  const measured = useMemo(
+    () => subs.find((sub) => sub.subStepId === reference?.subStepId)?.guideSets ?? [],
+    [subs, reference?.subStepId],
+  );
+  const madeSets = useMemo(() => subs.flatMap((sub) => sub.guideSets), [subs]);
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
   const resolved = useMemo(
     () => resolveStep(info.stepId, subs, defaults, info.makeup),
@@ -269,7 +355,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 눈썹은 등록 사진의 원래 눈썹 모양·앞머리·꼬리에 맞춘다
   const guideStep = useBrowFit(resolved, run.id);
   // 게이지가 이번 단계 화장만 재도록 단계 준비 카드가 떠 있는 동안 바르기 전 얼굴을 모은다
-  useGaugeBaseline({ runId: run.id, step, collecting: !ready });
+  const baseline = useGaugeBaseline({
+    runId: run.id,
+    step,
+    collecting: !ready,
+    makeup: info.makeup,
+  });
   // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
   // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
   const photoRegions = useMemo(
@@ -414,32 +505,28 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     [],
   );
 
-  useEffect(() => {
-    if (!ready || blocked || exitAsk || target === null) return;
-    const t = setInterval(() => {
-      setGauge((g) => {
-        if (g >= target) return g;
-        return Math.min(
-          target,
-          g + Math.max(0.12, (target - g) * 0.02) * (0.6 + Math.random() * 0.8),
-        );
-      });
-    }, 160);
-    return () => clearInterval(t);
-  }, [ready, blocked, exitAsk, target]);
-
-  const gv = Math.round(gauge);
+  // 개발 도구에서 ?gauge를 붙이면 잰 값과 못 잰 이유를 띄운다
+  const gaugeDebug = process.env.DEV_TOOLS === "1" && !!query?.has("gauge");
+  const gaugeMeasure = useGaugeMeasure({
+    active: ready && showGauge && !exitAsk && !paused,
+    // 기준이 대체 제품 쪽으로 바뀌면 다듬던 값을 이어 쓰지 않는다
+    key: reference ? `${run.id}:${reference.subStepId}:${rule?.basis}` : null,
+    makeup: info.makeup,
+    gauge: measureGauge,
+    guideSets: measured,
+    madeSets,
+    start: baseline.stepBaseline(step),
+    white: baseline.status.white,
+    debug: gaugeDebug,
+  });
+  const { display } = gaugeMeasure;
+  // 이 하위 단계 동안 잴 수 없는 이유면 게이지를 숨기고, 카메라가 잠깐 못 잴 때는 회색으로 비운다
+  const gaugeHidden = !!display?.reason && HIDE_GAUGE.has(display.reason) && display.bar === null;
+  const showMeter = showGauge && !gaugeHidden;
+  const gaugeLabel = display?.label ?? null;
+  const meterBlocked = blocked || display?.bar == null;
   // 변수 이름을 그대로 적어야 Tailwind가 테마 변수를 CSS에 넣는다
-  const meterColor = blocked
-    ? "var(--color-ash)"
-    : gv > 62
-      ? "var(--color-blush)"
-      : gv < 45
-        ? "var(--color-sky)"
-        : "var(--color-mint)";
-  // 잴 수 없을 때는 이유를 위쪽 알림이 알려 주므로 판정 문구를 띄우지 않는다
-  const gaugeLabel =
-    gv > 62 ? "레퍼런스보다 진해요" : gv < 45 ? "레퍼런스보다 연해요" : "레퍼런스와 비슷해요";
+  const meterColor = meterBlocked || !gaugeLabel ? "var(--color-ash)" : LABEL_COLOR[gaugeLabel];
   const lastAct = !paced || act >= info.acts.length - 1;
   // 사진은 묶음 마지막 단계에서만 찍으므로, 촬영 부위를 다시 불러오는 것도 그 단계에서만 한다
   const reloadRegions = groupLast && defaultsFailed && photoRegions.length === 0;
@@ -465,7 +552,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setStep(i);
     setAct(0);
     setReady(!prep);
-    setGauge(10);
   }
   // 모든 묶음(제품 없는 단계·생략한 단계 포함)의 끝에서 사진을 찍는다. 못 찍으면 넘기지 않고 다시 찍게 한다
   const next = () => {
@@ -605,12 +691,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                   할 일 {act + 1}/{info.acts.length}
                 </span>
               )}
-              {target !== null && !blocked && (
+              {showMeter && !meterBlocked && gaugeLabel && (
                 <span
                   className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
                   style={{ color: meterColor }}
                 >
-                  {gaugeLabel}
+                  {LABEL_TEXT[gaugeLabel]}
                 </span>
               )}
             </div>
@@ -631,7 +717,18 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
               )}
             </div>
 
-            {target !== null && <DensityMeter value={gv} color={meterColor} blocked={blocked} />}
+            {showMeter && (
+              <DensityMeter value={display?.bar ?? 0} color={meterColor} blocked={meterBlocked} />
+            )}
+            {gaugeDebug && (
+              <GaugeDebug
+                baseline={baseline.status}
+                reading={gaugeMeasure.reading}
+                display={display}
+                areas={gaugeMeasure.areas.map((a) => a.cells)}
+                made={gaugeMeasure.made}
+              />
+            )}
           </>
         )}
 

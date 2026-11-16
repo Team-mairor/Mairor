@@ -1,9 +1,10 @@
 import type { FaceFrame } from "@/features/face";
 
 import type { CellLab } from "./cells";
+import { eyesOpen } from "./frame";
 import { FRAMES, GRID, MEASURED } from "./spec";
 
-/** 사진 한 장의 고개 각도(라디안)와 눈 뜬 정도. 눈은 덜 뜬 쪽이다 */
+/** 사진 한 장의 고개 각도(라디안)와 눈 뜬 정도(eyesOpen, 덜 뜬 쪽) */
 export interface FrameQuality {
   yaw: number;
   pitch: number;
@@ -13,7 +14,7 @@ export interface FrameQuality {
 
 export const qualityOf = (frame: FaceFrame): FrameQuality => ({
   ...frame.pose,
-  eyes: Math.min(frame.eyes.left.openness, frame.eyes.right.openness),
+  eyes: eyesOpen(frame),
 });
 
 /** 좌우 고개·기울기·눈 뜸 조건. 얼굴 등록과 같은 각도다 */

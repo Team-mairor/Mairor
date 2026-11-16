@@ -9,6 +9,7 @@ export {
   executionSelections,
   ExecutionMismatchError,
   faceRegistrationRequest,
+  getExecution,
   isFaceRegistrationGone,
   registerFace,
   setPhotoConsent,

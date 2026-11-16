@@ -8,8 +8,15 @@ const lip: GaugeReference = {
   effect: { delta: [-3.96, 9.13, 2.76], size: 5.18, direction: "darker" },
   strength: 25.9,
   reason: null,
+  white: null,
 };
-const none: GaugeReference = { color: null, effect: null, strength: null, reason: "noArea" };
+const none: GaugeReference = {
+  color: null,
+  effect: null,
+  strength: null,
+  reason: "noArea",
+  white: null,
+};
 const sub = (order: number, gauge?: GaugeReference | null): AreaSubStep => ({
   subStepId: `s1-${order}`,
   order,
@@ -33,6 +40,15 @@ describe("게이지 기준 읽기", () => {
     expect(gaugeOf({ ...lip, effect: { ...lip.effect, direction: "up" } })).toBeNull();
     expect(gaugeOf({ ...lip, effect: { ...lip.effect, size: Number.NaN } })).toBeNull();
     expect(gaugeOf({ ...lip, strength: "26" })).toBeNull();
+  });
+
+  it("흰자 색은 있으면 그대로 두고, 없거나 모양이 틀리면 null로 둔다", () => {
+    const white = { hex: "#C3A8A2", lab: [71.02, 8.84, 6.73] };
+    expect(gaugeOf({ ...lip, white })?.white).toEqual(white);
+    const beforeWhite: Record<string, unknown> = { ...lip };
+    delete beforeWhite.white;
+    expect(gaugeOf(beforeWhite)?.white).toBeNull();
+    expect(gaugeOf({ ...lip, white: { hex: "white" } })?.white).toBeNull();
   });
 });
 

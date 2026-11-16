@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useCamera, useFaceFrame, type FaceBrows, type FaceFrame } from "@/features/face";
-import { useGaugeBaseline } from "@/features/gauge";
+import { GaugeDebug, useGaugeBaseline, useGaugeMeasure } from "@/features/gauge";
 import {
   fitBrowStep,
   browSpans,
@@ -16,7 +16,9 @@ import {
   loadGuideSet,
   readPixels,
   resolveSubStep,
+  type AreaGuideSet,
   type AreaStatus,
+  type AreaSubStep,
   type GuideStep,
 } from "@/features/guide";
 import { loadFaceMesh, type FaceMesh } from "@/features/overlay";
@@ -26,6 +28,9 @@ interface Item {
   title: string;
   detail: string;
   step: GuideStep | null;
+  /** AI 영역 파일의 하위 단계와 화장 종류. 게이지를 잴 때 쓴다 */
+  sub?: AreaSubStep;
+  makeup?: string;
 }
 
 const STATUS_LABEL: Record<AreaStatus, string> = {
@@ -46,6 +51,7 @@ const EMPTY_NOTE: Partial<Record<AreaStatus, string>> = {
  * ?guides=경로 는 가이드 파일, ?area=경로 는 AI 가이드 영역 파일을 하위 단계마다 넘겨 본다.
  * "원래 눈썹 찾기"는 지금 카메라 화면을 등록 사진처럼 써서 눈썹 가이드를 원래 눈썹 모양·앞머리·꼬리에 맞춘다.
  * "맨얼굴 기준 잡기"는 튜토리얼처럼 게이지 맨얼굴 기준을 모으고 카메라 잠금 결과와 칸 색 읽는 시간을 띄운다.
+ * 기준을 잡은 뒤 게이지 기준이 있는 하위 단계(?area=…local_01.json의 s17-1 등)에서는 그 영역을 재 잰 값을 띄운다.
  */
 export default function TutorialPage() {
   const [items, setItems] = useState<Item[] | null>(null);
@@ -115,6 +121,8 @@ export default function TutorialPage() {
               title: resolved?.title || EMPTY_NOTE[sub.status] || STATUS_LABEL[sub.status],
               detail: `${sub.subStepId} · ${step.makeup} · ${STATUS_LABEL[sub.status]}${reasons}`,
               step: resolved,
+              sub,
+              makeup: step.makeup,
             };
           }),
         );
@@ -195,7 +203,7 @@ export default function TutorialPage() {
                 <span className="rounded bg-black/70 p-2 text-sm text-white">{browNote}</span>
               )}
             </div>
-            <GaugeBaselineCheck />
+            <GaugeBaselineCheck item={item} />
             <div className="flex gap-3">
               <Button size="lg" variant="outline" asChild>
                 <Link href="/debug/preview">처음으로</Link>
@@ -226,10 +234,29 @@ export default function TutorialPage() {
   );
 }
 
-/** 게이지 맨얼굴 기준을 튜토리얼과 같은 방법으로 모아 본다. 누를 때마다 새로 모은다 */
-function GaugeBaselineCheck() {
+const NO_SETS: AreaGuideSet[] = [];
+
+/**
+ * 게이지 맨얼굴 기준을 튜토리얼과 같은 방법으로 모아 본다. 누를 때마다 새로 모은다.
+ * 기준을 잡은 뒤 지금 하위 단계에 게이지 기준(gauge)이 있으면 그 영역을 이어서 재 잰 값을 띄운다
+ */
+function GaugeBaselineCheck({ item }: { item: Item | null }) {
   const [run, setRun] = useState<string | null>(null);
-  const { status } = useGaugeBaseline({ runId: run ?? "", step: 0, collecting: run !== null });
+  const baseline = useGaugeBaseline({ runId: run ?? "", step: 0, collecting: run !== null });
+  const { status } = baseline;
+  const sub = item?.sub;
+  const guideSets = sub?.guideSets ?? NO_SETS;
+  const measured = useGaugeMeasure({
+    active: !!status.bare && !!sub?.gauge,
+    key: run && sub ? `${run}:${sub.subStepId}` : null,
+    makeup: item?.makeup ?? "",
+    gauge: sub?.gauge ?? null,
+    guideSets,
+    madeSets: guideSets,
+    start: status.bare,
+    white: status.white,
+    debug: true,
+  });
   const lock = status.lock
     ? Object.entries(status.lock)
         .map(([name, result]) => `${name} ${result}`)
@@ -239,6 +266,8 @@ function GaugeBaselineCheck() {
     ? ""
     : [
         status.center === null ? "정면 찾는 중" : `정면 pitch ${status.center.toFixed(2)}`,
+        status.quality &&
+          `yaw ${status.quality.yaw.toFixed(2)} pitch ${status.quality.pitch.toFixed(2)} roll ${status.quality.roll.toFixed(2)} 눈 ${status.quality.eyes.toFixed(2)} (점 6개 ${status.quality.aspect.toFixed(2)})`,
         status.bare ? "맨얼굴 기준 완료" : `사진 ${status.frames}/15`,
         status.readMs === null ? null : `칸 읽기 ${status.readMs.toFixed(1)}ms`,
         lock,
@@ -252,6 +281,15 @@ function GaugeBaselineCheck() {
         맨얼굴 기준 잡기
       </Button>
       {note && <span className="rounded bg-black/70 p-2 text-sm text-white">{note}</span>}
+      {status.bare && sub?.gauge && (
+        <GaugeDebug
+          baseline={status}
+          reading={measured.reading}
+          display={measured.display}
+          areas={measured.areas.map((a) => a.cells)}
+          made={measured.made}
+        />
+      )}
     </div>
   );
 }

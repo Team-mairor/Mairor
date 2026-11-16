@@ -40,6 +40,11 @@ vi.mock("@/features/face", () => ({
 vi.mock("@/features/overlay", () => ({
   loadFaceMesh: () => Promise.resolve({ triangles: [], uv: [] }),
 }));
+vi.mock("./white", () => ({
+  eyeSampler: () => ({ corners: new Int32Array(), weights: new Float32Array(), size: 0 }),
+  readEyePixels: () => new Float32Array(),
+  whiteOfFrames: (frames: Float32Array[]) => (frames.length === 15 ? [230, 220, 215] : null),
+}));
 vi.mock("./cells", () => ({
   cellSampler: () => ({ cell: new Int32Array(), samples: new Uint16Array() }),
   readCells: () => new Float32Array(GRID * GRID * 3).fill(50),
@@ -53,7 +58,8 @@ const frame = (): FaceFrame =>
     detectedAt: now,
     pose: { yaw: 0, pitch: 0, roll: 0 },
     eyes: { left: { openness: 1, blinking: false }, right: { openness: 1, blinking: false } },
-    landmarks: [],
+    landmarks: Array.from({ length: 478 }, () => ({ x: 0.5, y: 0.5, z: 0 })),
+    imageSize: { width: 640, height: 480 },
   }) as unknown as FaceFrame;
 
 /** 정면 30장으로 정면을 정한 뒤, 기준 사진 n장을 간격을 두고 보낸다 */
@@ -68,8 +74,9 @@ async function feed(n: number) {
 
 type Result = { status: GaugeBaselineStatus; stepBaseline: (i: number) => unknown };
 const probe: { current: Result | null } = { current: null };
-function Probe({ run, step, collecting }: { run: string; step: number; collecting: boolean }) {
-  const result = useGaugeBaseline({ runId: run, step, collecting });
+type ProbeProps = { run: string; step: number; collecting: boolean; makeup?: string };
+function Probe({ run, step, collecting, makeup }: ProbeProps) {
+  const result = useGaugeBaseline({ runId: run, step, collecting, makeup });
   useEffect(() => {
     probe.current = result;
   });
@@ -100,8 +107,10 @@ afterEach(async () => {
   mocks.unlock.mockClear();
 });
 
-const render = (run: string, step: number, collecting: boolean) =>
-  act(async () => root.render(<Probe run={run} step={step} collecting={collecting} />));
+const render = (run: string, step: number, collecting: boolean, makeup = "foundation") =>
+  act(async () =>
+    root.render(<Probe run={run} step={step} collecting={collecting} makeup={makeup} />),
+  );
 
 describe("게이지 기준 모으기", () => {
   it("첫 단계 준비 카드에서 카메라를 자동 밝기에 맞춰 잠근 뒤 15장을 모아 맨얼굴 기준으로 둔다", async () => {
@@ -115,6 +124,8 @@ describe("게이지 기준 모으기", () => {
     await feed(15);
     expect(latest().status.bare?.frames).toBe(15);
     expect(latest().stepBaseline(0)).toBe(latest().status.bare);
+    // 맨얼굴 기준과 같은 사진으로 흰자 색을 잰다
+    expect(latest().status.white).toEqual([230, 220, 215]);
   });
 
   it("잠그는 동안에는 화면 밝기가 바뀌어 기준 사진을 모으지 않는다", async () => {
@@ -191,6 +202,34 @@ describe("게이지 기준 모으기", () => {
     expect(latest().stepBaseline(1)).not.toBeNull();
     expect(latest().status.bare).toBeNull();
     expect(mocks.match).toHaveBeenCalledTimes(1);
+  });
+
+  it("맨얼굴 기준을 못 모으면 눈 화장 전 다음 준비 카드에서 다 모은 사진으로 흰자를 잰다", async () => {
+    await render("run", 0, true);
+    await feed(5);
+    await render("run", 0, false);
+    expect(latest().status.white).toBeNull();
+
+    await render("run", 1, true, "blush");
+    await feed(15);
+    expect(latest().status.bare).toBeNull();
+    expect(latest().status.white).toEqual([230, 220, 215]);
+  });
+
+  it("눈 화장 단계에 들어선 뒤에는 흰자를 재지 않는다", async () => {
+    await render("run", 0, true);
+    await feed(5);
+    await render("run", 0, false);
+
+    await render("run", 1, true, "eyeliner");
+    await feed(15);
+    expect(latest().stepBaseline(1)).not.toBeNull();
+    expect(latest().status.white).toBeNull();
+
+    await render("run", 2, true, "lip");
+    await feed(15);
+    expect(latest().stepBaseline(2)).not.toBeNull();
+    expect(latest().status.white).toBeNull();
   });
 
   it("준비 카드가 떠 있지 않으면 모으지 않고, 다른 실행의 기준은 버린다", async () => {

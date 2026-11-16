@@ -182,6 +182,16 @@ const ROUTES: MockRoute[] = [
       }),
   },
   {
+    // 빈 파우치. 제품 체크를 지나 튜토리얼까지 갈 수 있게 한다
+    method: "GET",
+    path: /^\/v1\/users\/me\/pouch-items$/,
+    success: () => ({
+      status: 200,
+      body: { items: [], page: 0, size: 100, hasNext: false, pouchVersion: 1 },
+    }),
+    error: () => NOT_FOUND(),
+  },
+  {
     // 요청 본문(guideId)을 보지 않으므로 단계 결과 없이 답한다. 화면은 모든 단계를 비교 기준 없음으로 본다
     method: "POST",
     path: /^\/v1\/users\/me\/guide-matches$/,

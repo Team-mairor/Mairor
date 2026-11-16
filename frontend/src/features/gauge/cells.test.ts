@@ -26,7 +26,8 @@ function photo(size: number, left: number[], right: number[]): Pixels {
   return { width: size, height: size, data };
 }
 
-describe("칸 색", () => {
+// 128 × 128칸을 여러 번 계산해 전체 시험을 함께 돌릴 때 느려질 수 있다
+describe("칸 색", { timeout: 20_000 }, () => {
   it("재는 칸마다 색을 내고, 눈 구멍처럼 재지 않는 칸은 비운다", () => {
     const lab = readCells(photo(512, [200, 150, 130], [200, 150, 130]), landmarks, sampler);
     const skin = rgbToLab(200, 150, 130);

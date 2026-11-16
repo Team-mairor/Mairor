@@ -5,17 +5,17 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const isLab = (v: unknown): v is [number, number, number] =>
   Array.isArray(v) && v.length === 3 && v.every(Number.isFinite);
 const DIRECTIONS = new Set<unknown>(["darker", "lighter", "same"]);
+const isColor = (v: unknown): v is NonNullable<GaugeReference["color"]> =>
+  isRecord(v) && typeof v.hex === "string" && /^#[0-9a-f]{6}$/i.test(v.hex) && isLab(v.lab);
 
-/** 가이드 조회 응답의 gauge를 검사한다. 없거나 모양이 틀리면 기준 없음(null)이다 */
+/**
+ * 가이드 조회 응답의 gauge를 검사한다. 없거나 모양이 틀리면 기준 없음(null)이다.
+ * 흰자 색은 없거나 모양이 틀리면 null로 두어, 흰자로 맞추는 화장만 noWhite로 숨긴다
+ */
 export function gaugeOf(v: unknown): GaugeReference | null {
   if (!isRecord(v)) return null;
   const { color, effect, strength, reason } = v;
-  const colorOk =
-    color === null ||
-    (isRecord(color) &&
-      typeof color.hex === "string" &&
-      /^#[0-9a-f]{6}$/i.test(color.hex) &&
-      isLab(color.lab));
+  const colorOk = color === null || isColor(color);
   const effectOk =
     effect === null ||
     (isRecord(effect) &&
@@ -28,7 +28,8 @@ export function gaugeOf(v: unknown): GaugeReference | null {
     strength === null || (typeof strength === "number" && Number.isFinite(strength));
   const reasonOk = reason === null || typeof reason === "string";
   if (!colorOk || !effectOk || !strengthOk || !reasonOk) return null;
-  return v as unknown as GaugeReference;
+  const white = isColor(v.white) ? v.white : null;
+  return { ...(v as unknown as GaugeReference), white };
 }
 
 /** 게이지 막대를 그릴 수 있는 하위 단계 기준 */

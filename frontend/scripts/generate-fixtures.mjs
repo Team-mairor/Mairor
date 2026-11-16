@@ -569,6 +569,12 @@ const eyeshadowSubSteps = [
 const aiArea = JSON.parse(
   readFileSync(join(frontendDir, "../ai/samples/local_01/guide_area.json"), "utf8"),
 );
+// 흰자 칸 전에 만든 AI 샘플이라, 값이 있는 게이지 기준에 예시 흰자(shared/guide-area 「게이지 기준」의 예)를 넣는다
+const EXAMPLE_WHITE = { hex: "#C3A8A2", lab: [71.02, 8.84, 6.73] };
+const withWhite = (sub) =>
+  sub.gauge && !sub.gauge.reason && !("white" in sub.gauge)
+    ? { ...sub, gauge: { ...sub.gauge, white: EXAMPLE_WHITE } }
+    : sub;
 writeJson("guide-areas/local_01.json", {
   ...aiArea,
   steps: aiArea.steps.map((step) => ({
@@ -576,7 +582,7 @@ writeJson("guide-areas/local_01.json", {
     subSteps:
       step.stepId === "s10"
         ? eyeshadowSubSteps
-        : step.subSteps.map((s) => ({
+        : step.subSteps.map(withWhite).map((s) => ({
             ...s,
             guideSets: s.guideSets.map((set) => ({
               ...set,

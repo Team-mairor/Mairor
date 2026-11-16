@@ -100,7 +100,7 @@ export class ExecutionMismatchError extends Error {
 }
 
 /** GET …/{executionId}. 진행 중 실행은 만든 세션에서만 보인다 */
-function getExecution(executionId: string) {
+export function getExecution(executionId: string) {
   return api.get<ExecutionSummary>(`${EXECUTIONS}/${encodeURIComponent(executionId)}`);
 }
 

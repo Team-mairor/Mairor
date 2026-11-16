@@ -37,7 +37,8 @@ function scene() {
   return { base, current, made };
 }
 
-describe("조명 보정", () => {
+// 128 × 128칸을 여러 번 계산해 전체 시험을 함께 돌릴 때 느려질 수 있다
+describe("조명 보정", { timeout: 20_000 }, () => {
   it("바르는 칸 둘레를 OpenCV 타원 dilate와 같게 넓힌다", () => {
     const { made } = scene();
     expect(grow(made).reduce((a, b) => a + b, 0)).toBe(fixture.grownCount);

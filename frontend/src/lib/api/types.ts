@@ -456,13 +456,22 @@ export interface CreateExecutionRequest {
   acceptMissingProducts: boolean;
 }
 
+/** 실행 단계 스냅샷 중 FE가 쓰는 칸. 시작 때 서버가 확정한 제품 선택과 그 결과 */
+export interface ExecutionStep extends ExecutionSelection {
+  result: "SAME" | "SUBSTITUTE" | "NONE";
+  /** 고른 제품의 색 칸. 기준색이 없어 칸을 정하지 못했으면 null */
+  selectedColor: ColorInfo | null;
+  /** 제품 없이 진행하는 단계 */
+  skipped: boolean;
+}
+
 /** 실행 (Execution) 중 FE가 쓰는 칸. steps는 단계마다 확정한 제품 선택 */
 export interface ExecutionSummary {
   executionId: string;
   guideId: string;
   status: "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
   recordId: string | null;
-  steps: ExecutionSelection[];
+  steps: ExecutionStep[];
 }
 
 /** POST …/executions/{executionId}/completion 응답. 처음 201, 다시 보내면 200이고 recordId가 같다 */

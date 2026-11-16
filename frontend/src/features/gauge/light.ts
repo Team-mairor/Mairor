@@ -44,44 +44,83 @@ function gaussianKernel(sigma: number): Float64Array {
   return kernel.map((v) => v / total);
 }
 
-/** 가장자리 반사(BORDER_REFLECT_101). 끝 칸은 두 번 쓰지 않는다 */
-const reflect = (p: number, n: number) => {
-  let i = p;
-  while (i < 0 || i >= n) i = i < 0 ? -i : 2 * n - 2 - i;
-  return i;
-};
+const KERNEL = gaussianKernel(LIGHT.sigmaCells);
+const HALF = (KERNEL.length - 1) / 2;
 
-/** GRID × GRID 표 하나를 가로·세로로 흐린다 */
-function blur(values: Float64Array, kernel: Float64Array): Float64Array {
-  const half = (kernel.length - 1) / 2;
+/** 가장자리 반사(BORDER_REFLECT_101) 칸 번호. 끝 칸은 두 번 쓰지 않는다. 흐릴 때 칸마다 계산하지 않게 미리 만든다 */
+const REFLECT = Int32Array.from({ length: GRID + 2 * HALF }, (_, i) => {
+  let p = i - HALF;
+  while (p < 0 || p >= GRID) p = p < 0 ? -p : 2 * GRID - 2 - p;
+  return p;
+});
+
+/** 칸마다 네 값(쓰는 칸 · Lab 차이 셋)을 이어 붙인 표를 가로 · 세로로 한 번에 흐린다 */
+function blur4(values: Float64Array): Float64Array {
+  const n = KERNEL.length;
   const rows = new Float64Array(values.length);
-  for (let i = 0; i < GRID; i++)
+  for (let i = 0; i < GRID; i++) {
+    const row = i * GRID;
     for (let j = 0; j < GRID; j++) {
-      let s = 0;
-      for (let k = 0; k < kernel.length; k++)
-        s += kernel[k] * values[i * GRID + reflect(j + k - half, GRID)];
-      rows[i * GRID + j] = s;
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let d = 0;
+      for (let k = 0; k < n; k++) {
+        const w = KERNEL[k];
+        const at = (row + REFLECT[j + k]) * 4;
+        a += w * values[at];
+        b += w * values[at + 1];
+        c += w * values[at + 2];
+        d += w * values[at + 3];
+      }
+      const o = (row + j) * 4;
+      rows[o] = a;
+      rows[o + 1] = b;
+      rows[o + 2] = c;
+      rows[o + 3] = d;
     }
+  }
   const out = new Float64Array(values.length);
   for (let i = 0; i < GRID; i++)
     for (let j = 0; j < GRID; j++) {
-      let s = 0;
-      for (let k = 0; k < kernel.length; k++)
-        s += kernel[k] * rows[reflect(i + k - half, GRID) * GRID + j];
-      out[i * GRID + j] = s;
+      let a = 0;
+      let b = 0;
+      let c = 0;
+      let d = 0;
+      for (let k = 0; k < n; k++) {
+        const w = KERNEL[k];
+        const at = (REFLECT[i + k] * GRID + j) * 4;
+        a += w * rows[at];
+        b += w * rows[at + 1];
+        c += w * rows[at + 2];
+        d += w * rows[at + 3];
+      }
+      const o = (i * GRID + j) * 4;
+      out[o] = a;
+      out[o + 1] = b;
+      out[o + 2] = c;
+      out[o + 3] = d;
     }
   return out;
 }
+
+/** 같은 바르는 칸 표는 한 번만 넓힌다 */
+const grown = new WeakMap<Uint8Array, Uint8Array>();
+const grownOf = (made: Uint8Array) => {
+  let out = grown.get(made);
+  if (!out) grown.set(made, (out = grow(made)));
+  return out;
+};
 
 const hasColor = (lab: CellLab, k: number) =>
   !Number.isNaN(lab[k * 3]) && !Number.isNaN(lab[k * 3 + 1]) && !Number.isNaN(lab[k * 3 + 2]);
 
 /** 조명을 잴 칸. 기준과 지금 모두 색이 있는 맨피부 칸에서, 바르는 칸과 그 둘레를 뺀다 */
 export function freeCells(current: CellLab, base: Baseline, made: Uint8Array | null): Uint8Array {
-  const grown = made ? grow(made) : null;
+  const margin = made ? grownOf(made) : null;
   const free = new Uint8Array(GRID * GRID);
   for (let k = 0; k < GRID * GRID; k++)
-    free[k] = base.cells[k] && SKIN[k] && hasColor(current, k) && !grown?.[k] ? 1 : 0;
+    free[k] = base.cells[k] && SKIN[k] && hasColor(current, k) && !margin?.[k] ? 1 : 0;
   return free;
 }
 
@@ -93,15 +132,17 @@ export function lightChange(current: CellLab, base: Baseline, made: Uint8Array |
   const out = new Float32Array(GRID * GRID * 3);
   const free = freeCells(current, base, made);
   if (!free.some(Boolean)) return out;
-  const kernel = gaussianKernel(LIGHT.sigmaCells);
-  const count = blur(Float64Array.from(free), kernel);
-  for (let ch = 0; ch < 3; ch++) {
-    const filled = new Float64Array(GRID * GRID);
-    for (let k = 0; k < GRID * GRID; k++)
-      if (free[k]) filled[k] = current[k * 3 + ch] - base.lab[k * 3 + ch];
-    const total = blur(filled, kernel);
-    for (let k = 0; k < GRID * GRID; k++)
-      out[k * 3 + ch] = total[k] / Math.max(count[k], LIGHT.minWeight);
+  const filled = new Float64Array(GRID * GRID * 4);
+  for (let k = 0; k < GRID * GRID; k++) {
+    if (!free[k]) continue;
+    filled[k * 4] = 1;
+    for (let ch = 0; ch < 3; ch++)
+      filled[k * 4 + 1 + ch] = current[k * 3 + ch] - base.lab[k * 3 + ch];
+  }
+  const blurred = blur4(filled);
+  for (let k = 0; k < GRID * GRID; k++) {
+    const weight = Math.max(blurred[k * 4], LIGHT.minWeight);
+    for (let ch = 0; ch < 3; ch++) out[k * 3 + ch] = blurred[k * 4 + 1 + ch] / weight;
   }
   return out;
 }

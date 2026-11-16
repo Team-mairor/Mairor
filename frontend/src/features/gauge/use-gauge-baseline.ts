@@ -13,14 +13,28 @@ import {
 } from "@/features/face";
 import { loadFaceMesh } from "@/features/overlay";
 
-import { BaselineCollector, FrontCenter, qualityOf, type Baseline } from "./baseline";
+import {
+  BaselineCollector,
+  FrontCenter,
+  qualityOf,
+  type Baseline,
+  type FrameQuality,
+} from "./baseline";
 import { cellSampler, readCells, type CellSampler, type Pixels } from "./cells";
+import { eyeAspect } from "./frame";
+import { FRAME } from "./stability";
+import { eyeSampler, readEyePixels, whiteOfFrames, type EyeSampler } from "./white";
 
-let samplerPromise: Promise<CellSampler> | null = null;
-/** 칸 표본 자리는 얼굴 지도로 정해져 한 번만 만든다 */
-export function loadCellSampler(): Promise<CellSampler> {
+export interface Samplers {
+  cells: CellSampler;
+  eyes: EyeSampler;
+}
+
+let samplerPromise: Promise<Samplers> | null = null;
+/** 칸 · 눈 구멍 표본 자리는 얼굴 지도로 정해져 한 번만 만든다 */
+export function loadCellSampler(): Promise<Samplers> {
   samplerPromise ??= loadFaceMesh()
-    .then(cellSampler)
+    .then((mesh) => ({ cells: cellSampler(mesh), eyes: eyeSampler(mesh) }))
     .catch((e) => {
       samplerPromise = null;
       throw e;
@@ -62,12 +76,18 @@ export interface GaugeBaselineStatus {
   lockMs: number | null;
   /** 칸 색을 한 번 읽는 데 걸린 시간(ms) */
   readMs: number | null;
+  /** 눈 화장 전 첫 기준 사진으로 잰 흰자 색(sRGB 0~255). 못 쟀으면 null */
+  white: [number, number, number] | null;
+  /** 최근 사진의 고개 각도와 눈 뜸(aspect는 점 6개 비율). 기준 사진이 안 모일 때 이유를 보려고 띄운다 */
+  quality: (FrameQuality & { aspect: number }) | null;
 }
 
 export interface GaugeBaselineOptions {
   runId: string;
   step: number;
   collecting: boolean;
+  /** 지금 단계 화장 종류. 눈 화장 단계에 들어서면 그 뒤로는 흰자를 재지 않는다 */
+  makeup?: string;
 }
 
 /** 한 실행 동안 모은 기준 */
@@ -75,6 +95,11 @@ const freshStore = (runId: string) => ({
   runId,
   center: new FrontCenter(),
   bare: null as Baseline | null,
+  white: null as [number, number, number] | null,
+  /** 지금 모으는 기준 사진의 눈 구멍 점 색. 흰자 색을 잴 때 쓴다 */
+  eyes: [] as Float32Array[],
+  /** 눈 화장 단계에 들어선 적이 있는지. 아이라인 · 속눈썹이 흰자 둘레를 덮으므로 그 뒤로는 흰자를 재지 않는다 */
+  eyeMakeupSeen: false,
   /** 첫 모으기가 끝나기 전. 이때 만든 기준만 맨얼굴 기준이다 */
   first: true,
   /** 카메라를 잠그는 중. 잠그는 동안은 화면 밝기가 바뀌어 기준 사진을 모으지 않는다 */
@@ -92,10 +117,16 @@ function finish(s: Store, collector: BaselineCollector) {
   const base = collector.build();
   s.steps.set(s.step, base);
   s.collector = null;
+  // 맨얼굴 기준을 못 모았으면 눈 화장 전 다음 준비 카드에서 다 모은 사진으로 흰자를 잰다
+  if (base && !s.white && s.eyes.length) s.white = whiteOfFrames(s.eyes);
+  s.eyes = [];
   if (!s.first) return;
   s.first = false;
   s.bare = base;
 }
+
+/** 흰자를 아직 못 쟀고 눈 화장 전이면 기준 사진의 눈 구멍도 읽는다 */
+const wantsWhite = (s: Store) => !s.white && !s.eyeMakeupSeen;
 
 /** 노출은 자동 밝기에 맞추고, 화이트밸런스는 지원되는 기기에서 잠금을 시도한다. 잠그는 동안은 기준 사진을 모으지 않는다 */
 async function lockCamera(video: HTMLVideoElement, track: MediaStreamTrack, signal: AbortSignal) {
@@ -120,9 +151,10 @@ async function lockCamera(video: HTMLVideoElement, track: MediaStreamTrack, sign
  * collecting인 동안(단계 준비 카드) 정면 · 눈 뜬 사진을 모아 그 단계 시작 기준을 만들고,
  * 첫 단계에서 모은 기준은 맨얼굴 기준으로도 쓴다. 첫 모으기를 시작할 때 노출 · 화이트밸런스를 먼저 잠그고
  * (잠근 뒤 색으로 기준을 잡아야 측정과 같은 카메라 설정이다) 나갈 때 푼다.
- * 준비 카드가 닫힐 때까지 다 모으지 못한 단계는 기준이 null이고, 첫 단계에서 못 모으면 맨얼굴 기준도 없다
+ * 준비 카드가 닫힐 때까지 다 모으지 못한 단계는 기준이 null이고, 첫 단계에서 못 모으면 맨얼굴 기준도 없다.
+ * 흰자는 눈 화장 단계 전에 처음 다 모은 기준 사진으로 잰다
  */
-export function useGaugeBaseline({ runId, step, collecting }: GaugeBaselineOptions) {
+export function useGaugeBaseline({ runId, step, collecting, makeup }: GaugeBaselineOptions) {
   const { videoRef } = useCamera();
   const [status, setStatus] = useState<GaugeBaselineStatus>({
     center: null,
@@ -131,12 +163,15 @@ export function useGaugeBaseline({ runId, step, collecting }: GaugeBaselineOptio
     lock: null,
     lockMs: null,
     readMs: null,
+    white: null,
+    quality: null,
   });
+  const shown = useRef(0);
   const store = useRef(freshStore(runId));
   const locked = useRef<MediaStreamTrack | null>(null);
   const lockAbort = useRef<AbortController | null>(null);
   const released = useRef<Promise<void>>(Promise.resolve());
-  const sampler = useRef<CellSampler | null>(null);
+  const sampler = useRef<Samplers | null>(null);
   const read = useRef(videoReader());
 
   const releaseCamera = useCallback(() => {
@@ -192,10 +227,17 @@ export function useGaugeBaseline({ runId, step, collecting }: GaugeBaselineOptio
       lock: null,
       lockMs: null,
       readMs: null,
+      white: null,
+      quality: null,
     }));
   }, [releaseCamera, runId]);
 
   useEffect(() => () => releaseCamera(), [releaseCamera]);
+
+  // 눈 화장 단계에 들어서면 그 실행에서는 흰자를 더 재지 않는다. 준비 카드보다 먼저 정한다
+  useEffect(() => {
+    if (makeup && FRAME.eyeMakeups.includes(makeup)) store.current.eyeMakeupSeen = true;
+  }, [makeup, runId]);
 
   // 준비 카드가 닫히거나 단계가 바뀌면 모으던 기준을 그 단계 것으로 정한다
   useEffect(() => {
@@ -203,12 +245,13 @@ export function useGaugeBaseline({ runId, step, collecting }: GaugeBaselineOptio
     if (collecting && !s.steps.has(step)) {
       s.collector = new BaselineCollector();
       s.step = step;
+      s.eyes = [];
       const video = videoRef.current;
       const track = videoTrack(video);
       if (!s.lockReady && video && track) startLock(s, video, track);
       return () => {
         if (s.collector && s.step === step) finish(s, s.collector);
-        setStatus((prev) => ({ ...prev, bare: s.bare }));
+        setStatus((prev) => ({ ...prev, bare: s.bare, white: s.white }));
       };
     }
   }, [collecting, step, runId, startLock, videoRef]);
@@ -217,6 +260,10 @@ export function useGaugeBaseline({ runId, step, collecting }: GaugeBaselineOptio
     const s = store.current;
     if (!frame || frame.trackingState !== "tracking") return;
     const q = qualityOf(frame);
+    if (s.collector && performance.now() - shown.current > 500) {
+      shown.current = performance.now();
+      setStatus((prev) => ({ ...prev, quality: { ...q, aspect: eyeAspect(frame) } }));
+    }
     const before = s.center.value;
     s.center.push(q);
     const center = s.center.value;
@@ -236,13 +283,21 @@ export function useGaugeBaseline({ runId, step, collecting }: GaugeBaselineOptio
     const pixels = read.current(video);
     if (!pixels) return;
     const started = performance.now();
-    collector.push(readCells(pixels, frame.landmarks, sampler.current), now);
+    collector.push(readCells(pixels, frame.landmarks, sampler.current.cells), now);
     const readMs = performance.now() - started;
+    if (wantsWhite(s)) s.eyes.push(readEyePixels(pixels, frame.landmarks, sampler.current.eyes));
     if (collector.done) finish(s, collector);
-    setStatus((prev) => ({ ...prev, center, bare: s.bare, frames: collector.count, readMs }));
+    setStatus((prev) => ({
+      ...prev,
+      center,
+      bare: s.bare,
+      white: s.white,
+      frames: collector.count,
+      readMs,
+    }));
   });
 
   /** 그 단계 시작 기준. 아직 없거나 모으지 못했으면 null */
   const stepBaseline = useCallback((i: number) => store.current.steps.get(i) ?? null, []);
-  return { status, stepBaseline };
+  return { status, stepBaseline, sampler };
 }
