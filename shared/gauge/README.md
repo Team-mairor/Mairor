@@ -11,6 +11,7 @@
 | 고른 제품(같은 제품 · 대체 제품 · 제품 없음) | [GAUGE_SUBSTITUTE_PRODUCT.md](../../docs/experiments/GAUGE_SUBSTITUTE_PRODUCT.md) |
 | 대체 제품 진하기 목표 · 사진부터 시험 데이터 · 허용 오차 · 계산량 | [GAUGE_BROWSER_SPEC.md](../../docs/experiments/GAUGE_BROWSER_SPEC.md) |
 | 단계 끝 평가(덮음 · 넘침 · 진하기) | [GAUGE_STEP_EVALUATION.md](../../docs/experiments/GAUGE_STEP_EVALUATION.md) |
+| 단계 끝 안내 문장(기준값 · 좌우 · 순서 · 문장 수 · 문장 틀) | [GAUGE_STEP_FEEDBACK_TEXT.md](../../docs/experiments/GAUGE_STEP_FEEDBACK_TEXT.md) |
 
 | 파일 | 내용 | 출처 |
 | --- | --- | --- |
@@ -24,8 +25,10 @@
 | `substitute.v1.schema.json` | 위 파일의 JSON Schema (draft 2020-12) | 손으로 쓴다 |
 | `pipeline.v1.json` | 카메라 사진부터 게이지 값까지 한 번에 재는 시험 데이터(사진 · 얼굴 점 · guideSets · gauge → 중간값 · 게이지 값)와 허용 오차 | `ai/tools/gauge/export_pipeline_spec.py`가 만든다 |
 | `fixtures/pipeline/*.png` | 위 시험 데이터의 480 × 640 사진. 사람 얼굴이 아니라 얼굴 메시로 그린 합성 얼굴이다 | 같은 스크립트가 만든다 |
-| `step_evaluation.v1.json` | 단계 끝 평가(덮음 · 넘침 · 진하기)의 화장 방향 · 바른 칸 문턱 · 둘레 띠 · 좌우 합치기 · 가림 · 조명 값, 안내 문장 첫 기준값과 기대값 시험 데이터 | `ai/tools/gauge/export_step_evaluation_spec.py`가 `ai/tools/gauge/step_evaluation.py` 값으로 만든다 |
+| `step_evaluation.v1.json` | 단계 끝 평가(덮음 · 넘침 · 진하기)의 화장 방향 · 바른 칸 문턱 · 둘레 띠 · 좌우 합치기 · 가림 · 조명 값, 안내 문장 기준값과 기대값 시험 데이터 | `ai/tools/gauge/export_step_evaluation_spec.py`가 `ai/tools/gauge/step_evaluation.py` 값으로 만든다 |
 | `step_evaluation.v1.schema.json` | 위 파일의 JSON Schema (draft 2020-12) | 손으로 쓴다 |
+| `feedback_text.v1.json` | 단계 끝 평가 결과를 안내 문장으로 바꾸는 기준값 · 순서 · 문장 수 · 문장 틀 · 낱말과 하위 단계 · 묶음 기대값 시험 데이터 | `ai/tools/gauge/export_feedback_text_spec.py`가 `ai/tools/gauge/feedback_text.py` 값으로 만든다 |
+| `feedback_text.v1.schema.json` | 위 파일의 JSON Schema (draft 2020-12) | 손으로 쓴다 |
 
 ## 한눈에 보는 순서
 
@@ -263,9 +266,26 @@ function fillPolygon(ixy, width, height, hline) {
 6. **방향**: 안쪽은 얼굴 가운데 선(u = 0.5) 쪽, 바깥쪽은 귀 쪽이다. 영역 칸은 잴 수 있는 영역 칸의 가운데에서 위아래 거리를 (행 범위 ÷ 2)로, 가운데 선에서 멀어진 거리를 (가운데 선과의 거리 범위 ÷ 2)로 나눠 큰 쪽으로 정한다. 둘레 띠 칸은 가장 가까운 영역 칸(OpenCV `distanceTransformWithLabels`, L2, 마스크 5, 픽셀마다 라벨)에서 그 칸까지 간 위아래 거리와 가운데 선에서 멀어진 거리 중 큰 쪽이다. 같으면 위아래다. 방향마다 칸이 `minSideCells`보다 적으면 그 방향 값은 null이다.
 7. **좌우 합치기**: `combine`이 `weaker`면 덮음은 묶음 중 가장 작은 값, 넘침은 가장 큰 값이다(방향별 값도 같다). 묶음마다 값은 `regions`에 따로 낸다.
 8. **진하기**: 위 「게이지 값 계산」 4~7번과 9번(좌우는 덜 바른 쪽)을 끝 칸 색(조명 뺀 값)으로 한 번 한 비율이다. 고른 제품 규칙(`substitute.v1.json`)과 작은 레퍼런스 효과(`stability.v1.json` `weakTargetMin`, `weakReference`)도 같다. 맨피부 변화가 `drift.ratioMax`보다 크면 진하기만 null이고 `ratioReason`이 `lightChanged`다.
-9. **안내 문장 첫 기준값**: 덮음 < `thresholds.coverageLow`면 덜 바름, 방향 덮음 < `thresholds.sideCoverageLow`면 그쪽이 빔, 방향 넘침 ≥ `thresholds.sideOverflowHigh`면 그쪽으로 넘침. 문장 규칙과 설정 탐색에서 다시 고른다.
+9. **안내 문장 기준값**: 덮음 < `thresholds.coverageLow`면 덜 바름, 방향 덮음 < `thresholds.sideCoverageLow`면 그쪽이 빔, 방향 넘침 ≥ `thresholds.sideOverflowHigh`면 그쪽으로 넘침. 문장으로 바꾸는 규칙은 아래 「단계 끝 안내 문장」이다.
 
 `cases`의 시작 칸 색은 `cells.measured`가 1인 칸이 모두 `skin`이고, 끝 칸 색은 거기에 `light`(모든 칸)와 `paint`(칸 묶음마다 `delta`)를 더하고 `covered` 칸을 비운 것이다. 칸 묶음은 [행, 시작 열, 끝 열(포함)] 줄 목록이다. 같은 입력에서 소수 넷째 자리까지 같은 값이 나와야 한다.
+
+## 단계 끝 안내 문장 (`feedback_text.v1.json`)
+
+단계 끝 평가 결과를 사용자가 읽을 문장으로 바꾼다. 숫자 · 점수 · 합격 · 「잘했어요 / 실패」는 보이지 않고, 문장과 평가 결과는 기록에 남기지 않는다. 정한 이유와 숫자는 [docs/experiments/GAUGE_STEP_FEEDBACK_TEXT.md](../../docs/experiments/GAUGE_STEP_FEEDBACK_TEXT.md)에 있다.
+
+1. **입력**: 하위 단계마다 단계 끝 평가 결과(`step_evaluation.v1.json` 결과 칸에 `regions[].sides`를 더한 것)와 그 하위 단계의 화장 종류(`makeup`). 좌우 짝은 `regions`의 두 이름이 모두 `left` · `right`로 시작하는 경우다(입술 · 얼굴 윤곽은 짝이 아니다).
+2. **말하지 않는 경우**: `makeup`이 `silentMakeups`(아이라인)면 이유와 상관없이 아무 문장도 없다. `reason`이 `silentReasons`(`noArea` · `thinArea` · `tooFewCells`)이면 아무 문장도 없다. 그 밖의 `reason`(`covered` · `lightChanged` · `noStart` · `noEnd`)은 `notChecked` 한 문장이다(`reason` 칸에 이유).
+3. **덜 바름(`paintMore`)**: 짝이면 잰 묶음(`coverage`가 null이 아닌 묶음)이 둘 이상이고 모두 `coverage` < `thresholds.coverageLow`일 때 `where` 없이 하나, 아니면 `coverage` < `thresholds.coverageLow`인 묶음마다 그 묶음의 `where`(`left` · `right`)로 하나씩 낸다. 짝이 아니면 전체 `coverage` < `thresholds.coverageLow`일 때 하나다. 이 문장을 낸 쪽을 「말한 쪽」이라 한다.
+4. **빈 쪽(`fillSide`) · 넘침(`overflowSide`)**: 짝이면 묶음마다 그 묶음 `sides`로 본다(`sideWhere`가 `regions`). 빈 쪽은 말한 쪽이 아닌 잰 묶음에서 `coverage` < `thresholds.sideCoverageLow`인 방향 중 가장 작은 하나, 넘침은 잰 묶음 모두에서 `overflow` ≥ `thresholds.sideOverflowHigh`인 방향 중 가장 큰 하나다(값이 같으면 `up` · `down` · `inner` · `outer` 순서로 앞의 것). 묶음이 둘이고 두 묶음 모두 같은 방향이 나오면 `where` 없이 한 문장, 아니면 묶음마다 `where`를 붙인다(빈 쪽은 말한 쪽이 하나도 없을 때만 하나로 합친다). 짝이 아니면 전체 `sides`로 같은 규칙이고 `where`는 없다. 짝이 아닌데 3번에서 말했으면 빈 쪽은 보지 않는다.
+5. **말한 쪽의 넘침**: 넘침 문장이 말한 쪽에 걸리면(3번이 `where` 없이 났거나, 넘침 문장이 `where` 없거나, `where`가 말한 쪽과 같음) 그쪽 전체 넘침(넘침 문장 `where`가 없으면 전체 `overflow`, 있으면 그 묶음 `overflow`)이 `thresholds.toldOverflowMin` 이상일 때만 남긴다.
+6. **진하기**: `ratio`가 null이 아니면 `ratio` < `label.bounds[0]` × (1 − `label.margin`)이면 `lighter`, `ratio` > `label.bounds[1]` × (1 + `label.margin`)이면 `darker`, 아니면 `similar`. `lighter`는 `paintMore`가 있으면 뺀다. `similar`는 영역 문장(`paintMore` · `fillSide` · `overflowSide`)이 하나도 없을 때만 낸다. `label`은 `stability.v1.json` `labels`와 같다.
+7. **가린 묶음**: 짝에서 `reason`이 `covered`인 묶음은 `notChecked`(그 묶음 `where`, `reason` `covered`)를 더한다.
+8. **순서와 수**: `order` 순서로 놓고 앞에서 `subMax`개만 남긴다.
+9. **묶음 끝**: 같은 부위 묶음의 하위 단계를 순서대로 놓고, 하위 단계마다 첫 문장을 하위 단계 순서로, 그다음 둘째 문장을 같은 순서로 이어 `bundleMax`개까지 보인다(`bundleOrder` `step`). 글자가 같은 문장은 앞의 것 하나만 둔다.
+10. **글자**: `texts[key]`의 `{where}`는 `whereWords[where]`(없으면 빈 글자), `{side}`는 `sideWords[makeup][side]`, `{reason}`은 `reasonWords[reason]`, `{name}` · `{obj}` · `{topic}` · `{do}` · `{did}`는 `parts[makeup]`이다. `parts`에 없는 화장 종류는 `parts.other` · `sideWords.other`를 쓴다. 본인 기준 왼쪽 · 오른쪽이라 거울 화면에서 보이는 쪽과 같다.
+
+`cases`는 하위 단계 하나의 평가 결과(`evaluation`)와 화장 종류에서 나와야 할 문장(`expected`, 순서대로, 글자 `text` 포함)이고, `bundles`는 `cases` 이름을 묶음 순서대로 적은 것과 묶음 끝에 보일 문장이다. 같은 입력에서 키 · 변수 · 글자가 모두 같아야 한다.
 
 ## 칸 표 읽는 법
 
@@ -273,5 +293,5 @@ function fillPolygon(ixy, width, height, hline) {
 
 ## 사용 위치
 
-- AI: `ai/tests/test_gauge_*_spec.py`가 JSON이 파이썬 구현과 같은지, 스키마를 통과하는지, 시험 데이터가 입력만으로 다시 나오는지 본다. `ai/tests/test_gauge_spec_bundle.py`가 파일끼리 같은 값(칸 수 · 막대 · 재는 간격 · 검정 갈색 화장)을 같게 적었는지 본다. `ai/tests/test_gauge_pipeline_spec.py`가 PNG만 읽어 사진부터 시험 기대값이 다시 나오는지 본다.
+- AI: `ai/tests/test_gauge_*_spec.py`가 JSON이 파이썬 구현과 같은지, 스키마를 통과하는지, 시험 데이터가 입력만으로 다시 나오는지 본다. `ai/tests/test_gauge_spec_bundle.py`가 파일끼리 같은 값(칸 수 · 막대 · 재는 간격 · 검정 갈색 화장)을 같게 적었는지 본다. `ai/tests/test_gauge_pipeline_spec.py`가 PNG만 읽어 사진부터 시험 기대값이 다시 나오는지 본다. `ai/tests/test_gauge_feedback_text_spec.py`는 안내 문장 기준값이 `step_evaluation.v1.json` · `stability.v1.json`과 같은지도 본다. `ai/tests/test_gauge_feedback_text.py`가 안내 문장 규칙의 고른 이유(덮음 0.2 · 방향 덮음 0.03 · 넘침 먼저 · 말한 쪽 넘침 0.4 · 진하기 여유 · 아이라인 침묵 · 묶음 순서)를 지킨다.
 - FE (예정): 튜토리얼 화면에서 기준을 잡고 게이지 값을 계산할 때 이 값과 칸 표를 읽는다.

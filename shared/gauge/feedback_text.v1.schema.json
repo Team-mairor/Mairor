@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FeedbackTextSpec",
+  "description": "단계 끝 AI 평가 결과를 안내 문장으로 바꾸는 규칙의 값 · 문장 틀 · 기대값 시험 데이터. ai/tools/gauge/export_feedback_text_spec.py가 만든다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "thresholds", "label", "order", "subMax", "bundleMax", "bundleOrder", "sideWhere", "silentMakeups", "silentReasons", "texts", "parts", "sideWords", "whereWords", "reasonWords", "cases", "bundles"],
+  "properties": {
+    "version": { "const": "v1" },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coverageLow", "sideCoverageLow", "sideOverflowHigh", "toldOverflowMin"],
+      "properties": {
+        "coverageLow": { "type": "number", "minimum": 0, "maximum": 1, "description": "덮음이 이보다 작으면 paintMore" },
+        "sideCoverageLow": { "type": "number", "minimum": 0, "maximum": 1, "description": "그 방향 덮음이 이보다 작으면 fillSide" },
+        "sideOverflowHigh": { "type": "number", "minimum": 0, "maximum": 1, "description": "그 방향 넘침이 이 이상이면 overflowSide" },
+        "toldOverflowMin": { "type": "number", "minimum": 0, "description": "paintMore를 낸 쪽은 그쪽 전체 넘침이 이 이상일 때만 overflowSide" }
+      }
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bounds", "margin"],
+      "properties": {
+        "bounds": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "게이지 연해요 | 비슷해요 | 진해요 경계(stability.v1.json labels.bounds)" },
+        "margin": { "type": "number", "minimum": 0, "description": "lighter는 bounds[0] × (1 − margin) 아래, darker는 bounds[1] × (1 + margin) 위" }
+      }
+    },
+    "order": { "type": "array", "items": { "$ref": "#/$defs/key" }, "description": "한 하위 단계 안의 문장 순서" },
+    "subMax": { "type": "integer", "minimum": 1, "description": "하위 단계 하나에서 남길 문장 수" },
+    "bundleMax": { "type": "integer", "minimum": 1, "description": "묶음 끝에 보일 문장 수" },
+    "bundleOrder": { "enum": ["step", "kind"], "description": "step은 하위 단계마다 첫 문장을 먼저, 남는 자리에 둘째 문장" },
+    "sideWhere": { "enum": ["regions", "combined"], "description": "방향 문장을 좌우 짝마다 따로(regions) 보는지" },
+    "silentMakeups": { "type": "array", "items": { "type": "string" }, "description": "이유와 상관없이 문장을 내지 않는 화장 종류" },
+    "silentReasons": { "type": "array", "items": { "type": "string" }, "description": "문장을 내지 않는 평가 못 한 이유" },
+    "texts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paintMore", "fillSide", "overflowSide", "darker", "lighter", "similar", "notChecked"],
+      "patternProperties": { ".*": { "type": "string" } },
+      "description": "문장 틀. {where} · {name} · {obj} · {topic} · {do} · {did} · {side} · {reason}을 채운다"
+    },
+    "parts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "obj", "topic", "do", "did"],
+        "properties": {
+          "name": { "type": "string" },
+          "obj": { "type": "string" },
+          "topic": { "type": "string" },
+          "do": { "type": "string" },
+          "did": { "type": "string" }
+        }
+      },
+      "description": "화장 종류별 이름과 조사 붙은 꼴 · 바르다 / 채우다 / 그리다"
+    },
+    "sideWords": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["up", "down", "inner", "outer"],
+        "properties": {
+          "up": { "type": "string" },
+          "down": { "type": "string" },
+          "inner": { "type": "string" },
+          "outer": { "type": "string" }
+        }
+      },
+      "description": "화장 종류별 방향 낱말. 모두 「쪽」으로 끝나 「~으로 · ~에도」가 맞는다"
+    },
+    "whereWords": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left", "right"],
+      "properties": { "left": { "type": "string" }, "right": { "type": "string" } },
+      "description": "본인 기준 왼쪽 · 오른쪽(뒤에 띄어쓰기 포함)"
+    },
+    "reasonWords": { "type": "object", "additionalProperties": { "type": "string" }, "description": "못 본 이유별 앞말" },
+    "cases": { "type": "array", "items": { "$ref": "#/$defs/case" } },
+    "bundles": { "type": "array", "items": { "$ref": "#/$defs/bundle" } }
+  },
+  "$defs": {
+    "key": { "enum": ["paintMore", "fillSide", "overflowSide", "darker", "lighter", "similar", "notChecked"] },
+    "side": { "enum": ["up", "down", "inner", "outer"] },
+    "score": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "sideScores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["up", "down", "inner", "outer"],
+      "patternProperties": {
+        "^(up|down|inner|outer)$": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["coverage", "overflow"],
+          "properties": { "coverage": { "$ref": "#/$defs/score" }, "overflow": { "$ref": "#/$defs/score" } }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subStepId", "coverage", "overflow", "sides", "ratio", "ratioReason", "regions", "reason"],
+      "properties": {
+        "subStepId": { "type": "string" },
+        "coverage": { "$ref": "#/$defs/score" },
+        "overflow": { "$ref": "#/$defs/score" },
+        "sides": { "$ref": "#/$defs/sideScores" },
+        "ratio": { "type": ["number", "null"], "minimum": 0 },
+        "ratioReason": { "type": ["string", "null"] },
+        "regions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["region", "coverage", "overflow", "sides", "reason"],
+            "properties": {
+              "region": { "type": "string" },
+              "coverage": { "$ref": "#/$defs/score" },
+              "overflow": { "$ref": "#/$defs/score" },
+              "sides": { "$ref": "#/$defs/sideScores" },
+              "reason": { "enum": [null, "tooFewCells", "covered"] }
+            }
+          }
+        },
+        "reason": { "enum": [null, "noStart", "noEnd", "noArea", "thinArea", "tooFewCells", "covered", "lightChanged"] }
+      }
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "subStepId", "makeup", "where", "side", "reason", "text"],
+      "properties": {
+        "key": { "$ref": "#/$defs/key" },
+        "subStepId": { "type": "string" },
+        "makeup": { "type": "string" },
+        "where": { "enum": [null, "left", "right"] },
+        "side": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/side" }] },
+        "reason": { "type": ["string", "null"] },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "makeup", "evaluation", "expected"],
+      "properties": {
+        "name": { "type": "string" },
+        "makeup": { "type": "string" },
+        "evaluation": { "$ref": "#/$defs/evaluation" },
+        "expected": { "type": "array", "items": { "$ref": "#/$defs/message" } }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "steps", "expected"],
+      "properties": {
+        "name": { "type": "string" },
+        "steps": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "expected": { "type": "array", "items": { "$ref": "#/$defs/message" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,1653 @@
+{
+  "version": "v1",
+  "thresholds": {
+    "coverageLow": 0.2,
+    "sideCoverageLow": 0.03,
+    "sideOverflowHigh": 0.3,
+    "toldOverflowMin": 0.4
+  },
+  "label": {
+    "bounds": [
+      0.837,
+      1.183
+    ],
+    "margin": 0.1
+  },
+  "order": [
+    "paintMore",
+    "overflowSide",
+    "fillSide",
+    "darker",
+    "lighter",
+    "notChecked",
+    "similar"
+  ],
+  "subMax": 2,
+  "bundleMax": 3,
+  "bundleOrder": "step",
+  "sideWhere": "regions",
+  "silentMakeups": [
+    "eyeliner"
+  ],
+  "silentReasons": [
+    "noArea",
+    "thinArea",
+    "tooFewCells"
+  ],
+  "texts": {
+    "paintMore": "{where}{obj} 조금 더 {do} 주세요",
+    "fillSide": "{where}{name} {side}에도 {do} 주세요",
+    "overflowSide": "{where}{topic} 가이드보다 {side}으로 넓게 {did}",
+    "darker": "{topic} 레퍼런스보다 진해요",
+    "lighter": "{topic} 레퍼런스보다 연해요",
+    "similar": "{topic} 레퍼런스와 비슷해요",
+    "notChecked": "{reason} {where}{topic} 확인하지 못했어요"
+  },
+  "parts": {
+    "blush": {
+      "name": "블러셔",
+      "obj": "블러셔를",
+      "topic": "블러셔는",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "brow": {
+      "name": "눈썹",
+      "obj": "눈썹을",
+      "topic": "눈썹은",
+      "do": "채워",
+      "did": "그렸어요"
+    },
+    "contour": {
+      "name": "쉐딩",
+      "obj": "쉐딩을",
+      "topic": "쉐딩은",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "eyeliner": {
+      "name": "아이라인",
+      "obj": "아이라인을",
+      "topic": "아이라인은",
+      "do": "그려",
+      "did": "그렸어요"
+    },
+    "eyeshadow": {
+      "name": "섀도",
+      "obj": "섀도를",
+      "topic": "섀도는",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "foundation": {
+      "name": "베이스",
+      "obj": "베이스를",
+      "topic": "베이스는",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "highlight": {
+      "name": "하이라이트",
+      "obj": "하이라이트를",
+      "topic": "하이라이트는",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "lip": {
+      "name": "립",
+      "obj": "립을",
+      "topic": "립은",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "mascara": {
+      "name": "마스카라",
+      "obj": "마스카라를",
+      "topic": "마스카라는",
+      "do": "발라",
+      "did": "발랐어요"
+    },
+    "other": {
+      "name": "화장",
+      "obj": "화장을",
+      "topic": "화장은",
+      "do": "발라",
+      "did": "발랐어요"
+    }
+  },
+  "sideWords": {
+    "blush": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "코 쪽",
+      "outer": "바깥쪽"
+    },
+    "brow": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "앞머리 쪽",
+      "outer": "꼬리 쪽"
+    },
+    "contour": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "안쪽",
+      "outer": "바깥쪽"
+    },
+    "eyeliner": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "안쪽",
+      "outer": "바깥쪽"
+    },
+    "eyeshadow": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "눈 앞머리 쪽",
+      "outer": "눈꼬리 쪽"
+    },
+    "foundation": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "안쪽",
+      "outer": "바깥쪽"
+    },
+    "highlight": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "안쪽",
+      "outer": "바깥쪽"
+    },
+    "lip": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "가운데 쪽",
+      "outer": "입꼬리 쪽"
+    },
+    "mascara": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "안쪽",
+      "outer": "바깥쪽"
+    },
+    "other": {
+      "up": "위쪽",
+      "down": "아래쪽",
+      "inner": "안쪽",
+      "outer": "바깥쪽"
+    }
+  },
+  "whereWords": {
+    "left": "왼쪽 ",
+    "right": "오른쪽 "
+  },
+  "reasonWords": {
+    "covered": "손이나 도구가 가려서",
+    "lightChanged": "조명이 바뀌어서",
+    "noStart": "얼굴이 잘 보이지 않아서",
+    "noEnd": "얼굴이 잘 보이지 않아서"
+  },
+  "cases": [
+    {
+      "name": "lipLikeReference",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s1",
+        "coverage": 0.9,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.0,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.9,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "similar",
+          "subStepId": "s1",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립은 레퍼런스와 비슷해요"
+        }
+      ]
+    },
+    {
+      "name": "cheeksBothBare",
+      "makeup": "blush",
+      "evaluation": {
+        "subStepId": "s2",
+        "coverage": 0.05,
+        "overflow": 0.0,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "leftCheek",
+            "coverage": 0.05,
+            "overflow": 0.0,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          },
+          {
+            "region": "rightCheek",
+            "coverage": 0.1,
+            "overflow": 0.0,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "paintMore",
+          "subStepId": "s2",
+          "makeup": "blush",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "블러셔를 조금 더 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "cheekLeftBare",
+      "makeup": "blush",
+      "evaluation": {
+        "subStepId": "s3",
+        "coverage": 0.05,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.0,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "leftCheek",
+            "coverage": 0.05,
+            "overflow": 0.0,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          },
+          {
+            "region": "rightCheek",
+            "coverage": 0.8,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "paintMore",
+          "subStepId": "s3",
+          "makeup": "blush",
+          "where": "left",
+          "side": null,
+          "reason": null,
+          "text": "왼쪽 블러셔를 조금 더 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "shadowLightButCovered",
+      "makeup": "eyeshadow",
+      "evaluation": {
+        "subStepId": "s4",
+        "coverage": 0.33,
+        "overflow": 0.02,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 0.9,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "leftEye",
+            "coverage": 0.33,
+            "overflow": 0.02,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          },
+          {
+            "region": "rightEye",
+            "coverage": 0.35,
+            "overflow": 0.01,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "similar",
+          "subStepId": "s4",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "섀도는 레퍼런스와 비슷해요"
+        }
+      ]
+    },
+    {
+      "name": "shadowOuterEmptyBothEyes",
+      "makeup": "eyeshadow",
+      "evaluation": {
+        "subStepId": "s5",
+        "coverage": 0.7,
+        "overflow": 0.02,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.0,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.0,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "leftEye",
+            "coverage": 0.7,
+            "overflow": 0.02,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.0,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          },
+          {
+            "region": "rightEye",
+            "coverage": 0.7,
+            "overflow": 0.02,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.02,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "fillSide",
+          "subStepId": "s5",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "섀도 눈꼬리 쪽에도 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "browRightUpperEmpty",
+      "makeup": "brow",
+      "evaluation": {
+        "subStepId": "s6",
+        "coverage": 0.7,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.0,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.0,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "leftBrow",
+            "coverage": 0.8,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          },
+          {
+            "region": "rightBrow",
+            "coverage": 0.7,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.0,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "fillSide",
+          "subStepId": "s6",
+          "makeup": "brow",
+          "where": "right",
+          "side": "up",
+          "reason": null,
+          "text": "오른쪽 눈썹 위쪽에도 채워 주세요"
+        }
+      ]
+    },
+    {
+      "name": "lipOverflowBeforeEmptySide",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s7",
+        "coverage": 0.7,
+        "overflow": 0.2,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.0,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.5
+          }
+        },
+        "ratio": 1.0,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.7,
+            "overflow": 0.2,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.0,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.5
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "overflowSide",
+          "subStepId": "s7",
+          "makeup": "lip",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "립은 가이드보다 입꼬리 쪽으로 넓게 발랐어요"
+        },
+        {
+          "key": "fillSide",
+          "subStepId": "s7",
+          "makeup": "lip",
+          "where": null,
+          "side": "down",
+          "reason": null,
+          "text": "립 아래쪽에도 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "lipBareSmallOverflow",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s8",
+        "coverage": 0.1,
+        "overflow": 0.25,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.1,
+            "overflow": 0.35
+          }
+        },
+        "ratio": 0.2,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.1,
+            "overflow": 0.25,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.1,
+                "overflow": 0.35
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "paintMore",
+          "subStepId": "s8",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립을 조금 더 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "lipMovedBigOverflow",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s9",
+        "coverage": 0.1,
+        "overflow": 0.5,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.1,
+            "overflow": 0.6
+          }
+        },
+        "ratio": 0.2,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.1,
+            "overflow": 0.5,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.1,
+                "overflow": 0.6
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "paintMore",
+          "subStepId": "s9",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립을 조금 더 발라 주세요"
+        },
+        {
+          "key": "overflowSide",
+          "subStepId": "s9",
+          "makeup": "lip",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "립은 가이드보다 입꼬리 쪽으로 넓게 발랐어요"
+        }
+      ]
+    },
+    {
+      "name": "lipDarker",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s10",
+        "coverage": 0.9,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.35,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.9,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "darker",
+          "subStepId": "s10",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립은 레퍼런스보다 진해요"
+        }
+      ]
+    },
+    {
+      "name": "lipSlightlyDarkerStillSimilar",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s11",
+        "coverage": 0.9,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.25,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.9,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "similar",
+          "subStepId": "s11",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립은 레퍼런스와 비슷해요"
+        }
+      ]
+    },
+    {
+      "name": "lipLighter",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s12",
+        "coverage": 0.8,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 0.6,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.8,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "lighter",
+          "subStepId": "s12",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립은 레퍼런스보다 연해요"
+        }
+      ]
+    },
+    {
+      "name": "cheekRightCovered",
+      "makeup": "blush",
+      "evaluation": {
+        "subStepId": "s13",
+        "coverage": 0.8,
+        "overflow": 0.05,
+        "sides": {
+          "up": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          }
+        },
+        "ratio": 1.0,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "leftCheek",
+            "coverage": 0.8,
+            "overflow": 0.05,
+            "sides": {
+              "up": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              }
+            },
+            "reason": null
+          },
+          {
+            "region": "rightCheek",
+            "coverage": null,
+            "overflow": null,
+            "sides": {
+              "up": {
+                "coverage": null,
+                "overflow": null
+              },
+              "down": {
+                "coverage": null,
+                "overflow": null
+              },
+              "inner": {
+                "coverage": null,
+                "overflow": null
+              },
+              "outer": {
+                "coverage": null,
+                "overflow": null
+              }
+            },
+            "reason": "covered"
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "notChecked",
+          "subStepId": "s13",
+          "makeup": "blush",
+          "where": "right",
+          "side": null,
+          "reason": "covered",
+          "text": "손이나 도구가 가려서 오른쪽 블러셔는 확인하지 못했어요"
+        },
+        {
+          "key": "similar",
+          "subStepId": "s13",
+          "makeup": "blush",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "블러셔는 레퍼런스와 비슷해요"
+        }
+      ]
+    },
+    {
+      "name": "cheeksCovered",
+      "makeup": "blush",
+      "evaluation": {
+        "subStepId": "s14",
+        "coverage": null,
+        "overflow": null,
+        "sides": {
+          "up": {
+            "coverage": null,
+            "overflow": null
+          },
+          "down": {
+            "coverage": null,
+            "overflow": null
+          },
+          "inner": {
+            "coverage": null,
+            "overflow": null
+          },
+          "outer": {
+            "coverage": null,
+            "overflow": null
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [],
+        "reason": "covered"
+      },
+      "expected": [
+        {
+          "key": "notChecked",
+          "subStepId": "s14",
+          "makeup": "blush",
+          "where": null,
+          "side": null,
+          "reason": "covered",
+          "text": "손이나 도구가 가려서 블러셔는 확인하지 못했어요"
+        }
+      ]
+    },
+    {
+      "name": "lipLightChanged",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s15",
+        "coverage": null,
+        "overflow": null,
+        "sides": {
+          "up": {
+            "coverage": null,
+            "overflow": null
+          },
+          "down": {
+            "coverage": null,
+            "overflow": null
+          },
+          "inner": {
+            "coverage": null,
+            "overflow": null
+          },
+          "outer": {
+            "coverage": null,
+            "overflow": null
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [],
+        "reason": "lightChanged"
+      },
+      "expected": [
+        {
+          "key": "notChecked",
+          "subStepId": "s15",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": "lightChanged",
+          "text": "조명이 바뀌어서 립은 확인하지 못했어요"
+        }
+      ]
+    },
+    {
+      "name": "shadowNoEnd",
+      "makeup": "eyeshadow",
+      "evaluation": {
+        "subStepId": "s16",
+        "coverage": null,
+        "overflow": null,
+        "sides": {
+          "up": {
+            "coverage": null,
+            "overflow": null
+          },
+          "down": {
+            "coverage": null,
+            "overflow": null
+          },
+          "inner": {
+            "coverage": null,
+            "overflow": null
+          },
+          "outer": {
+            "coverage": null,
+            "overflow": null
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [],
+        "reason": "noEnd"
+      },
+      "expected": [
+        {
+          "key": "notChecked",
+          "subStepId": "s16",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": null,
+          "reason": "noEnd",
+          "text": "얼굴이 잘 보이지 않아서 섀도는 확인하지 못했어요"
+        }
+      ]
+    },
+    {
+      "name": "templateStepNoArea",
+      "makeup": "blush",
+      "evaluation": {
+        "subStepId": "s17",
+        "coverage": null,
+        "overflow": null,
+        "sides": {
+          "up": {
+            "coverage": null,
+            "overflow": null
+          },
+          "down": {
+            "coverage": null,
+            "overflow": null
+          },
+          "inner": {
+            "coverage": null,
+            "overflow": null
+          },
+          "outer": {
+            "coverage": null,
+            "overflow": null
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [],
+        "reason": "noArea"
+      },
+      "expected": []
+    },
+    {
+      "name": "eyelinerThinArea",
+      "makeup": "eyeliner",
+      "evaluation": {
+        "subStepId": "s18",
+        "coverage": null,
+        "overflow": null,
+        "sides": {
+          "up": {
+            "coverage": null,
+            "overflow": null
+          },
+          "down": {
+            "coverage": null,
+            "overflow": null
+          },
+          "inner": {
+            "coverage": null,
+            "overflow": null
+          },
+          "outer": {
+            "coverage": null,
+            "overflow": null
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [],
+        "reason": "thinArea"
+      },
+      "expected": []
+    },
+    {
+      "name": "eyelinerNoStartStaysQuiet",
+      "makeup": "eyeliner",
+      "evaluation": {
+        "subStepId": "s19",
+        "coverage": null,
+        "overflow": null,
+        "sides": {
+          "up": {
+            "coverage": null,
+            "overflow": null
+          },
+          "down": {
+            "coverage": null,
+            "overflow": null
+          },
+          "inner": {
+            "coverage": null,
+            "overflow": null
+          },
+          "outer": {
+            "coverage": null,
+            "overflow": null
+          }
+        },
+        "ratio": null,
+        "ratioReason": null,
+        "regions": [],
+        "reason": "noStart"
+      },
+      "expected": []
+    },
+    {
+      "name": "threeIssuesKeepTwo",
+      "makeup": "lip",
+      "evaluation": {
+        "subStepId": "s20",
+        "coverage": 0.6,
+        "overflow": 0.3,
+        "sides": {
+          "up": {
+            "coverage": 0.0,
+            "overflow": 0.0
+          },
+          "down": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "inner": {
+            "coverage": 0.9,
+            "overflow": 0.0
+          },
+          "outer": {
+            "coverage": 0.9,
+            "overflow": 0.5
+          }
+        },
+        "ratio": 1.4,
+        "ratioReason": null,
+        "regions": [
+          {
+            "region": "lipsOuter",
+            "coverage": 0.6,
+            "overflow": 0.3,
+            "sides": {
+              "up": {
+                "coverage": 0.0,
+                "overflow": 0.0
+              },
+              "down": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "inner": {
+                "coverage": 0.9,
+                "overflow": 0.0
+              },
+              "outer": {
+                "coverage": 0.9,
+                "overflow": 0.5
+              }
+            },
+            "reason": null
+          }
+        ],
+        "reason": null
+      },
+      "expected": [
+        {
+          "key": "overflowSide",
+          "subStepId": "s20",
+          "makeup": "lip",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "립은 가이드보다 입꼬리 쪽으로 넓게 발랐어요"
+        },
+        {
+          "key": "fillSide",
+          "subStepId": "s20",
+          "makeup": "lip",
+          "where": null,
+          "side": "up",
+          "reason": null,
+          "text": "립 위쪽에도 발라 주세요"
+        }
+      ]
+    }
+  ],
+  "bundles": [
+    {
+      "name": "eyeBundleOneLineEach",
+      "steps": [
+        "shadowOuterEmptyBothEyes",
+        "shadowLightButCovered",
+        "shadowNoEnd"
+      ],
+      "expected": [
+        {
+          "key": "fillSide",
+          "subStepId": "s5",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "섀도 눈꼬리 쪽에도 발라 주세요"
+        },
+        {
+          "key": "similar",
+          "subStepId": "s4",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "섀도는 레퍼런스와 비슷해요"
+        },
+        {
+          "key": "notChecked",
+          "subStepId": "s16",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": null,
+          "reason": "noEnd",
+          "text": "얼굴이 잘 보이지 않아서 섀도는 확인하지 못했어요"
+        }
+      ]
+    },
+    {
+      "name": "lipBundleSecondLinesFillRoom",
+      "steps": [
+        "lipOverflowBeforeEmptySide",
+        "lipDarker"
+      ],
+      "expected": [
+        {
+          "key": "overflowSide",
+          "subStepId": "s7",
+          "makeup": "lip",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "립은 가이드보다 입꼬리 쪽으로 넓게 발랐어요"
+        },
+        {
+          "key": "darker",
+          "subStepId": "s10",
+          "makeup": "lip",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "립은 레퍼런스보다 진해요"
+        },
+        {
+          "key": "fillSide",
+          "subStepId": "s7",
+          "makeup": "lip",
+          "where": null,
+          "side": "down",
+          "reason": null,
+          "text": "립 아래쪽에도 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "sameTextOnce",
+      "steps": [
+        "cheeksBothBare",
+        "cheeksBothBare",
+        "cheekLeftBare"
+      ],
+      "expected": [
+        {
+          "key": "paintMore",
+          "subStepId": "s2",
+          "makeup": "blush",
+          "where": null,
+          "side": null,
+          "reason": null,
+          "text": "블러셔를 조금 더 발라 주세요"
+        },
+        {
+          "key": "paintMore",
+          "subStepId": "s3",
+          "makeup": "blush",
+          "where": "left",
+          "side": null,
+          "reason": null,
+          "text": "왼쪽 블러셔를 조금 더 발라 주세요"
+        }
+      ]
+    },
+    {
+      "name": "eyelinerStaysQuietInBundle",
+      "steps": [
+        "eyelinerThinArea",
+        "shadowOuterEmptyBothEyes"
+      ],
+      "expected": [
+        {
+          "key": "fillSide",
+          "subStepId": "s5",
+          "makeup": "eyeshadow",
+          "where": null,
+          "side": "outer",
+          "reason": null,
+          "text": "섀도 눈꼬리 쪽에도 발라 주세요"
+        }
+      ]
+    }
+  ]
+}

@@ -32,9 +32,11 @@
    stability.WEAK_TARGET_MIN보다 작으면 내지 않는다(weakReference).
 
 점수 · 합격 · 단계 이동은 내지 않는다. 결과를 안내 문장으로 바꾸는 규칙은 따로 둔다.
-그 규칙이 처음 쓸 기준값은 COVERAGE_LOW(덮음이 이보다 작으면 덜 바름), SIDE_COVERAGE_LOW(그 방향
-덮음이 이보다 작으면 그쪽이 빔), SIDE_OVERFLOW_HIGH(그 방향 넘침이 이 이상이면 그쪽으로 넘침)다.
-근거 숫자는 docs/experiments/GAUGE_STEP_EVALUATION.md에 있다.
+그 규칙(feedback_text)이 쓰는 기준값은 COVERAGE_LOW(덮음이 이보다 작으면 덜 바름),
+SIDE_COVERAGE_LOW(그 방향 덮음이 이보다 작으면 그쪽이 빔), SIDE_OVERFLOW_HIGH(그 방향 넘침이
+이 이상이면 그쪽으로 넘침)다.
+평가 계산의 근거 숫자는 docs/experiments/GAUGE_STEP_EVALUATION.md, 기준값의 근거는
+docs/experiments/GAUGE_STEP_FEEDBACK_TEXT.md에 있다.
 """
 
 from collections.abc import Sequence
@@ -87,8 +89,8 @@ COVERED_MAX = 0.4
 DRIFT_RATIO_MAX = 6.0
 DRIFT_ALL_MAX = 8.0
 MIN_SIDE_CELLS = 3
-COVERAGE_LOW = 0.4
-SIDE_COVERAGE_LOW = 0.1
+COVERAGE_LOW = 0.2
+SIDE_COVERAGE_LOW = 0.03
 SIDE_OVERFLOW_HIGH = 0.3
 
 

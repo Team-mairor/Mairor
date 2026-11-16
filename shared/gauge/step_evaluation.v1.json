@@ -63,8 +63,8 @@
   "minAreaCells": 6,
   "minSideCells": 3,
   "thresholds": {
-    "coverageLow": 0.4,
-    "sideCoverageLow": 0.1,
+    "coverageLow": 0.2,
+    "sideCoverageLow": 0.03,
     "sideOverflowHigh": 0.3
   },
   "skin": [
