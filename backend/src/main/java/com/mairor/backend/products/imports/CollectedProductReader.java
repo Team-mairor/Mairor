@@ -84,6 +84,7 @@ public final class CollectedProductReader {
   private static final class Reader {
 
     private final List<ImportIssue> issues = new ArrayList<>();
+    private final ShadeReader shadeReader = new ShadeReader();
 
     ReadResult run(JsonNode root) {
       if (root == null || !root.isObject()) {
@@ -121,7 +122,7 @@ public final class CollectedProductReader {
       String imageUrl = optString(root, "imageUrl", "imageUrl", Product.IMAGE_URL_MAX_LENGTH);
       SaleStatus saleStatus =
           enumValue(root, "saleStatus", "saleStatus", SaleStatus.class, false, Set.of());
-      List<CollectedShade> shades = shades(root, sourceProductId);
+      List<CollectedShade> shades = shadeReader.read(root, sourceProductId);
       List<String> warnings = warnings(root);
 
       if (!issues.isEmpty()) {
@@ -242,230 +243,238 @@ public final class CollectedProductReader {
       return List.copyOf(warnings);
     }
 
-    private List<CollectedShade> shades(JsonNode root, String sourceProductId) {
-      JsonNode node = root.path("shades");
-      if (node.isMissingNode() || node.isNull()) {
-        return List.of();
-      }
-      if (!node.isArray()) {
-        issue("shades", Code.WRONG_TYPE, "배열이어야 한다");
-        return List.of();
-      }
-      if (node.size() > SHADES_MAX) {
-        issue("shades", Code.TOO_LONG, "호수는 " + SHADES_MAX + "개까지다");
-        return List.of();
-      }
-      List<CollectedShade> shades = new ArrayList<>();
-      Set<String> optionIds = new HashSet<>();
-      for (int i = 0; i < node.size(); i++) {
-        CollectedShade shade = shade(node.get(i), "shades[" + i + "]", sourceProductId);
-        if (shade == null) {
-          continue;
-        }
-        if (!optionIds.add(shade.sourceOptionId())) {
-          issue("shades[" + i + "].sourceOptionId", Code.DUPLICATE, "같은 옵션 값이 한 건에 두 번 있다");
-        }
-        shades.add(shade);
-      }
-      return List.copyOf(shades);
-    }
+    private final class ShadeReader {
 
-    private CollectedShade shade(JsonNode node, String path, String sourceProductId) {
-      if (!node.isObject()) {
-        issue(path, Code.WRONG_TYPE, "객체여야 한다");
-        return null;
-      }
-      String optionId =
-          reqRawString(
-              node,
-              "sourceOptionId",
-              path + ".sourceOptionId",
-              ProductShade.SOURCE_OPTION_MAX_LENGTH);
-      String name = reqString(node, "name", path + ".name", ProductShade.NAME_MAX_LENGTH);
-      Integer sortOrder = reqInt(node, "sortOrder", path + ".sortOrder", 0);
-      ColorStatus status =
-          enumValue(node, "colorStatus", path + ".colorStatus", ColorStatus.class, true, Set.of());
-      VariantHints hints = variantHints(node.path("variantHints"), path + ".variantHints");
-      int issuesBeforeColors = issues.size();
-      List<CollectedColor> colors = colors(node, path, sourceProductId, optionId);
-      // 칸 하나가 거절되면 목록에서 빠져 상태와 어긋나 보인다. 그 어긋남은 원인이 아니라 결과라서 따로 보고하지 않는다
-      boolean colorsAreClean = issues.size() == issuesBeforeColors;
-      SlotOrderBasis basis =
-          enumValue(
-              node,
-              "slotOrderBasis",
-              path + ".slotOrderBasis",
-              SlotOrderBasis.class,
-              !colors.isEmpty(),
-              Set.of());
-
-      if (status != null && colorsAreClean) {
-        boolean anyColor = colors.stream().anyMatch(CollectedColor::hasColor);
-        if (status == ColorStatus.EXTRACTED && !anyColor) {
-          issue(path + ".colorStatus", Code.INCONSISTENT, "EXTRACTED 인데 색이 있는 칸이 없다");
-        } else if (status != ColorStatus.EXTRACTED && anyColor) {
-          issue(path + ".colorStatus", Code.INCONSISTENT, status + " 인데 색이 있는 칸이 있다");
+      private List<CollectedShade> read(JsonNode root, String sourceProductId) {
+        JsonNode node = root.path("shades");
+        if (node.isMissingNode() || node.isNull()) {
+          return List.of();
         }
+        if (!node.isArray()) {
+          issue("shades", Code.WRONG_TYPE, "배열이어야 한다");
+          return List.of();
+        }
+        if (node.size() > SHADES_MAX) {
+          issue("shades", Code.TOO_LONG, "호수는 " + SHADES_MAX + "개까지다");
+          return List.of();
+        }
+        List<CollectedShade> shades = new ArrayList<>();
+        Set<String> optionIds = new HashSet<>();
+        for (int i = 0; i < node.size(); i++) {
+          CollectedShade shade = shade(node.get(i), "shades[" + i + "]", sourceProductId);
+          if (shade == null) {
+            continue;
+          }
+          if (!optionIds.add(shade.sourceOptionId())) {
+            issue("shades[" + i + "].sourceOptionId", Code.DUPLICATE, "같은 옵션 값이 한 건에 두 번 있다");
+          }
+          shades.add(shade);
+        }
+        return List.copyOf(shades);
       }
-      if (optionId == null || name == null || sortOrder == null || status == null) {
-        return null;
-      }
-      return new CollectedShade(optionId, name, sortOrder, basis, status, hints, colors);
-    }
 
-    private VariantHints variantHints(JsonNode node, String path) {
-      if (node.isMissingNode() || node.isNull()) {
-        return null;
-      }
-      if (!node.isObject()) {
-        issue(path, Code.WRONG_TYPE, "객체여야 한다");
-        return null;
-      }
-      Map<String, String> attributes = null;
-      JsonNode raw = node.path("optionAttributes");
-      if (raw.isObject()) {
-        if (raw.size() > OPTION_ATTRIBUTES_MAX) {
-          issue(path + ".optionAttributes", Code.TOO_LONG, "항목은 " + OPTION_ATTRIBUTES_MAX + "개까지다");
-        } else {
-          attributes = new LinkedHashMap<>();
-          for (Map.Entry<String, JsonNode> entry : raw.properties()) {
-            String value =
-                scalarText(
-                    entry.getValue(), path + ".optionAttributes." + entry.getKey(), HINT_TEXT_MAX);
-            if (value != null) {
-              attributes.put(entry.getKey(), value);
-            }
+      private CollectedShade shade(JsonNode node, String path, String sourceProductId) {
+        if (!node.isObject()) {
+          issue(path, Code.WRONG_TYPE, "객체여야 한다");
+          return null;
+        }
+        String optionId =
+            reqRawString(
+                node,
+                "sourceOptionId",
+                path + ".sourceOptionId",
+                ProductShade.SOURCE_OPTION_MAX_LENGTH);
+        String name = reqString(node, "name", path + ".name", ProductShade.NAME_MAX_LENGTH);
+        Integer sortOrder = reqInt(node, "sortOrder", path + ".sortOrder", 0);
+        ColorStatus status =
+            enumValue(
+                node, "colorStatus", path + ".colorStatus", ColorStatus.class, true, Set.of());
+        VariantHints hints = variantHints(node.path("variantHints"), path + ".variantHints");
+        int issuesBeforeColors = issues.size();
+        List<CollectedColor> colors = colors(node, path, sourceProductId, optionId);
+        // 칸 하나가 거절되면 목록에서 빠져 상태와 어긋나 보인다. 그 어긋남은 원인이 아니라 결과라서 따로 보고하지 않는다
+        boolean colorsAreClean = issues.size() == issuesBeforeColors;
+        SlotOrderBasis basis =
+            enumValue(
+                node,
+                "slotOrderBasis",
+                path + ".slotOrderBasis",
+                SlotOrderBasis.class,
+                !colors.isEmpty(),
+                Set.of());
+
+        if (status != null && colorsAreClean) {
+          boolean anyColor = colors.stream().anyMatch(CollectedColor::hasColor);
+          if (status == ColorStatus.EXTRACTED && !anyColor) {
+            issue(path + ".colorStatus", Code.INCONSISTENT, "EXTRACTED 인데 색이 있는 칸이 없다");
+          } else if (status != ColorStatus.EXTRACTED && anyColor) {
+            issue(path + ".colorStatus", Code.INCONSISTENT, status + " 인데 색이 있는 칸이 있다");
           }
         }
-      } else if (!raw.isMissingNode() && !raw.isNull()) {
-        issue(path + ".optionAttributes", Code.WRONG_TYPE, "객체이거나 null 이어야 한다");
-      }
-      return new VariantHints(
-          scalarText(node.path("volume"), path + ".volume", HINT_TEXT_MAX),
-          scalarText(node.path("composition"), path + ".composition", HINT_TEXT_MAX),
-          scalarText(node.path("formulation"), path + ".formulation", HINT_TEXT_MAX),
-          attributes == null ? null : Map.copyOf(attributes),
-          scalarText(node.path("listPrice"), path + ".listPrice", HINT_TEXT_MAX));
-    }
-
-    private List<CollectedColor> colors(
-        JsonNode shade, String shadePath, String sourceProductId, String sourceOptionId) {
-      JsonNode node = shade.path("colors");
-      if (node.isMissingNode() || node.isNull()) {
-        return List.of();
-      }
-      if (!node.isArray()) {
-        issue(shadePath + ".colors", Code.WRONG_TYPE, "배열이어야 한다");
-        return List.of();
-      }
-      if (node.size() > COLORS_MAX) {
-        issue(shadePath + ".colors", Code.TOO_LONG, "칸은 " + COLORS_MAX + "개까지다");
-        return List.of();
-      }
-      List<CollectedColor> colors = new ArrayList<>();
-      Set<Integer> orders = new HashSet<>();
-      for (int i = 0; i < node.size(); i++) {
-        String path = shadePath + ".colors[" + i + "]";
-        CollectedColor color = color(node.get(i), path, sourceProductId, sourceOptionId);
-        if (color == null) {
-          continue;
+        if (optionId == null || name == null || sortOrder == null || status == null) {
+          return null;
         }
-        if (!orders.add(color.sortOrder())) {
-          issue(path + ".sortOrder", Code.DUPLICATE, "한 호수 안에서 칸 순서가 겹친다");
-        }
-        colors.add(color);
-      }
-      return List.copyOf(colors);
-    }
-
-    private CollectedColor color(
-        JsonNode node, String path, String sourceProductId, String sourceOptionId) {
-      if (!node.isObject()) {
-        issue(path, Code.WRONG_TYPE, "객체여야 한다");
-        return null;
-      }
-      Integer sortOrder = reqInt(node, "sortOrder", path + ".sortOrder", 1);
-      String name = optString(node, "name", path + ".name", ProductShadeColor.NAME_MAX_LENGTH);
-      NameSource nameSource =
-          enumValue(node, "nameSource", path + ".nameSource", NameSource.class, true, Set.of());
-      if (nameSource != null) {
-        if (name != null && nameSource == NameSource.NONE) {
-          issue(path + ".nameSource", Code.INCONSISTENT, "이름이 있으면 근거는 NONE 일 수 없다");
-        } else if (name == null && nameSource != NameSource.NONE) {
-          issue(path + ".nameSource", Code.INCONSISTENT, "이름이 없으면 근거는 NONE 이어야 한다");
-        }
+        return new CollectedShade(optionId, name, sortOrder, basis, status, hints, colors);
       }
 
-      String hex = optString(node, "hex", path + ".hex", 7);
-      if (hex != null && !HEX.matcher(hex).matches()) {
-        issue(path + ".hex", Code.INVALID_FORMAT, "#RRGGBB 대문자여야 한다");
-      }
-      boolean hasColor = hex != null;
-      ColorSource colorSource =
-          enumValue(
-              node,
-              "colorSource",
-              path + ".colorSource",
-              ColorSource.class,
-              hasColor,
-              NOT_COLLECTABLE);
-      if (!hasColor && colorSource != null) {
-        issue(path + ".colorSource", Code.INCONSISTENT, "색이 없는 칸에는 출처를 쓰지 않는다");
-      }
-      ShadeLink shadeLink =
-          enumValue(node, "shadeLink", path + ".shadeLink", ShadeLink.class, hasColor, Set.of());
-      Double quality = colorQuality(node, path, hasColor, colorSource);
-
-      String evidenceKey = reqRawString(node, "evidenceKey", path + ".evidenceKey", 400);
-      if (evidenceKey != null
-          && sortOrder != null
-          && sourceProductId != null
-          && sourceOptionId != null) {
-        String expected = sourceProductId + "/" + sourceOptionId + "/" + sortOrder;
-        if (!evidenceKey.equals(expected)) {
-          issue(
-              path + ".evidenceKey",
-              Code.INCONSISTENT,
-              "<sourceProductId>/<sourceOptionId>/<칸 sortOrder> 꼴이어야 한다");
+      private VariantHints variantHints(JsonNode node, String path) {
+        if (node.isMissingNode() || node.isNull()) {
+          return null;
         }
-      }
-      if (sortOrder == null || nameSource == null) {
-        return null;
-      }
-      return new CollectedColor(
-          sortOrder, name, nameSource, hex, colorSource, shadeLink, quality, evidenceKey);
-    }
-
-    /** 사진에서 얻은 색만 0~1 품질을 가진다. 사이트 색값·모델 추정·색 없음은 {@code null} 이다. */
-    private Double colorQuality(JsonNode node, String path, boolean hasColor, ColorSource source) {
-      String p = path + ".colorQuality";
-      JsonNode raw = node.path("colorQuality");
-      boolean present = !raw.isMissingNode() && !raw.isNull();
-      boolean photo =
-          hasColor
-              && source != null
-              && source != ColorSource.SOURCE_VALUE
-              && source != ColorSource.LLM_ESTIMATE;
-      if (!present) {
-        if (photo) {
-          issue(p, Code.REQUIRED, "사진에서 얻은 색은 품질 점수가 있어야 한다");
+        if (!node.isObject()) {
+          issue(path, Code.WRONG_TYPE, "객체여야 한다");
+          return null;
         }
-        return null;
+        Map<String, String> attributes = null;
+        JsonNode raw = node.path("optionAttributes");
+        if (raw.isObject()) {
+          if (raw.size() > OPTION_ATTRIBUTES_MAX) {
+            issue(
+                path + ".optionAttributes", Code.TOO_LONG, "항목은 " + OPTION_ATTRIBUTES_MAX + "개까지다");
+          } else {
+            attributes = new LinkedHashMap<>();
+            for (Map.Entry<String, JsonNode> entry : raw.properties()) {
+              String value =
+                  scalarText(
+                      entry.getValue(),
+                      path + ".optionAttributes." + entry.getKey(),
+                      HINT_TEXT_MAX);
+              if (value != null) {
+                attributes.put(entry.getKey(), value);
+              }
+            }
+          }
+        } else if (!raw.isMissingNode() && !raw.isNull()) {
+          issue(path + ".optionAttributes", Code.WRONG_TYPE, "객체이거나 null 이어야 한다");
+        }
+        return new VariantHints(
+            scalarText(node.path("volume"), path + ".volume", HINT_TEXT_MAX),
+            scalarText(node.path("composition"), path + ".composition", HINT_TEXT_MAX),
+            scalarText(node.path("formulation"), path + ".formulation", HINT_TEXT_MAX),
+            attributes == null ? null : Map.copyOf(attributes),
+            scalarText(node.path("listPrice"), path + ".listPrice", HINT_TEXT_MAX));
       }
-      if (!raw.isNumber()) {
-        issue(p, Code.WRONG_TYPE, "숫자여야 한다");
-        return null;
+
+      private List<CollectedColor> colors(
+          JsonNode shade, String shadePath, String sourceProductId, String sourceOptionId) {
+        JsonNode node = shade.path("colors");
+        if (node.isMissingNode() || node.isNull()) {
+          return List.of();
+        }
+        if (!node.isArray()) {
+          issue(shadePath + ".colors", Code.WRONG_TYPE, "배열이어야 한다");
+          return List.of();
+        }
+        if (node.size() > COLORS_MAX) {
+          issue(shadePath + ".colors", Code.TOO_LONG, "칸은 " + COLORS_MAX + "개까지다");
+          return List.of();
+        }
+        List<CollectedColor> colors = new ArrayList<>();
+        Set<Integer> orders = new HashSet<>();
+        for (int i = 0; i < node.size(); i++) {
+          String path = shadePath + ".colors[" + i + "]";
+          CollectedColor color = color(node.get(i), path, sourceProductId, sourceOptionId);
+          if (color == null) {
+            continue;
+          }
+          if (!orders.add(color.sortOrder())) {
+            issue(path + ".sortOrder", Code.DUPLICATE, "한 호수 안에서 칸 순서가 겹친다");
+          }
+          colors.add(color);
+        }
+        return List.copyOf(colors);
       }
-      double value = raw.doubleValue();
-      if (!hasColor || (source != null && !photo)) {
-        issue(p, Code.INCONSISTENT, "사진에서 얻은 색에만 품질 점수를 쓴다");
-        return null;
+
+      private CollectedColor color(
+          JsonNode node, String path, String sourceProductId, String sourceOptionId) {
+        if (!node.isObject()) {
+          issue(path, Code.WRONG_TYPE, "객체여야 한다");
+          return null;
+        }
+        Integer sortOrder = reqInt(node, "sortOrder", path + ".sortOrder", 1);
+        String name = optString(node, "name", path + ".name", ProductShadeColor.NAME_MAX_LENGTH);
+        NameSource nameSource =
+            enumValue(node, "nameSource", path + ".nameSource", NameSource.class, true, Set.of());
+        if (nameSource != null) {
+          if (name != null && nameSource == NameSource.NONE) {
+            issue(path + ".nameSource", Code.INCONSISTENT, "이름이 있으면 근거는 NONE 일 수 없다");
+          } else if (name == null && nameSource != NameSource.NONE) {
+            issue(path + ".nameSource", Code.INCONSISTENT, "이름이 없으면 근거는 NONE 이어야 한다");
+          }
+        }
+
+        String hex = optString(node, "hex", path + ".hex", 7);
+        if (hex != null && !HEX.matcher(hex).matches()) {
+          issue(path + ".hex", Code.INVALID_FORMAT, "#RRGGBB 대문자여야 한다");
+        }
+        boolean hasColor = hex != null;
+        ColorSource colorSource =
+            enumValue(
+                node,
+                "colorSource",
+                path + ".colorSource",
+                ColorSource.class,
+                hasColor,
+                NOT_COLLECTABLE);
+        if (!hasColor && colorSource != null) {
+          issue(path + ".colorSource", Code.INCONSISTENT, "색이 없는 칸에는 출처를 쓰지 않는다");
+        }
+        ShadeLink shadeLink =
+            enumValue(node, "shadeLink", path + ".shadeLink", ShadeLink.class, hasColor, Set.of());
+        Double quality = colorQuality(node, path, hasColor, colorSource);
+
+        String evidenceKey = reqRawString(node, "evidenceKey", path + ".evidenceKey", 400);
+        if (evidenceKey != null
+            && sortOrder != null
+            && sourceProductId != null
+            && sourceOptionId != null) {
+          String expected = sourceProductId + "/" + sourceOptionId + "/" + sortOrder;
+          if (!evidenceKey.equals(expected)) {
+            issue(
+                path + ".evidenceKey",
+                Code.INCONSISTENT,
+                "<sourceProductId>/<sourceOptionId>/<칸 sortOrder> 꼴이어야 한다");
+          }
+        }
+        if (sortOrder == null || nameSource == null) {
+          return null;
+        }
+        return new CollectedColor(
+            sortOrder, name, nameSource, hex, colorSource, shadeLink, quality, evidenceKey);
       }
-      if (Double.isNaN(value) || value < 0.0 || value > 1.0) {
-        issue(p, Code.INVALID_VALUE, "0~1 사이여야 한다");
-        return null;
+
+      /** 사진에서 얻은 색만 0~1 품질을 가진다. 사이트 색값·모델 추정·색 없음은 {@code null} 이다. */
+      private Double colorQuality(
+          JsonNode node, String path, boolean hasColor, ColorSource source) {
+        String p = path + ".colorQuality";
+        JsonNode raw = node.path("colorQuality");
+        boolean present = !raw.isMissingNode() && !raw.isNull();
+        boolean photo =
+            hasColor
+                && source != null
+                && source != ColorSource.SOURCE_VALUE
+                && source != ColorSource.LLM_ESTIMATE;
+        if (!present) {
+          if (photo) {
+            issue(p, Code.REQUIRED, "사진에서 얻은 색은 품질 점수가 있어야 한다");
+          }
+          return null;
+        }
+        if (!raw.isNumber()) {
+          issue(p, Code.WRONG_TYPE, "숫자여야 한다");
+          return null;
+        }
+        double value = raw.doubleValue();
+        if (!hasColor || (source != null && !photo)) {
+          issue(p, Code.INCONSISTENT, "사진에서 얻은 색에만 품질 점수를 쓴다");
+          return null;
+        }
+        if (Double.isNaN(value) || value < 0.0 || value > 1.0) {
+          issue(p, Code.INVALID_VALUE, "0~1 사이여야 한다");
+          return null;
+        }
+        return value;
       }
-      return value;
     }
 
     // --- 필드 읽기 ---
