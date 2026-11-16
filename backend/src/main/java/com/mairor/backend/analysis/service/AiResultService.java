@@ -94,62 +94,69 @@ public class AiResultService {
       return Outcome.ALREADY_FINISHED;
     }
     if ("COMPLETED".equals(result.status())) {
-      Guide guide =
-          guides
-              .findByAnalysisJobId(job.getId())
-              .orElseThrow(() -> new IllegalStateException("작업 " + job.getId() + " 의 가이드가 없습니다."));
-      List<String> problems =
-          AiResultCheck.problems(
-              job.getVideo().getYoutubeVideoId(),
-              objectMapper.readTree(guide.getGuideInput()),
-              // 프레임을 싣지 않고 맡긴 작업은 요청할 때 키를 비워 둔다(BuildGuideStep)
-              guide.getFramesManifestKey() != null,
-              result);
-      if (!problems.isEmpty()) {
-        String reason = String.join(" / ", problems);
-        job.fail(
-            AnalysisFailureCode.AI_RESULT_MISMATCH,
-            AnalysisFailureCode.AI_RESULT_MISMATCH.defaultMessage() + " " + reason,
-            clock.instant());
-        log.warn(
-            "AI 결과가 작업과 맞지 않아 실패 처리 jobId={} aiJobId={} problems={}",
-            job.getId(),
-            result.jobId(),
-            reason);
-        notifier.changed(job.getId());
-        return Outcome.APPLIED;
-      }
-      JsonNode area = present(result.area()) ? result.area() : null;
-      guide.recordAiResult(
-          result.guide().toString(), area == null ? null : area.toString(), meshVersion(area));
-      Instant now = clock.instant();
-      reviews.publish(guide, now);
-      job.complete(now);
-      events.publishEvent(new ReferenceProductReconciliationRequested(guide.getId()));
-      log.info(
-          "AI 가이드 저장 · 공개 jobId={} aiJobId={} guideId={} steps={} area={}",
-          job.getId(),
-          result.jobId(),
-          guide.getId(),
-          result.guide().path("steps").size(),
-          area != null);
+      applyCompleted(job, result);
     } else {
-      String code = result.error() == null ? "" : result.error().path("code").asString("");
-      AnalysisFailureCode failure =
-          "GENERATION_FAILED".equals(code)
-              ? AnalysisFailureCode.AI_GENERATION_FAILED
-              : AnalysisFailureCode.AI_INTERNAL_ERROR;
-      String message = AiResultCheck.failureMessage(result.error(), failure.defaultMessage());
-      job.fail(failure, message, clock.instant());
-      log.warn(
-          "AI 가이드 생성 실패 jobId={} aiJobId={} code={} message={}",
-          job.getId(),
-          result.jobId(),
-          code,
-          message);
+      applyFailed(job, result);
     }
     notifier.changed(job.getId());
     return Outcome.APPLIED;
+  }
+
+  private void applyCompleted(AnalysisJob job, AiGuideJobCallbackRequest result) {
+    Guide guide =
+        guides
+            .findByAnalysisJobId(job.getId())
+            .orElseThrow(() -> new IllegalStateException("작업 " + job.getId() + " 의 가이드가 없습니다."));
+    List<String> problems =
+        AiResultCheck.problems(
+            job.getVideo().getYoutubeVideoId(),
+            objectMapper.readTree(guide.getGuideInput()),
+            // 프레임을 싣지 않고 맡긴 작업은 요청할 때 키를 비워 둔다(BuildGuideStep)
+            guide.getFramesManifestKey() != null,
+            result);
+    if (!problems.isEmpty()) {
+      String reason = String.join(" / ", problems);
+      job.fail(
+          AnalysisFailureCode.AI_RESULT_MISMATCH,
+          AnalysisFailureCode.AI_RESULT_MISMATCH.defaultMessage() + " " + reason,
+          clock.instant());
+      log.warn(
+          "AI 결과가 작업과 맞지 않아 실패 처리 jobId={} aiJobId={} problems={}",
+          job.getId(),
+          result.jobId(),
+          reason);
+      return;
+    }
+    JsonNode area = present(result.area()) ? result.area() : null;
+    guide.recordAiResult(
+        result.guide().toString(), area == null ? null : area.toString(), meshVersion(area));
+    Instant now = clock.instant();
+    reviews.publish(guide, now);
+    job.complete(now);
+    events.publishEvent(new ReferenceProductReconciliationRequested(guide.getId()));
+    log.info(
+        "AI 가이드 저장 · 공개 jobId={} aiJobId={} guideId={} steps={} area={}",
+        job.getId(),
+        result.jobId(),
+        guide.getId(),
+        result.guide().path("steps").size(),
+        area != null);
+  }
+
+  private void applyFailed(AnalysisJob job, AiGuideJobCallbackRequest result) {
+    String code = result.error() == null ? "" : result.error().path("code").asString("");
+    AnalysisFailureCode failure =
+        "GENERATION_FAILED".equals(code)
+            ? AnalysisFailureCode.AI_GENERATION_FAILED
+            : AnalysisFailureCode.AI_INTERNAL_ERROR;
+    String message = AiResultCheck.failureMessage(result.error(), failure.defaultMessage());
+    job.fail(failure, message, clock.instant());
+    log.warn(
+        "AI 가이드 생성 실패 jobId={} aiJobId={} code={} message={}",
+        job.getId(),
+        result.jobId(),
+        code,
+        message);
   }
 
   /**
