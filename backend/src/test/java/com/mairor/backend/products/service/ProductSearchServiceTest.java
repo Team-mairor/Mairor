@@ -21,8 +21,10 @@ import com.mairor.backend.products.entity.ProductShade;
 import com.mairor.backend.products.entity.ProductShadeColor;
 import com.mairor.backend.products.entity.ProductType;
 import com.mairor.backend.products.entity.ReviewStatus;
+import com.mairor.backend.products.repository.ProductNameAliasRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -62,6 +64,7 @@ class ProductSearchServiceTest {
   private static final String LONG_NAME = " " + "x".repeat(Product.NAME_MAX_LENGTH - 2) + " ";
 
   @Autowired private ProductSearchService service;
+  @Autowired private ProductNameAliasRepository aliasRepository;
   @Autowired private EntityManager em;
   @Autowired private EntityManagerFactory emf;
 
@@ -192,6 +195,16 @@ class ProductSearchServiceTest {
     em.flush();
 
     assertThat(searchTint(BRAND, "Water GelTint")).isEmpty();
+  }
+
+  @Test
+  void productNameAliasIsUsedAfterOtherFallbacksMiss() {
+    aliasRepository.remember(
+        "LIP_TINT", BRAND, "Community Alias Tint", tint.getId(), UUID.randomUUID(), Instant.now());
+
+    assertThat(searchTint(BRAND, "Community Alias Tint"))
+        .extracting(ProductResponse::productId)
+        .containsExactly(tint.getId().toString());
   }
 
   @Test

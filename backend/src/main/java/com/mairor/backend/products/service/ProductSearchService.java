@@ -74,20 +74,11 @@ public class ProductSearchService {
       return List.of(toResponse(exact.get()));
     }
 
-    List<Product> compactMatches =
-        productRepository.findCompact(query.type(), query.brand(), query.name());
-    if (compactMatches.isEmpty()) {
-      compactMatches =
-          productRepository.findWithBrandPrefix(List.of(query.type()), query.brand(), query.name());
-    }
-    if (compactMatches.isEmpty()) {
-      compactMatches =
-          productRepository.findByAlias(List.of(query.type()), query.brand(), query.name());
-    }
-    if (compactMatches.size() != 1) {
+    List<Product> matches = findFallbackMatches(query);
+    if (matches.size() != 1) {
       return List.of();
     }
-    return List.of(toResponse(compactMatches.get(0)));
+    return List.of(toResponse(matches.get(0)));
   }
 
   /**
@@ -113,6 +104,22 @@ public class ProductSearchService {
       throw invalid("category", UNKNOWN_CATEGORY);
     }
     throw invalid("type", UNKNOWN_TYPE);
+  }
+
+  private List<Product> findFallbackMatches(ProductSearchQuery query) {
+    List<Product> matches =
+        productRepository.findCompact(query.type(), query.brand(), query.name());
+    if (!matches.isEmpty()) {
+      return matches;
+    }
+
+    matches =
+        productRepository.findWithBrandPrefix(List.of(query.type()), query.brand(), query.name());
+    if (!matches.isEmpty()) {
+      return matches;
+    }
+
+    return productRepository.findByAlias(List.of(query.type()), query.brand(), query.name());
   }
 
   private ProductResponse toResponse(Product product) {
