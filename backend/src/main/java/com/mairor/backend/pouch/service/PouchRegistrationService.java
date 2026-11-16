@@ -10,7 +10,6 @@ import com.mairor.backend.pouch.event.PouchItemRegisteredManually;
 import com.mairor.backend.pouch.repository.PouchItemRepository;
 import com.mairor.backend.pouch.repository.PouchVersionRepository;
 import java.util.UUID;
-import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -55,7 +54,7 @@ public class PouchRegistrationService {
         item.getBrandNormalized(),
         item.getNameNormalized(),
         item.getShadeNameNormalized())) {
-      throw duplicate();
+      throw PouchDuplicateHandling.duplicate();
     }
 
     try {
@@ -66,24 +65,10 @@ public class PouchRegistrationService {
       }
       return new PouchRegistrationResponse(PouchItemResponse.from(saved), pouchVersion);
     } catch (DataIntegrityViolationException e) {
-      if (isDuplicateConstraint(e)) throw duplicate();
+      if (PouchDuplicateHandling.isDuplicateConstraint(e)) {
+        throw PouchDuplicateHandling.duplicate();
+      }
       throw e;
     }
-  }
-
-  private static boolean isDuplicateConstraint(Throwable error) {
-    for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-      if (cause instanceof ConstraintViolationException violation
-          && "23505".equals(violation.getSQLState())
-          && PouchItem.DUPLICATE_UNIQUE.equalsIgnoreCase(violation.getConstraintName())) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private static BusinessException duplicate() {
-    return new BusinessException(
-        HttpStatus.CONFLICT, "POUCH_DUPLICATE", "이미 같은 제품이 파우치에 등록되어 있습니다.");
   }
 }
