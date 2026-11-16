@@ -5,7 +5,7 @@
 - 날짜: 2026-11-15
 - 기한: 게이지 계산을 튜토리얼에 붙일 때 함께 봐 주세요
 - 관련 Jira: [S15P31A306-440](https://ssafy.atlassian.net/browse/S15P31A306-440), 스토리 [S15P31A306-196 GUIDE-013](https://ssafy.atlassian.net/browse/S15P31A306-196)
-- 앞 요청: [튜토리얼 게이지 형식](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md) · [사용자 캠 기준 잡기](2026-11-15-hyeonsoo-seoyun-gauge-baseline.md) · [색감 맞추기 · 흰자 색](2026-11-15-hyeonsoo-seoyun-gauge-color-match.md)
+- 앞 요청: [튜토리얼 게이지 형식](2026-11-15-hyeonsoo-seoyun-tutorial-gauge-contract.md) · [사용자 캠 기준 잡기 근거](../experiments/GAUGE_BARE_FACE_BASELINE.md) · [색감 맞추기 · 흰자 색](2026-11-15-hyeonsoo-seoyun-gauge-color-match.md)
 
 ## 요청 배경
 

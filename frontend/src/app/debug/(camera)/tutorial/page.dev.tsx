@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useCamera, useFaceFrame, type FaceBrows, type FaceFrame } from "@/features/face";
+import { useGaugeBaseline } from "@/features/gauge";
 import {
   fitBrowStep,
   browSpans,
@@ -44,6 +45,7 @@ const EMPTY_NOTE: Partial<Record<AreaStatus, string>> = {
  * 튜토리얼 가이드 확인 화면. 기본은 9개 부위 기본 가이드이고,
  * ?guides=경로 는 가이드 파일, ?area=경로 는 AI 가이드 영역 파일을 하위 단계마다 넘겨 본다.
  * "원래 눈썹 찾기"는 지금 카메라 화면을 등록 사진처럼 써서 눈썹 가이드를 원래 눈썹 모양·앞머리·꼬리에 맞춘다.
+ * "맨얼굴 기준 잡기"는 튜토리얼처럼 게이지 맨얼굴 기준을 모으고 카메라 잠금 결과와 칸 색 읽는 시간을 띄운다.
  */
 export default function TutorialPage() {
   const [items, setItems] = useState<Item[] | null>(null);
@@ -193,6 +195,7 @@ export default function TutorialPage() {
                 <span className="rounded bg-black/70 p-2 text-sm text-white">{browNote}</span>
               )}
             </div>
+            <GaugeBaselineCheck />
             <div className="flex gap-3">
               <Button size="lg" variant="outline" asChild>
                 <Link href="/debug/preview">처음으로</Link>
@@ -220,5 +223,35 @@ export default function TutorialPage() {
         )}
       />
     </main>
+  );
+}
+
+/** 게이지 맨얼굴 기준을 튜토리얼과 같은 방법으로 모아 본다. 누를 때마다 새로 모은다 */
+function GaugeBaselineCheck() {
+  const [run, setRun] = useState<string | null>(null);
+  const { status } = useGaugeBaseline({ runId: run ?? "", step: 0, collecting: run !== null });
+  const lock = status.lock
+    ? Object.entries(status.lock)
+        .map(([name, result]) => `${name} ${result}`)
+        .join(" · ")
+    : "잠그기 전";
+  const note = !run
+    ? ""
+    : [
+        status.center === null ? "정면 찾는 중" : `정면 pitch ${status.center.toFixed(2)}`,
+        status.bare ? "맨얼굴 기준 완료" : `사진 ${status.frames}/15`,
+        status.readMs === null ? null : `칸 읽기 ${status.readMs.toFixed(1)}ms`,
+        lock,
+        status.lockMs === null ? null : `잠그기 ${(status.lockMs / 1000).toFixed(1)}초`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+  return (
+    <div className="flex items-center gap-3">
+      <Button size="lg" variant="outline" onClick={() => setRun(String(Date.now()))}>
+        맨얼굴 기준 잡기
+      </Button>
+      {note && <span className="rounded bg-black/70 p-2 text-sm text-white">{note}</span>}
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { PillButton } from "@/components/ui/pill-button";
 import { pickOf } from "@/features/check";
 import { type RegionName } from "@/features/face";
+import { useGaugeBaseline } from "@/features/gauge";
 import {
   categoryOfPart,
   checkGuideArea,
@@ -267,6 +268,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   );
   // 눈썹은 등록 사진의 원래 눈썹 모양·앞머리·꼬리에 맞춘다
   const guideStep = useBrowFit(resolved, run.id);
+  // 게이지가 이번 단계 화장만 재도록 단계 준비 카드가 떠 있는 동안 바르기 전 얼굴을 모은다
+  useGaugeBaseline({ runId: run.id, step, collecting: !ready });
   // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
   // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
   const photoRegions = useMemo(

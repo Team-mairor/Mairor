@@ -4,6 +4,7 @@ export {
   exposureRange,
   listCameras,
   lockControls,
+  matchExposure,
   openCamera,
   RESOLUTIONS,
   setExposureTime,

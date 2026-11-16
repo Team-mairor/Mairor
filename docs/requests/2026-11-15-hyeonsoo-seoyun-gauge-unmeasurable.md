@@ -5,7 +5,7 @@
 - 날짜: 2026-11-15
 - 기한: 게이지 계산을 튜토리얼에 붙일 때 함께 봐 주세요
 - 관련 Jira: [S15P31A306-441](https://ssafy.atlassian.net/browse/S15P31A306-441), 스토리 [S15P31A306-196 GUIDE-013](https://ssafy.atlassian.net/browse/S15P31A306-196) · [S15P31A306-178 CAMERA-004](https://ssafy.atlassian.net/browse/S15P31A306-178)
-- 앞 요청: [게이지 계산](2026-11-15-hyeonsoo-seoyun-gauge-measure.md) · [사용자 캠 기준 잡기](2026-11-15-hyeonsoo-seoyun-gauge-baseline.md)
+- 앞 요청: [게이지 계산](2026-11-15-hyeonsoo-seoyun-gauge-measure.md) · [사용자 캠 기준 잡기 근거](../experiments/GAUGE_BARE_FACE_BASELINE.md)
 
 ## 요청 배경
 

@@ -163,6 +163,18 @@ npm run dev:https
 - 원래 눈썹을 못 찾았거나(앞머리 가림·어두운 조명·너무 멂) 찾은 길이가 랜드마크 눈썹의 0.6~1.4배를 벗어나는 쪽은 그대로 그린다
 - 확인: `/debug/overlay?area=/fixtures/guide-areas/sample.json&step=s7&brows=1`에서 칠한 얼굴로 찾은 눈썹(초록 실선)과 가이드를 본다. 카메라는 `/debug/tutorial?area=/fixtures/guide-areas/sample.json&sub=s7-1`에서 "원래 눈썹 찾기"를 누른다
 
+### 게이지 기준
+
+진하기 게이지는 사용자 캠에서 그 단계 화장이 얼굴 색을 얼마나 바꿨는지 잰다. 바르기 전 색(기준)을 잡는 방법은 AI 규격(`shared/gauge/README.md`, `baseline.v1.json`)을 따르고 코드는 `features/gauge/`에 있다.
+
+- 칸 색: 프레임을 얼굴 지도(`shared/face-mesh` UV)로 펴 128 × 128칸으로 나누고 칸마다 평균 RGB를 Lab(D65)으로 바꾼다. 칸마다 4 × 4 점을 같은 삼각형의 같은 비율 자리에서 둘레 네 픽셀로 섞어 읽는다(AI는 8 × 8 지도 픽셀). 재는 칸(`cells.measured`)이 아니거나 사진 밖으로 나간 칸은 비운다
+- 정면: 카메라 정면이 아니라 그 사람 정면을 쓴다. 좌우 고개 · 기울기 · 눈 뜸(얼굴 등록과 같은 각도)을 지킨 앞 사진 30장의 pitch 가운데 값이고, 그 뒤 기준 사진은 그 값 ±0.2 안에서만 고른다
+- 맨얼굴 기준 · 단계 시작 기준: 단계 준비 카드가 떠 있는 동안 정면 · 눈 뜬 사진 15장을 0.2초 넘게 띄워 모아 칸마다 가운데 값으로 만든다. 첫 기준이 맨얼굴 기준이고, 카드가 닫힐 때까지 다 모으지 못한 단계는 기준이 없다. 이전 단계로 돌아갈 때는 다시 모으지 않는다. 등록 사진은 한 장이고 튜토리얼보다 몇 분 앞서서 쓰지 않는다
+- 카메라 잠금: 첫 단계 준비 카드에서 맨얼굴 기준을 모으기 전에 잠그고 튜토리얼을 나갈 때 푼다. 잠근 뒤 색으로 기준을 잡아야 측정과 카메라 설정이 같다. 노출은 자동일 때 화면 밝기를 재고 ISO 800에서 노출 시간을 바꿔 같은 밝기를 찾는다(`matchExposure`, 100ms까지). 갤럭시탭 S6은 자동 중에 노출 값을 실제와 다르게 알려 줘 알려 준 값으로 고정하면 화면이 어두워진다(밝기 145 → 50). 화이트밸런스는 지원되는 기기에서만 잠금을 시도한다. 갤럭시탭 S6은 색온도를 0으로 알려 주고, 직접 지정해도 화면 색이 바뀌지 않아 자동으로 둔다
+- 조명 보정: 바르는 칸과 그 둘레 8칸을 뺀 맨피부 칸의 지금 − 기준 차이를 시그마 10칸 가우스로 흐려 칸마다 조명 변화로 빼고, 가장자리는 반사(`BORDER_REFLECT_101`)다. `scripts/gauge-light-fixture.py`로 만든 OpenCV 결과와 소수 셋째 자리까지 같은지 시험한다
+- 기준과 측정값은 이번 실행 메모리에만 두고 저장하거나 보내지 않는다
+- 확인: `/debug/tutorial`에서 "맨얼굴 기준 잡기"를 누르면 정면 pitch · 모은 사진 수 · 칸 읽는 시간 · 잠금 결과를 띄운다
+
 ### 기본 가이드
 
 외부 분석 결과 없이도 튜토리얼이 동작하도록 9개 부위의 기본 가이드를 초보자용 데일리 메이크업 기준으로 `features/guide/default-guides.ts`에 랜드마크 번호로 정의한다. 불러올 때 `MeshAnchor`로 바꿔 가이드 파일과 같은 형식(`GuideSet`, `source: template`)으로 만들므로, 외부 가이드가 들어오면 그대로 바꿔 끼울 수 있다.
@@ -221,6 +233,7 @@ src/
 │  ├─ face/                   # 카메라·얼굴 추적·얼굴 등록 조건 ('use client')
 │  ├─ overlay/                # 화장 레이어 합성 ('use client')
 │  ├─ guide/                  # 튜토리얼 가이드 ('use client')
+│  ├─ gauge/                  # 진하기 게이지: 얼굴 지도 칸 색 · 맨얼굴·단계 시작 기준 · 조명 보정
 │  ├─ live/                   # 카메라 화면 공통: 추적 상태 · 안내 문구 · 상태 훅 · 패널
 │  ├─ report/                 # 완료 화면 · 리포트 단계 스냅샷
 │  ├─ preview/                # 실제 가이드 미리보기 · 대상 단계 요약
@@ -232,7 +245,8 @@ src/
 scripts/
 ├─ sync-mediapipe-assets.mjs  # MediaPipe wasm·모델·메시·추론 Worker를 public/에 준비
 ├─ face-worker.js             # 얼굴 추론 classic Worker (public/mediapipe/로 복사)
-└─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
+├─ generate-fixtures.mjs      # 확인용 픽스처(public/fixtures/) 생성
+└─ gauge-light-fixture.py     # 게이지 조명 보정 시험 데이터(OpenCV) 생성
 public/
 ├─ ill/                       # 파우치 종류 일러스트
 └─ images/                    # 로그인·온보딩 이미지, 샘플 얼굴
