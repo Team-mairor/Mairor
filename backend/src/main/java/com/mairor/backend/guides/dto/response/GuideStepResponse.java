@@ -31,7 +31,11 @@ public record GuideStepResponse(
     @Schema(description = "영상에 나온 제품. 없으면 null") ReferenceProductResponse referenceProduct,
     @Schema(description = "목표 발색(ColorInfo). 1차는 항상 null", type = "object") JsonNode targetColor,
     @Schema(description = "영상 구간") VideoRange videoRange,
-    @Schema(description = "미리보기 가능 여부. 색이 있는 단계(아이섀도·아이라인·블러셔·하이라이트·립)만 true") boolean previewable,
+    @Schema(
+            description =
+                "미리보기 가능 여부. 색이 있는 단계(아이섀도·아이라인·블러셔·하이라이트·립)이고 AI 영역 하위 단계가 하나라도"
+                    + " notApplicable 이 아닐 때만 true")
+        boolean previewable,
     @Schema(description = "제품 매칭 카테고리(BASE·EYE·BROW·CHEEK·LIP). 제외 단계는 null", example = "EYE")
         String matchCategory,
     @Schema(

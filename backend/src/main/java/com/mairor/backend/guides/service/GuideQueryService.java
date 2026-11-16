@@ -36,9 +36,14 @@ import tools.jackson.databind.node.JsonNodeFactory;
 @Service
 public class GuideQueryService {
 
-  /** 미리보기(색 레이어)가 되는 화장 종류. API 명세 v2: 아이섀도·아이라이너·블러셔·하이라이터·립. */
+  /**
+   * 미리보기(색 레이어)가 되는 화장 종류. API 명세 v2: 아이섀도·아이라이너·블러셔·하이라이터·립. 이 종류여도 AI 영역의 하위 단계가 없거나 모두 {@code
+   * notApplicable}(컨실러 단계)이면 미리보기가 아니다(현수 요청, S15P31A306-533).
+   */
   static final Set<String> PREVIEWABLE =
       Set.of("eyeshadow", "eyeliner", "blush", "highlight", "lip");
+
+  private static final String NOT_APPLICABLE = "notApplicable";
 
   /** 화장 종류 → 제품 매칭 카테고리(product_categories 시드). other 는 없음. */
   static final Map<String, String> MATCH_CATEGORY =
@@ -121,6 +126,7 @@ public class GuideQueryService {
     StepType type = EXCLUDED_MAKEUP.equals(makeup) ? StepType.EXCLUDED : StepType.GUIDE;
     JsonNode facts = step.path("facts");
     String tool = text(facts.path("tool").path("value"));
+    JsonNode subSteps = arrayOrEmpty(area == null ? null : area.get("subSteps"));
     return new GuideStepResponse(
         step.path("stepId").asString(""),
         step.path("order").asInt(),
@@ -135,9 +141,19 @@ public class GuideQueryService {
         null,
         new GuideStepResponse.VideoRange(
             step.path("startSeconds").asDouble(), step.path("endSeconds").asDouble()),
-        type == StepType.GUIDE && PREVIEWABLE.contains(makeup),
+        type == StepType.GUIDE && PREVIEWABLE.contains(makeup) && hasApplicableArea(subSteps),
         type == StepType.GUIDE ? MATCH_CATEGORY.get(makeup) : null,
-        arrayOrEmpty(area == null ? null : area.get("subSteps")));
+        subSteps);
+  }
+
+  /** 하위 단계가 하나라도 {@code notApplicable}이 아니면 true. 하위 단계가 없으면 false. */
+  private static boolean hasApplicableArea(JsonNode subSteps) {
+    for (JsonNode subStep : subSteps) {
+      if (!NOT_APPLICABLE.equals(subStep.path("status").asString(""))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static ReferenceProductResponse product(

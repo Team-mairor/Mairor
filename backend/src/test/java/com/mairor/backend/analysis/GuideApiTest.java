@@ -127,6 +127,8 @@ class GuideApiTest extends AnalysisIntegrationTest {
         .andExpect(jsonPath("$.steps[16].matchCategory").value("LIP"))
         .andExpect(jsonPath("$.steps[18].type").value("GUIDE"))
         .andExpect(jsonPath("$.steps[18].subSteps[0].status").value("failed"))
+        // notApplicable 만 빠진다. 못 찾은(failed) 단계는 미리보기로 남는다
+        .andExpect(jsonPath("$.steps[18].previewable").value(true))
         .andExpect(
             jsonPath("$.steps[*].targetColor", everyItem(org.hamcrest.Matchers.nullValue())));
   }
@@ -146,6 +148,27 @@ class GuideApiTest extends AnalysisIntegrationTest {
   }
 
   @Test
+  void aStepWhoseAreaIsAllNotApplicableIsNotPreviewable() throws Exception {
+    // 컨실러 단계: 하이라이트로 왔지만 AI 가 영역을 띄우지 않는다(s16, 영역 steps 의 16번째)
+    String guideId = guideWithStatus("concealer01", "APPROVED");
+    jdbc.update(
+        "update guides set area = jsonb_set(area, '{steps,15,subSteps,0,status}',"
+            + " '\"notApplicable\"') where id = ?::uuid",
+        guideId);
+
+    mockMvc
+        .perform(get("/v1/guides/" + guideId).with(member()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.steps[15].stepId").value("s16"))
+        .andExpect(jsonPath("$.steps[15].part").value("highlight"))
+        .andExpect(jsonPath("$.steps[15].type").value("GUIDE"))
+        .andExpect(jsonPath("$.steps[15].subSteps[0].status").value("notApplicable"))
+        .andExpect(jsonPath("$.steps[15].previewable").value(false))
+        .andExpect(jsonPath("$.stepCount").value(13))
+        .andExpect(jsonPath("$.previewableStepCount").value(9));
+  }
+
+  @Test
   void stepsWithoutExplanationOrAreaStillComeBack() throws Exception {
     String guideId = guideWithStatus("noAreaVid01", "APPROVED");
     jdbc.update(
@@ -159,7 +182,11 @@ class GuideApiTest extends AnalysisIntegrationTest {
         .andExpect(jsonPath("$.meshVersion").isEmpty())
         .andExpect(jsonPath("$.steps[9].actions", hasSize(0)))
         .andExpect(jsonPath("$.steps[9].doneWhen").isEmpty())
-        .andExpect(jsonPath("$.steps[9].subSteps", hasSize(0)));
+        .andExpect(jsonPath("$.steps[9].subSteps", hasSize(0)))
+        // 그릴 영역이 없으면 미리보기 단계도 없다
+        .andExpect(jsonPath("$.steps[9].part").value("eyeshadow"))
+        .andExpect(jsonPath("$.steps[9].previewable").value(false))
+        .andExpect(jsonPath("$.previewableStepCount").value(0));
   }
 
   @Test
