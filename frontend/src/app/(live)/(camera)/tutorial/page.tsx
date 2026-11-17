@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
@@ -296,6 +297,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const [ready, setReady] = useState(false);
   const [exitAsk, setExitAsk] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  // 할 일 카드를 펼쳐 둘지. 설명이 길면 얼굴을 가려 접을 수 있게 하고, 다음 단계로 가도 고른 상태를 둔다
+  const [actsOpen, setActsOpen] = useState(true);
   // 목록에서 지금 단계에서 완성하기를 골랐는지. 마지막 단계처럼 얼굴 전체 사진을 찍고 끝낸다
   const [finishing, setFinishing] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -835,18 +838,39 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                   {meterText}
                 </span>
               )}
+              {shownActs.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActsOpen((o) => !o)}
+                  aria-expanded={actsOpen}
+                  aria-controls="tutorial-acts"
+                  aria-label={actsOpen ? "설명 접기" : "설명 펴기"}
+                  className={cn(
+                    "flex size-10 shrink-0 items-center justify-center self-start rounded-full bg-white/10 text-white hover:bg-white/20",
+                    !(visibleGauge && meterText) && "ml-auto",
+                  )}
+                >
+                  <ChevronDown
+                    className={cn("size-6 transition-transform", actsOpen && "rotate-180")}
+                    strokeWidth={2.4}
+                    aria-hidden
+                  />
+                </button>
+              )}
             </div>
-            {/* 단계의 동작을 모두 카드로 띄운다 */}
-            <div className="flex flex-col gap-2">
-              {shownActs.map((i) => (
-                <ActCard
-                  key={info.acts[i].text}
-                  n={i + 1}
-                  act={info.acts[i]}
-                  doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
-                />
-              ))}
-            </div>
+            {/* 단계의 동작을 모두 카드로 띄운다. 접으면 제목·게이지만 남긴다 */}
+            {actsOpen && (
+              <div id="tutorial-acts" className="flex flex-col gap-2">
+                {shownActs.map((i) => (
+                  <ActCard
+                    key={info.acts[i].text}
+                    n={i + 1}
+                    act={info.acts[i]}
+                    doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
+                  />
+                ))}
+              </div>
+            )}
 
             {visibleGauge && (
               <DensityMeter
