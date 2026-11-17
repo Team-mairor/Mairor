@@ -3,6 +3,7 @@ package com.mairor.backend.guides.controller;
 import com.mairor.backend.common.web.OpenApiConfig;
 import com.mairor.backend.guides.dto.response.GuideResponse;
 import com.mairor.backend.guides.service.GuideQueryService;
+import com.mairor.backend.guides.service.GuideReferenceLinkRefresher;
 import com.mairor.backend.users.controller.AuthApiDocs;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -22,8 +23,12 @@ public class GuideController {
 
   private final GuideQueryService guideQueryService;
 
-  public GuideController(GuideQueryService guideQueryService) {
+  private final GuideReferenceLinkRefresher linkRefresher;
+
+  public GuideController(
+      GuideQueryService guideQueryService, GuideReferenceLinkRefresher linkRefresher) {
     this.guideQueryService = guideQueryService;
+    this.linkRefresher = linkRefresher;
   }
 
   @Operation(
@@ -42,6 +47,8 @@ public class GuideController {
   @ApiResponse(responseCode = "404", description = "없거나 검수 승인 전인 가이드. (NOT_FOUND)")
   @GetMapping("/{guideId}")
   public GuideResponse get(@PathVariable UUID guideId) {
-    return guideQueryService.get(guideId);
+    GuideResponse response = guideQueryService.get(guideId);
+    linkRefresher.refreshIfNeeded(guideId);
+    return response;
   }
 }

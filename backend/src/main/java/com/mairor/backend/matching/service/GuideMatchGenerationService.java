@@ -186,6 +186,13 @@ public class GuideMatchGenerationService {
     UUID sourceShadeId = linkedShadeId(link);
     UUID sameItemId = findSameItem(sourceProductId, sourceShadeId, ownedItems);
 
+    List<RecommendationCandidateSelector.RankedCandidate> alternatives =
+        candidateSelector
+            .selectAll(makeup, comparisonAvailable ? referenceColor.hex() : null, candidates)
+            .stream()
+            .filter(candidate -> !candidate.candidate().pouchItemId().equals(sameItemId))
+            .toList();
+
     ObjectNode result = JsonNodeFactory.instance.objectNode();
     result.put("stepId", stepId);
     String category = PouchCompatibilityPolicy.categoryFor(makeup);
@@ -196,6 +203,13 @@ public class GuideMatchGenerationService {
     }
     result.put("comparisonAvailable", comparisonAvailable);
     ArrayNode candidateNodes = result.putArray("candidates");
+    ArrayNode alternativeNodes = result.putArray("alternatives");
+    for (int index = 0; index < alternatives.size(); index++) {
+      ObjectNode alternative = alternativeNodes.addObject();
+      alternative.put("pouchItemId", alternatives.get(index).candidate().pouchItemId().toString());
+      alternative.put("rank", index + 1);
+      alternative.put("matchedColorHex", alternatives.get(index).matchedColorHex());
+    }
 
     if (sameItemId != null) {
       result.put("result", "SAME");
@@ -210,17 +224,12 @@ public class GuideMatchGenerationService {
       result.put("noneReason", "NO_ITEMS");
       return result;
     }
-    if (!comparisonAvailable) {
-      result.put("result", "NONE");
-      result.put("noneReason", "COMPARISON_UNAVAILABLE");
-      return result;
-    }
 
     List<RecommendationCandidateSelector.RankedCandidate> ranked =
-        candidateSelector.select(makeup, referenceColor.hex(), candidates);
+        alternatives.stream().limit(RecommendationCandidateSelector.MAX_CANDIDATES).toList();
     if (ranked.isEmpty()) {
       result.put("result", "NONE");
-      result.put("noneReason", "NO_SUITABLE_ITEM");
+      result.put("noneReason", comparisonAvailable ? "NO_SUITABLE_ITEM" : "COMPARISON_UNAVAILABLE");
       return result;
     }
 

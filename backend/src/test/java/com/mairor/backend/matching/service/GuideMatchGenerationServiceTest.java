@@ -86,6 +86,8 @@ class GuideMatchGenerationServiceTest {
     assertThat(response.steps().get(0).path("result").asString()).isEqualTo("NONE");
     assertThat(response.steps().get(0).path("noneReason").asString()).isEqualTo("NO_ITEMS");
     assertThat(response.steps().get(0).path("comparisonAvailable").asBoolean()).isFalse();
+    assertThat(response.steps().get(0).path("alternatives").isArray()).isTrue();
+    assertThat(response.steps().get(0).path("alternatives").size()).isZero();
 
     var saved = org.mockito.ArgumentCaptor.forClass(GuideMatch.class);
     verify(matches).saveAndFlush(saved.capture());

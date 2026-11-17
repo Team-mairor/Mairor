@@ -57,7 +57,7 @@ class RecommendationCandidateSelectorTest {
   }
 
   @Test
-  void excludesColorsBeyondTheMaximumDistance() {
+  void keepsFarColorsAfterTheCloseOnesWithoutADistanceLimit() {
     UUID closeId = UUID.randomUUID();
     UUID farId = UUID.randomUUID();
 
@@ -66,14 +66,12 @@ class RecommendationCandidateSelectorTest {
             "lip",
             "#FF0000",
             List.of(
-                candidate(closeId, "LIP_TINT", "#E00000"),
-                candidate(farId, "LIPSTICK", "#0000FF")));
+                candidate(farId, "LIPSTICK", "#0000FF"),
+                candidate(closeId, "LIP_TINT", "#E00000")));
 
     assertThat(result)
         .extracting(ranked -> ranked.candidate().pouchItemId())
-        .containsExactly(closeId);
-    assertThat(result.getFirst().distance())
-        .isLessThanOrEqualTo(RecommendationCandidateSelector.MAX_COLOR_DISTANCE);
+        .containsExactly(closeId, farId);
   }
 
   @Test
@@ -105,6 +103,48 @@ class RecommendationCandidateSelectorTest {
         .isFalse();
     assertThat(RecommendationCandidateSelector.isSame(productId, shadeId, productId, null))
         .isFalse();
+  }
+
+  @Test
+  void selectAllKeepsEveryCompatibleColoredItemInOrderWhileSelectStaysAtThree() {
+    UUID a = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    UUID b = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    UUID c = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    UUID d = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    UUID far = UUID.fromString("00000000-0000-0000-0000-000000000005");
+    var candidates =
+        List.of(
+            candidate(d, "LIPSTICK", "#E00000"),
+            candidate(a, "LIP_TINT", "#FF0000"),
+            candidate(c, "LIP_GLOSS", "#F00000"),
+            candidate(b, "LIQUID_LIP", "#FA0000"),
+            candidate(far, "LIPSTICK", "#0000FF"),
+            candidate(UUID.randomUUID(), "EYESHADOW_PALETTE", "#FF0000"));
+
+    var all = selector.selectAll("lip", "#FF0000", candidates);
+
+    assertThat(all)
+        .extracting(ranked -> ranked.candidate().pouchItemId())
+        .containsExactly(a, b, c, d, far);
+    assertThat(selector.select("lip", "#FF0000", candidates)).hasSize(3);
+    assertThat(selector.selectAll("lip", "#FF0000", List.of())).isEmpty();
+  }
+
+  @Test
+  void withoutAReferenceColorEveryCompatibleColoredItemKeepsPouchOrder() {
+    UUID first = UUID.fromString("00000000-0000-0000-0000-000000000009");
+    UUID second = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    var candidates =
+        List.of(
+            candidate(first, "LIPSTICK", "#E00000"),
+            candidate(UUID.randomUUID(), "EYESHADOW_PALETTE", "#FF0000"),
+            candidate(second, "LIP_TINT", "#0000FF"));
+
+    var all = selector.selectAll("lip", null, candidates);
+
+    assertThat(all)
+        .extracting(ranked -> ranked.candidate().pouchItemId())
+        .containsExactly(first, second);
   }
 
   private static RecommendationCandidateSelector.Candidate candidate(

@@ -114,6 +114,11 @@ def _hints(shade: RawShade) -> VariantHints | None:
     )
 
 
+_CAFE24_NAME = re.compile(r"var product_name\s*=\s*'((?:[^'\\]|\\.)*)'")
+_PLACEHOLDER = re.compile(r"\{\$[^}]*\}")
+_URL = re.compile(r"https?://\S+")
+
+
 def _letters(text: str) -> str:
     return "".join(ch for ch in text.casefold() if ch.isalnum())
 
@@ -129,24 +134,41 @@ def _is_site_name(text: str, site: BrandSite) -> bool:
 
 
 def _title_parts(title: str | None) -> list[str]:
-    """<title>을 구분자("제품 – 사이트", "사이트 | 제품")로 나눈 조각."""
+    """<title>을 구분자("제품 – 사이트", "사이트 | 제품")로 나눈 조각. 섞여 든 주소는 뺀다."""
     if not title:
         return []
+    title = _URL.sub(" ", title)
     return [part.strip() for part in re.split(r"\s[–—|-]\s", title) if part.strip()]
 
 
+def _cafe24_name(html: str) -> str | None:
+    """Cafe24 상품 페이지 스크립트의 상품명(var product_name). 몰 화면 구성과 상관없이 늘 있다."""
+    found = _CAFE24_NAME.search(html)
+    return clean_text(found.group(1).replace("\\'", "'")) if found else None
+
+
 def _name_of(
-    chosen: Extraction, attempts: list[Extraction], meta: PageMeta, site: BrandSite
+    chosen: Extraction,
+    attempts: list[Extraction],
+    meta: PageMeta,
+    site: BrandSite,
+    platform_name: str | None = None,
 ) -> str | None:
-    """상품 이름. 사이트 이름(로고 h1, 앞이나 뒤에 붙은 몰 이름)만인 후보는 건너뛴다."""
+    """상품 이름. 사이트 이름(로고 h1, 앞이나 뒤에 붙은 몰 이름)만인 후보는 건너뛴다.
+
+    플랫폼이 페이지에 적어 둔 상품명이 있으면 h1·title보다 먼저 쓴다. 몰마다 h1이 상품명이 아니라
+    팝업 제목("게시글 신고하기")·고객센터 제목("CUSTOMER CENTER:")·치환되지 않은 틀("{$d1-data}")인
+    경우가 있다(라카·뮤드·하밍). 틀 글자가 남은 후보는 쓰지 않는다.
+    """
     for candidate in (
         chosen.name,
         *(a.name for a in attempts),
+        platform_name,
         meta.h1,
         *_title_parts(meta.title),
         meta.og_title,
     ):
-        if candidate and not _is_site_name(candidate, site):
+        if candidate and not _PLACEHOLDER.search(candidate) and not _is_site_name(candidate, site):
             return candidate
     return None
 
@@ -167,7 +189,8 @@ def build_product(
         raise ExtractError("NOT_PRODUCT_URL", f"상품 상세 주소가 아니다: {url}")
     meta = read_meta(html)
     chosen, attempts = extract_shades(platform, html, product_json)
-    name = _name_of(chosen, attempts, meta, site)
+    platform_name = _cafe24_name(html) if platform is Platform.CAFE24 else None
+    name = _name_of(chosen, attempts, meta, site, platform_name)
     if name is None:
         raise ExtractError("NO_PRODUCT_NAME", "상품 이름을 찾지 못했다")
     warnings = [w for a in attempts for w in a.warnings]

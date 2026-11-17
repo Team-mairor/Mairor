@@ -78,7 +78,7 @@ export function SwapPanel({
             {!list.length
               ? ""
               : ranked
-                ? `추천 ${Math.min(3, list.length)}개 · 같은 종류 ${list.length}개`
+                ? `추천 상위 ${Math.min(3, list.length)}개 · 색 기준 통과 ${list.length}개`
                 : `고를 수 있는 제품 ${list.length}개`}
           </span>
         </span>

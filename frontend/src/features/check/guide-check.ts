@@ -46,7 +46,8 @@ export function pickOf(
   return { kind: "undecided" };
 }
 
-const byRank = (list: StepMatch["candidates"] = []) => [...list].sort((a, b) => a.rank - b.rank);
+const byRank = <T extends { rank: number }>(list: T[] = []) =>
+  [...list].sort((a, b) => a.rank - b.rank);
 
 /** 사용자가 직접 고른 선택. 시작할 때 자동으로 채운 것은 빼고 본다 */
 export function userChoice(choice: Record<string, Choice>, stepId: string): Choice | undefined {
@@ -109,10 +110,20 @@ export function choiceOf(pick: GuidePick): Choice {
     : { kind: "pouch", id: pick.item.id, auto: true };
 }
 
-/** 바꾸기 목록. 서버 대체 후보를 먼저, 나머지 같은 종류 제품을 뒤에 둔다 */
-export function swapList(row: CheckRow, pouch: PouchItem[]): PouchItem[] {
-  const rest = candidatesFor(row.step, pouch).filter((p) => !row.candidates.includes(p));
-  return [...row.candidates, ...rest];
+/**
+ * 교체 목록은 서버가 고른 색 있는 호환 제품(색이 가까운 순)을 먼저 쓰고, 서버 목록에 없는
+ * 같은 카테고리의 색 있는 보유 제품을 뒤에 붙인다. 그런 제품이 있으면 목록이 비지 않는다.
+ */
+export function swapList(row: CheckRow, pouch: PouchItem[], match?: StepMatch): PouchItem[] {
+  const listed: { pouchItemId: string; rank: number; matchedColorHex?: string }[] | undefined =
+    match?.alternatives ?? match?.candidates;
+  const ranked = byRank(listed).flatMap((candidate) => {
+    const item = pouch.find((p) => p.id === candidate.pouchItemId);
+    if (!item) return [];
+    return [candidate.matchedColorHex ? { ...item, color: candidate.matchedColorHex } : item];
+  });
+  const rest = candidatesFor(row.step, pouch).filter((p) => !ranked.some((r) => r.id === p.id));
+  return [...ranked, ...rest];
 }
 
 /** 기준색이 있으면 색이 가까운 순, 없으면 파우치 순서 */

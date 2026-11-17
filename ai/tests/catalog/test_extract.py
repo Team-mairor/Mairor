@@ -271,6 +271,33 @@ def test_a_page_named_only_after_the_site_has_no_product_name() -> None:
     assert error.value.code == "NO_PRODUCT_NAME"
 
 
+@pytest.mark.parametrize(
+    ("h1", "title"),
+    [
+        ("게시글 신고하기", "<title>라카 | 프루티 글램 틴트</title>"),
+        ("CUSTOMER CENTER:", "<title>세상 누군가의 뮤즈, 당신을 위한 브랜드</title>"),
+        ("{$d1-data}", "<title>젤리 에어 치크https://x.cafe24.com/disp/admin</title>"),
+    ],
+)
+def test_a_cafe24_page_uses_the_product_name_from_its_script(h1: str, title: str) -> None:
+    """라카·뮤드·하밍: h1이 팝업·고객센터 제목이거나 치환되지 않은 틀이어도 상품명을 쓴다."""
+    html = fixtures.page(
+        f"<h1>{h1}</h1><script>var product_name = '프루티 글램 틴트';</script>", title
+    )
+
+    product, _ = build(Platform.CAFE24, f"{BASE}/product/a/1/", html)
+
+    assert product.name == "프루티 글램 틴트"
+
+
+def test_a_template_placeholder_and_a_url_in_the_title_are_never_the_name() -> None:
+    html = fixtures.page("<h1>{$d1-data}</h1>", "<title>젤리 에어 치크https://x.example/a</title>")
+
+    product, _ = build(Platform.CAFE24, f"{BASE}/product/a/1/", html)
+
+    assert product.name == "젤리 에어 치크"
+
+
 def test_unusable_pages_raise_with_a_reason_code() -> None:
     with pytest.raises(ExtractError) as no_id:
         build(Platform.CAFE24, f"{BASE}/product/search.html?keyword=a", fixtures.CAFE24_CHIPS)

@@ -76,7 +76,15 @@ const MATCH = {
   matchId: "m1",
   guideId: GUIDE_ID,
   steps: [
-    { stepId: "s2", result: "SAME", samePouchItemId: "same", noneReason: null, candidates: [] },
+    {
+      stepId: "s2",
+      result: "SAME",
+      samePouchItemId: "same",
+      noneReason: null,
+      comparisonAvailable: false,
+      candidates: [],
+      alternatives: [],
+    },
     {
       stepId: "s5",
       result: "SUBSTITUTE",
@@ -89,7 +97,9 @@ const MATCH = {
       result: "NONE",
       samePouchItemId: null,
       noneReason: "COMPARISON_UNAVAILABLE",
+      comparisonAvailable: false,
       candidates: [],
+      alternatives: [],
     },
     {
       stepId: "s9",

@@ -129,6 +129,8 @@ export function GuideCheck() {
   const active = group ?? (counts.none ? "none" : counts.sub ? "sub" : "same");
   const shown = rows.filter((r) => r.pick.kind === active);
   const swapRow = rows.find((r) => r.step.stepId === swapFor) ?? null;
+  const swapMatch =
+    swapRow && matching.status === "ready" ? matching.byStep.get(swapRow.step.stepId) : undefined;
   const href = (path: string) => runHref(path, run.guideId);
 
   /** 화면에 보이는 결과로 선택을 정해 서버 실행을 만든다. 매칭이 낡았으면 다시 맞추고, 얼굴 등록이 없으면(404) 다시 등록하게 한다 */
@@ -240,14 +242,16 @@ export function GuideCheck() {
               name: productText(swapRow.step) ?? "영상 속 제품 정보 없음",
               color: null,
             }}
-            list={swapList(swapRow, pouch)}
+            list={swapList(swapRow, pouch, swapMatch)}
             curId={swapRow.pick.kind === "none" ? null : swapRow.pick.item.id}
             skipped={swapRow.pick.kind === "none" && swapRow.pick.reason === "skipped"}
-            ranked={false}
+            ranked
             emptyText={
-              COMPAT_TYPES[swapRow.step.makeup].length
-                ? `파우치에 ${COMPAT_TYPES[swapRow.step.makeup].join("·")} 종류 제품이 없어요`
-                : "이 단계에 맞춰 볼 제품 종류가 아직 정해지지 않았어요"
+              matching.status !== "ready"
+                ? "파우치 제품 매칭을 불러온 뒤 교체 후보를 보여드릴게요"
+                : COMPAT_TYPES[swapRow.step.makeup].length
+                  ? `파우치에 ${COMPAT_TYPES[swapRow.step.makeup].join("·")} 종류 제품이 없어요`
+                  : "이 단계에 맞춰 볼 제품 종류가 아직 정해지지 않았어요"
             }
             onPick={(choice) => {
               setChoice(swapRow.step.stepId, choice);

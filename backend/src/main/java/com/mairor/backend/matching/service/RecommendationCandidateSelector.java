@@ -7,14 +7,11 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
-/** 색 비교가 가능한 본인 파우치 대체 후보를 거리순으로 최대 3개 선택한다. */
+/** 색이 있는 본인 파우치 대체 후보를 거리순으로 고른다. 자동 추천은 최대 3개다. */
 @Component
 public final class RecommendationCandidateSelector {
 
   public static final int MAX_CANDIDATES = 3;
-
-  /** Maximum accepted CIEDE2000 distance for a product to count as a color substitute. */
-  public static final double MAX_COLOR_DISTANCE = 15.0;
 
   private static final Comparator<RankedCandidate> ORDER =
       Comparator.comparingDouble(RankedCandidate::distance)
@@ -23,18 +20,37 @@ public final class RecommendationCandidateSelector {
   /** 색 칸은 사용 가능한 색만 selector에 전달한다. 색상 원천 조회는 호출자가 수행한다. */
   public List<RankedCandidate> select(
       String makeup, String referenceHex, List<Candidate> candidates) {
-    if (referenceHex == null || candidates == null || candidates.isEmpty()) {
+    return selectAll(makeup, referenceHex, candidates).stream().limit(MAX_CANDIDATES).toList();
+  }
+
+  /**
+   * 호환되는 종류이고 쓸 수 있는 색이 있는 모든 항목을 반환한다. 교체 목록도 같은 서버 판정을 쓴다.
+   *
+   * <p>기준색이 있으면 색차(CIEDE2000)가 가까운 순이고 색차 상한은 없다. 기준색이 없으면 비교할 수 없으므로 받은 순서(파우치 순서)를 그대로 둔다.
+   */
+  public List<RankedCandidate> selectAll(
+      String makeup, String referenceHex, List<Candidate> candidates) {
+    if (candidates == null || candidates.isEmpty()) {
       return List.of();
     }
 
-    return candidates.stream()
-        .filter(candidate -> PouchCompatibilityPolicy.supports(makeup, candidate.typeCode()))
-        .map(candidate -> closestColor(candidate, referenceHex))
-        .filter(Objects::nonNull)
-        .filter(candidate -> candidate.distance() <= MAX_COLOR_DISTANCE)
-        .sorted(ORDER)
-        .limit(MAX_CANDIDATES)
-        .toList();
+    var compatible =
+        candidates.stream()
+            .filter(candidate -> PouchCompatibilityPolicy.supports(makeup, candidate.typeCode()))
+            .map(
+                candidate ->
+                    referenceHex == null
+                        ? firstColor(candidate)
+                        : closestColor(candidate, referenceHex))
+            .filter(Objects::nonNull);
+    return referenceHex == null ? compatible.toList() : compatible.sorted(ORDER).toList();
+  }
+
+  private static RankedCandidate firstColor(Candidate candidate) {
+    return candidate.colors().stream()
+        .findFirst()
+        .map(color -> new RankedCandidate(candidate, color.colorId(), color.hex(), 0.0))
+        .orElse(null);
   }
 
   /** 실행의 수동 선택은 호출자가 같은 카테고리를 검사한 뒤 이 색 칸 선택만 재사용한다. */

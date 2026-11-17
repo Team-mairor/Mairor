@@ -14,6 +14,10 @@ export interface StepMatch {
   samePouchItemId: string | null;
   noneReason: NoneReason | null;
   candidates: { pouchItemId: string; rank: number }[];
+  /** false면 비교할 기준색이 없어 alternatives도 비어 있다 */
+  comparisonAvailable?: boolean;
+  /** 서버의 동일한 호환성·색차 상한을 통과한 전체 교체 후보 */
+  alternatives?: { pouchItemId: string; rank: number; matchedColorHex?: string }[];
 }
 
 /** POST /v1/users/me/guide-matches 응답. 화장 종류가 기타인 단계는 steps에 없다 */

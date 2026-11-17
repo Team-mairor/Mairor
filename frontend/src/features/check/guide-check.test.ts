@@ -123,7 +123,7 @@ describe("guidePick", () => {
 });
 
 describe("checkRows", () => {
-  it("가이드 단계 순서를 쓰고 상태별로 센다. 대체 후보는 순위순, 바꾸기 목록은 후보 다음 같은 종류", () => {
+  it("가이드 단계 순서를 쓰고 상태별로 센다. 대체 후보는 순위순", () => {
     const pouch = [item("p1"), item("p2"), item("p3")];
     const matches = new Map([
       ["s2", match("s2", { result: "SAME", samePouchItemId: "p1", noneReason: null })],
@@ -146,7 +146,6 @@ describe("checkRows", () => {
       ["s8", "none"],
     ]);
     expect(rows[1].candidates.map((p) => p.id)).toEqual(["p2", "p3"]);
-    expect(swapList(rows[1], pouch).map((p) => p.id)).toEqual(["p2", "p3"]);
     expect(pickCounts(rows)).toEqual({ same: 1, sub: 1, none: 1 });
     expect(rows.map((r) => choiceOf(r.pick))).toEqual([
       { kind: "pouch", id: "p1", auto: true },
@@ -176,6 +175,51 @@ describe("checkRows", () => {
       kind: "none",
       reason: "skipped",
     });
+  });
+});
+
+describe("swapList", () => {
+  const pouch = [
+    item("p1", { color: "#EF8E8A" }),
+    item("p2", { color: "#D9776F" }),
+    item("p3", { color: "#C06A66" }),
+  ];
+  const row = checkRows([step("s5")], {}, pouch, new Map())[0];
+  const same = candidatesFor(row.step, pouch).map((p) => p.id);
+
+  it("서버 alternatives를 순위순으로 먼저 쓰고 비교에 쓴 색을 얹는다", () => {
+    const m = match("s5", {
+      alternatives: [
+        { pouchItemId: "p3", rank: 2, matchedColorHex: "#AA0000" },
+        { pouchItemId: "p2", rank: 1 },
+      ],
+    });
+    const list = swapList(row, pouch, m);
+    expect(list.slice(0, 2).map((p) => p.id)).toEqual(["p2", "p3"]);
+    expect(list[1].color).toBe("#AA0000");
+  });
+
+  it("서버 후보 뒤에 같은 카테고리의 색 있는 제품을 붙이고 중복은 없다", () => {
+    const m = match("s5", { alternatives: [{ pouchItemId: "p2", rank: 1 }] });
+    const ids = swapList(row, pouch, m).map((p) => p.id);
+    expect(ids[0]).toBe("p2");
+    expect([...ids].sort()).toEqual([...same].sort());
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("alternatives가 비거나 매칭이 없어도 같은 종류 제품은 보여 준다", () => {
+    expect(swapList(row, pouch, match("s5", { alternatives: [] })).map((p) => p.id)).toEqual(same);
+    expect(swapList(row, pouch, undefined).map((p) => p.id)).toEqual(same);
+  });
+
+  it("alternatives 필드가 없는 옛 매칭은 candidates를 먼저 쓴다", () => {
+    const legacy = match("s5", { candidates: [{ pouchItemId: "p3", rank: 1 }] });
+    expect(swapList(row, pouch, legacy)[0].id).toBe("p3");
+  });
+
+  it("파우치에 없는 서버 후보는 건너뛴다", () => {
+    const m = match("s5", { alternatives: [{ pouchItemId: "gone", rank: 1 }] });
+    expect(swapList(row, pouch, m).map((p) => p.id)).toEqual(same);
   });
 });
 
