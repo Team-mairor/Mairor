@@ -183,6 +183,18 @@ main() {
   log "이미지 받기"
   compose_at "$TAG" pull --quiet nginx-a api-a
 
+  # 앱이 세션·인증 상태를 두는 Redis 를 슬롯보다 먼저 띄운다. 슬롯은 --no-deps 로 바꾸므로 depends_on 이 Redis 를 띄워 주지 않는다.
+  # 이미 같은 설정으로 떠 있으면 아무것도 바꾸지 않는다. 실패하면 기존 슬롯을 그대로 둔 채 멈춘다.
+  # Redis 를 쓰기 전 태그로 되돌릴 때는 그 태그의 compose 에 redis 가 없으므로 건너뛴다
+  if compose_at "$TAG" config --services | grep -qx redis; then
+    log "redis: 떠 있는지 확인하고 없으면 띄운다"
+    if ! compose_at "$TAG" up -d --no-deps --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" redis; then
+      record failed
+      log "redis 를 띄우지 못했다. 기존 슬롯은 그대로다. docker compose logs redis 로 원인을 본다"
+      exit 1
+    fi
+  fi
+
   if [ -z "$prev" ]; then
     log "첫 배포: 롤링 없이 전부 띄운다"
     if ! compose_at "$TAG" up -d --wait --wait-timeout "$CONTAINER_WAIT_SECONDS" nginx-a api-a nginx-b api-b ||

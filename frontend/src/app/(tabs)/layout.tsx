@@ -1,4 +1,5 @@
 import { BottomTabs } from "@/components/bottom-tabs";
+import { ExpiredSessionRedirect } from "@/features/session";
 
 /**
  * 하단 탭이 있는 화면 묶음: 홈 · 촬영 · 영상 입력 · 마이페이지 · 리포트 상세. 뒤로·홈 버튼 없이 탭으로 옮겨 다닌다
@@ -10,6 +11,7 @@ export default function TabsLayout({ children }: LayoutProps<"/">) {
     <div className="relative flex h-(--screen-h) flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
       <BottomTabs />
+      <ExpiredSessionRedirect />
     </div>
   );
 }

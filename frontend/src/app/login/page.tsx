@@ -190,7 +190,9 @@ export default function LoginPage() {
             {signupDone && <Notice tone="success">가입이 완료됐어요. 로그인해 주세요.</Notice>}
             {expired && (
               <Notice tone="expired" title="로그인이 만료됐어요. 다시 로그인해 주세요.">
-                {expired === "tut" ? "진행 중이던 메이크업은 기록 없이 종료됐어요." : undefined}
+                {expired === "tut"
+                  ? "진행 중이던 메이크업은 기록 없이 종료됐어요."
+                  : "다른 기기에서 같은 계정으로 로그인하면 이 기기는 로그아웃돼요."}
               </Notice>
             )}
             {resetDone && (

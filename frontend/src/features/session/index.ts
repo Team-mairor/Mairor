@@ -8,6 +8,7 @@ export {
   type RunState,
   type SessionState,
 } from "./session-provider";
+export { ExpiredSessionRedirect } from "./expired-session-redirect";
 export {
   hasSame,
   matchCounts,
