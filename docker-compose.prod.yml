@@ -58,6 +58,9 @@ x-backend: &backend
     timeout: 3s
     retries: 3
     start_period: 90s
+  depends_on:
+    redis:
+      condition: service_healthy
 
 x-api-limits: &api-limits
   resources:
@@ -66,6 +69,26 @@ x-api-limits: &api-limits
       memory: 1536M
 
 services:
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    logging: *logging
+    command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Egx"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+    networks:
+      - core
+
   nginx-a:
     <<: *nginx
     # 주소를 적는다. 빼면 daemon.json 의 기본 공개 주소(127.0.0.1)에 열려 ALB 가 닿지 못한다
@@ -93,9 +116,7 @@ services:
   api-b:
     <<: *backend
     deploy: *api-limits
-    environment:
-      # 만료 세션 정리는 슬롯 a 만 한다. 두 api 가 함께 돌면 같은 세션의 종료 훅이 두 번 불릴 수 있다
-      SESSION_SWEEP_ENABLED: "false"
+    # 세션 만료(Redis 키 만료 알림)는 Redis 에 붙은 서버마다 받아 같은 세션의 종료 훅이 여러 번 불릴 수 있다. 훅은 멱등이다(SessionEndHook)
     networks:
       slot-b:
         aliases: [api]
@@ -108,7 +129,6 @@ services:
     profiles: [worker]
     environment:
       SPRING_PROFILES_ACTIVE: prod,worker
-      SESSION_SWEEP_ENABLED: "false"
     deploy:
       resources:
         limits:
@@ -180,3 +200,4 @@ networks:
 
 volumes:
   alloy-data:
+  redis-data:

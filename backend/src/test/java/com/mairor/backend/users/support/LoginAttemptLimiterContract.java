@@ -36,7 +36,7 @@ abstract class LoginAttemptLimiterContract {
     return create(maxFailures, Duration.ofSeconds(30), Duration.ofMinutes(15), 1_000);
   }
 
-  private static Ticket acquire(LoginAttemptLimiter limiter, String email, Instant now) {
+  protected static Ticket acquire(LoginAttemptLimiter limiter, String email, Instant now) {
     Result result = limiter.tryAcquire(email, now);
     assertThat(result).as("%s 의 시도", email).isInstanceOf(Allowed.class);
     return ((Allowed) result).ticket();
@@ -500,16 +500,6 @@ abstract class LoginAttemptLimiterContract {
 
     // 이전 실패 2 가 남아 있었다면 지금쯤 잠겼을 것이다
     assertThat(limiter.tryAcquire("a@x.com", later)).isInstanceOf(Allowed.class);
-  }
-
-  @Test
-  void keepsAStateWhileAnAttemptIsStillInFlight() {
-    LoginAttemptLimiter limiter = create(1, Duration.ofSeconds(30), Duration.ofMinutes(15), 1_000);
-    acquire(limiter, "a@x.com", T0);
-
-    // TTL 이 한참 지나도 진행 중인 시도가 있으면 자리를 잡고 있다
-    assertThat(limiter.tryAcquire("a@x.com", T0.plus(Duration.ofHours(1))))
-        .isInstanceOf(Pending.class);
   }
 
   @Test

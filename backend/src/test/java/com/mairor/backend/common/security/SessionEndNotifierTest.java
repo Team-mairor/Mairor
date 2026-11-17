@@ -152,7 +152,7 @@ class SessionEndNotifierTest {
         notifierWith(new RecordingHook("broken", 10, new IllegalStateException("boom")));
 
     notifier.bestEffort(new SessionEnd("user-1", "secret-session-id", SessionEndReason.LOGOUT));
-    notifier.bestEffort(new SessionEnd("user-2", "other-secret", SessionEndReason.DEVICE_REVOKED));
+    notifier.bestEffort(new SessionEnd("user-2", "other-secret", SessionEndReason.LOGOUT));
 
     assertThat(registry.getMeters())
         .allSatisfy(
@@ -206,7 +206,6 @@ class SessionEndNotifierTest {
         .extracting(Enum::name)
         .containsExactly(
             "LOGOUT",
-            "DEVICE_REVOKED",
             "ALL_DEVICES_REVOKED",
             "REPLACED_BY_LOGIN",
             "ABSOLUTE_EXPIRED",

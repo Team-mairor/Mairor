@@ -8,14 +8,12 @@ import com.mairor.backend.common.security.SessionEndReason;
 import com.mairor.backend.users.entity.User;
 import com.mairor.backend.users.support.AuthenticatedUser;
 import com.mairor.backend.users.support.CurrentSessionEnder;
-import com.mairor.backend.users.support.DeviceSummary;
-import com.mairor.backend.users.support.UserSessionAttributes;
+import com.mairor.backend.users.support.RedisAccountSessionLock;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.time.Clock;
 import java.util.List;
-import java.util.UUID;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -30,8 +28,7 @@ import org.springframework.security.web.csrf.DeferredCsrfToken;
 import org.springframework.stereotype.Component;
 
 /**
- * 인증이 끝난 회원의 로그인 세션을 만든다. 자체 로그인과 Google 로그인이 같이 쓴다. 자격 증명을 확인하는 일({@link UserLoginService})과 HTTP
- * 세션을 발급하는 일을 나눠서, 로그인 방식이 늘어도 세션 규칙(세션 고정 방지, 로그인 시각·기기 기록, CSRF 토큰 교체)은 한곳에만 있다.
+ * 자체 로그인과 Google 로그인이 함께 쓰는 세션 발급기다. 자격 증명 검증과 세션 발급을 나누고, 계정당 한 세션 제한을 포함한 로그인 세션 규칙을 한곳에서 처리한다.
  *
  * <p>CSRF 저장소와 핸들러는 보안 설정({@code SecurityConfig})의 빈을 쓴다. CSRF 필터가 검증하는 것과 같은 방식으로 토큰을 발급해야 필터가
  * 통과시킨다.
@@ -43,6 +40,8 @@ public class SessionEstablisher {
   private final CsrfTokenRepository csrfTokenRepository;
   private final CsrfTokenRequestHandler csrfTokenRequestHandler;
   private final SessionEndNotifier sessionEnd;
+  private final UserSessionService userSessionService;
+  private final RedisAccountSessionLock accountSessionLock;
   private final Clock clock;
 
   public SessionEstablisher(
@@ -50,22 +49,27 @@ public class SessionEstablisher {
       CsrfTokenRepository csrfTokenRepository,
       CsrfTokenRequestHandler csrfTokenRequestHandler,
       SessionEndNotifier sessionEnd,
+      UserSessionService userSessionService,
+      RedisAccountSessionLock accountSessionLock,
       Clock clock) {
     this.securityContextRepository = securityContextRepository;
     this.csrfTokenRepository = csrfTokenRepository;
     this.csrfTokenRequestHandler = csrfTokenRequestHandler;
     this.sessionEnd = sessionEnd;
+    this.userSessionService = userSessionService;
+    this.accountSessionLock = accountSessionLock;
     this.clock = clock;
   }
 
   /**
-   * 인증된 세션을 만들고 응답에 줄 CSRF 토큰을 돌려준다.
+   * 계정의 기존 로그인 세션을 정리하고, 새 세션과 응답에 줄 CSRF 토큰을 만든다.
    *
    * <ol>
+   *   <li>로그인 대상 계정의 Redis 잠금을 잡고 기존 로그인 세션을 정리한다.
    *   <li>이미 인증된 세션이면 폐기하고 새 세션을 만든다(다른 계정으로 전환할 때 이전 계정의 속성이 넘어오지 않게). 익명 세션이면 세션 ID 만 바꾼다(세션 고정
    *       방지).
    *   <li>새 {@code SecurityContext} 를 만들어 저장한다. 기존 컨텍스트를 고쳐 쓰지 않는다.
-   *   <li>로그인 시각·기기 식별자·기기 요약을 세션에 기록한다.
+   *   <li>로그인 시각을 세션에 기록한다.
    *   <li>CSRF 토큰을 교체하고, 교체된 요청 속성의 토큰을 돌려준다.
    *   <li>이 응답에서는 쿠키 갱신 필터가 쓰지 않도록 표시한다. 쿠키 발급은 Spring Session 이 한다.
    * </ol>
@@ -73,23 +77,27 @@ public class SessionEstablisher {
    * <p>도중에 실패하면 지금까지 만든 인증 상태(컨텍스트·세션)를 모두 버리고 예외를 그대로 던진다. 그렇지 않으면 응답은 실패인데 세션은 응답을 커밋할 때 저장되어 이후
    * 내 계정 조회가 인증된 것으로 나온다. 이미 로그인한 세션으로 다른 계정 로그인을 시작했다면 이전 세션은 시작하면서 이미 폐기된 뒤다.
    *
-   * <p>세션 저장소는 세션을 만들고 속성을 바꾸는 즉시 저장한다({@code spring.session.jdbc.flush-mode=immediate}). 그래서 이
-   * 메서드가 돌아온 시점에 세션 행이 이미 저장소에 있다. 이전 해시로 검증을 끝낸 로그인이 비밀번호 재설정 이후에 세션을 발급하는 경합은 호출자({@link
+   * <p>세션 저장소는 세션을 만들고 속성을 바꾸는 즉시 저장한다({@code spring.session.data.redis.flush-mode=immediate}). 그래서
+   * 이 메서드가 돌아온 시점에 세션 행이 이미 저장소에 있다. 이전 해시로 검증을 끝낸 로그인이 비밀번호 재설정 이후에 세션을 발급하는 경합은 호출자({@link
    * UserLoginService})가 이 뒤에 비밀번호 버전을 다시 확인해서 막는다. 재설정이 세션 목록을 읽는 시점에 이 세션이 이미 저장돼 있어야 그 확인이 의미가
    * 있다.
    */
   public String establish(User user, HttpServletRequest request, HttpServletResponse response) {
-    try {
-      return build(user, request, response);
-    } catch (RuntimeException e) {
-      abandon(request, e);
-      throw e;
-    }
+    return accountSessionLock.withLock(
+        user.getId(),
+        () -> {
+          try {
+            startFreshSession(request);
+            userSessionService.replaceForNewLogin(user.getId());
+            return build(user, request, response);
+          } catch (RuntimeException e) {
+            abandon(request, e);
+            throw e;
+          }
+        });
   }
 
   private String build(User user, HttpServletRequest request, HttpServletResponse response) {
-    startFreshSession(request);
-
     AuthenticatedUser principal = new AuthenticatedUser(user.getId(), user.getEmail());
     Authentication authentication =
         UsernamePasswordAuthenticationToken.authenticated(
@@ -101,9 +109,6 @@ public class SessionEstablisher {
 
     HttpSession session = request.getSession();
     session.setAttribute(SessionAttributes.AUTHENTICATED_AT, clock.instant());
-    session.setAttribute(UserSessionAttributes.SESSION_REF, UUID.randomUUID());
-    session.setAttribute(
-        UserSessionAttributes.DEVICE, DeviceSummary.of(request.getHeader("User-Agent")));
 
     String csrfToken = issueCsrfToken(request, response);
 

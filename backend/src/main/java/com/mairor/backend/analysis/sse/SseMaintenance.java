@@ -10,9 +10,7 @@ import org.springframework.stereotype.Component;
 /**
  * 분석 상태 SSE 의 주기 작업: 빈 신호(ping)와 상태 맞추기. api 프로세스에서만 뜬다.
  *
- * <p>스케줄링을 여기서 직접 켠다. 지금 {@code @EnableScheduling}은 worker 와 만료 세션 정리에만 있는데, 운영 api-b 는 worker 가
- * 아니고 세션 정리도 꺼져 있어({@code SESSION_SWEEP_ENABLED=false}) 기존 설정에 기대면 api-b 에서 이 작업이 돌지 않는다. 여러 번 켜도 한
- * 번만 적용된다.
+ * <p>스케줄링을 여기서 직접 켠다. 운영 api-b 는 worker 가 아니어서 다른 설정에 기대면 이 작업이 돌지 않을 수 있다. 여러 번 켜도 한 번만 적용된다.
  */
 @Component
 @Profile("!worker")

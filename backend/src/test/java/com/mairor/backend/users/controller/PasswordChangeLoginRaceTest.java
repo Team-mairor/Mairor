@@ -10,6 +10,7 @@ import static org.mockito.Mockito.reset;
 import com.mairor.backend.TestcontainersConfiguration;
 import com.mairor.backend.testsupport.AuthFlowClient;
 import com.mairor.backend.testsupport.AuthFlowClient.Account;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.testsupport.SessionTestClient;
 import com.mairor.backend.testsupport.SessionTestClient.Response;
 import com.mairor.backend.users.repository.UserRepository;
@@ -34,7 +35,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -66,7 +66,7 @@ class PasswordChangeLoginRaceTest {
   }
 
   @LocalServerPort private int port;
-  @Autowired private JdbcTemplate jdbc;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private PasswordEncoder passwordEncoder;
   @Autowired private UserSessionService userSessionService;
   @Autowired private Clock clock;
@@ -111,7 +111,7 @@ class PasswordChangeLoginRaceTest {
   void setUp() {
     flow = new AuthFlowClient(new SessionTestClient(port));
     pool = Executors.newCachedThreadPool();
-    jdbc.update("delete from spring_session");
+    sessionStore.clear();
   }
 
   @AfterEach

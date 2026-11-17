@@ -1,0 +1,10 @@
+app:
+  login:
+    attempt-store: memory
+  password-reset:
+    lock-store: memory
+  oauth:
+    google:
+      state-store: memory
+  rate-limit:
+    store-type: memory

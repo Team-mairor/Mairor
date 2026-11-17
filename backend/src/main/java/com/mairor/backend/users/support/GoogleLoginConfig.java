@@ -3,10 +3,12 @@ package com.mairor.backend.users.support;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.config.oauth2.client.CommonOAuth2Provider;
 
 /**
@@ -29,13 +31,37 @@ public class GoogleLoginConfig {
   }
 
   @Bean
+  @ConditionalOnProperty(
+      prefix = "app.oauth.google",
+      name = "state-store",
+      havingValue = "memory",
+      matchIfMissing = true)
   GoogleAuthorizationStore googleAuthorizationStore(GoogleLoginProperties properties) {
     return new GoogleAuthorizationStore(properties.authorizationTtl());
   }
 
   @Bean
+  @ConditionalOnProperty(prefix = "app.oauth.google", name = "state-store", havingValue = "redis")
+  GoogleAuthorizationStore redisGoogleAuthorizationStore(
+      GoogleLoginProperties properties, StringRedisTemplate redis) {
+    return new GoogleAuthorizationStore(properties.authorizationTtl(), redis);
+  }
+
+  @Bean
+  @ConditionalOnProperty(
+      prefix = "app.oauth.google",
+      name = "state-store",
+      havingValue = "memory",
+      matchIfMissing = true)
   GoogleSignupStore googleSignupStore(GoogleLoginProperties properties) {
     return new GoogleSignupStore(properties.signupTtl());
+  }
+
+  @Bean
+  @ConditionalOnProperty(prefix = "app.oauth.google", name = "state-store", havingValue = "redis")
+  GoogleSignupStore redisGoogleSignupStore(
+      GoogleLoginProperties properties, StringRedisTemplate redis) {
+    return new GoogleSignupStore(properties.signupTtl(), redis);
   }
 
   @Bean

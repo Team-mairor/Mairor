@@ -14,8 +14,6 @@ import org.springframework.stereotype.Component;
  *       반복되는지는 이 지표로 본다.
  *   <li>{@code mairor.session.end_hook.failures{reason}}: 세션 종료 훅({@link SessionEndHook})이 실패한 횟수.
  *       {@code reason} 은 {@link SessionEndReason} 의 소문자 이름이다. 어느 훅이 실패했는지는 로그로 본다.
- *   <li>{@code mairor.session.sweep.removed} / {@code mairor.session.sweep.failed}: 만료된 세션을 정리 작업이
- *       지운 횟수 / 지우지 못해(훅 또는 삭제 실패) 다음으로 미룬 횟수. 실패가 계속 늘면 종료 훅이 막혀 있는 것이다.
  * </ul>
  */
 @Component
@@ -24,8 +22,6 @@ public class SessionMetrics {
   static final String FAILURES = "mairor.session.failures";
   static final String COOKIE_REFRESH_FAILURES = "mairor.session.cookie_refresh.failures";
   static final String END_HOOK_FAILURES = "mairor.session.end_hook.failures";
-  static final String SWEEP_REMOVED = "mairor.session.sweep.removed";
-  static final String SWEEP_FAILED = "mairor.session.sweep.failed";
 
   private final MeterRegistry registry;
 
@@ -37,14 +33,6 @@ public class SessionMetrics {
     registry
         .counter(FAILURES, "cause", cause.name().toLowerCase(java.util.Locale.ROOT))
         .increment();
-  }
-
-  void sweepRemoved() {
-    registry.counter(SWEEP_REMOVED).increment();
-  }
-
-  void sweepFailed() {
-    registry.counter(SWEEP_FAILED).increment();
   }
 
   void cookieRefreshFailure() {

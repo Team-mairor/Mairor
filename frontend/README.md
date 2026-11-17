@@ -304,7 +304,7 @@ try {
 }
 ```
 
-- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. [API 명세](../docs/references/api-spec.md)와 다르면 코드를 따른다. 타입은 `GET /health`, 화면에서 쓰는 회원 API(가입·이메일 인증·로그인·내 계정·로그아웃·비밀번호 재설정), 파우치·제품 API만 있고, 로그인 기기 API는 화면을 만들 때 BE `users.dto`를 보고 추가한다.
+- 요청·응답 형식은 **BE 코드**(`common.error`·`common.web`·`users`)를 기준으로 맞춘다. [API 명세](../docs/references/api-spec.md)와 다르면 코드를 따른다. 타입은 `GET /health`, 화면에서 쓰는 회원 API(가입·이메일 인증·로그인·내 계정·로그아웃·비밀번호 재설정), 파우치·제품 API만 있다. 계정당 로그인 세션은 1개라서 다른 기기에서 같은 계정으로 로그인하면 이 기기의 다음 요청은 401 `UNAUTHORIZED`가 된다.
 - 경로는 `/api` 뒤부터 적는다 (`/v1/...`, `/health`). 주소 앞부분은 `NEXT_PUBLIC_API_BASE_URL` (기본 `/api`).
 - `NEXT_PUBLIC_API_BASE_URL`은 같은 Origin의 상대 경로(`/api`)만 지원한다. 다른 도메인이면 세션 쿠키가 실리지 않고, BE에도 CORS 설정이 없다.
 - 세션 쿠키(`__Host-sessionId`)는 Secure라서 `http://<PC IP>:3000`으로 접속하면 브라우저가 버린다. 로그인이 필요한 요청을 폰에서 확인할 때는 USB 연결(`localhost`)이나 `npm run dev:https`로 접속한다.

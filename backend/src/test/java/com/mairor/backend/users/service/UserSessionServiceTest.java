@@ -17,18 +17,17 @@ import com.mairor.backend.common.security.SessionEnd;
 import com.mairor.backend.common.security.SessionEndHook;
 import com.mairor.backend.common.security.SessionEndNotifier;
 import com.mairor.backend.common.security.SessionEndReason;
-import com.mairor.backend.common.security.SessionLifetimePolicy;
+import com.mairor.backend.common.security.SessionLookup;
 import com.mairor.backend.common.security.SessionMetrics;
+import com.mairor.backend.common.security.UnreadableSessionCleaner;
+import com.mairor.backend.common.security.UnreadableSessionException;
 import com.mairor.backend.testsupport.MutableClock;
-import com.mairor.backend.users.dto.response.SessionItemResponse;
-import com.mairor.backend.users.support.UserSessionAttributes;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,6 +52,7 @@ class UserSessionServiceTest {
 
   private final SessionEndHook hook = mock(SessionEndHook.class);
   private final SessionEndNotifier notifier = notifierWith(hook);
+  private final UnreadableSessionCleaner unreadable = mock(UnreadableSessionCleaner.class);
   private UserSessionService service;
 
   private static SessionEndNotifier notifierWith(SessionEndHook... hooks) {
@@ -71,173 +71,25 @@ class UserSessionServiceTest {
     when(sessions.findByPrincipalName(
             org.mockito.ArgumentMatchers.argThat(id -> !userId.toString().equals(id))))
         .thenReturn(Map.of());
-    service =
-        new UserSessionService(
-            sessions,
-            new SessionLifetimePolicy(THREE_DAYS, THREE_DAYS, THIRTY_DAYS),
-            notifier,
-            clock);
+    service = new UserSessionService(new SessionLookup(sessions, unreadable), notifier);
   }
 
-  /** 기기 정보가 모두 있는 유효한 세션. */
-  private MapSession device(String id, UUID ref, String device, Instant lastAccessed) {
+  /** 로그인 시각이 있는 세션. */
+  private MapSession session(String id, Instant lastAccessed) {
     MapSession session = new MapSession(id);
     session.setMaxInactiveInterval(THREE_DAYS);
     session.setLastAccessedTime(lastAccessed);
     session.setAttribute(SessionAttributes.AUTHENTICATED_AT, clock.instant());
-    session.setAttribute(UserSessionAttributes.SESSION_REF, ref);
-    if (device != null) {
-      session.setAttribute(UserSessionAttributes.DEVICE, device);
-    }
     stored.put(id, session);
     return session;
-  }
-
-  // ---- 목록 ----
-
-  @Test
-  void listsActiveDevicesNewestFirstAndMarksTheCurrentOne() {
-    Instant now = Instant.now();
-    UUID phoneRef = UUID.randomUUID();
-    UUID tabletRef = UUID.randomUUID();
-    MapSession phone = device("phone", phoneRef, "Safari · iOS", now.minusSeconds(3_600));
-    MapSession tablet = device("tablet", tabletRef, "Chrome · Windows", now.minusSeconds(60));
-
-    List<SessionItemResponse> items = service.list(userId, "tablet");
-
-    assertThat(items).hasSize(2);
-    assertThat(items.get(0))
-        .isEqualTo(
-            new SessionItemResponse(
-                tabletRef.toString(),
-                "Chrome · Windows",
-                clock.instant(),
-                tablet.getLastAccessedTime(),
-                true));
-    assertThat(items.get(1))
-        .isEqualTo(
-            new SessionItemResponse(
-                phoneRef.toString(),
-                "Safari · iOS",
-                clock.instant(),
-                phone.getLastAccessedTime(),
-                false));
-  }
-
-  /** 익명 세션을 재사용해 로그인하면 세션 생성 시각이 로그인 시각보다 앞선다. 목록에는 로그인 시각을 보여 준다. */
-  @Test
-  void createdAtIsTheLoginTimeNotTheTimeTheSessionWasCreated() {
-    MapSession phone = device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    Instant loggedInAt = clock.instant().minus(Duration.ofDays(2));
-    phone.setAttribute(SessionAttributes.AUTHENTICATED_AT, loggedInAt);
-
-    SessionItemResponse item = service.list(userId, "phone").get(0);
-
-    assertThat(item.createdAt()).isEqualTo(loggedInAt).isNotEqualTo(phone.getCreationTime());
-  }
-
-  @Test
-  void noDeviceIsCurrentWhenTheCurrentSessionIsUnknown() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-
-    assertThat(service.list(userId, null))
-        .extracting(SessionItemResponse::current)
-        .containsOnly(false);
-  }
-
-  @Test
-  void aSessionWithoutADeviceNameIsShownAsUnknown() {
-    device("phone", UUID.randomUUID(), null, Instant.now());
-
-    assertThat(service.list(userId, "phone"))
-        .extracting(SessionItemResponse::device)
-        .containsExactly("알 수 없는 기기");
-  }
-
-  @Test
-  void leavesOutSessionsThatAreNotUsableDevices() {
-    Instant now = Instant.now();
-    UUID goodRef = UUID.randomUUID();
-    device("good", goodRef, "Chrome · Windows", now);
-    // 서버 유휴 만료가 지난 세션 (저장소가 아직 지우지 않았다)
-    device("idle-expired", UUID.randomUUID(), "Chrome · Windows", now.minus(Duration.ofDays(4)));
-    // 절대 만료가 지난 세션
-    MapSession absoluteExpired =
-        device("absolute-expired", UUID.randomUUID(), "Chrome · Windows", now);
-    absoluteExpired.setAttribute(
-        SessionAttributes.AUTHENTICATED_AT, clock.instant().minus(THIRTY_DAYS));
-    // 기기 식별자가 없는 세션
-    MapSession noRef = new MapSession("no-ref");
-    noRef.setAttribute(SessionAttributes.AUTHENTICATED_AT, clock.instant());
-    stored.put("no-ref", noRef);
-    // 로그인 시각이 없는 세션
-    MapSession noLoginTime = new MapSession("no-login-time");
-    noLoginTime.setAttribute(UserSessionAttributes.SESSION_REF, UUID.randomUUID());
-    stored.put("no-login-time", noLoginTime);
-
-    List<SessionItemResponse> items = service.list(userId, "good");
-
-    assertThat(items)
-        .extracting(SessionItemResponse::sessionRef)
-        .containsExactly(goodRef.toString());
-  }
-
-  @Test
-  void listIsEmptyWhenThereAreNoSessions() {
-    assertThat(service.list(userId, null)).isEmpty();
-  }
-
-  // ---- 기기 하나 로그아웃 ----
-
-  @Test
-  void revokesOnlyTheDeviceWithTheMatchingReference() {
-    UUID phoneRef = UUID.randomUUID();
-    device("phone", phoneRef, "Safari · iOS", Instant.now());
-    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
-
-    Optional<String> revoked = service.revoke(userId, phoneRef, "tablet");
-
-    assertThat(revoked).contains("phone");
-    verify(sessions).deleteById("phone");
-    verify(sessions, never()).deleteById("tablet");
-  }
-
-  @Test
-  void revokingAnUnknownReferenceDeletesNothing() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-
-    assertThat(service.revoke(userId, UUID.randomUUID(), null)).isEmpty();
-
-    verify(sessions, never()).deleteById(anyString());
-  }
-
-  @Test
-  void aReferenceOfAnotherUsersDeviceFindsNothing() {
-    UUID ref = UUID.randomUUID();
-    device("phone", ref, "Safari · iOS", Instant.now());
-    UUID otherUser = UUID.randomUUID();
-
-    // 조회는 호출한 회원의 principal 로만 하므로 다른 회원의 sessionRef 로는 찾을 수 없다
-    assertThat(service.revoke(otherUser, ref, null)).isEmpty();
-
-    verify(sessions, never()).deleteById(anyString());
-  }
-
-  @Test
-  void anExpiredDeviceCannotBeRevokedByItsReference() {
-    UUID ref = UUID.randomUUID();
-    device("idle-expired", ref, "Chrome · Windows", Instant.now().minus(Duration.ofDays(4)));
-
-    assertThat(service.revoke(userId, ref, null)).isEmpty();
   }
 
   // ---- 전체 로그아웃 ----
 
   @Test
   void revokeAllDeletesEverySessionOfTheUserIncludingUnusableOnes() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    device(
-        "expired", UUID.randomUUID(), "Chrome · Windows", Instant.now().minus(Duration.ofDays(4)));
+    session("phone", Instant.now());
+    session("expired", Instant.now().minus(Duration.ofDays(4)));
     stored.put("no-attributes", new MapSession("no-attributes"));
 
     int count = service.revokeAll(userId);
@@ -250,9 +102,9 @@ class UserSessionServiceTest {
 
   @Test
   void revokeAllEndsTheCurrentSessionLast() {
-    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    session("current", Instant.now());
+    session("phone", Instant.now());
+    session("tablet", Instant.now());
 
     int count = service.revokeAll(userId, "current");
 
@@ -266,9 +118,9 @@ class UserSessionServiceTest {
 
   @Test
   void whenAnotherDeviceFailsTheCurrentSessionIsLeftAndTheRestAreStillTried() {
-    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    session("current", Instant.now());
+    session("phone", Instant.now());
+    session("tablet", Instant.now());
     doThrow(new IllegalStateException("store down")).when(sessions).deleteById("phone");
 
     assertThatThrownBy(() -> service.revokeAll(userId, "current"))
@@ -281,9 +133,9 @@ class UserSessionServiceTest {
 
   @Test
   void whenSeveralDevicesFailTheFirstFailureIsThrownWithTheOthersAttached() {
-    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    session("current", Instant.now());
+    session("phone", Instant.now());
+    session("tablet", Instant.now());
     doThrow(new IllegalStateException("first")).when(sessions).deleteById("phone");
     doThrow(new IllegalStateException("second")).when(sessions).deleteById("tablet");
 
@@ -302,7 +154,7 @@ class UserSessionServiceTest {
 
   @Test
   void revokeAllWithAnUnknownCurrentSessionDeletesEverythingElse() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+    session("phone", Instant.now());
 
     assertThat(service.revokeAll(userId, "not-mine")).isEqualTo(1);
 
@@ -319,7 +171,7 @@ class UserSessionServiceTest {
 
   @Test
   void revokeAllNeverTouchesAnotherUsersSessions() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+    session("phone", Instant.now());
 
     assertThat(service.revokeAll(UUID.randomUUID())).isZero();
 
@@ -348,52 +200,9 @@ class UserSessionServiceTest {
   }
 
   @Test
-  void revokeCallsTheHookBeforeDeletingTheDevice() {
-    UUID phoneRef = UUID.randomUUID();
-    device("phone", phoneRef, "Safari · iOS", Instant.now());
-
-    service.revoke(userId, phoneRef, "tablet");
-
-    InOrder order = inOrder(hook, sessions);
-    order.verify(hook).beforeSessionEnds(end("phone", SessionEndReason.DEVICE_REVOKED, userId));
-    order.verify(sessions).deleteById("phone");
-  }
-
-  @Test
-  void revokingTheCurrentDeviceUsesTheLogoutReason() {
-    UUID ref = UUID.randomUUID();
-    device("tablet", ref, "Chrome · Windows", Instant.now());
-
-    service.revoke(userId, ref, "tablet");
-
-    verify(hook).beforeSessionEnds(end("tablet", SessionEndReason.LOGOUT, userId));
-  }
-
-  @Test
-  void aFailingHookKeepsTheDeviceAndPropagates() {
-    UUID phoneRef = UUID.randomUUID();
-    device("phone", phoneRef, "Safari · iOS", Instant.now());
-    doThrow(new IllegalStateException("cleanup failed")).when(hook).beforeSessionEnds(any());
-
-    assertThatThrownBy(() -> service.revoke(userId, phoneRef, "tablet"))
-        .isInstanceOf(IllegalStateException.class);
-
-    verify(sessions, never()).deleteById(anyString());
-  }
-
-  @Test
-  void anUnknownReferenceDoesNotCallTheHook() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-
-    assertThat(service.revoke(userId, UUID.randomUUID(), "tablet")).isEmpty();
-
-    verify(hook, never()).beforeSessionEnds(any());
-  }
-
-  @Test
   void revokeAllCallsTheHookForEverySessionBeforeDeletingIt() {
-    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+    session("current", Instant.now());
+    session("phone", Instant.now());
 
     service.revokeAll(userId, "current");
 
@@ -410,9 +219,9 @@ class UserSessionServiceTest {
 
   @Test
   void revokeAllKeepsTheSessionWhoseHookFailedAndTheCurrentOneButTriesTheRest() {
-    device("current", UUID.randomUUID(), "Chrome · Windows", Instant.now());
-    device("blocked", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    session("current", Instant.now());
+    session("blocked", Instant.now());
+    session("tablet", Instant.now());
     doThrow(new IllegalStateException("cleanup failed"))
         .when(hook)
         .beforeSessionEnds(end("blocked", SessionEndReason.ALL_DEVICES_REVOKED, userId));
@@ -430,8 +239,8 @@ class UserSessionServiceTest {
 
   @Test
   void revokeAllWithoutACurrentSessionCallsTheHookForEverySession() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
-    device("tablet", UUID.randomUUID(), "Chrome · Windows", Instant.now());
+    session("phone", Instant.now());
+    session("tablet", Instant.now());
 
     assertThat(service.revokeAll(userId)).isEqualTo(2);
 
@@ -441,10 +250,60 @@ class UserSessionServiceTest {
 
   @Test
   void revokeAllNeverCallsTheHookForAnotherUsersSessions() {
-    device("phone", UUID.randomUUID(), "Safari · iOS", Instant.now());
+    session("phone", Instant.now());
 
     service.revokeAll(UUID.randomUUID(), "x");
 
     verify(hook, never()).beforeSessionEnds(any());
+  }
+
+  // ---- 손상된 세션 ----
+
+  private static UnreadableSessionException unreadableValue() {
+    return new UnreadableSessionException("읽지 못함(테스트)", new IllegalStateException());
+  }
+
+  /** "good" 은 정상, "broken" 은 값을 읽을 수 없는 세션. 회원 색인 조회는 "broken" 때문에 통째로 실패한다. */
+  private void oneSessionIsUnreadable() {
+    MapSession good = session("good", Instant.now());
+    when(sessions.findByPrincipalName(userId.toString())).thenThrow(unreadableValue());
+    when(unreadable.sessionIdsOf(userId.toString())).thenReturn(List.of("good", "broken"));
+    when(sessions.findById("good")).thenReturn(good);
+    when(sessions.findById("broken")).thenThrow(unreadableValue());
+    doThrow(unreadableValue()).when(sessions).deleteById("broken");
+  }
+
+  @Test
+  void aNewLoginStillReplacesSessionsWhenOneOfThemCannotBeRead() {
+    oneSessionIsUnreadable();
+
+    assertThat(service.replaceForNewLogin(userId)).isEqualTo(2);
+
+    verify(sessions).deleteById("good");
+    verify(unreadable).remove(userId.toString(), "broken");
+    verify(hook).beforeSessionEnds(end("good", SessionEndReason.REPLACED_BY_LOGIN, userId));
+    verify(hook).beforeSessionEnds(end("broken", SessionEndReason.REPLACED_BY_LOGIN, userId));
+  }
+
+  @Test
+  void revokeAllStillEndsEverySessionWhenOneOfThemCannotBeRead() {
+    oneSessionIsUnreadable();
+
+    assertThat(service.revokeAll(userId)).isEqualTo(2);
+
+    verify(sessions).deleteById("good");
+    verify(unreadable).remove(userId.toString(), "broken");
+  }
+
+  @Test
+  void otherStoreFailuresAreNotTreatedAsUnreadableSessions() {
+    when(sessions.findByPrincipalName(userId.toString()))
+        .thenThrow(new IllegalStateException("store down"));
+
+    assertThatThrownBy(() -> service.replaceForNewLogin(userId))
+        .isInstanceOf(IllegalStateException.class);
+
+    verify(unreadable, never()).sessionIdsOf(anyString());
+    verify(unreadable, never()).remove(anyString(), anyString());
   }
 }

@@ -12,6 +12,7 @@ import com.mairor.backend.testsupport.AuthFlowClient.Account;
 import com.mairor.backend.testsupport.AuthFlowClient.Login;
 import com.mairor.backend.testsupport.RecordingSessionEndHook;
 import com.mairor.backend.testsupport.RecordingSessionEndHookConfig;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.testsupport.SessionTestClient;
 import com.mairor.backend.testsupport.SessionTestClient.Response;
 import com.mairor.backend.users.VerificationTestSupport.CapturingMailSender;
@@ -45,7 +46,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -92,7 +92,7 @@ class PasswordResetFlowTest {
   }
 
   @LocalServerPort private int port;
-  @Autowired private JdbcTemplate jdbc;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private CapturingMailSender mail;
   @Autowired private RecordingSessionEndHook hook;
   @Autowired private MeterRegistry registry;
@@ -119,7 +119,7 @@ class PasswordResetFlowTest {
     flow = new AuthFlowClient(client);
     pool = Executors.newCachedThreadPool();
     hook.reset();
-    jdbc.update("delete from spring_session");
+    sessionStore.clear();
   }
 
   @AfterEach
@@ -209,7 +209,9 @@ class PasswordResetFlowTest {
   void aResetChangesThePasswordAndLogsOutEveryDeviceWithoutLoggingIn() throws Exception {
     Account account = flow.signUp();
     Login chrome = flow.login(account, AuthFlowClient.CHROME_WINDOWS);
+    // 계정당 로그인 세션은 하나라 safari 로그인이 chrome 세션을 이미 대체했다
     Login safari = flow.login(account, AuthFlowClient.SAFARI_IPHONE);
+    hook.reset();
     double successes = count("success");
     String token = tokenFor(account.email());
 
@@ -223,7 +225,7 @@ class PasswordResetFlowTest {
     assertThat(hook.calls)
         .extracting(call -> call.end().reason())
         .containsOnly(SessionEndReason.ALL_DEVICES_REVOKED);
-    assertThat(hook.calls).hasSize(2);
+    assertThat(hook.calls).hasSize(1);
     assertThat(loginStatus(account, AuthFlowClient.PASSWORD)).isEqualTo(401);
     assertThat(loginStatus(account, NEW_PASSWORD)).isEqualTo(200);
     assertThat(passwordVersion(account)).isEqualTo(1);

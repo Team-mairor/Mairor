@@ -10,7 +10,12 @@ class GoogleSignupStoreTest {
 
   private static final Instant NOW = Instant.parse("2026-11-02T00:00:00Z");
 
-  private final GoogleSignupStore store = new GoogleSignupStore(Duration.ofMinutes(10));
+  private final GoogleSignupStore store = create(Duration.ofMinutes(10));
+
+  /** 저장소 구현. Redis 구현 테스트가 덮어쓴다. */
+  GoogleSignupStore create(Duration ttl) {
+    return new GoogleSignupStore(ttl);
+  }
 
   @Test
   void save_setsTheExpiryAfterTtl() {

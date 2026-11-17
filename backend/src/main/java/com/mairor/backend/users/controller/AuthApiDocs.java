@@ -12,8 +12,8 @@ import java.lang.annotation.Target;
 import org.springframework.http.MediaType;
 
 /**
- * 로그인·기기 관리 API 문서의 요청·응답 예시. 애너테이션 값으로 쓰려고 상수로 둔다. 여러 API 에 같은 모양으로 붙는 응답(401·CSRF 403·404)은 메타
- * 애너테이션으로 묶었다. 401 메타 애너테이션({@link Unauthorized})은 다른 도메인의 로그인 필요 API 도 쓴다.
+ * 로그인 API 문서의 요청·응답 예시. 애너테이션 값으로 쓰려고 상수로 둔다. 여러 API 에 같은 모양으로 붙는 응답(401·CSRF 403·404)은 메타 애너테이션으로
+ * 묶었다. 401 메타 애너테이션({@link Unauthorized})은 다른 도메인의 로그인 필요 API 도 쓴다.
  */
 public final class AuthApiDocs {
 
@@ -47,19 +47,6 @@ public final class AuthApiDocs {
               examples = @ExampleObject(name = "CSRF_INVALID", value = AuthApiDocs.CSRF_INVALID)))
   public @interface CsrfRejected {}
 
-  /** 없는 값·이미 끝난 기기·다른 회원의 기기를 구분하지 않는 404. */
-  @Retention(RetentionPolicy.RUNTIME)
-  @Target(ElementType.METHOD)
-  @ApiResponse(
-      responseCode = "404",
-      description = "이 회원의 유효한 기기 중에 해당 sessionRef 가 없다(없는 값·형식 오류·이미 끝난 기기·다른 회원의 값을 구분하지 않는다).",
-      content =
-          @Content(
-              mediaType = MediaType.APPLICATION_JSON_VALUE,
-              schema = @Schema(implementation = ErrorResponse.class),
-              examples = @ExampleObject(name = "NOT_FOUND", value = AuthApiDocs.NOT_FOUND)))
-  @interface DeviceNotFound {}
-
   /** 없는 리소스와 다른 회원 소유 리소스를 구분하지 않는 공통 404. */
   @Retention(RetentionPolicy.RUNTIME)
   @Target(ElementType.METHOD)
@@ -88,27 +75,6 @@ public final class AuthApiDocs {
           "createdAt": "2026-10-29T03:00:00Z"
         },
         "csrfToken": "YqfRQxgFY0ZD43De9XhCs06V1s7tLnezDQXnS6jao1qX36DNU5Czdis1VH9u10fvkFV2gSil-6-PHxKeazfXesrqx2uu7JH9"
-      }""";
-
-  static final String SESSION_LIST =
-      """
-      {
-        "items": [
-          {
-            "sessionRef": "9d1c3b7a-2e4f-4a6b-8c0d-1e2f3a4b5c6d",
-            "device": "Chrome · Windows",
-            "createdAt": "2026-10-29T03:00:00Z",
-            "lastAccessedAt": "2026-10-29T05:30:00Z",
-            "current": true
-          },
-          {
-            "sessionRef": "5a7b9c1d-3e5f-4071-9283-a4b5c6d7e8f9",
-            "device": "Safari · iOS",
-            "createdAt": "2026-10-27T09:10:00Z",
-            "lastAccessedAt": "2026-10-28T20:00:00Z",
-            "current": false
-          }
-        ]
       }""";
 
   static final String VALIDATION_FAILED =

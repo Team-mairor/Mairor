@@ -5,7 +5,7 @@ package com.mairor.backend.common.security;
  * 쓰게 된 것이라 다시 로그인하게 하면 된다.
  *
  * <p>새 값을 저장하지 못하는 실패(직렬화 실패)와 구분하려고 둔 예외다. 둘은 Spring 에서 같은 예외 종류로 나오지만 뜻이 다르다. 직렬화 실패는 직렬화할 수 없는
- * 값을 세션에 넣은 서버 버그라서 사용자에게 "로그인 만료"로 보이면 안 된다. 변환 경계({@link SessionConversionConfig})에서 읽는 쪽만 이 예외로
+ * 값을 세션에 넣은 서버 버그라서 사용자에게 "로그인 만료"로 보이면 안 된다. 직렬화 경계({@link SessionSerializerConfig})에서 읽는 쪽만 이 예외로
  * 감싼다.
  */
 public class UnreadableSessionException extends RuntimeException {

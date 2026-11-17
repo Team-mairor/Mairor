@@ -49,8 +49,8 @@ class SessionEndHookWiringTest {
 
   @Test
   void registeredHookBeansAreCalledInOrderThroughTheNotifier() {
-    notifier.strict(new SessionEnd("user-1", "session-1", SessionEndReason.DEVICE_REVOKED));
+    notifier.strict(new SessionEnd("user-1", "session-1", SessionEndReason.LOGOUT));
 
-    assertThat(CALLS).containsExactly("first:DEVICE_REVOKED", "second:DEVICE_REVOKED");
+    assertThat(CALLS).containsExactly("first:LOGOUT", "second:LOGOUT");
   }
 }

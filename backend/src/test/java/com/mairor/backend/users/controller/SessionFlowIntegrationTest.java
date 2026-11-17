@@ -11,16 +11,15 @@ import com.mairor.backend.testsupport.AuthFlowClient.Account;
 import com.mairor.backend.testsupport.AuthFlowClient.Login;
 import com.mairor.backend.testsupport.AuthenticatedSessionTestConfig;
 import com.mairor.backend.testsupport.MutableClock;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.testsupport.SessionTestClient;
 import com.mairor.backend.testsupport.SessionTestClient.Response;
 import com.mairor.backend.users.support.LoginHashGate;
-import com.mairor.backend.users.support.UserSessionAttributes;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,7 +29,6 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 
@@ -49,7 +47,7 @@ class SessionFlowIntegrationTest {
   private static final long THREE_DAYS_SECONDS = Duration.ofDays(3).toSeconds();
 
   @LocalServerPort private int port;
-  @Autowired private JdbcTemplate jdbc;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private MutableClock clock;
   @Autowired private FindByIndexNameSessionRepository<?> sessions;
   @Autowired private LoginHashGate hashGate;
@@ -61,7 +59,7 @@ class SessionFlowIntegrationTest {
   void setUp() {
     client = new SessionTestClient(port);
     flow = new AuthFlowClient(client);
-    jdbc.update("delete from spring_session");
+    sessionStore.clear();
     clock.set(Instant.now());
   }
 
@@ -92,7 +90,7 @@ class SessionFlowIntegrationTest {
   }
 
   private long sessionRows() {
-    return jdbc.queryForObject("select count(*) from spring_session", Long.class);
+    return sessionStore.count();
   }
 
   // ---- 로그인 → 내 계정 → 로그아웃 → 재사용 차단 ----
@@ -323,23 +321,22 @@ class SessionFlowIntegrationTest {
     assertThat(sessions.findByPrincipalName(second.userId().toString())).hasSize(1);
   }
 
+  /** 계정당 로그인 세션은 하나다. 다른 기기에서 같은 계정으로 로그인하면 먼저 로그인한 기기는 로그아웃된다. */
   @Test
-  void eachDeviceHasItsOwnSessionAndLoggingOutOneKeepsTheOther() throws Exception {
+  void loggingInOnAnotherDeviceLogsOutTheFirstOne() throws Exception {
     Account account = signUp();
     Login phone = login(account);
     Login tablet = login(account);
+
     assertThat(phone.cookie()).isNotEqualTo(tablet.cookie());
-    assertThat(sessions.findByPrincipalName(account.userId().toString())).hasSize(2);
-
-    assertThat(logout(phone.cookie(), phone.csrfToken()).status()).isEqualTo(204);
-
     assertThat(me(phone.cookie()).status()).isEqualTo(401);
     assertThat(me(tablet.cookie()).status()).isEqualTo(200);
-    assertThat(sessions.findByPrincipalName(account.userId().toString())).hasSize(1);
+    assertThat(sessions.findByPrincipalName(account.userId().toString()))
+        .containsOnlyKeys(AuthFlowClient.sessionId(tablet.cookie()));
   }
 
   @Test
-  void theSessionRecordsTheLoginTimeTheDeviceAndAPublicReference() throws Exception {
+  void theSessionRecordsTheLoginTime() throws Exception {
     Account account = signUp();
     Instant loginTime = clock.instant();
 
@@ -352,12 +349,6 @@ class SessionFlowIntegrationTest {
     assertThat(session).isNotNull();
     assertThat((Instant) session.getAttribute(SessionAttributes.AUTHENTICATED_AT))
         .isEqualTo(loginTime);
-    assertThat((String) session.getAttribute(UserSessionAttributes.DEVICE))
-        .isEqualTo("Chrome · Windows");
-    UUID sessionRef = session.getAttribute(UserSessionAttributes.SESSION_REF);
-    assertThat(sessionRef).isNotNull();
-    // 공개용 식별자는 실제 세션 ID 와 다른 값이다
-    assertThat(sessionRef.toString()).isNotEqualTo(session.getId());
   }
 
   // ---- 절대 만료 ----

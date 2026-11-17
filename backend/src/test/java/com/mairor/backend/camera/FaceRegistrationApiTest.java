@@ -2,6 +2,7 @@ package com.mairor.backend.camera;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
@@ -32,7 +33,6 @@ import com.mairor.backend.camera.service.FaceRegistrationOrphanScheduler;
 import com.mairor.backend.camera.service.FaceRegistrationProperties;
 import com.mairor.backend.camera.service.FaceRegistrationService;
 import com.mairor.backend.common.error.BusinessException;
-import com.mairor.backend.common.security.ExpiredSessionSweeper;
 import com.mairor.backend.common.security.SessionAttributes;
 import com.mairor.backend.common.security.SessionEnd;
 import com.mairor.backend.common.security.SessionEndNotifier;
@@ -42,6 +42,7 @@ import com.mairor.backend.common.storage.StorageException;
 import com.mairor.backend.photos.entity.PhotoState;
 import com.mairor.backend.photos.repository.StoredPhotoRepository;
 import com.mairor.backend.photos.service.PhotoRecordService;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.users.entity.User;
 import com.mairor.backend.users.repository.UserRepository;
 import com.mairor.backend.users.support.AuthenticatedUser;
@@ -52,6 +53,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -120,7 +122,7 @@ class FaceRegistrationApiTest {
   @Autowired private FaceRegistrationOrphanRepository orphans;
   @Autowired private FaceRegistrationProperties registrationProperties;
   @Autowired private SessionEndNotifier sessionEnd;
-  @Autowired private ExpiredSessionSweeper sessionSweeper;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private PlatformTransactionManager transactions;
   @MockitoSpyBean private PhotoRecordService photoRecords;
   @Autowired private JdbcTemplate jdbc;
@@ -452,12 +454,13 @@ class FaceRegistrationApiTest {
   @Test
   void idleSessionSweepCallsTheHookAndBlocksRegistrationAccess() throws Exception {
     UUID id = id(register(login, metadata()).getResponse().getContentAsString());
-    jdbc.update(
-        "update spring_session set expiry_time = ? where session_id = ?",
-        System.currentTimeMillis() - 1,
-        login.id());
-    sessionSweeper.sweep();
-    assertThat(registrations.findById(id).orElseThrow().getDiscardedAt()).isNotNull();
+    sessionStore.idleFor(login.id(), Duration.ofDays(4));
+    sessionStore.expireNow(login.id());
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .untilAsserted(
+            () ->
+                assertThat(registrations.findById(id).orElseThrow().getDiscardedAt()).isNotNull());
     assertThat(sessions.findById(login.id())).isNull();
   }
 

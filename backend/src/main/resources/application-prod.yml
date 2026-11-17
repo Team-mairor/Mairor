@@ -1,4 +1,13 @@
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+  session:
+    data:
+      redis:
+        namespace: mairor:session
+        repository-type: indexed
+        flush-mode: immediate
   jpa:
     hibernate:
       ddl-auto: validate
@@ -45,6 +54,17 @@ catalog:
 
 # 운영 저장소는 S3 비공개 버킷(-203). 자격 증명은 EC2 역할이라 키를 두지 않는다
 app:
+  login:
+    attempt-store: ${LOGIN_ATTEMPT_STORE:redis}
+  verification-store:
+    type: ${VERIFICATION_STORE:redis}
+  password-reset:
+    lock-store: ${PASSWORD_RESET_LOCK_STORE:redis}
+  rate-limit:
+    store-type: ${RATE_LIMIT_STORE:redis}
+  oauth:
+    google:
+      state-store: ${GOOGLE_STATE_STORE:redis}
   storage:
     type: s3
     s3:

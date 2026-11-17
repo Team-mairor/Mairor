@@ -44,7 +44,7 @@
         });
       }
       if (response.status === 401 || (response.ok && request.method !== 'GET'
-          && (path.endsWith('/logout') || path.indexOf('/v1/users/me/sessions') >= 0))) {
+          && path.endsWith('/logout'))) {
         token = null;
       }
       return response;

@@ -11,8 +11,12 @@ class GoogleAuthorizationStoreTest {
 
   private static final Instant NOW = Instant.parse("2026-11-02T00:00:00Z");
 
-  private final GoogleAuthorizationStore store =
-      new GoogleAuthorizationStore(Duration.ofMinutes(10));
+  private final GoogleAuthorizationStore store = create(Duration.ofMinutes(10));
+
+  /** 저장소 구현. Redis 구현 테스트가 덮어쓴다. */
+  GoogleAuthorizationStore create(Duration ttl) {
+    return new GoogleAuthorizationStore(ttl);
+  }
 
   private static OAuth2AuthorizationRequest request(String state) {
     return OAuth2AuthorizationRequest.authorizationCode()

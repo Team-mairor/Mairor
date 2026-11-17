@@ -32,7 +32,7 @@ import com.mairor.backend.users.support.InMemoryLoginAttemptLimiter;
 import com.mairor.backend.users.support.LoginHashGate;
 import com.mairor.backend.users.support.LoginMetrics;
 import com.mairor.backend.users.support.PasswordNormalizer;
-import com.mairor.backend.users.support.UserSessionAttributes;
+import com.mairor.backend.users.support.RedisAccountSessionLock;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.http.HttpSession;
 import java.text.Normalizer;
@@ -40,6 +40,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,8 +61,8 @@ import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
- * 로그인 서비스 단위 테스트. 비밀번호 인코더는 실제 bcrypt 를 쓰고(스파이로 호출만 센다), 시도 제한기·BCrypt 게이트도 실제 구현이다. 세션 저장소(JDBC)와
- * 쿠키는 실제 HTTP 흐름 테스트에서 확인한다.
+ * 로그인 서비스 단위 테스트. 비밀번호 인코더는 실제 bcrypt 를 쓰고(스파이로 호출만 센다), 시도 제한기·BCrypt 게이트도 실제 구현이다. 세션 저장소와 쿠키는 실제
+ * HTTP 흐름 테스트에서 확인한다.
  */
 class UserLoginServiceTest {
 
@@ -111,7 +112,16 @@ class UserLoginServiceTest {
         new HttpSessionCsrfTokenRepository(),
         new XorCsrfTokenRequestAttributeHandler(),
         endNotifier,
+        mock(UserSessionService.class),
+        passthroughAccountSessionLock(),
         clock);
+  }
+
+  private RedisAccountSessionLock passthroughAccountSessionLock() {
+    RedisAccountSessionLock lock = mock(RedisAccountSessionLock.class);
+    when(lock.withLock(any(), any()))
+        .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+    return lock;
   }
 
   private static SessionEndNotifier notifierWith(SessionEndHook hook) {
@@ -179,13 +189,11 @@ class UserLoginServiceTest {
   }
 
   @Test
-  void successRecordsTheLoginTimeTheDeviceAndAPublicSessionReference() {
+  void successRecordsTheLoginTime() {
     login("member@example.com", PASSWORD);
 
     var session = request.getSession();
     assertThat(session.getAttribute(SessionAttributes.AUTHENTICATED_AT)).isEqualTo(NOW);
-    assertThat(session.getAttribute(UserSessionAttributes.DEVICE)).isEqualTo("Chrome · Windows");
-    assertThat(session.getAttribute(UserSessionAttributes.SESSION_REF)).isInstanceOf(UUID.class);
   }
 
   @Test
@@ -242,7 +250,6 @@ class UserLoginServiceTest {
     when(userRepository.findByEmail("other@example.com")).thenReturn(Optional.of(other));
     login("member@example.com", PASSWORD);
     MockHttpSession first = (MockHttpSession) request.getSession();
-    Object firstRef = first.getAttribute(UserSessionAttributes.SESSION_REF);
 
     // 같은 브라우저가 다른 계정으로 로그인한다 (서비스가 SecurityContextHolder 에서 기존 인증을 본다)
     login("other@example.com", "Another1!");
@@ -250,9 +257,6 @@ class UserLoginServiceTest {
     MockHttpSession second = (MockHttpSession) request.getSession();
     assertThat(first.isInvalid()).isTrue();
     assertThat(second.getId()).isNotEqualTo(first.getId());
-    assertThat(second.getAttribute(UserSessionAttributes.SESSION_REF))
-        .isNotNull()
-        .isNotEqualTo(firstRef);
     SecurityContext stored =
         (SecurityContext)
             second.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
@@ -308,6 +312,8 @@ class UserLoginServiceTest {
                 broken,
                 new XorCsrfTokenRequestAttributeHandler(),
                 endNotifier,
+                mock(UserSessionService.class),
+                passthroughAccountSessionLock(),
                 clock),
             metrics,
             clock);

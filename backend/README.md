@@ -20,7 +20,7 @@ cp .env.example .env      # 처음 한 번. DB 접속값. git에 올라가지 �
 ./gradlew bootRun         # 직접 띄운 PostgreSQL 에 .env 값으로 붙는다
 ```
 
-`bootRun` 용 PostgreSQL 은 레포 루트에서 `cp .env.example .env` 후 `docker compose up -d postgres` 로 띄울 수 있다. 값은 `backend/.env` 의 DB 값과 맞춘다.
+`bootRun` 용 PostgreSQL 은 레포 루트에서 `cp .env.example .env` 후 `docker compose up -d postgres redis` 로 띄울 수 있다. 값은 `backend/.env` 의 DB 값과 맞춘다.
 
 | 주소 | 내용 |
 |---|---|
@@ -52,6 +52,8 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `DB_URL` | `jdbc:postgresql://localhost:5432/mairor` | JDBC URL |
 | `DB_USERNAME` | `mairor` | DB 사용자 |
 | `DB_PASSWORD` | (없음) | DB 비밀번호 |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis server for temporary signup and password-reset state. Production Compose uses the internal `redis:6379` service. |
+| `REDIS_PASSWORD` | (empty) | Optional password for an externally managed Redis. The bundled Compose Redis is private to the Docker network and has no password configured. |
 | `ALLOWED_ORIGINS` | dev: `http://localhost:3000,https://localhost:3000,http://localhost:8080` / prod: 없음(필수) | 회원가입·로그인 같은 세션 없는 요청을 보낼 수 있는 프론트 Origin. 쉼표로 구분. 직접 적으면 dev 기본값을 대체한다(Swagger 에서 호출하려면 `http://localhost:8080` 포함). prod 에서 비어 있으면 기동 실패 |
 | `AGREEMENT_TERMS_VERSION` | `2026-10-26` | 서비스 이용약관의 현재 버전. 가입 요청의 `agreements[].version` 이 같아야 한다 |
 | `AGREEMENT_PRIVACY_VERSION` | `2026-10-26` | 개인정보 수집·이용의 현재 버전 |
@@ -64,7 +66,11 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `MAIL_HOST` / `MAIL_PORT` | `smtp.gmail.com` / `587` | SMTP 서버 (STARTTLS) |
 | `SIGNUP_REQUIRE_EMAIL_VERIFICATION` | `false` | `true`면 가입 요청에 `emailVerificationToken` 이 필요하다(없거나 다른 이메일의 토큰이면 `USERS_EMAIL_NOT_VERIFIED`). 이메일 소유 확인은 명세 확정 전 확장이라 기본은 꺼져 있다. prod 에서 켜면 `MAIL_ENABLED=true`(+SMTP 계정)와 `EMAIL_VERIFICATION_SECRET` 이 없을 때 기동 실패한다 |
 | `EMAIL_VERIFICATION_SECRET` | (없음) | 인증번호 해시용 비밀키(가입 인증과 비밀번호 재설정이 같이 쓴다). 비우면 서버를 켤 때마다 임의로 만들어져 재시작 시 진행 중인 인증이 무효가 된다. 서버를 여러 대 두기 전에 반드시 설정한다 |
-| `VERIFICATION_STORE` | `memory` | 인증 임시 상태 저장소. 가입 인증용과 비밀번호 재설정용이 따로 만들어진다. 지금은 `memory` 만 있다 ([인메모리 저장소의 한계](#인메모리-저장소의-한계)) |
+| `VERIFICATION_STORE` | dev: `memory`, prod: `redis` | 가입 이메일 인증과 비밀번호 재설정 임시 상태 저장소. 운영은 Redis 를 사용하고 두 기능은 별도 키 공간으로 분리한다 |
+| `LOGIN_ATTEMPT_STORE` | dev: `memory`, prod: `redis` | 로그인 실패 횟수·잠금 상태 저장소. Redis 구현은 이메일별 원자 연산으로 여러 API 인스턴스에서 제한을 공유한다 |
+| `PASSWORD_RESET_LOCK_STORE` | dev: `memory`, prod: `redis` | 같은 계정의 비밀번호 재설정 요청을 직렬화하는 잠금 저장소. Redis 잠금은 이메일별로 공유되고 5분 뒤 자동 만료된다 |
+| `GOOGLE_STATE_STORE` | dev: `memory`, prod: `redis` | Google 인가 요청(state·nonce·PKCE)과 가입 대기 정보를 저장한다. Redis 값은 10분 뒤 자동 만료되고 callback·가입 완료 때 1회 소비된다 |
+| `RATE_LIMIT_STORE` | dev: `memory`, prod: `redis` | 이메일 조회·인증번호 발송·비밀번호 재설정·Google 로그인 시작의 IP 요청 제한 저장소. Redis 는 용도별 카운터를 여러 API 인스턴스에서 공유한다 |
 | `RATE_LIMIT_EMAIL_AVAILABILITY_LIMIT` / `_WINDOW` | `30` / `1m` | 이메일 중복 확인의 IP 당 요청 제한 |
 | `RATE_LIMIT_EMAIL_VERIFICATION_LIMIT` / `_WINDOW` | `10` / `10m` | 인증번호 발송의 IP 당 요청 제한 |
 | `RATE_LIMIT_PASSWORD_RESET_LIMIT` / `_WINDOW` | `10` / `10m` | 비밀번호 재설정 인증번호 발송의 IP 당 요청 제한(가입 인증과 따로 센다) |
@@ -75,14 +81,12 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `SESSION_TIMEOUT` | `3d` | 서버 세션 유휴 만료. 마지막 인증 요청으로부터 이 시간이 지나면 다시 로그인해야 한다 |
 | `SESSION_COOKIE_MAX_AGE` | `3d` | 세션 쿠키 최대 수명. 인증 요청이 성공하면 이 값으로 갱신된다(절대 만료까지 남은 시간이 더 짧으면 그 값) |
 | `SESSION_ABSOLUTE_TIMEOUT` | `30d` | 절대 만료. 로그인 성공 시점부터 이 시간이 지나면 활동 중이어도 다시 로그인한다. 일반 요청으로 연장하지 않는다. 쿠키 최대 수명 ≤ 유휴 만료 ≤ 절대 만료 여야 하며 어긋나면 기동 실패 |
-| `SESSION_SWEEP_ENABLED` | `true` | 만료된 세션을 지우는 정리 작업을 예약한다. Spring Session 의 기본 정리 작업은 꺼 두었고(`spring.session.jdbc.cleanup-cron: "-"`) 이 작업이 대신한다. 지우기 전에 세션 종료 훅(`SessionEndHook`)을 호출하기 위해서다. `false` 면 **만료된 세션 행을 아무도 지우지 않으니** 테스트·점검에만 끈다 |
-| `SESSION_SWEEP_INTERVAL` | `1m` | 정리 작업 실행 간격(이전 실행이 끝난 뒤부터). 만료된 세션의 종료 훅은 만료 직후가 아니라 이 간격만큼 늦게 호출된다 |
-| `SESSION_SWEEP_BATCH_SIZE` | `100` | 한 번 실행에서 정리를 시도하는 세션 수의 상한. 넘으면 다음 실행에서 이어서 한다 |
-| `SESSION_SWEEP_RETRY_DELAY` | `5m` | 정리에 실패한(훅 또는 삭제 실패) 세션을 다시 시도하기까지 기다리는 시간. 그동안은 건너뛰어서 계속 실패하는 세션이 뒤의 정상 세션을 막지 않는다 |
+| `SESSION_SWEEP_INTERVAL` | `1m` | 세션이 사라진 가이드 실행을 찾아 정리하는 작업의 실행 간격 |
+| `SESSION_SWEEP_BATCH_SIZE` | `100` | 그 정리 작업이 한 번에 보는 실행 수의 상한 |
 | `LOGIN_MAX_FAILURES` | `3` | 로그인 시도 제한. 이메일 하나에서 확정 실패가 이 횟수에 닿으면 잠근다. 진행 중인 시도도 이 수에 포함되어 동시에 이보다 많이 시도할 수 없다. 5회로 올릴 예정 |
 | `LOGIN_LOCK_DURATION` | `30s` | 로그인 시도 제한으로 잠그는 시간. 잠금 중에는 비밀번호가 맞아도 429 |
 | `LOGIN_ATTEMPT_TTL` | `15m` | 마지막 시도 후 실패 횟수를 기억하는 시간 |
-| `LOGIN_MAX_ENTRIES` | `10000` | 기억하는 이메일 상태의 최대 개수. 넘으면 진행 중 시도가 없는 가장 오래된 상태부터 지우고, 잠금만으로 가득 차면 새 이메일을 거절한다 |
+| `LOGIN_MAX_ENTRIES` | `10000` | 기억하는 이메일 상태의 최대 개수. 넘으면 잠기지 않고 진행 중 시도도 없는 가장 오래된 상태부터 지우며, 잠금·진행 중 상태만 남으면 새 이메일을 거절한다 |
 | `LOGIN_MAX_CONCURRENT_HASHES` | `4` | 서버 전체에서 동시에 처리하는 로그인 수. 사용자 조회부터 BCrypt 비교까지를 한 번에 묶어 센다(DB 연결 대기가 쌓이는 것도 막는다). 넘으면 DB 에 가지 않고 기다리지 않고 429 로 거절한다. 서버 코어 수에 맞춰 조정한다 |
 | `DB_CONNECTION_TIMEOUT_MS` | `5000` | DB 연결을 얻기까지 기다리는 최대 시간(ms). 넘으면 요청이 `503 SERVICE_UNAVAILABLE` 로 끝난다. 쿼리 실행 시간 제한은 두지 않았다(아래 "운영 전 확인") |
 | `PROCESSOR_API_TOKEN` | (없음) | 영상 전처리 노트북 API(`/api/v1/internal/processor/**`)의 토큰. `X-Processor-Token` 헤더와 비교한다. 공유 토큰(`INTERNAL_API_TOKEN`)과 다른 값. **비우면 노트북 API 는 모두 401**(앱은 뜬다). 계약 `docs/references/processor-api.md` |
@@ -144,46 +148,48 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 
 ### 인메모리 저장소의 한계
 
-인증번호·재발송 기록·인증 토큰(`VERIFICATION_STORE=memory`, 가입 인증과 비밀번호 재설정 각각), 요청 제한(`RateLimiter`), 로그인 시도 제한(`LoginAttemptLimiter`), 비밀번호 재설정의 이메일 단위 잠금(`PasswordResetLocks`), Google 로그인의 인가 요청·가입 대기(`GoogleAuthorizationStore`, `GoogleSignupStore`)는 서버 메모리에 있다.
+요청 제한(`RateLimiter`), 로그인 실패 제한, 비밀번호 재설정 잠금, Google 인가 요청·가입 대기는 각각 `RATE_LIMIT_STORE=redis`, `LOGIN_ATTEMPT_STORE=redis`, `PASSWORD_RESET_LOCK_STORE=redis`, `GOOGLE_STATE_STORE=redis`일 때 Redis에 저장한다. 가입 이메일 인증과 비밀번호 재설정 인증 데이터는 `VERIFICATION_STORE=redis`일 때 Redis에 저장하고, 기능별로 별도 키 공간을 사용한다.
 
-- **서버 1대에서만 정확하다.** 여러 대면 인증번호를 발송한 서버와 확인하는 서버가 달라 인증이 실패하고, 요청 제한도 서버마다 따로 센다.
-- **재시작하면 사라진다.** 진행 중인 인증은 다시 받아야 하고 제한 횟수도 초기화된다(`EMAIL_VERIFICATION_SECRET` 이 없으면 인증번호 해시도 달라진다). 로그인 시도 제한의 잠금도 풀린다.
+- Redis 를 선택하면 가입 이메일 인증·비밀번호 재설정 상태, IP 요청 제한, 로그인 실패 제한, 재설정 잠금, Google OAuth 임시 상태를 여러 BE 인스턴스에서 공유한다. 각 `*_STORE=memory` 설정은 해당 상태를 프로세스 안에만 둔다.
+- 메모리 저장소에 남은 진행 상태는 프로세스 재시작 시 사라진다. Redis 인증 데이터는 만료 전까지 유지되며, `EMAIL_VERIFICATION_SECRET` 이 없으면 재시작 때 해시 키가 바뀌어 기존 코드가 무효가 된다.
 - 로그인 시도 제한은 이메일 단위라서 **서로 다른 이메일로 오는 대량 시도는 막지 못한다.** 그 CPU·DB 소모는 `LOGIN_MAX_CONCURRENT_HASHES` 로 서버 전체 동시 처리 수(사용자 조회 + BCrypt)를 제한해 막고, IP 단위 제한은 프록시의 로그인 경로 요청 제한(배포 조건)에 맡긴다.
-- 저장소가 가득 차서(`LOGIN_MAX_ENTRIES`) 상태를 지우면 해당 이메일의 실패 횟수가 초기화된 것과 같다. 제거·거절 횟수는 로그에 최대 1분에 한 번 요약해서 남긴다.
-- 인증 임시 상태 저장소는 맵마다 10만 개 상한이 있다. 넘으면 **어떤 항목을 지울지는 Caffeine 이 정하며 가장 오래된 것이라는 보장은 없다.** 정상 사용자의 진행 중 인증(인증번호·쿨다운 기록·토큰)이 사라질 수 있고, 그 사용자는 인증번호를 다시 받아야 한다. 비밀번호 재설정은 가입하지 않은 이메일에도 항목을 만들어서(가입 여부를 숨기기 위해) 이 상한을 채우는 요청을 IP 제한과 이메일당 시간당 한도로만 막는다.
-- 비밀번호 재설정의 이메일 단위 잠금은 프로세스 안에서만 유효하다. 서버를 여러 대 두면 분산 잠금으로 바꿔야 한다.
+- 저장소가 가득 차서(`LOGIN_MAX_ENTRIES`) 진행 중이 아닌 상태를 지우면 해당 이메일의 실패 횟수가 초기화된 것과 같다. Redis 에서 진행 중·잠금 상태만 남아 새 이메일을 받을 수 없으면 `SATURATED` 지표를 기록하고 429 `USERS_LOGIN_RATE_LIMITED` 로 거절한다.
+- 메모리 저장소는 이메일 인증·재설정 코드와 Google OAuth 임시 상태에 항목 상한을 둔다. Redis 저장소는 Redis 인스턴스의 메모리 정책과 만료 설정을 따른다.
+- `PASSWORD_RESET_LOCK_STORE=memory` 는 프로세스 안에서만 유효하다. 운영 Redis 잠금은 각 이메일에서 공유되고 5분 뒤 만료된다.
 - 클라이언트 IP 는 운영에서 ALB · nginx 가 붙인 `X-Forwarded-For` 의 오른쪽 실제 IP 다(`application-prod.yml` 의 `server.forward-headers-strategy: native`, S15P31A306-203). 내부 대역(10.x · 172.16~31.x)만 건너뛰므로 사용자가 보낸 가짜 앞부분은 쓰이지 않는다. 이 설정이 없으면 모든 요청이 nginx IP 하나로 보인다.
-- 저장소·제한기는 인터페이스(`EmailVerificationStore`, `RateLimiter`, `LoginAttemptLimiter`)와 계약 테스트가 있어서, Redis 구현을 더하고 `VERIFICATION_STORE` 로 고르게 하면 바꿀 수 있다(후속).
+- 이메일 인증·비밀번호 재설정과 Google OAuth 임시 상태는 각각의 저장소 설정으로 메모리 또는 Redis 를 선택한다.
+
+## 인증 데이터 저장 위치
+
+- **PostgreSQL**: 회원 ID·이메일·비밀번호 해시·프로필·계정 상태·가입 일시, 약관 동의 내역 등 장기 보존할 기준 데이터.
+- **Redis**: 가입 이메일 인증·비밀번호 재설정의 코드 해시·시도 횟수·발송 제한·단기 토큰, IP별 요청 창 카운터, 로그인 실패 횟수·잠금, 재설정 분산 잠금, Google OAuth state·nonce·PKCE 와 가입 대기 이메일·이름·Google subject. 임시 값은 만료되며 기능별 키 공간으로 분리한다.
+- **로그인 세션**: Spring Session Redis 에 저장한다. PostgreSQL 에는 회원·프로필·비밀번호 해시·약관 동의 등 기준 데이터를 저장한다.
 
 ## 로그인·로그아웃
 
-서버 세션 + 쿠키 방식이다(JWT 없음). 세션은 PostgreSQL(Spring Session JDBC)에 저장한다.
+서버 세션 + 쿠키 방식이다(JWT 없음). 세션과 CSRF 상태는 Redis 에 저장하고, PostgreSQL 에는 회원 계정 기준 데이터를 저장한다.
 
 | API | 경로 | 설명 |
 |---|---|---|
 | API-USERS-002 | `POST /api/v1/users/login` | 로그인. 세션 쿠키 발급, 응답 `{user, csrfToken}`. 허용 Origin 검사 |
 | API-USERS-003 | `POST /api/v1/users/logout` | 현재 기기 로그아웃 (204) |
 | API-USERS-004 | `GET /api/v1/users/me` | 로그인 상태 확인과 `csrfToken` 재발급 |
-| (번호 미정) | `GET /api/v1/users/me/sessions` | 내 로그인 기기 목록 |
-| (번호 미정) | `DELETE /api/v1/users/me/sessions/{sessionRef}` | 기기 하나 로그아웃 |
-| (번호 미정) | `DELETE /api/v1/users/me/sessions` | 전체 기기 로그아웃 (현재 기기 포함) |
 
 - **쿠키**: `__Host-sessionId` (HttpOnly · Secure · SameSite=Strict · Path=/ · Domain 없음). `Secure` 라서 `https` 이거나 `localhost` 에서만 저장된다.
 - **CSRF**: 로그인 외 변경 요청(POST/PUT/PATCH/DELETE)은 `X-CSRF-TOKEN: <csrfToken>` 이 필요하다. 토큰은 로그인과 `/me` 응답으로만 받는다. 없거나 틀리면 403 `CSRF_INVALID`. 세션이 없는 변경 요청도 403 이다.
 - **세션 수명**: 유휴 3일(`SESSION_TIMEOUT`) · 쿠키 3일(`SESSION_COOKIE_MAX_AGE`, 인증 요청이 성공하면 갱신) · 절대 30일(`SESSION_ABSOLUTE_TIMEOUT`, 로그인 시점 기준). 만료되면 401.
+- **동시 로그인**: 계정당 활성 로그인 세션은 1개다. 이메일·Google 등 로그인 성공 시 기존 세션 종료 훅을 호출하고 세션을 폐기한 다음 새 세션을 만든다. api 인스턴스 간 로그인도 Redis 잠금으로 순서대로 처리하며, 잠금 대기가 3초를 넘으면 429 로 다시 시도하도록 응답한다.
 - **로그인 실패**: 미가입 이메일, 틀린 비밀번호, Google 전용 계정은 구분 없이 401 `USERS_INVALID_CREDENTIALS`. 이메일 하나에서 반복 실패하면 잠기고(429 `USERS_LOGIN_RATE_LIMITED` + `Retry-After`), 서버가 혼잡하면 429 `TOO_MANY_REQUESTS`. 수치는 위 환경변수 표(`LOGIN_*`).
-- **비밀번호 재설정과 겹친 로그인**: 로그인은 비밀번호를 확인할 때 읽은 비밀번호 버전(`users.password_version`)을 세션을 발급한 뒤 다시 읽어, 그 사이 재설정이 끝났으면 만든 세션을 버리고 401 `USERS_INVALID_CREDENTIALS` 로 끝낸다(실패 횟수에는 세지 않고 지표는 `password_changed`). 이 확인이 의미가 있도록 세션은 만들자마자 저장한다(`spring.session.jdbc.flush-mode: immediate`). 그래서 재설정이 세션 목록을 먼저 읽었다면 그 세션도 함께 끊긴다. 즉시 저장으로 바뀐 세션 쓰기: 인증된 일반 요청은 1건 그대로(마지막 접근 시각, 응답 커밋 대신 요청 처리 시작 시점), 로그인 성공은 2건 → 8건(속성마다 저장, 1회성), 로그아웃은 1건 → 2건.
-- **기기 식별**: 기기는 `sessionRef` 로 가리킨다. 세션 ID(쿠키 값)와 다른 값이고, 다른 회원의 값이나 없는 값은 모두 404 다.
+- **비밀번호 재설정과 겹친 로그인**: 로그인은 비밀번호를 확인할 때 읽은 비밀번호 버전(`users.password_version`)을 세션 발급 뒤 다시 읽는다. 그 사이 재설정이 끝났으면 세션을 버리고 401 `USERS_INVALID_CREDENTIALS` 를 반환한다. Redis 세션은 속성 변경을 즉시 저장(`spring.session.data.redis.flush-mode: immediate`)한다.
 - **Swagger 에서 호출**: `login` 을 실행하면 브라우저가 쿠키를 저장하고, 응답의 `csrfToken` 은 이후 변경 요청에 자동으로 실린다(Authorize 에 넣을 필요 없음). Swagger 출처(`http://localhost:8080`)가 `ALLOWED_ORIGINS` 에 있어야 한다.
 
 ### 장애 처리와 지표
 
-- **세션 저장소(DB) 장애**: 세션을 읽거나 저장·삭제하지 못했을 때 원인에 따라 응답이 다르다. 세션을 저장하지 못했는데 로그인 성공이 나가거나 지우지 못했는데 로그아웃 204 가 나가는 일은 없다. 이미 커밋된 응답은 다시 쓰지 않고 로그만 남긴다.
-  - **일시 장애 → `503 SERVICE_UNAVAILABLE`** (인증 실패 401 로 바꾸지 않는다): DB 연결 실패, 연결 풀 소진(`DB_CONNECTION_TIMEOUT_MS` 초과), 쿼리 시간 초과, 락 경합, 연결이 죽어 롤백까지 실패한 경우. 예외 하나가 아니라 원인 사슬 전체로 판단하며, 컨트롤러 안과 필터 단계가 같은 기준(`StoreFailure`)을 쓴다.
-  - **서버 문제 → `500 INTERNAL_ERROR`**: 잘못된 SQL, 스키마 불일치, 제약 위반, 해석하지 못한 원시 `SQLException`. 장애로 단정하지 않는다.
-  - **손상된 세션 → `401` + 세션 쿠키 만료**: 저장된 값을 읽지 못한 경우(깨졌거나 배포로 클래스 구조가 바뀜). 다시 로그인하면 된다. 읽는 쪽 실패만 이렇게 처리한다(`SessionConversionConfig`).
+- **세션 저장소(Redis) 장애**: 세션을 읽거나 저장·삭제하지 못했을 때 원인에 따라 응답이 다르다. 세션을 저장하지 못했는데 로그인 성공이 나가거나 지우지 못했는데 로그아웃 204 가 나가는 일은 없다. 이미 커밋된 응답은 다시 쓰지 않고 로그만 남긴다.
+  - **일시 장애 → `503 SERVICE_UNAVAILABLE`** (인증 실패 401 로 바꾸지 않는다): Redis 연결 실패·연결 시간 초과. 예외 하나가 아니라 원인 사슬 전체로 판단하며, 컨트롤러 안과 필터 단계가 같은 기준(`StoreFailure`)을 쓴다.
+  - **서버 문제 → `500 INTERNAL_ERROR`**: 그 밖의 Redis 명령 오류. 장애로 단정하지 않는다.
+  - **손상된 세션 → `401` + 세션 쿠키 만료**: 저장된 값을 읽지 못한 경우(깨졌거나 배포로 클래스 구조가 바뀜). 다시 로그인하면 된다. 읽는 쪽 실패만 이렇게 처리한다(`SessionSerializerConfig`).
   - **저장할 수 없는 값 → `500`**: 직렬화할 수 없는 값을 세션에 넣은 서버 버그. "로그인 만료"(401)로 보이지 않는다.
-- **전체 기기 로그아웃은 원자적이지 않다.** 다른 기기를 먼저 끊고 현재 기기를 마지막에 끊는다. 도중에 실패하면 일부만 끊긴 채 500 이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내면 된다.
 - **지표**(Micrometer 카운터, 건수만 센다. 이메일·세션 ID·사용자 ID 는 라벨에 넣지 않는다):
 
 | 이름 | 라벨 | 뜻 |
@@ -192,8 +198,7 @@ Gradle test JVM 힙은 1 GiB, Spring 테스트 컨텍스트 캐시는 최대 8�
 | `mairor.password_reset` | `result`: `success` `session_revoke_failed` `busy` | 비밀번호 재설정 결과. `session_revoke_failed` 는 비밀번호는 바뀌었는데 기존 세션을 다 끊지 못한 경우로, 사용자가 다시 요청하지 않으면 옛 세션이 남으니 알림 대상이다. `busy` 는 같은 이메일의 재설정 요청이 겹쳐 거절한 수 |
 | `mairor.session.failures` | `cause`: `store_unavailable` `corrupted_session` `unexpected` | 필터 단계의 세션 조회·저장·삭제 실패. 조회·저장·삭제 중 어느 쪽인지는 나누지 않는다(로그의 스택으로 본다) |
 | `mairor.session.cookie_refresh.failures` | 없음 | 세션 쿠키 갱신 실패. 갱신이 실패해도 업무 응답은 그대로 나간다 |
-| `mairor.session.end_hook.failures` | `reason`: `logout` `device_revoked` `all_devices_revoked` `replaced_by_login` `absolute_expired` `idle_expired` | 세션 종료 훅이 실패한 횟수. 어느 훅인지는 로그로 본다 |
-| `mairor.session.sweep.removed` / `mairor.session.sweep.failed` | 없음 | 만료된 세션을 정리 작업이 지운 횟수 / 지우지 못해(훅 또는 삭제 실패) 다음으로 미룬 횟수. 실패가 계속 늘면 종료 훅이 막혀 있는 것이다 |
+| `mairor.session.end_hook.failures` | `reason`: `logout` `all_devices_revoked` `replaced_by_login` `absolute_expired` `idle_expired` | 세션 종료 훅이 실패한 횟수. 어느 훅인지는 로그로 본다 |
 
 - 지표를 내보내는 방법(`/actuator/metrics`, Prometheus 등)과 알림 기준은 아직 정하지 않았다. 지금 노출하는 actuator 엔드포인트는 `health` 뿐이다. 노출 방식은 배포 환경(S15P31A306-203)에서 정한다.
 
@@ -213,29 +218,28 @@ class AbandonUnfinishedExecutions implements SessionEndHook {
 
 | 종료 이유 (`SessionEndReason`) | 언제 | 훅이 실패하면 |
 |---|---|---|
-| `LOGOUT` | 로그아웃. 기기 목록에서 현재 기기를 지정해 지운 경우도 포함 | 세션을 지우지 않고 오류 응답(500, 저장소 장애면 503). 로그인은 유지되고 같은 요청으로 재시도 |
-| `DEVICE_REVOKED` | 다른 기기 로그아웃 | 그 기기를 지우지 않고 오류 응답. 재시도 가능 |
-| `ALL_DEVICES_REVOKED` | 전체 로그아웃(세션마다 한 번, 현재 기기가 마지막) | 실패한 기기와 현재 기기는 남기고 나머지는 계속 처리한 뒤 오류 응답. 같은 요청으로 마무리 |
-| `REPLACED_BY_LOGIN` | 로그인된 쿠키로 다시 로그인하거나 다른 계정으로 전환해 이전 인증 세션이 대체됨 | 로그인은 막지 않는다. 이전 세션은 지워지고 실패는 로그·지표로만 남음 |
+| `LOGOUT` | 로그아웃 | 세션을 지우지 않고 오류 응답(500, 저장소 장애면 503). 로그인은 유지되고 같은 요청으로 재시도 |
+| `ALL_DEVICES_REVOKED` | 비밀번호 재설정으로 모든 세션 종료(세션마다 한 번, 요청한 기기가 마지막) | 실패한 세션과 요청한 기기는 남기고 나머지는 계속 처리한 뒤 오류 응답. 같은 요청으로 마무리 |
+| `REPLACED_BY_LOGIN` | 새 로그인이 이전 인증 세션을 대체함(같은 계정의 다른 기기 로그인, 재로그인, 계정 전환) | 로그인은 막지 않는다. 이전 세션은 지워지고 실패는 로그·지표로만 남음 |
 | `ABSOLUTE_EXPIRED` | 로그인한 지 절대 만료 시간이 지남(요청이 올 때 발견) | 세션을 남기고 401 로 응답. 다음 요청에서 다시 시도. 단 로그인처럼 인증 없이 열린 경로로 온 요청은 만료 세션을 이어 쓰면 안 되므로 훅이 실패해도 지우고 계속 진행 |
-| `IDLE_EXPIRED` | 마지막 요청으로부터 유휴 만료 시간이 지남. 정리 작업(`ExpiredSessionSweeper`)이 호출 | 그 세션을 남기고 `SESSION_SWEEP_RETRY_DELAY` 뒤에 다시 시도 |
+| `IDLE_EXPIRED` | 마지막 요청부터 유휴 만료. Redis 키 만료 알림으로 호출 | 엄격한 종료 경로와 달리 실패해도 세션은 이미 만료되어 있으므로 로그와 지표로 확인 |
 
 **구현이 지켜야 할 것**
-- **멱등이어야 한다.** 같은 세션에 두 번 이상 호출될 수 있다(실패 후 재시도, 정리 작업의 재시도, 서버 여러 대의 동시 정리). 최소 한 번 호출됨(at-least-once)이 보장이고 정확히 한 번은 보장하지 않는다.
+- **멱등이어야 한다.** 같은 세션에 두 번 이상 호출될 수 있다(실패 후 재시도, 서버마다 받는 같은 Redis 만료 알림). 최소 한 번 호출됨(at-least-once)이 보장이고 정확히 한 번은 보장하지 않는다.
 - 요청 스레드에서 **동기**로 호출된다. 오래 걸리는 일은 비동기로 넘기고 빠른 상태 변경만 한다. 세션 삭제 트랜잭션 밖에서 호출되므로 필요하면 자기 트랜잭션을 연다.
 - **`end.userId()`·`end.sessionId()` 만 믿는다.** 세션이 이미 만료됐을 수 있어 세션 속성은 읽지 않는다. 특히 `IDLE_EXPIRED` 에서 `sessions.findById()` 를 부르지 않는다. 만료된 세션에 `findById` 를 부르면 Spring Session 이 그 행을 지워 버린다.
 - 세션 ID 는 비밀 값이다. 로그·응답·지표에 내보내지 않는다(`SessionEnd#toString` 은 가려 준다).
 - 여러 구현이 있으면 `@Order` 순으로 호출된다. 엄격한 경로(로그아웃 계열, 절대 만료, 유휴 만료)에서는 앞 구현이 실패하면 뒤 구현은 호출되지 않는다.
 
 **한계**
-- 유휴 만료의 훅은 만료 직후가 아니라 정리 주기(`SESSION_SWEEP_INTERVAL`, 기본 1분)만큼 늦게 호출된다. Spring Session JDBC 는 만료 이벤트를 발행하지 않아서, Spring 의 기본 정리 작업을 끄고 `ExpiredSessionSweeper` 가 대신한다.
+- 유휴 만료는 Redis 가 세션 키를 만료시킬 때 오는 알림으로 종료 훅을 호출한다. 알림을 놓치면(서버가 모두 내려가 있던 동안 만료 등) 훅이 불리지 않는다.
 - 세션 행을 DB 에서 직접 지우는 등 이 경로들을 거치지 않고 사라지는 세션에는 호출되지 않는다.
-- 훅이 영구히 실패하면 그 세션의 만료된 행이 남아 매 재시도 때 훅이 다시 호출된다. 사용자에게는 영향이 없다(쓸 수 없는 상태). `mairor.session.end_hook.failures`, `mairor.session.sweep.failed` 로 알아챈다. 재시도 시각은 서버 메모리에만 있어서 재시작하면 즉시 다시 시도한다.
-- 서버를 여러 대 두면 같은 만료 행에 두 서버가 동시에 훅을 부를 수 있다(멱등으로 흡수).
+- 유휴 만료의 훅이 실패해도 다시 호출하지 않는다. `mairor.session.end_hook.failures` 로 알아챈다.
+- 서버를 여러 대 두면 같은 만료 알림을 여러 서버가 받아 훅이 여러 번 불릴 수 있다(멱등으로 흡수).
 
 ### 소유권 규칙 (회원 데이터)
 
-회원 데이터(파우치, 실행, 기록, 얼굴 등록 등)를 다루는 API 는 아래를 지킨다. 공용 도우미 코드는 아직 없다(쓸 도메인이 없다). 첫 도메인이 필요로 할 때 그 이슈에서 만든다. 기기 관리(`UserSessionService`)가 이미 이 규칙을 지킨다.
+회원 데이터(파우치, 실행, 기록, 얼굴 등록 등)를 다루는 API 는 아래를 지킨다. 공용 도우미 코드는 아직 없다(쓸 도메인이 없다). 첫 도메인이 필요로 할 때 그 이슈에서 만든다.
 
 - **남의 데이터는 없는 것과 똑같이 `404 NOT_FOUND`** 로 응답한다(같은 코드·메시지). `403` 으로 구분하면 "그 ID 에는 남의 데이터가 있다"는 사실이 새어 나간다.
 - **조회할 때부터 소유자 조건을 건다.** `findByIdAndUserId(id, principal.userId())` 처럼 내 것만 찾는다. 먼저 `findById` 로 찾은 뒤 비교하는 방식은 비교를 빠뜨리기 쉽다.
@@ -254,13 +258,13 @@ class AbandonUnfinishedExecutions implements SessionEndHook {
 | 프록시의 요청 본문 크기 제한 | **적용**. nginx `/api` 에 `client_max_body_size 6m`(`frontend/nginx/api.conf`), 넘으면 413 |
 | DB 쿼리 실행 시간 제한(`statement_timeout` 등) | **미설정**. 느린 쿼리는 연결을 오래 쥔다. DB 서버 또는 접속 URL 로 정한다 |
 | 요청 전체 처리 시간 제한(서버·프록시) | **기본값**. ALB 유휴 60초, nginx 프록시 읽기 60초(둘 다 기본값). 앱 안의 처리 시간 상한은 없다 |
-| 사용자별 활성 세션 수 상한 | **정책 미정**. 지금은 상한이 없어 반복 로그인으로 세션이 쌓일 수 있다. 초과 시 가장 오래된 세션 제거 또는 새 로그인 거절 중 정해야 한다(후속) |
+| 사용자별 활성 세션 수 상한 | **적용됨**. 계정당 활성 세션은 1개이며, 새 로그인이 이전 세션을 종료한다 |
 | 지표 노출·알림 | **미정** (203). 특히 `mairor.password_reset{result=session_revoke_failed}` |
 | 운영 DB 의 `users.password_version` 컬럼 | **적용됨**(2026-11-01, 첫 배포 때 `users.sql` 전체). 이후 스키마 변경은 [DB 스키마](#db-스키마) 순서 |
 | 재설정·인증 IP 제한의 클라이언트 IP | **적용**. `X-Forwarded-For` 의 실제 IP 로 센다(위 "제약" 참고) |
 | Google 로그인 운영값 | **미적용**(208). 운영 환경변수 `GOOGLE_CLIENT_ID`·`GOOGLE_CLIENT_SECRET`·`GOOGLE_REDIRECT_URI`(prod 는 비어 있으면 기동 실패라 **머지 전에** 넣는다), GCP 에 운영 리디렉션 URI 등록, OAuth 동의 화면 "프로덕션 게시"(테스트 상태면 등록한 테스트 사용자만 로그인된다), 운영 DB 에 `user_identities` 테이블 |
-| Google 로그인과 슬롯 고정 | **확인 필요**(208). 인가 요청·가입 대기가 슬롯 메모리에 있어서 시작 → callback → 가입 완료가 같은 슬롯으로 가야 한다. ALB 고정 쿠키(`AWSALB`, SameSite 속성 없음 → 브라우저 기본 Lax)는 Google 에서 돌아오는 최상위 GET 에도 붙을 것으로 보지만 운영에서 한 번 확인한다. 어긋나면 `USERS_OAUTH_STATE_INVALID` · `USERS_GOOGLE_SIGNUP_EXPIRED` 로 끝나고 사용자는 Google 로 다시 시작한다 |
-| 배포 방식(새 프로세스와 옛 프로세스의 동시 기동) | **정함**(203). api 2개(슬롯 a · b)를 한 대씩 바꾸는 롤링. ALB 고정 세션(1시간)으로 한 브라우저는 같은 슬롯에 붙고, `EMAIL_VERIFICATION_SECRET` 은 두 슬롯이 같은 값, 만료 세션 정리는 슬롯 a 만 돈다(`SESSION_SWEEP_ENABLED=false`). 인메모리 인증 상태 · 재설정 잠금은 여전히 슬롯마다 따로라, 바뀌는 슬롯에서 진행 중이던 인증 · 재설정은 다시 해야 한다 |
+| Google 로그인과 슬롯 고정 | Google 인가 요청·가입 대기는 Redis 를 공유하므로 시작 → callback → 가입 완료가 서로 다른 슬롯에 도착해도 처리된다. ALB 고정 세션은 필요하지 않다. |
+| 배포 방식(새 프로세스와 옛 프로세스의 동시 기동) | api 2개(슬롯 a · b)를 한 대씩 바꾸는 롤링. 로그인 세션·IP 요청 제한·로그인 실패 제한·비밀번호 재설정 잠금·Google 임시 상태는 Redis 를 공유하므로 ALB 고정 세션은 인증 상태 공유에 필요하지 않다. Redis 키 공간과 `EMAIL_VERIFICATION_SECRET` 을 유지한다. |
 
 ## 비밀번호 재설정
 
@@ -283,7 +287,7 @@ class AbandonUnfinishedExecutions implements SessionEndHook {
 - **발송 실패 되돌리기**: 재발송 예약 뒤 무엇이든 실패하면(회원 조회, 저장, 메일 발송) 그 예약을 되돌려 쿨다운·시간당 횟수가 줄지 않는다. 되돌리기는 세대 값으로 자기 예약만 지워서, 그사이 다른 요청이 저장한 새 인증번호를 지우지 않는다.
 - **현재 비밀번호와 같은 새 비밀번호는 거절**한다(400 `VALIDATION_FAILED`, 필드 `newPassword`). 단 이 토큰으로 이미 비밀번호를 바꿨는데 세션 정리만 실패한 재시도는 같은 값을 다시 보내도 받는다. 토큰을 발급할 때 그 시점의 `password_version` 을 함께 저장해 두고, 버전이 그대로일 때만 비교해서 구분한다.
 - **저장(010) 순서**: 입력 확인 → 토큰 확인 → 잠금 → 토큰 재확인 → 새 해시와 `password_version` 을 먼저 커밋 → 모든 세션 종료(종료 훅 이유 `ALL_DEVICES_REVOKED`) → 로그인 잠금 해제 → 그 이메일의 토큰과 남은 인증번호 폐기(발송 기록은 유지). 같은 계정으로 로그인한 기기에서 보내면 그 기기도 로그아웃되고 만료 쿠키가 내려간다. 규칙 위반 400 은 토큰을 쓰지 않는다.
-- **세션 정리가 실패하면** 비밀번호는 이미 바뀐 채 500(저장소 일시 장애면 503)이 나가고 `session_revoke_failed` 지표와 ERROR 로그(원인 예외 이름만)가 남는다. 토큰은 남아 있어서 **같은 요청을 다시 보내면** 비밀번호를 한 번 더 저장하고 남은 세션(그 사이 새로 로그인한 세션 포함)을 끊어 마무리한다. 토큰이 그사이 만료·교체·퇴거됐으면 410 이고 인증번호부터 다시 받는다. 남은 옛 세션은 새 비밀번호로 로그인한 뒤 "전체 기기 로그아웃"으로도 끊을 수 있다.
+- **세션 정리가 실패하면** 비밀번호는 이미 바뀐 채 500(저장소 일시 장애면 503)이 나가고 `session_revoke_failed` 지표와 ERROR 로그(원인 예외 이름만)가 남는다. 토큰은 남아 있어서 **같은 요청을 다시 보내면** 비밀번호를 한 번 더 저장하고 남은 세션(그 사이 새로 로그인한 세션 포함)을 끊어 마무리한다. 토큰이 그사이 만료·교체·퇴거됐으면 410 이고 인증번호부터 다시 받는다. 남은 옛 세션은 새 비밀번호로 로그인하면 함께 끊긴다(계정당 세션 1개).
 - **재설정과 겹친 로그인**은 세션을 만들지 못한다([로그인·로그아웃](#로그인로그아웃) 참고).
 - **메일 발송 설정**은 가입 인증과 같다(`MAIL_*`). `MAIL_ENABLED=false` 면 dev 는 인증번호를 서버 로그에만 남기고(받는 사람 주소는 가린다), prod 는 발송이 실패한다(503).
 
@@ -328,7 +332,7 @@ Swagger 확인·실패 응답·운영 DB 사전 적용 절차는 [얼굴 등록 
 - 운영 EC2의 저장소 역할에는 photos/*의 s3:PutObject·s3:GetObject뿐 아니라 **s3:DeleteObject** 권한이 필요하다. 코드 변경만으로 AWS 권한이 적용되는 것은 아니므로 배포 담당자가 확인한다. 이 단계에서는 운영 버킷·IAM을 수정하지 않았다.
 - 얼굴 등록 POST는 multipart image와 application/json metadata를 받는다. GET/DELETE는 경로 ID를 사용한다. 새 등록 성공 후에만 이전 미연결 사진을 정리한다. 파일 삭제 실패 시 GET을 막고 DELETE는 503으로 응답하며 같은 ID로 재시도한다. 사진 바이트를 내려주는 API-GUIDE-008은 395에서 구현한다.
 - 미연결 REGISTERED 사진은 고정 시간 만료 없이 원래 로그인 세션 종료까지 보관한다. FaceRegistrationSessionEndHook이 해당 userId+sessionId의 미연결 등록만 폐기하고 사진 삭제를 DB에 예약한다. 파일 삭제는 PhotoCleanupScheduler가 재시도하며, LINKED/RETAINED는 이 훅으로 삭제하지 않는다. 실행에 연결된 미완료 사진은 395의 실행 종료 처리에서 정리한다.
-- FaceRegistrationOrphanScheduler는 세션 행이 사라진 REGISTERED만 주기적으로 정리해 종료 훅 누락을 복구한다. 세션 행이 살아 있는 등록은 생성 시각이 오래돼도 정리하지 않는다. 유휴 만료는 기존 ExpiredSessionSweeper가 종료 훅을 호출한 뒤 세션을 지우는 순서를 유지한다.
+- FaceRegistrationOrphanScheduler는 세션 행이 사라진 REGISTERED만 주기적으로 정리해 종료 훅 누락을 복구한다. 세션 행이 살아 있는 등록은 생성 시각이 오래돼도 정리하지 않는다. 유휴 만료는 Redis 만료 알림으로 종료 훅을 호출한다.
 - 395는 FaceRegistrationExecutionService의 link/retain/abandon을 실행 DB 트랜잭션 안에서 호출해야 한다(MANDATORY). 회원 → 실행/얼굴 등록 → 사진 잠금 순서를 지키며, 같은 얼굴 등록의 실행 재사용은 FACE_REGISTRATION_ALREADY_USED로 거절한다. 완료 보관 전환과 중도 종료 삭제 예약은 실행 저장과 함께 롤백되고 반복 호출은 안전하다. 이 브랜치에는 executions 테이블이나 실행 API가 추가되지 않으며 실행 FK는 395에서 적용한다.
 
 ## 가이드 실행 API (S15P31A306-395)
@@ -401,7 +405,7 @@ SELECT EXISTS (
 두 조회 결과가 각각 `NULL`, `false`이면 `psql -v ON_ERROR_STOP=1 -d <DB> -f db/upgrade/324-guide-step-product-links.sql`을 실행합니다. 파일 내부의 적용 순서는 `guides.reference_version` 추가 → `guide_step_product_links` 테이블·인덱스·CHECK·FK 생성 → 색 변경 버전 갱신 트리거 생성이며, 전체가 트랜잭션으로 처리됩니다.
 
 - 적용은 BE(정윤)가 한다(S15P31A306-203). master 머지가 곧 운영 배포라, 스키마를 바꾸는 MR 은 **머지 전에** 운영 DB 에 적용한다. 그래서 옛 버전과 함께 돌아도 깨지지 않는 변경(추가 → 코드 전환 → 삭제)만 한다. 절차는 `deploy/README.md` "DB 스키마".
-- 세션 테이블(`spring_session*`)은 Spring Session 이 직접 만든다 (`initialize-schema: always`).
+- 운영 세션은 Redis 에 저장하므로 PostgreSQL `spring_session*` 테이블은 만들지 않는다. 테스트도 Testcontainers 로 Redis 를 띄워 운영과 같은 세션 저장소를 쓴다.
 - 엔티티를 바꾸면 SQL 도 같이 고친다. 어긋나면 `UsersSchemaSqlTest`·`ProductsSchemaSqlTest`·`AnalysisSchemaSqlTest` 가 실패한다 (SQL 을 먼저 적용하고 `validate` 로 기동해 확인). `validate` 는 엔티티 전체를 검사하므로 스키마 SQL 을 추가하면 `schema-locations` 를 쓰는 모든 테스트에 같이 넣는다(`grep -rn schema-locations src/test`).
 - `analysis.sql` 의 부분 유일 인덱스 두 개(`uk_analysis_jobs_video_active`, `uk_guides_video_approved`)와 `increment_guide_reference_version_for_color_change` 트리거는 JPA로 표현할 수 없어 SQL에만 있다. `ddl-auto=update`로 만든 dev DB에는 트리거가 없으므로 색 변경 버전 갱신까지 확인하려면 SQL 초기화 DB를 쓰거나 `analysis.sql`의 트리거 정의를 적용한다.
 - `camera.sql`의 미연결 얼굴 등록 부분 유일 인덱스(`uk_face_registrations_registered`), 사진 소유자·세션 복합 FK 및 CHECK도 SQL 전용이다. dev의 `ddl-auto=update`만으로 이 규칙이 만들어지지 않으므로 SQL 초기화 DB에서 검증한다. 이미지 바이트는 DB에 저장하지 않으며 `session_id`는 내부 인가용으로만 사용한다.
@@ -538,7 +542,7 @@ ai ── POST api:8080/api/v1/internal/ai/guide-jobs/callback ──▶ guides.
 - 상태를 바꾸는 곳(worker 단계·AI 접수·진행 숫자·콜백·시간 초과·검수)은 저장 트랜잭션에서 `pg_notify('analysis_job', 작업 ID)` 를 보낸다(`AnalysisJobNotifier`). 커밋될 때만 전달된다.
 - api 프로세스마다 연결 풀 밖의 DB 연결 하나로 `LISTEN analysis_job` 하고(`PgNotificationListener`), 알림을 받으면 그 작업의 SSE 연결에 DB 에서 다시 읽은 상태를 보낸다(`SseHub`). 끊기면 다시 붙고 열린 작업 전부를 다시 보낸다. **SSE·LISTEN·주기 작업은 worker 프로세스에는 없다**(`@Profile("!worker")`).
 - 설정 `app.analysis.sse`: 연결 최대 `timeout` 30m(지나면 EventSource 가 다시 붙음), `ping-interval` 20s(ALB·nginx 60초 유휴 끊김보다 짧게), `reconcile-interval` 30s(알림을 놓쳐도 이 안에 맞춤), `listen-poll-timeout` 10s, `listen-retry-max` 30s. 폴링 간격 `app.analysis.status.poll-after` 3s.
-- 스케줄링(ping·맞추기)은 SSE 쪽에서 따로 켠다. 운영 api-b 는 `SESSION_SWEEP_ENABLED=false` 라 세션 정리 쪽 `@EnableScheduling` 이 없다.
+- 스케줄링(ping·맞추기)은 SSE 쪽에서 따로 켠다. 운영 Redis 세션은 만료 이벤트로 처리하므로 JDBC 정리 스케줄러를 켜지 않는다.
 - 앱이 내려갈 때 SSE 연결을 graceful shutdown 보다 먼저 닫는다(`SseHub` 의 `SmartLifecycle` 단계가 가장 높다). ALB 대상 그룹 연결 정리 대기(deregistration delay)는 기본 300초라 30초 안팎으로 줄이는 것을 제안한다(인프라 확인 필요).
 - 로컬로 직접 볼 때: SSE 는 api 프로세스에서만 뜨므로 api 와 worker 를 별도 프로세스로 띄우고(아래), `AI_CALLBACK_BASE_URL` 은 api 를 가리킨다. 회원이 볼 수 있게 운영 등록 작업의 `requested_by` 를 SQL 로 넣는다.
 
@@ -654,8 +658,8 @@ backend/
 
 - 도메인 패키지 안에서 컨트롤러 → 서비스 → 리포지토리 순으로 의존한다. `common` 은 도메인을 import 하지 않는다.
 - 컨텍스트 경로가 `/api` 이므로 컨트롤러 매핑은 `/v1/...` 처럼 그 뒤만 적는다.
-- 스키마 마이그레이션(Flyway)은 ERD 확정 후 도입한다. 그 전까지 dev 는 `ddl-auto=update`, 세션 테이블은 Spring Session 이 만든다.
+- 스키마 마이그레이션(Flyway)은 ERD 확정 후 도입한다. 그 전까지 dev 는 `ddl-auto=update`; 로그인 세션은 Redis 에 저장한다.
 
-`GUIDE_EXECUTION_ORPHAN_CLEANUP_ENABLED` (기본 `true`)는 세션 종료 훅을 거치지 못하고 Spring Session 행도 사라진 가이드 실행 복구를 제어한다. `app.session.sweep.interval`과 `app.session.sweep.batch-size` 설정을 사용해 실제 세션이 없는 `IN_PROGRESS` 실행만 찾아 포기 처리하며, 파일 정리는 사진 정리 스케줄러가 재시도한다.
+`GUIDE_EXECUTION_ORPHAN_CLEANUP_ENABLED` (기본 `true`)는 세션 종료 훅을 거치지 못하고 Spring Session 저장소에서도 사라진 가이드 실행 복구를 제어한다. `app.session.sweep.interval`과 `app.session.sweep.batch-size` 설정을 사용해 실제 세션이 없는 `IN_PROGRESS` 실행만 찾아 포기 처리하며, 파일 정리는 사진 정리 스케줄러가 재시도한다.
 
 S15P31A306-395 SQL은 2026-11-11 운영 DB에 적용했고, `guide_executions`·`execution_steps`·`history_records` 및 추가 제약의 검증을 확인했다. 다시 실행하지 않는다. 남은 배포 확인은 신규 코드의 `ddl-auto=validate` 기동과 사진 저장·읽기·삭제 스모크 테스트다. FE 연결 절차와 요청 예시는 [GUIDE 실행 FE 인계](docs/guide-execution-fe-handoff.md)를 참고한다.

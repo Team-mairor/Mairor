@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.mairor.backend.TestcontainersConfiguration;
 import com.mairor.backend.testsupport.AuthenticatedSessionTestConfig;
 import com.mairor.backend.testsupport.MutableClock;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.testsupport.SessionTestClient;
 import com.mairor.backend.testsupport.SessionTestClient.Response;
 import java.time.Duration;
@@ -18,16 +19,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.Session;
 
 /**
- * 세션 수명 정책(서버 유휴 3일 / 쿠키 3일 갱신 / 절대 30일)을 실제 HTTP + PostgreSQL 로 확인한다.
+ * 세션 수명 정책(서버 유휴 3일 / 쿠키 3일 갱신 / 절대 30일)을 실제 HTTP + Redis 로 확인한다.
  *
  * <p>시간 조작은 두 가지로 나뉜다. 절대 만료와 쿠키 {@code Max-Age} 계산은 필터가 쓰는 {@link MutableClock} 을 옮기고, 서버 유휴 만료는
- * Spring Session 이 따로 시각을 관리하므로 {@code spring_session} 컬럼을 직접 되돌린다. 만료 판정은 {@code last_access_time
- * + max_inactive_interval} 기준이라 {@code expiry_time} 만 바꿔서는 만료되지 않는다.
+ * Spring Session 이 따로 시각을 관리하므로 Redis 세션의 마지막 접근 시각을 직접 되돌린다({@link RedisSessionStore}).
  */
 @Import({TestcontainersConfiguration.class, AuthenticatedSessionTestConfig.class})
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -36,7 +35,7 @@ class SessionLifetimeIntegrationTest {
   private static final long THREE_DAYS_SECONDS = Duration.ofDays(3).toSeconds();
 
   @LocalServerPort private int port;
-  @Autowired private JdbcTemplate jdbc;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private MutableClock clock;
   @Autowired private SessionLifetimePolicy policy;
   @Autowired private FindByIndexNameSessionRepository<?> sessions;
@@ -46,7 +45,7 @@ class SessionLifetimeIntegrationTest {
   @BeforeEach
   void setUp() {
     client = new SessionTestClient(port);
-    jdbc.update("delete from spring_session");
+    sessionStore.clear();
     clock.set(Instant.now());
   }
 
@@ -72,17 +71,11 @@ class SessionLifetimeIntegrationTest {
 
   /** 마지막 접근 시각을 {@code elapsed} 만큼 과거로 되돌려, 그만큼 요청이 없었던 상태를 만든다. */
   private void idleFor(String cookie, Duration elapsed) {
-    long millis = elapsed.toMillis();
-    jdbc.update(
-        "update spring_session set last_access_time = last_access_time - ?, "
-            + "expiry_time = expiry_time - ? where session_id = ?",
-        millis,
-        millis,
-        sessionId(cookie));
+    sessionStore.idleFor(sessionId(cookie), elapsed);
   }
 
   private long sessionRows() {
-    return jdbc.queryForObject("select count(*) from spring_session", Long.class);
+    return sessionStore.count();
   }
 
   // ---- 정책 값 ----
@@ -100,11 +93,7 @@ class SessionLifetimeIntegrationTest {
   void reconnectingExtendsTheServerIdleExpiryAndTheCookieTogether() throws Exception {
     Login login = login();
     idleFor(login.cookie(), Duration.ofDays(2));
-    long expiryBefore =
-        jdbc.queryForObject(
-            "select expiry_time from spring_session where session_id = ?",
-            Long.class,
-            sessionId(login.cookie()));
+    long expiryBefore = sessionStore.expiryMillis(sessionId(login.cookie()));
     // 2일 전에 마지막으로 접근한 상태라 만료까지 1일 남았다
     assertThat(expiryBefore - System.currentTimeMillis())
         .isBetween(Duration.ofHours(23).toMillis(), Duration.ofHours(25).toMillis());
@@ -115,11 +104,7 @@ class SessionLifetimeIntegrationTest {
     assertThat(response.sessionCookieCount()).isEqualTo(1);
     assertThat(response.sessionCookieValue()).isEqualTo(login.cookie());
     assertThat(response.sessionCookieMaxAge()).isEqualTo(THREE_DAYS_SECONDS);
-    long expiryAfter =
-        jdbc.queryForObject(
-            "select expiry_time from spring_session where session_id = ?",
-            Long.class,
-            sessionId(login.cookie()));
+    long expiryAfter = sessionStore.expiryMillis(sessionId(login.cookie()));
     // 서버 유휴 만료도 지금부터 3일 뒤로 연장됐다
     assertThat(expiryAfter - System.currentTimeMillis())
         .isBetween(Duration.ofDays(3).toMillis() - 60_000, Duration.ofDays(3).toMillis() + 60_000);

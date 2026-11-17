@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.mairor.backend.TestcontainersConfiguration;
 import com.mairor.backend.testsupport.AuthFlowClient;
 import com.mairor.backend.testsupport.AuthFlowClient.Account;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.testsupport.SessionTestClient;
 import com.mairor.backend.testsupport.SessionTestClient.Response;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,7 +20,6 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.DeferredCsrfToken;
@@ -79,7 +79,7 @@ class LoginSessionCleanupTest {
   }
 
   @LocalServerPort private int port;
-  @Autowired private JdbcTemplate jdbc;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private FailableCsrfTokenRepository csrfRepository;
   @Autowired private FindByIndexNameSessionRepository<?> sessions;
 
@@ -88,7 +88,7 @@ class LoginSessionCleanupTest {
   @BeforeEach
   void setUp() {
     flow = new AuthFlowClient(new SessionTestClient(port));
-    jdbc.update("delete from spring_session");
+    sessionStore.clear();
   }
 
   @AfterEach

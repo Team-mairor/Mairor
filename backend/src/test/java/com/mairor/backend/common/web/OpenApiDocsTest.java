@@ -33,7 +33,7 @@ class OpenApiDocsTest {
    * 가이드 매칭 POST·GET, 얼굴 등록 3개, 실행 생성·조회·사진 동의·업로드·바이너리 조회·완료·중도 종료, 리포트 목록·상세·삭제, 네 컷 공유 POST·GET
    * 포함. API 를 추가하면 함께 올린다.
    */
-  private static final int ALL_OPERATIONS = 70;
+  private static final int ALL_OPERATIONS = 67;
 
   @Autowired private MockMvc mockMvc;
 
@@ -244,16 +244,6 @@ class OpenApiDocsTest {
         .andExpect(jsonPath("$.paths['/v1/users/me'].get").exists());
   }
 
-  @Test
-  void apiDocs_includesDeviceManagement() throws Exception {
-    mockMvc
-        .perform(get("/v3/api-docs"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].get").exists())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].delete").exists())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete").exists());
-  }
-
   /** Swagger UI 의 기본 입력이 "string" 이 아니라 바로 보낼 수 있는 값이어야 한다. */
   @Test
   void apiDocs_loginHasUsableExamples() throws Exception {
@@ -336,20 +326,9 @@ class OpenApiDocsTest {
         .andExpect(jsonPath("$.paths['/v1/users/me'].get.security.length()").value(1))
         .andExpect(jsonPath("$.paths['/v1/users/me'].get.security[0].sessionCookie").exists())
         .andExpect(jsonPath("$.paths['/v1/users/me'].get.security[0].csrfToken").doesNotExist())
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions'].get.security[0].sessionCookie").exists())
         .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security.length()").value(1))
         .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security[0].sessionCookie").exists())
-        .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security[0].csrfToken").exists())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].delete.security.length()").value(1))
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions'].delete.security[0].csrfToken").exists())
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.security.length()")
-                .value(1))
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.security[0].csrfToken")
-                .exists());
+        .andExpect(jsonPath("$.paths['/v1/users/logout'].post.security[0].csrfToken").exists());
   }
 
   @Test
@@ -358,33 +337,10 @@ class OpenApiDocsTest {
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/v1/users/me'].get.responses['401']").exists())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].get.responses['401']").exists())
         .andExpect(
             jsonPath(
                     "$.paths['/v1/users/logout'].post.responses['403'].content['application/json'].examples.CSRF_INVALID")
-                .exists())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].delete.responses['403']").exists())
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.responses['403']")
-                .exists())
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.responses['404']")
                 .exists());
-  }
-
-  @Test
-  void apiDocs_deviceListDoesNotExposeInternalParameters() throws Exception {
-    // 인증된 principal 같은 내부 인자가 요청 파라미터로 새어 나오면 안 된다
-    mockMvc
-        .perform(get("/v3/api-docs"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/v1/users/me/sessions'].get.parameters").doesNotExist())
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.parameters.length()")
-                .value(1))
-        .andExpect(
-            jsonPath("$.paths['/v1/users/me/sessions/{sessionRef}'].delete.parameters[0].name")
-                .value("sessionRef"));
   }
 
   /** 카테고리·종류 목록은 로그인이 필요한 조회라 세션 쿠키만 요구하고, 401 과 성공 예시·필드 예시를 문서에 싣는다. */

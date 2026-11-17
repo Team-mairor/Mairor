@@ -3,6 +3,7 @@ package com.mairor.backend.users.controller;
 import static com.mairor.backend.testsupport.AuthFlowClient.CHROME_WINDOWS;
 import static com.mairor.backend.testsupport.AuthFlowClient.SAFARI_IPHONE;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 import com.mairor.backend.TestcontainersConfiguration;
 import com.mairor.backend.common.security.SessionEndReason;
@@ -14,6 +15,7 @@ import com.mairor.backend.testsupport.MutableClock;
 import com.mairor.backend.testsupport.RecordingSessionEndHook;
 import com.mairor.backend.testsupport.RecordingSessionEndHook.Call;
 import com.mairor.backend.testsupport.RecordingSessionEndHookConfig;
+import com.mairor.backend.testsupport.RedisSessionStore;
 import com.mairor.backend.testsupport.SessionTestClient;
 import com.mairor.backend.testsupport.SessionTestClient.Response;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -26,7 +28,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.session.FindByIndexNameSessionRepository;
 
 /**
@@ -42,7 +43,7 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 class SessionEndHookReplacementAndExpiryTest {
 
   @LocalServerPort private int port;
-  @Autowired private JdbcTemplate jdbc;
+  @Autowired private RedisSessionStore sessionStore;
   @Autowired private MutableClock clock;
   @Autowired private RecordingSessionEndHook hook;
   @Autowired private MeterRegistry registry;
@@ -55,7 +56,7 @@ class SessionEndHookReplacementAndExpiryTest {
   void setUp() {
     raw = new SessionTestClient(port);
     flow = new AuthFlowClient(raw);
-    jdbc.update("delete from spring_session");
+    sessionStore.clear();
     clock.set(Instant.now());
     hook.reset();
   }
@@ -119,14 +120,18 @@ class SessionEndHookReplacementAndExpiryTest {
   void loggingInWithoutALoggedInSessionDoesNotCallTheHook() throws Exception {
     Account account = flow.signUp();
     // 쿠키 없음
-    flow.login(account, CHROME_WINDOWS);
+    Login first = flow.login(account, CHROME_WINDOWS);
     hook.reset();
     // 로그인 전 익명 세션 쿠키
     Response anonymous = raw.get("/test-support/anonymous-session", null);
 
     flow.login(account, anonymous.sessionCookieValue(), SAFARI_IPHONE);
 
-    assertThat(hook.calls).isEmpty();
+    // 익명 세션은 훅을 부르지 않는다. 같은 계정의 다른 기기 세션만 계정당 1개 규칙으로 대체된다
+    assertThat(hook.calls)
+        .extracting(call -> call.end().sessionId())
+        .containsExactly(sessionIdOf(first));
+    assertThat(hook.calls.get(0).end().reason()).isEqualTo(SessionEndReason.REPLACED_BY_LOGIN);
   }
 
   @Test
@@ -216,7 +221,6 @@ class SessionEndHookReplacementAndExpiryTest {
     assertThat(flow.me(login.cookie()).status()).isEqualTo(401);
     // 변경 요청도 403 이 아니라 401 이다
     assertThat(flow.logout(login.cookie(), login.csrfToken()).status()).isEqualTo(401);
-    assertThat(flow.get(SESSIONS, login.cookie()).status()).isEqualTo(401);
   }
 
   /** 공개 경로(로그인)는 만료된 세션을 이어 쓰면 안 되므로 훅이 실패해도 세션을 지우고 요청을 계속한다. */
@@ -240,5 +244,27 @@ class SessionEndHookReplacementAndExpiryTest {
     assertThat(failures("absolute_expired")).isEqualTo(before + 1);
   }
 
-  private static final String SESSIONS = "/v1/users/me/sessions";
+  /**
+   * 유휴 만료는 요청 없이 일어나므로, Redis 가 세션의 만료 알림 키를 지울 때 보내는 알림으로 종료 훅이 불린다(운영과 같은 경로). 알림은 비동기라 기다려서
+   * 확인한다.
+   */
+  @Test
+  void anIdleSessionThatRedisExpiresCallsTheHookWithIdleExpired() throws Exception {
+    Account account = flow.signUp();
+    Login login = flow.login(account, CHROME_WINDOWS);
+    hook.reset();
+
+    sessionStore.expireNow(sessionIdOf(login));
+
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .untilAsserted(
+            () ->
+                assertThat(hook.calls)
+                    .extracting(call -> call.end().sessionId(), call -> call.end().reason())
+                    .contains(
+                        org.assertj.core.groups.Tuple.tuple(
+                            sessionIdOf(login), SessionEndReason.IDLE_EXPIRED)));
+    assertThat(hook.calls.get(0).end().userId()).isEqualTo(account.userId().toString());
+  }
 }

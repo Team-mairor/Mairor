@@ -35,9 +35,6 @@
 | API-USERS-011 | POST /api/v1/users/email-availability | USERS-001 회원가입 |
 | API-USERS-012 | POST /api/v1/users/email-verification | USERS-001 회원가입 (이메일 소유 확인, 초안) |
 | API-USERS-013 | POST /api/v1/users/email-verification/verification | USERS-001 회원가입 (이메일 소유 확인, 초안) |
-| API-USERS-014 | GET /api/v1/users/me/sessions | USERS-003 로그인 기기 관리 (번호 임시) |
-| API-USERS-015 | DELETE /api/v1/users/me/sessions/\{sessionRef\} | USERS-003 로그인 기기 관리 (번호 임시) |
-| API-USERS-016 | DELETE /api/v1/users/me/sessions | USERS-003 로그인 기기 관리 (번호 임시) |
 | API-USERS-017 | GET /api/v1/users/oauth/google/signup | USERS-004 Google 최초 가입 대기 조회 (번호 임시) |
 | API-USERS-018 | POST /api/v1/users/oauth/google/signup | USERS-004 · USERS-001 Google 최초 가입 완료 (번호 임시) |
 | API-VIDEO-001 | POST /api/v1/videos | VIDEO-001 · VIDEO-005 · VIDEO-004 |
@@ -110,8 +107,8 @@ API-USERS-002 · POST /api/v1/users/login
 관련 기능: USERS-002 로그인 / 로그아웃
 
 - 공개 JSON·허용 Origin 검증. Body: email:string 필수(가입과 동일 정규화, 254자 이하), password:string 필수(공백 자동 제거 안 함, 256자 이하, 강도 규칙은 검사하지 않음).
-- 200: \{user:User, csrfToken:string\}. 새 세션 ID·쿠키 발급, Cache-Control:no-store. 로그인할 때마다 세션 ID와 csrfToken이 새로 발급되고, 기존 로그인 세션이 있는 쿠키로 요청하면 그 세션은 폐기한다(계정 전환 포함).
-- 오류: 400 VALIDATION\_FAILED(누락·빈 값·길이 초과·깨진 JSON) · 401 USERS\_INVALID\_CREDENTIALS(미가입 이메일·틀린 비밀번호·Google 전용 계정·72바이트 초과 비밀번호를 구분하지 않음) · 403 FORBIDDEN(허용되지 않은 Origin) · 415 UNSUPPORTED\_MEDIA\_TYPE · 429 USERS\_LOGIN\_RATE\_LIMITED(이메일 잠금) + Retry-After · 429 TOO\_MANY\_REQUESTS(서버 혼잡, Retry-After: 1).
+- 200: \{user:User, csrfToken:string\}. 새 세션 ID·쿠키 발급, Cache-Control:no-store. 로그인할 때마다 세션 ID와 csrfToken이 새로 발급된다. 계정당 로그인 세션은 1개라서, 로그인에 성공하면 같은 계정의 기존 세션(다른 기기 포함)을 모두 끊는다(종료 이유 REPLACED\_BY\_LOGIN). 다른 계정의 로그인 세션이 있는 쿠키로 요청하면 그 세션도 폐기한다(계정 전환).
+- 오류: 400 VALIDATION\_FAILED(누락·빈 값·길이 초과·깨진 JSON) · 401 USERS\_INVALID\_CREDENTIALS(미가입 이메일·틀린 비밀번호·Google 전용 계정·72바이트 초과 비밀번호를 구분하지 않음) · 403 FORBIDDEN(허용되지 않은 Origin) · 415 UNSUPPORTED\_MEDIA\_TYPE · 429 USERS\_LOGIN\_RATE\_LIMITED(이메일 잠금) + Retry-After · 429 TOO\_MANY\_REQUESTS(서버 혼잡 또는 같은 계정의 로그인이 동시에 몰려 3초 넘게 기다림, Retry-After: 1) · 503 SERVICE\_UNAVAILABLE(세션 저장소 장애 등 일시 장애).
 - 시도 제한: 이메일 하나에서 확정 실패가 3회에 닿으면 30초 잠금(5회로 올릴 예정, 설정값). 잠금 중에는 비밀번호가 맞아도 429이고 잠금 시간을 연장하지 않는다. 진행 중인 시도도 횟수에 포함되어 동시에 한도보다 많이 시도할 수 없다. 이메일 단위 제한이라 서로 다른 이메일의 대량 시도는 막지 못하며, 서버 전체 BCrypt 동시 계산 수를 제한해 CPU 소모를 막는다(초과분은 429 TOO\_MANY\_REQUESTS, 시도 횟수 미차감). IP 단위 제한은 프록시 담당(배포 조건).
 - 비밀번호 재설정과 겹친 로그인: 비밀번호를 확인한 뒤 세션을 발급하는 사이에 같은 계정의 비밀번호 재설정(API-USERS-010)이 끝나면, 만든 세션을 버리고 401 USERS\_INVALID\_CREDENTIALS로 끝난다(실패 횟수에는 세지 않음). 세션은 발급 즉시 저장되므로, 재설정이 먼저 세션 목록을 읽었다면 이 세션도 함께 끊긴다.
 - FE는 기기 온보딩 완료 여부로 최초 안내 또는 홈 분기. 파우치 등록은 선택, 얼굴 등록은 실행 준비 단계에서 수행.
@@ -123,7 +120,7 @@ API-USERS-003 · POST /api/v1/users/logout
 관련 기능: USERS-002 · USERS-003 · GUIDE-011
 
 - 회원·CSRF 필요. Body 없음. 204 본문 없음. 만료 쿠키(Max-Age=0)가 내려간다.
-- 현재 세션의 미완료 실행을 ABANDONED로 전환하고 단계 사진·연결 얼굴 등록 이미지 접근을 차단·정리 예약한 뒤 세션·쿠키 폐기. 실패 시 성공 응답 금지. 다른 기기의 세션·완료 기록 유지. (구현 상태: 세션을 끝내기 전에 세션 종료 훅 `SessionEndHook`(이유 LOGOUT)을 호출하는 연동 지점까지 구현. 실행 ABANDONED 전환·사진 접근 차단은 GUIDE-011 이 훅을 구현해 붙인다. 훅이 실패하면 세션을 지우지 않고 500 INTERNAL\_ERROR(저장소 장애면 503)로 응답하며 로그인은 유지되므로 같은 요청을 다시 보낸다)
+- 현재 세션의 미완료 실행을 ABANDONED로 전환하고 단계 사진·연결 얼굴 등록 이미지 접근을 차단·정리 예약한 뒤 세션·쿠키 폐기. 실패 시 성공 응답 금지. 완료 기록 유지. (구현 상태: 세션을 끝내기 전에 세션 종료 훅 `SessionEndHook`(이유 LOGOUT)을 호출하는 연동 지점까지 구현. 실행 ABANDONED 전환·사진 접근 차단은 GUIDE-011 이 훅을 구현해 붙인다. 훅이 실패하면 세션을 지우지 않고 500 INTERNAL\_ERROR(저장소 장애면 503)로 응답하며 로그인은 유지되므로 같은 요청을 다시 보낸다)
 - 오류: 403 CSRF\_INVALID(CSRF 토큰 없음·불일치, 세션이 없는 요청 포함) · 401 UNAUTHORIZED(절대 만료로 세션이 끝난 요청 포함) · 500 INTERNAL\_ERROR(세션 정리 실패, 로그인 유지). FE는 403이면 내 계정 조회로 확인해 200이면 새 토큰으로 한 번만 재시도하고, 401이면 이미 로그아웃된 상태로 정리한다.
 </toggle>
 
@@ -659,33 +656,6 @@ POST /api/v1/users/email-verification/verification
 - 오류: 400 <code>VALIDATION_FAILED</code>(코드 형식) · 400 <code>USERS_EMAIL_CODE_INVALID</code>(불일치) · 410 <code>USERS_EMAIL_CODE_EXPIRED</code>(만료 또는 발송 이력 없음) · 429 <code>USERS_EMAIL_CODE_ATTEMPTS_EXCEEDED</code>(시도 5회 초과, 재발송으로 초기화)
 - 정책: 코드는 확인에 성공하면 즉시 폐기(1회용). 토큰은 이 응답에서만 평문으로 노출한다. FE는 410·429를 구분해 안내하고, 이메일을 바꾸면 인증 상태를 해제한다
 
-### API-USERS-014 · 내 로그인 기기 목록
-
-GET /api/v1/users/me/sessions
-
-- 관련 기능: USERS-003 로그인 기기 관리 · 회원 · 번호·기능 ID는 팀 확정 전 임시
-- 요청 필드 없음. 성공 200: <code>{ "items": [ { "sessionRef": "…", "device": "Chrome · Windows", "createdAt": "…", "lastAccessedAt": "…", "current": true } ] }</code> — 마지막 요청이 최근인 기기가 앞에 오고, 요청을 보낸 기기만 current=true. Cache-Control:no-store
-- 오류: 401 UNAUTHORIZED
-- 정책: 로그인 후 30일이 지난 세션과 로그인 시각·sessionRef가 없는 세션은 목록에서 제외한다. device는 브라우저·운영체제 요약이고(알 수 없으면 '알 수 없는 기기') IP는 제공하지 않는다. sessionRef는 로그인 때 만든 공개용 식별자이며 세션 ID(쿠키 값)와 다르다. 응답·헤더·로그에 세션 ID를 노출하지 않는다
-
-### API-USERS-015 · 기기 하나 로그아웃
-
-DELETE /api/v1/users/me/sessions/\{sessionRef\}
-
-- 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
-- 요청: Path <code>sessionRef</code> string 필수. 성공 204 본문 없음
-- 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 404 NOT\_FOUND(없는 값·형식 오류·이미 끝난 기기·다른 회원의 값을 구분하지 않음) · 500 INTERNAL\_ERROR(그 기기의 세션 정리 실패, 기기는 그대로이니 재시도)
-- 정책: 다른 기기를 지정하면 현재 기기는 그대로 유지되고 쿠키는 평소처럼 갱신된다. 자기 자신을 지정하면 로그아웃과 같아 만료 쿠키가 내려간다. 지워지는 세션의 미완료 실행 처리는 API-USERS-003과 같다: 세션을 지우기 전에 종료 훅을 호출하고(이유 DEVICE_REVOKED, 현재 기기를 지정하면 LOGOUT) 훅이 실패하면 그 기기를 지우지 않는다(GUIDE-011)
-
-### API-USERS-016 · 전체 기기 로그아웃
-
-DELETE /api/v1/users/me/sessions
-
-- 관련 기능: USERS-003 로그인 기기 관리 · 회원·CSRF 필요 · 번호·기능 ID는 팀 확정 전 임시
-- 요청 필드 없음. 성공 204 본문 없음. 현재 기기도 함께 로그아웃되고 만료 쿠키가 내려간다
-- 오류: 401 UNAUTHORIZED · 403 CSRF\_INVALID · 500 INTERNAL\_ERROR(일부 기기를 끊지 못함)
-- 정책: 요청 시점에 존재하던 이 회원의 모든 세션을 끊는다. 원자적이지 않다: 다른 기기를 먼저 모두 끊고 현재 기기를 마지막에 끊으며, 도중에 실패하면 일부 기기만 끊긴 채 500이 오고 현재 기기는 로그인이 유지되므로 같은 요청을 다시 보내 마무리한다. 세션마다 지우기 전에 종료 훅을 호출하고(이유 ALL\_DEVICES\_REVOKED) 훅이 실패한 기기는 지우지 않는다. 같은 순간 다른 기기에서 막 시작된 로그인이나 이미 처리 중이던 요청까지 막지는 않는다. 비밀번호 재설정(API-USERS-010)도 같은 삭제 동작을 쓴다(로그인한 같은 계정의 요청이면 그 세션 포함)
-
 ### API-USERS-017 · Google 가입 대기 조회
 
 GET /api/v1/users/oauth/google/signup
@@ -768,7 +738,7 @@ POST /api/v1/users/me/face-registrations
   - 실행마다 새로 등록하고 API-GUIDE-001의 faceRegistrationId로 1회 연결. 다른 실행 재사용 금지
   - makeupDetected=true여도 등록(권장 조건). 화면은 '맨얼굴일수록 색 비교가 정확해요' 안내만
   - 같은 세션·videoId로 새로 등록하면 이전 미연결 등록은 새 등록 성공 후 폐기(다시 촬영).
-  - 실행에 연결되지 않은 등록은 별도의 고정 시간 만료 없이 원래 로그인 세션 종료까지 유지한다. 로그아웃·기기/전체 로그아웃·로그인으로 세션 대체·절대/유휴 만료 시 접근을 차단하고 파일 정리를 예약한다. 세션이 사라졌는데 종료 처리가 누락된 등록은 주기적으로 복구한다. 삭제 실패는 내부 재시도 대상이며 실제 파일 삭제까지 시간이 걸릴 수 있다.
+  - 실행에 연결되지 않은 등록은 별도의 고정 시간 만료 없이 원래 로그인 세션 종료까지 유지한다. 로그아웃·비밀번호 재설정·새 로그인으로 세션 대체(다른 기기 로그인 포함)·절대/유휴 만료 시 접근을 차단하고 파일 정리를 예약한다. 세션이 사라졌는데 종료 처리가 누락된 등록은 주기적으로 복구한다. 삭제 실패는 내부 재시도 대상이며 실제 파일 삭제까지 시간이 걸릴 수 있다.
   - 카메라 제어·촬영 트리거·실시간 조건 판정은 클라이언트가 처리한다. 현 BE는 클라이언트 판정과 동의를 검증·기록하고 이미지 형식·용량·해상도를 검사한다. 사진 자체의 얼굴/조명/배경색/화이트밸런스 분석·보정은 구현되어 있지 않다.
   - 용도는 해당 실행의 조명·색온도·밝기 기준(CAMERA-004 환경 알림, GUIDE-013 보정 후보). 얼굴 특징점·프로필은 저장하지 않음
   - 미연결 등록은 원래 세션 종료까지, 완료 리포트 연결 등록은 리포트 삭제까지 보관한다. 저장소 암호화 등 운영 기준은 비기능명세에서 확정한다.
@@ -1014,7 +984,7 @@ DELETE /api/v1/users/me/face-registrations/\{faceRegistrationId\}
 
 | 항목 | 남은 결정 |
 | --- | --- |
-| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, 로그인 기기 관리 API 번호·기능 ID(API-USERS-014\~016 임시), Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5). Google 최초 가입 약관·프로필 입력 및 nickname 기본값은 S15P31A306-522에서 확정했다. |
+| 인증·회원 | 로그인 실패 제한 수치 최종값(구현값 3회·30초, 5회로 상향 예정), SESSION\_EXPIRED 코드 도입 여부, Google 동일 이메일 연결/중복 계정(구현은 자동 연결 없이 USERS\_ACCOUNT\_LINK\_REQUIRED), 탈퇴 범위, 가입 시 이메일 소유 확인 적용 여부(API-USERS-012·013 초안, 시도·재발송 수치 포함), 약관 개정 시 재동의, 화면 약관 2개 ↔ 기능명세 필수 3개 + 선택 1개 정합화(확인 필요 5). Google 최초 가입 약관·프로필 입력 및 nickname 기본값은 S15P31A306-522에서 확정했다. |
 | 비밀번호 재설정 | 요청 제한 수치 최종값(구현 설정값: 코드 10분·재발송 60초·이메일당 시간당 5회·시도 5회·토큰 10분·IP 10분 10회). 확정: Google 전용 계정 안내는 메일로만(화면에 띄우면 가입 방식이 드러남), 메일 발송 실패 코드 USERS\_RESET\_SEND\_FAILED(503) 추가 |
 | 인기 Top 4 | 확정(11.11, S15P31A306-403): 영상 선택 기록으로 최근 30일 동안 고른 서로 다른 회원 수 순, 10분마다 다시 셈, 1\~4개 200 · 0개 503(확인 필요 11). 실수 탭으로 인한 한도 소모 → 분석 접수 취소 API 필요 여부(확인 필요 4) |
 | 신규 분석 | 분석 입력 확보 방식·지원 조건·시간 상한, 일일 한도 횟수, 검수 주체·소요 시간(11.12 확정: 자동 공개, S15P31A306-409), 홈 APPROVED 카드 노출 종료 시점(확인 필요 4) |

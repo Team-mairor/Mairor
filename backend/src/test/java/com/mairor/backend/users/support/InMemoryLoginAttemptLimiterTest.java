@@ -21,6 +21,16 @@ class InMemoryLoginAttemptLimiterTest extends LoginAttemptLimiterContract {
   }
 
   @Test
+  void keepsAStateWhileAnAttemptIsStillInFlight() {
+    LoginAttemptLimiter limiter = create(1, Duration.ofSeconds(30), Duration.ofMinutes(15), 1_000);
+    acquire(limiter, "a@x.com", T0);
+
+    // TTL 이 한참 지나도 진행 중인 시도가 있으면 자리를 잡고 있다
+    assertThat(limiter.tryAcquire("a@x.com", T0.plus(Duration.ofHours(1))))
+        .isInstanceOf(Pending.class);
+  }
+
+  @Test
   void ignoresATicketFromAnotherStateInstance() {
     LoginAttemptLimiter limiter = create(2, Duration.ofSeconds(30), Duration.ofMinutes(15), 10);
     acquire(limiter, "a@x.com");
