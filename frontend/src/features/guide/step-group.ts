@@ -64,6 +64,13 @@ export function groupSteps<S extends GroupedStep>(
   return groups;
 }
 
+/**
+ * 튜토리얼 묶음 키. 같은 제품으로 같은 동작을 이어 바른 단계(이름이 같은 단계)만 묶는다.
+ * 같은 팔레트라도 이름이 다른 단계는 따로 바르는 단계라 칸을 나눈다. 제품이 없으면 묶지 않는다
+ */
+export const productStepKey = (s: { title: string; product: { full: string } | null }) =>
+  s.product ? `${s.product.full}\n${s.title}` : null;
+
 /** step이 들어 있는 묶음의 순번. 범위 밖이면 -1 */
 export const groupIndexOf = (groups: readonly StepGroup[], step: number) =>
   groups.findIndex((g) => step >= g.start && step < g.end);

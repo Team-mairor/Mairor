@@ -39,6 +39,7 @@ export {
   groupIndexOf,
   groupSteps,
   MAKEUP_CATEGORY,
+  productStepKey,
   type StepGroup,
 } from "./step-group";
 export {

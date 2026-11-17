@@ -20,6 +20,7 @@ import {
   checkGuideArea,
   groupIndexOf,
   groupSteps,
+  productStepKey,
   TutorialViewport,
   loadDefaultGuideSet,
   resolveStep,
@@ -330,8 +331,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   useEffect(loadDefaults, [loadDefaults]);
 
   const info = steps[step];
-  // 섀도 사이에 애교살·아이라인이 끼지 않게, 같은 부위가 아니라 같은 제품이 이어질 때만 묶는다
-  const groups = useMemo(() => groupSteps(steps, (s) => s.product?.full ?? null), [steps]);
+  // 섀도 사이에 애교살·아이라인이 끼지 않게, 같은 제품으로 같은 동작을 이어 바를 때만 묶는다
+  const groups = useMemo(() => groupSteps(steps, productStepKey), [steps]);
   const g = groupIndexOf(groups, step);
   const group = groups[g];
   const groupLast = step === group.end - 1;

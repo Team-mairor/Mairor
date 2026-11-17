@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { categoryOfPart, groupIndexOf, groupSteps } from "./step-group";
+import { categoryOfPart, groupIndexOf, groupSteps, productStepKey } from "./step-group";
 
 const step = (category: Parameters<typeof groupSteps>[0][number]["category"], title = "") => ({
   category,
@@ -62,6 +62,33 @@ describe("groupSteps", () => {
       ["", 4, 5],
       ["", 5, 6],
       ["피부", 6, 8],
+    ]);
+  });
+});
+
+describe("productStepKey", () => {
+  it("같은 제품이라도 단계 이름이 다르면 따로 두고, 이름까지 같을 때만 묶는다", () => {
+    const at = (title: string, product: string | null) => ({
+      ...step("EYE", title),
+      product: product ? { full: product } : null,
+    });
+    const steps = [
+      at("컨실러로 음영 가리기", "컨실러 팔레트"),
+      at("컨실러로 음영 가리기", "컨실러 팔레트"),
+      at("윗눈두덩에 올리기", "리얼아이팔레트"),
+      at("부자연스러운 부분 풀어주기", "리얼아이팔레트"),
+      at("눈꼬리 가이드 정하기", "리얼아이팔레트"),
+      at("뷰러로 집기", null),
+      at("뷰러로 집기", null),
+    ];
+    const groups = groupSteps(steps, productStepKey);
+    expect(groups.map((g) => [g.start, g.end])).toEqual([
+      [0, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [5, 6],
+      [6, 7],
     ]);
   });
 });
