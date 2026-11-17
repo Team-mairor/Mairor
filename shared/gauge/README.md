@@ -113,13 +113,22 @@ function fillPolygon(ixy, width, height, hline) {
 
 입력은 지금 하위 단계의 `gauge`(가이드 조회 응답, [shared/guide-area 「게이지 기준」](../guide-area/README.md#게이지-기준-gauge))와 `guideSets`, 위 기준 두 가지, 맨얼굴 기준 때 잰 흰자 색이다. 화장 종류는 가이드 단계의 `makeup`이다(`foundation` · `eyeshadow` · `eyeliner` · `blush` · `lip` · `brow` · `mascara` · `contour` · `highlight` · `other`).
 
-1. **흰자 색**: 맨얼굴 기준을 잡는 사진 `white.frames`장을 펴서 지도 픽셀마다 · 채널마다 가운데 값을 낸다(짝수 장이면 0.5를 버려 정수로). 두 눈 구멍(얼굴 안이고 `leftEye` · `rightEye` 테두리 안) 픽셀의 밝기 0.2126 R + 0.7152 G + 0.0722 B(감마 sRGB 0~255)를 잰다. 그 밝기들의 위 `white.share` 경계값(numpy `percentile(…, 75)`, 선형 보간)보다 밝거나 같고, 세 채널이 모두 `white.clip`보다 작은 픽셀만 남긴다. 남은 픽셀의 채널별 가운데 값을 선형으로 바꾼 것이 사용자 흰자다(반올림하지 않는다). 남은 픽셀이 없으면 없음이다. 사용자 쪽은 최소 픽셀 수를 보지 않고, 맨얼굴 기준 사진은 가리지 않은 사진이라 가린 픽셀도 빼지 않는다. 맨얼굴 기준을 다 모으지 못했으면 눈 화장 단계(아이섀도 · 아이라인 · 마스카라)가 나오기 전의 다음 단계 시작 기준 사진으로 같은 규칙으로 재고, 눈 화장이 시작된 뒤에는 재지 않는다(아이라인 · 속눈썹이 흰자 둘레를 덮어 어둡게 읽힌다). 레퍼런스 흰자는 AI가 같은 규칙(픽셀 20개 이상, 가린 픽셀 뺌)으로 재서 `gauge.white.hex`에 넣는다. `gauge.white`는 hex만 쓴다.
+1. **흰자 색**: 맨얼굴 기준을 잡는 사진 `white.frames`장에서 사진마다 흰자를 내고, 사진별 흰자의 채널별 가운데 값을 선형으로 바꾼 것이 사용자 흰자다(반올림하지 않는다). 흰자를 낸 사진이 하나도 없으면 없음이다. 사진 한 장의 흰자는 아래 순서다. 얼굴 지도로 펴지 않고 사진에서 바로 읽는다.
+   - **후보 점**: 1024 × 1024 격자의 칸 가운데 ((열 + 0.5) ÷ 1024, (행 + 0.5) ÷ 1024) 중 `leftEye` · `rightEye` 테두리(점 uv, 정수로 버리지 않음) 안인 점이다. 여기서는 위 「칠하기 코드」가 아니라 칸 가운데에서 재는 짝홀 규칙이다(가로 반직선이 변을 몇 번 지나는지, 변 (i − 1, i)마다 `yi > y`와 `yj > y`가 다르고 x < (xj − xi)(y − yi) ÷ (yj − yi) + xi이면 뒤집는다). 칸 범위는 테두리 uv × 1024 − 0.5의 최소를 올림 · 최대를 버림한 데서 0~1023으로 자른다.
+   - **점의 삼각형**: 두 눈 후보 점을 모두 둘러싼 uv 네모와 겹치는 삼각형을 `triangles.v1.json` 순서로 보며, 점을 품는(세 비율이 모두 −10⁻⁹ 이상) 첫 삼각형을 쓴다. 칸 가장자리 점은 1번 펴기에서 칠한 삼각형과 다를 수 있어, 1번 지도에서 색을 꺼내 쓰면 후보 점이 몇 개씩 달라진다. 비율 w1 = ((px − ax)(cy − ay) − (cx − ax)(py − ay)) ÷ 넓이, w2 = ((bx − ax)(py − ay) − (px − ax)(by − ay)) ÷ 넓이, w0 = 1 − w1 − w2이고, 넓이 = (bx − ax)(cy − ay) − (cx − ax)(by − ay)다. 넓이 절댓값이 10⁻¹²보다 작은 삼각형은 건너뛴다. 비율은 float32로 둔다.
+   - **사진 자리**: x = (x_a w0 + x_b w1 + x_c w2) × 사진 너비, y도 같다(얼굴 점 0~1을 먼저 섞고 나중에 곱한다). 사진 밖(x < 0, y < 0, x > 너비 − 1, y > 높이 − 1) 점은 뺀다.
+   - **테두리 안쪽**: 눈마다 눈 가로 = `axis` 두 점의 사진 거리(px)다. 점에서 그 눈 테두리 변(점을 순서대로 잇고 끝과 처음도 이은 선분)까지 가장 짧은 거리가 눈 가로 × `white.inset`보다 작으면 뺀다. 선분까지 거리는 선분 위 가장 가까운 점까지 거리다(선분 길이가 0이면 끝점까지).
+   - **눈동자 원**: 오른눈(`rightEye`)은 가운데 468 · 둘레 469~472, 왼눈(`leftEye`)은 가운데 473 · 둘레 474~477이다. 반지름 = 둘레 네 점끼리 가장 먼 거리 ÷ 2 × `white.irisScale`이고, 가운데 점까지 거리가 반지름 이하인 점은 뺀다. 거리는 모두 사진 px다.
+   - **색 읽기**: 남은 점의 색은 둘레 네 픽셀을 1번과 같은 순서로 섞되 0.5는 올려(`Math.round`) 0~255 정수로 둔다.
+   - **고르기**: 밝기 0.2126 R + 0.7152 G + 0.0722 B(감마 sRGB 0~255, 이 순서로 더함)의 위 `white.share` 경계값(numpy `percentile(…, 75)`, 선형 보간) 이상이고 세 채널이 모두 `white.clip`보다 작은 점만 남긴다. 남은 점이 `white.minPixels`보다 적으면 그 사진은 흰자가 없다. 아니면 남은 점의 채널별 가운데 값이 그 사진의 흰자다.
+
+   맨얼굴 기준을 다 모으지 못했으면 눈 화장 단계(아이섀도 · 아이라인 · 마스카라)가 나오기 전의 다음 단계 시작 기준 사진으로 같은 규칙으로 재고, 눈 화장이 시작된 뒤에는 재지 않는다(아이라인 · 속눈썹이 흰자 둘레를 덮어 어둡게 읽힌다). 맨얼굴 기준 사진은 가리지 않은 사진이라 사용자 쪽은 가린 픽셀을 빼지 않는다. 레퍼런스 흰자는 AI(`ai/app/tasks/area/parts/eye_white.py`)가 같은 규칙으로 재되, 가림 찾기가 찾은 픽셀이 둘레 네 픽셀에 닿은 점은 빼고 두 눈 후보 점의 20%보다 많이 가린 사진은 쓰지 않는다. 결과는 `gauge.white.hex`에 넣고, `gauge.white`는 hex만 쓴다. 테두리 안쪽 · 눈동자 원을 빼는 까닭(눈꺼풀 피부 · 눈동자 가장자리가 섞임)과 숫자는 [DEMO_AI_CHECK](../../docs/experiments/DEMO_AI_CHECK.md)에 있다.
 2. **영역 칸**: 지금 하위 단계 `guideSets` 하나가 묶음 하나다. 묶음의 polygon 도형마다 얼굴 주소를 지도 좌표 Σ bary_k × uv[삼각형 꼭짓점 k] × 1024 − 0.5로 바꾸고, 0 쪽으로 잘라 정수로 만든 좌표로 1024 지도에 칠하고(1번 칠하기 규칙) 합친다. arrow와 `exclude`는 쓰지 않는다. 8 × 8 블록 중 칠한 픽셀이 `area.share` 이상(32개 이상)이고 `cells.measured`가 1인 칸이 영역 칸이다. 단계 전체가 아니라 지금 하위 단계만 잰다. 그 단계 모든 하위 단계의 영역 칸을 합친 것이 위 3번에서 넓혀 빼는 칸이다.
 3. **지금 칸 색**: `frames.intervalMs`마다 찍은 사진 중 지금 사진을 포함한 최근 `frames.medianWindowMs` ÷ `frames.intervalMs` = 5장(찍은 장 수로 센다)을 보고, 그중 사진 거르기를 통과한 사진의 칸 색을 칸마다 · 채널마다 가운데 값으로 모은다. 가린 칸과 빈 칸은 그 장만 뺀다. 여기서 위 3번 조명 변화를 뺀다.
 4. **영역 색**: 영역 칸 중 기준 칸이고 지금 값이 있는 칸이 `area.minCells`보다 적으면 `tooFewCells`. 아니면 그 칸들의 단계 시작 기준 색과 조명을 뺀 지금 색을 채널마다 가운데 값(Lab)으로 낸다. 둘 다 선형으로 바꾸고 0 아래를 0으로 자른다(위는 자르지 않는다). 사용자 바르기 전 색 Ub, 바른 뒤 색 Ua다.
 5. **레퍼런스 색**: 레퍼런스 바르기 전 색 Rb = `gauge.color.lab − gauge.effect.delta`, 바른 뒤 색 Ra = `gauge.color.lab`을 선형으로 바꾸고 0 아래를 0으로 자른다. `gauge.color` · `gauge.effect`가 없으면 `noReference`다(`gauge.reason`이 있으면 둘 다 null이다).
 6. **맞추기**: `methods.darkMakeups`(눈썹 · 아이라인)는 `local`, 나머지는 `mix`다. 모두 선형 RGB 세 채널이다.
-   - `mix`(흰자 기준 혼합 모델): 흰자가 레퍼런스 · 사용자 중 하나라도 없으면 `noWhite`. 레퍼런스 변화 d = Ra − Rb. 채널마다 필요한 양 = d < 0이면 −d ÷ max(Rb, 10⁻⁶), 아니면 d ÷ max(1 − Rb, 10⁻⁶). 레퍼런스 바른 양 α = 세 채널 중 가장 큰 값을 `methods.leastPaintMin`~1로 자른 값. 안료 색 = Rb + d ÷ α(자르지 않음). 흰자 비 g = max(사용자 흰자, 10⁻⁶) ÷ max(레퍼런스 흰자, 10⁻⁶)(채널마다, `methods.color.weight` = 1제곱). 목표 색 = Ub + α (g × 안료 색 − Ub)를 0 아래만 0으로.
+   - `mix`(흰자 기준 혼합 모델): 흰자가 레퍼런스 · 사용자 중 하나라도 없으면 `noWhite`. 레퍼런스 변화 d = Ra − Rb. 채널마다 필요한 양 = d < 0이면 −d ÷ max(Rb, 10⁻⁶), 아니면 d ÷ max(1 − Rb, 10⁻⁶). 레퍼런스 바른 양 α = 세 채널 중 가장 큰 값을 `methods.leastPaintMin`~1로 자른 값. 안료 색 = Rb + d ÷ α(자르지 않음). 흰자 비 g = max(사용자 흰자, 10⁻⁶) ÷ max(레퍼런스 흰자, 10⁻⁶)(채널마다, `methods.color.weight` = 1제곱). `methods.color.degree`가 `chroma`이면 g를 다시 밝기 비 (Yu ÷ Yr)로 나눠 색만 맞춘다. Y는 0 아래를 10⁻⁶으로 올린 흰자의 0.2126 R + 0.7152 G + 0.0722 B(선형)다. 흰자 밝기는 시선 · 눈꺼풀 그늘에 따라 같은 사람에서도 20~33% 흔들려서다([DEMO_AI_CHECK](../../docs/experiments/DEMO_AI_CHECK.md)). 목표 색 = Ub + α (g × 안료 색 − Ub)를 0 아래만 0으로.
    - `local`(자리마다 비율): 목표 색 = 채널마다 Ub × Ra ÷ max(Rb, 10⁻⁶). 사용자 바른 뒤 색은 Ua 그대로다. 흰자를 쓰지 않는다.
    - 바탕 B = Lab(Ub), 목표 T = Lab(목표 색), 사용자 U = Lab(Ua)다.
 7. **진하기 비율 · 막대**: 목표 효과 t = T − B(Lab). |t|² = 0이면 `noReference`. 비율 = (U − B) · t ÷ |t|²(Lab 내적, 목표 효과 방향으로 투영한 길이 ÷ 목표 효과 길이), 0보다 작으면 0이다. 막대 = 비율 × `bar.atReference`를 0~`bar.max`로 자른 값, 위치선은 `bar.atReference`. 목표 효과 크기 `target` = ΔE2000(B, T).
@@ -141,9 +150,9 @@ function fillPolygon(ixy, width, height, hline) {
    - `far`: 얼굴 윤곽 폭 비율 < `frame.faceWidthMin`. FE `tracking-issue.ts`의 `faceWidthRatio`(윤곽 점을 234 → 454 방향에 투영한 폭 ÷ 영상 너비)다.
    - `dark` · `bright`: 얼굴 밝기 < `frame.brightness[0]` 또는 > `frame.brightness[1]`. FE `face-register.ts`의 `faceBrightness`(얼굴 상자를 사방 25% 줄여 16 × 16으로 줄인 뒤 0.299 R + 0.587 G + 0.114 B 평균)다. 못 쟀으면 보지 않는다.
    - `lightChanged`: 카메라 흔들림 크기(위 5번, 그 사진 한 장 · 단계 시작 기준) > `frame.driftMax`. 못 쟀으면 보지 않는다.
-   - `eyesClosed`: 화장 종류가 `frame.eyeMakeups`이고 눈 뜬 정도 < `frame.eyesOpenMin`. 눈 뜬 정도는 눈마다 점 6개(왼쪽부터 33, 160, 158, 133, 153, 144와 362, 385, 387, 263, 373, 380)를 픽셀 좌표(x × 너비, y × 높이)로 바꿔 (|p1 − p5| + |p2 − p4|) ÷ (2 |p0 − p3|)이고, 두 눈 중 작은 쪽이다.
+   - `eyesClosed`: 화장 종류가 `frame.eyeMakeups`이고 눈 뜬 정도 < `frame.eyesOpenMin`. 눈 뜬 정도는 눈마다 MediaPipe 얼굴 표정 값 `eyeBlinkLeft` · `eyeBlinkRight`로 1 − eyeBlink ÷ 0.5를 0~1로 자른 값이고(FE 얼굴 추적 `closedBlink` 0.5와 같음), 두 눈 중 작은 쪽이다. 기준 사진 조건 `baseline` `frames.eyesOpenMin`도 같은 값으로 본다. 예전 점 6개 비율((|p1 − p5| + |p2 − p4|) ÷ (2 |p0 − p3|))은 눈 모양에 따라 뜬 눈도 0.12~0.2로 읽혀 쓰지 않는다. 같은 문턱(0.25 · 0.2)이 이 값에서 맞는 근거는 [DEMO_AI_CHECK](../../docs/experiments/DEMO_AI_CHECK.md)에 있다.
    - `covered`: 영역 가린 몫 > `frame.areaCoverMax`(아래 2번).
-2. **가림**: 가린 픽셀은 AI 가림 찾기 모델(`ai/app/weights/occlusion_bisenet.v1.onnx`, 출력 라벨 19가 가림)로 찾는다. 브라우저용은 `ai/tools/gauge/export_occlusion_web.py`로 이 줄이기 전 모델(32비트)에서 입력 크기를 바꿀 수 있게 만든 사본이다. 서버가 쓰는 8비트 판(`occlusion_bisenet.v1.int8.onnx`)은 이 도구로 바꿀 수 없다.
+2. **가림**: 가린 픽셀은 AI 가림 찾기 모델(출력 라벨 19가 가림)로 찾는다. 브라우저는 [`shared/occlusion/occlusion_bisenet.v1.web.fp16.onnx`](../occlusion/README.md)를 입력 S = 384로 쓴다. AI 서버의 줄이기 전 모델(`ai/app/weights/occlusion_bisenet.v1.onnx`)에서 `ai/tools/gauge/export_occlusion_web.py --fp16`으로 입력 크기를 바꿀 수 있게 고치고 숫자를 16비트로 줄인 판이다. 서버가 쓰는 8비트 판(`occlusion_bisenet.v1.int8.onnx`)은 이 도구로 바꿀 수 없다.
    - 입력: 얼굴 점 478개를 감싼 상자의 긴 변 × 1.4인 정사각형(가운데는 상자 가운데, 왼쪽 위 · 한 변은 반올림)을 검정으로 채운 캔버스에 사진과 겹치는 곳만 옮긴다. 입력 크기 S로 넓이 평균(OpenCV `INTER_AREA`) 줄이기를 하고, RGB를 255로 나눈 뒤 평균 (0.485, 0.456, 0.406) · 표준편차 (0.229, 0.224, 0.225)로 정규화한 [1, 3, S, S] 32비트 실수다.
    - 출력: 픽셀마다 가장 큰 라벨(같으면 앞 번호)이 19면 가림이다. 정사각형 크기로 가장 가까운 픽셀(`INTER_NEAREST`)로 되돌려 사진 자리에 놓는다.
    - 지도로 펴기: 1번 펴기와 같은 사진 자리의 둘레 네 픽셀 중 하나라도 가리면 그 지도 픽셀이 가림이다.
@@ -180,9 +189,9 @@ function fillPolygon(ixy, width, height, hline) {
 
 위 시험 데이터들은 영역 색 · 이유 · 시간 줄부터 시작해 사진을 펴고 칸 색을 내고 기준 · 조명 · 영역 칸을 고르는 앞 단계는 시험하지 않는다. `pipeline.v1.json`은 사진부터 시험한다. 사진은 사람 얼굴이 아니라 합성 얼굴(피부 · 눈썹 · 입술 · 입 안 · 흰자 · 눈동자만 칠한 얼굴 지도)을 얼굴 메시로 그린 480 × 640 PNG다.
 
-- 입력: `frames.start`(단계 시작 기준 사진) · `frames.now`(지금 사진) PNG 경로(이 파일 자리 기준), `landmarks`(0~1 얼굴 점 468개, 모든 사진에 같음), `guideSets`, `gauge`, `makeup`.
-- 사진 장수가 15장 · 5장이 아니어도 주어진 사진만으로 기준 · 지금 칸 색을 낸다. 흰자는 단계 시작 기준 사진으로 잰다. 사진 거르기는 하지 않는다(모두 통과).
-- `expected`: `probes`(부위마다 칸 하나의 첫 사진 칸 색, `cell`은 [행, 열], 2번만 따로 볼 때), `white`(사용자 흰자 선형), `baselineCells`(기준 칸 수), `madeCells`(그 단계 영역 칸 수), `sides`(묶음마다 영역 칸 수와 바르기 전 · 뒤 영역 색 Lab), `measure`(게이지 값).
+- 입력: `frames.start`(단계 시작 기준 사진) · `frames.now`(지금 사진) PNG 경로(이 파일 자리 기준), `landmarks`(0~1 얼굴 점 478개, 모든 사진에 같음. 468~477은 합성 얼굴 눈동자 원의 가운데와 오른쪽 · 위 · 왼쪽 · 아래 점), `guideSets`, `gauge`, `makeup`.
+- 사진 장수가 15장 · 5장이 아니어도 주어진 사진만으로 기준 · 지금 칸 색을 낸다. 흰자는 단계 시작 기준 사진으로 1번 규칙대로 잰다. 사진 거르기는 하지 않는다(모두 통과).
+- `expected`: `probes`(부위마다 칸 하나의 첫 사진 칸 색, `cell`은 [행, 열], 2번만 따로 볼 때), `white`(사용자 흰자 선형), `whitePoints`(첫 단계 시작 사진의 흰자 후보 점 중 테두리 안쪽 · 눈동자 원 밖 · 사진 안이라 남은 점 수, 고르기 전), `baselineCells`(기준 칸 수), `madeCells`(그 단계 영역 칸 수), `sides`(묶음마다 영역 칸 수와 바르기 전 · 뒤 영역 색 Lab), `measure`(게이지 값).
 - 장면은 립 같은 양 · 반만 · 조명 어둡게 · 고개 돌림 · 작은 얼굴 · 세 장 가운데 값, 블러셔 한쪽 덜 바름(기울인 얼굴), 눈썹(local)이다.
 
 ## FE에서 맞춰 보는 법
@@ -195,14 +204,14 @@ function fillPolygon(ixy, width, height, hline) {
   "measure": { "lipSameAmount": { "ratio": 1.0, "bar": 50.0, "…": "expected와 같은 모양" } },
   "stability": { "frames": { "frontOk": null }, "windows": { "…": null }, "sequences": { "risingToReference": [ { "…": "tick마다" } ] } },
   "substitute": { "sameProduct": { "show": true, "…": "…" } },
-  "pipeline": { "lipSame": { "probes": [], "white": [], "baselineCells": 0, "madeCells": 0, "sides": [], "measure": {} } }
+  "pipeline": { "lipSame": { "probes": [], "white": [], "whitePoints": 0, "baselineCells": 0, "madeCells": 0, "sides": [], "measure": {} } }
 }
 ```
 
 | 시험 데이터 | 숫자 허용 오차 |
 | --- | --- |
 | `measure` · `stability` · `substitute` | 1e-4. 기대값을 소수 넷째 자리로 반올림해 두어, 반올림 경계(예: 70.79825)에서는 맞게 짜도 넷째 자리가 하나 다를 수 있다 |
-| `pipeline` | `tolerance` 칸의 값. `ratio` · `bar` · `hue` · `chroma` · `target`은 같은 이름의 게이지 값, `lab`은 `probes`의 `start` · `now`와 `sides`의 `before` · `after`, `white`는 `white`, `cells`(0, 똑같아야 함)는 `baselineCells` · `madeCells` · `sides`의 `cells` |
+| `pipeline` | `tolerance` 칸의 값. `ratio` · `bar` · `hue` · `chroma` · `target`은 같은 이름의 게이지 값, `lab`은 `probes`의 `start` · `now`와 `sides`의 `before` · `after`, `white`는 `white`, `cells`(0, 똑같아야 함)는 `whitePoints` · `baselineCells` · `madeCells` · `sides`의 `cells` |
 
 `pipeline` 허용 오차는 브라우저에서 생길 수 있는 계산 차이(32비트 실수, 가우스를 3σ에서 자르기, 흰 점 상수 자리수)와 아래 「계산량」에서 줄여도 되는 계산이 모두 통과하고, 규칙 위반(감마 2.2, 조명 빼기 안 함, 가우스 시그마 5, 짝수 개 가운데 값을 아래 값으로)은 걸리는 값이다. 근거는 [GAUGE_BROWSER_SPEC.md](../../docs/experiments/GAUGE_BROWSER_SPEC.md#구현-차이와-허용-오차)에 있다. 이 문서만 보고 짠 자바스크립트 구현이 모든 시험 데이터를 이 허용 오차로(실제 차이는 5e-5 이하) 통과했다.
 
@@ -235,11 +244,13 @@ function fillPolygon(ixy, width, height, hline) {
 | `baseline` `cells.shareMin` | 0.9 | 재는 칸 · 맨피부 칸의 몫 | GAUGE_BARE_FACE_BASELINE |
 | `measure` `area.share` · `minCells` | 0.5 · 6 | 영역 칸 몫 · 잴 최소 칸 | GAUGE_MEASURE |
 | `measure` `white.frames` · `share` · `clip` | 15 · 0.25 · 250 | 흰자 사진 장수 · 밝은 쪽 몫 · 빼는 밝기 | GAUGE_MEASURE |
+| `measure` `white.inset` · `irisScale` · `minPixels` | 0.05 · 1.2 · 20 | 눈 테두리 안쪽 몫 · 눈동자 원 배율 · 사진 한 장 최소 점 수 | DEMO_AI_CHECK |
 | `measure` `methods.darkMakeups` · `leastPaintMin` | brow, eyeliner · 0.02 | 자리마다 비율로 맞출 화장 · 최소 바른 양 | GAUGE_COLOR_MATCHING |
+| `measure` `methods.color.degree` | chroma | 흰자로는 색만 맞추고 밝기 배수는 1 | DEMO_AI_CHECK |
 | `measure` `bar.atReference` · `max` (`substitute` `bar`도 같음) | 50 · 100 | 위치선 · 막대 끝 | GAUGE_MEASURE |
 | `measure` `color.hueMinChroma` · `hueSameDegrees` · `chromaSame` | 2.0 · 2.9 · 1.6 | 색 계열을 낼 최소 a · b 길이 · 「비슷」 범위 | GAUGE_MEASURE |
 | `measure` `frames` · `stability` `window` | 200ms · 1000ms | 재는 간격 · 모으는 시간(5장) | GAUGE_MEASURE |
-| `stability` `frame.yawMax` · `rollMax` · `pitchMax` | 0.2 · 0.15 · 0.35 | 사진 거르기 고개(rad) | GAUGE_UNMEASURABLE_SMOOTHING |
+| `stability` `frame.yawMax` · `rollMax` · `pitchMax` | 0.25 · 0.15 · 0.35 | 사진 거르기 고개(rad). 좌우는 등록 정면(0.2)보다 넓다 | GAUGE_UNMEASURABLE_SMOOTHING · DEMO_AI_CHECK |
 | `stability` `frame.faceWidthMin` · `brightness` | 0.4 · 100~215 | 얼굴 폭 비율 · 얼굴 밝기 | GAUGE_UNMEASURABLE_SMOOTHING |
 | `stability` `frame.driftMax` · `eyesOpenMin` · `areaCoverMax` | 6 · 0.25 · 0.2 | 흔들림 ΔE2000 · 눈 뜬 정도 · 영역 가린 몫 | GAUGE_UNMEASURABLE_SMOOTHING |
 | `stability` `weakTargetMin` | 2.0 | 숨길 작은 레퍼런스 효과(ΔE2000) | GAUGE_UNMEASURABLE_SMOOTHING |

@@ -42,6 +42,7 @@ PIPELINE_KEYS = {
     "now": "lab",
     "before": "lab",
     "after": "lab",
+    "whitePoints": "cells",
     "baselineCells": "cells",
     "madeCells": "cells",
     "cells": "cells",

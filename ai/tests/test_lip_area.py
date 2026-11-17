@@ -20,6 +20,7 @@ from app.tasks.area.parts.lip_area import (
     after_rows,
     before_rows,
     check_lip_area,
+    filled_lips,
     find_lip_area,
     found_ratio,
     lip_area_on_maps,
@@ -337,3 +338,36 @@ def test_gloss_step_is_found_in_pieces_on_sample_video():
 def test_found_lip_stays_near_the_lips_on_sample_video():
     for step in ("s27a", "s27b"):
         assert not (found_on(step) & ~near_lips()).any()
+
+
+def lip_halves() -> tuple[np.ndarray, np.ndarray]:
+    """입술을 입 안 가운데 높이로 가른 (윗입술, 아랫입술)."""
+    rows = np.nonzero(inner())[0]
+    upper = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE][0] < rows.mean()
+    return lips() & upper, lips() & ~upper
+
+
+def test_both_lips_found_in_part_are_filled_across_the_found_width():
+    """윗입술은 다 잡히고 아랫입술은 조각만 잡히면 아랫입술을 같은 폭으로 채운다.
+
+    시연 영상 운영 실행(MR !253)의 립이 아랫입술 일부만 나간 사례다.
+    """
+    top, bottom = lip_halves()
+    cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE][1]
+    center = int(np.nonzero(bottom.any(axis=0))[0].mean())
+    piece = bottom & (cols >= center) & (cols < center + 20)
+    filled = filled_lips(top | piece)
+    assert (filled & bottom).sum() >= 0.9 * bottom.sum()
+    assert not (filled & ~lips()).any()
+
+
+def test_one_lip_only_stays_and_lip_check_does_not_fill():
+    """한쪽 입술에서만 찾았으면 그대로 두고, 찾기 판정(check_lip_area)은 채우지 않는다.
+
+    채우기는 입술 전체에 바르는 단계에만 가이드 영역 빌더가 한다.
+    """
+    top, bottom = lip_halves()
+    assert np.array_equal(filled_lips(top), top)
+    cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE][1]
+    piece = bottom & (cols < int(np.nonzero(bottom.any(axis=0))[0].mean()))
+    assert np.array_equal(check_lip_area(top | piece).mask, top | piece)

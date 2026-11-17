@@ -21,9 +21,11 @@ ai/
 │  │  ├─ explanation/      쉬운 설명. 입구 guide_explainer.py
 │  │  ├─ area/             가이드 영역. 입구 area_work.py (사진 받기 → 작업 폴더 → 스레드에서 영역 계산, 동시 실행 수 제한)
 │  │  │  ├─ reference_area.py · guide_area_builder.py   받은 사진으로 단계별 영역 만들기
+│  │  │  ├─ direction_finder.py   찾은 영역마다 단계 동안 사진으로 바른 방향 화살표 더하기
 │  │  │  ├─ landmarks/     얼굴 점 찾기 · 사진 판정 · 사진 읽기 · 가림 찾기
-│  │  │  ├─ parts/         부위마다 한 파일 (립 · 블러셔 · 눈썹 · 아이섀도 · 아이라인)
-│  │  │  └─ common/        부위 분석이 함께 쓰는 계산 (얼굴 지도 · 마스크 · 점 번호)
+│  │  │  ├─ parts/         부위마다 한 파일 (립 · 블러셔 · 눈썹 · 아이섀도 · 아이라인 · 코 쉐딩)과
+│  │  │  │                 게이지 기준 계산 (영역 대표 색 area_color · 화장 효과와 진하기 makeup_effect · 흰자 eye_white)
+│  │  │  └─ common/        부위 분석이 함께 쓰는 계산 (얼굴 지도 · 마스크 · 점 번호 · 눈 선 · 화살표 그리기)
 │  │  ├─ template_guide/   LLM 없이 문장 틀로 만드는 가이드. 입구 guide_builder.py (개발 도구에서만 씀)
 │  │  └─ catalog/          화장품 카탈로그 수집기. 명령줄 도구(tools/collect_catalog.py)와 수집 워커(worker.py)가 쓰고 서버 API는 아니다
 │  ├─ clients/             외부 호출: Claude(GMS), Gemini 구글 검색(GMS), S3 객체, BE 콜백·진행 알림, 레퍼런스 사진 받기

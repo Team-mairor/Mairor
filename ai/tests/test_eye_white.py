@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from app.schemas.guide_area import GaugeColor, GaugeReference
-from app.schemas.landmarks import FrameLandmarks, LandmarksResult, Pose
+from app.schemas.landmarks import FrameLandmarks, LandmarksResult, Point, Pose
 from app.schemas.manifest import Step
 from app.tasks.area import guide_area_builder
 from app.tasks.area.common.region_points import REGION_POINTS
@@ -16,12 +16,19 @@ from app.tasks.area.guide_area_builder import (
     video_white,
 )
 from app.tasks.area.parts import eye_white
+from app.tasks.area.parts.area_preparation import EYE_REGIONS
 from app.tasks.area.parts.eye_white import (
+    IRIS_POINTS,
+    IRIS_SCALE,
     WHITE_FRAMES,
-    eye_holes,
+    eye_points,
+    eye_spots,
+    photo_white,
+    read_spots,
     reference_white,
+    sclera_points,
     white_cells,
-    white_of_map,
+    white_of_pixels,
     white_rows,
 )
 from tests.test_area_color import cheek_maps, cheek_sub_step
@@ -32,7 +39,9 @@ SKIN = (225, 185, 165)
 SCLERA = (205, 186, 182)
 IRIS = (70, 45, 35)
 GLARE = (255, 255, 255)
+LID = (240, 215, 205)
 WIDTH, HEIGHT = 800, 600
+IRIS_RADIUS = 6
 
 
 def steps(*plan: tuple[str, float]) -> list[Step]:
@@ -47,17 +56,53 @@ def turned(row: FrameLandmarks, **pose: float) -> FrameLandmarks:
     return row.model_copy(update={"face": face})
 
 
-def eye_photo(glare: bool = False) -> np.ndarray:
-    """얼굴 점이 지도 자리에 놓인 사진. 두 눈 구멍 안은 흰자, 가운데는 눈동자다."""
+def outline(eye: str) -> np.ndarray:
+    return (UV[list(REGION_POINTS[eye])] * (WIDTH, HEIGHT)).round().astype(np.int32)
+
+
+def iris_center(eye: str) -> tuple[int, int]:
+    x, y = outline(eye).mean(axis=0).round().astype(int)
+    return int(x), int(y)
+
+
+def eye_photo(
+    glare: bool = False,
+    lid: tuple[int, int, int] | None = None,
+    halo: tuple[int, int, int] | None = None,
+    sclera: tuple[int, int, int] = SCLERA,
+) -> np.ndarray:
+    """얼굴 점이 지도 자리에 놓인 사진. 두 눈 구멍 안은 흰자, 가운데는 눈동자(반지름 IRIS_RADIUS)다.
+
+    lid는 눈 테두리를 따라 안쪽 3px까지 칠할 눈꺼풀 색, halo는 눈동자 바로 바깥 1px 띠 색이다.
+    """
     photo = np.full((HEIGHT, WIDTH, 3), SKIN, dtype=np.uint8)
     for eye in ("leftEye", "rightEye"):
-        points = (UV[list(REGION_POINTS[eye])] * (WIDTH, HEIGHT)).round().astype(np.int32)
-        cv2.fillPoly(photo, [points], SCLERA)
-        center = points.mean(axis=0).round().astype(int)
-        cv2.circle(photo, tuple(int(v) for v in center), 6, IRIS, -1)
+        cv2.fillPoly(photo, [outline(eye)], sclera)
+        if lid is not None:
+            cv2.polylines(photo, [outline(eye)], True, lid, thickness=6)
+        center = iris_center(eye)
+        if halo is not None:
+            cv2.circle(photo, center, IRIS_RADIUS + 1, halo, -1)
+        cv2.circle(photo, center, IRIS_RADIUS, IRIS, -1)
         if glare:
-            cv2.circle(photo, tuple(int(v) for v in center + (10, 0)), 2, GLARE, -1)
+            cv2.circle(photo, (center[0] + 10, center[1]), 2, GLARE, -1)
     return photo
+
+
+def eye_row(timestamp_ms: int) -> FrameLandmarks:
+    """make_row 사진에 눈동자 점(가운데와 둘레 네 점)을 eye_photo의 눈동자 자리에 놓은 것."""
+    row = make_row(timestamp_ms)
+    landmarks = list(row.face.landmarks)
+    for eye, (center, ring) in IRIS_POINTS.items():
+        middle = np.array(iris_center(eye), dtype=float)
+        spots = [middle] + [
+            middle + offset
+            for offset in ((IRIS_RADIUS, 0), (0, -IRIS_RADIUS), (-IRIS_RADIUS, 0), (0, IRIS_RADIUS))
+        ]
+        for index, (x, y) in zip((center, *ring), spots, strict=True):
+            landmarks[index] = Point(x=x / WIDTH, y=y / HEIGHT, z=0.0)
+    face = row.face.model_copy(update={"landmarks": landmarks})
+    return row.model_copy(update={"face": face})
 
 
 def test_white_rows_take_the_earliest_front_open_eyed_frames_before_eye_makeup(monkeypatch):
@@ -103,7 +148,7 @@ def test_white_rows_fall_back_to_the_whole_video_without_frames_before_eye_makeu
 
 
 def test_reference_white_reads_the_sclera_and_leaves_out_glare():
-    rows = [make_row(ms) for ms in (1000, 2000, 3000)]
+    rows = [eye_row(ms) for ms in (1000, 2000, 3000)]
 
     white, frames = reference_white(
         LandmarksResult(video_id="t", frames=rows), steps(("lip", 0)), lambda row: eye_photo(True)
@@ -113,6 +158,38 @@ def test_reference_white_reads_the_sclera_and_leaves_out_glare():
     assert np.abs(white - SCLERA).max() <= 2
 
 
+def test_reference_white_leaves_out_the_eyelid_band_and_the_iris_edge():
+    """눈꺼풀 띠와 눈동자 바로 바깥이 흰자보다 밝아도, 테두리 안쪽 · 눈동자 원 밖 칸만 본다.
+
+    지도의 눈 구멍 전체에서 밝기 위 25%를 고르면 밝은 눈꺼풀 띠가 흰자로 잡힌다.
+    """
+    rows = [eye_row(ms) for ms in (1000, 2000, 3000)]
+    photo = eye_photo(lid=LID, halo=LID)
+
+    white, _ = reference_white(
+        LandmarksResult(video_id="t", frames=rows), steps(("lip", 0)), lambda row: photo
+    )
+
+    assert np.abs(white - SCLERA).max() <= 2
+    every = white_of_pixels(read_spots(photo, eye_spots(rows[0].face, WIDTH, HEIGHT)))
+    assert np.abs(every - LID).max() <= 2
+
+
+def test_reference_white_is_the_median_of_photo_whites():
+    """사진마다 흰자를 내고 채널마다 가운데 값을 쓴다. 한 장만 다른 조명이어도 끌리지 않는다."""
+    colors = {1000: (200, 180, 175), 2000: (205, 186, 182), 3000: (240, 120, 100)}
+    rows = [eye_row(ms) for ms in colors]
+
+    white, frames = reference_white(
+        LandmarksResult(video_id="t", frames=rows),
+        steps(("lip", 0)),
+        lambda row: eye_photo(sclera=colors[row.timestamp_ms]),
+    )
+
+    assert frames == 3
+    assert np.abs(white - (205, 180, 175)).max() <= 2
+
+
 def test_reference_white_is_none_without_usable_frames(monkeypatch):
     monkeypatch.setattr(eye_white, "eye_openness", lambda row: 0.05)
 
@@ -120,10 +197,82 @@ def test_reference_white_is_none_without_usable_frames(monkeypatch):
         raise AssertionError("쓸 사진이 없으면 사진을 읽지 않아야 합니다")
 
     out = reference_white(
-        LandmarksResult(video_id="t", frames=[make_row(1000)]), steps(("lip", 0)), never
+        LandmarksResult(video_id="t", frames=[eye_row(1000)]), steps(("lip", 0)), never
     )
 
     assert out == (None, 0)
+
+
+def test_reference_white_is_none_when_no_photo_gives_a_white():
+    rows = [eye_row(ms) for ms in (1000, 2000)]
+
+    out = reference_white(
+        LandmarksResult(video_id="t", frames=rows),
+        steps(("lip", 0)),
+        lambda row: np.full((HEIGHT, WIDTH, 3), 255, dtype=np.uint8),
+    )
+
+    assert out == (None, 0)
+
+
+def test_sclera_points_keep_spots_inside_the_inset_and_outside_the_iris_circle():
+    """눈 가로(약 111px)의 5%(약 5.6px)보다 테두리에 가까운 점과
+
+    눈동자 원(6px × 1.2) 안 점을 뺀다.
+    """
+    row = eye_row(1000)
+    keep = sclera_points(row.face, WIDTH, HEIGHT)
+    spots = eye_spots(row.face, WIDTH, HEIGHT)
+
+    assert keep.sum() > 500
+    for eye in IRIS_POINTS:
+        offset = spots - iris_center(eye)
+        assert not keep[np.linalg.norm(offset, axis=1) <= IRIS_RADIUS * IRIS_SCALE].any()
+        beside = (
+            (np.abs(offset[:, 1]) < 2)
+            & (np.abs(offset[:, 0]) > IRIS_RADIUS * IRIS_SCALE + 0.5)
+            & (np.abs(offset[:, 0]) < IRIS_RADIUS * 2)
+        )
+        assert beside.any() and keep[beside].all()
+    edges = np.concatenate(
+        [
+            np.linspace(start, end, 400)
+            for eye in IRIS_POINTS
+            for start, end in zip(
+                UV[list(REGION_POINTS[eye])] * (WIDTH, HEIGHT),
+                np.roll(UV[list(REGION_POINTS[eye])] * (WIDTH, HEIGHT), -1, axis=0),
+                strict=True,
+            )
+        ]
+    )
+    to_edge = np.linalg.norm(spots[:, None, :] - edges[None], axis=2).min(axis=1)
+    assert not keep[to_edge < 111.3 * 0.05 - 0.05].any()
+    to_iris = np.min([np.linalg.norm(spots - iris_center(eye), axis=1) for eye in IRIS_POINTS], 0)
+    assert keep[(to_edge > 111.4 * 0.05 + 0.05) & (to_iris > IRIS_RADIUS * IRIS_SCALE)].all()
+
+
+def test_sclera_points_drop_spots_outside_the_photo():
+    row = eye_row(1000)
+    landmarks = [Point(x=p.x - 1.0, y=p.y, z=p.z) for p in row.face.landmarks]
+    shifted = row.face.model_copy(update={"landmarks": landmarks})
+
+    assert sclera_points(row.face, WIDTH, HEIGHT).any()
+    assert not sclera_points(shifted, WIDTH, HEIGHT).any()
+
+
+def test_photo_white_drops_covered_spots_and_skips_a_mostly_covered_photo():
+    """가린 픽셀이 둘레에 닿은 점은 빼고, 두 눈 구멍 점의 20%보다 많이 가린 사진은 재지 않는다."""
+    row = eye_row(1000)
+    photo = eye_photo()
+    spots = eye_spots(row.face, WIDTH, HEIGHT)
+    right = spots[eye_points()[2] == EYE_REGIONS.index("rightEye")]
+    covered = np.zeros((HEIGHT, WIDTH), dtype=bool)
+    covered[:, : int(np.quantile(right[:, 0], 0.2))] = True
+    photo[covered] = LID
+
+    assert np.abs(photo_white(row, photo, covered) - SCLERA).max() <= 2
+    covered[:, : int(np.quantile(spots[:, 0], 0.4))] = True
+    assert photo_white(row, photo, covered) is None
 
 
 def test_white_cells_keep_the_brightest_quarter_and_drop_clipped_pixels():
@@ -139,18 +288,43 @@ def test_white_cells_keep_the_brightest_quarter_and_drop_clipped_pixels():
     assert white_cells(face_map, holes)[0].tolist() == [False, False, False, True]
 
 
-def test_white_of_map_needs_enough_white_pixels():
-    face_map = np.full((8, 8, 3), 200, dtype=np.uint8)
-    holes = np.zeros((8, 8), dtype=bool)
-    holes[0, :4] = True
+def test_white_of_pixels_needs_enough_white_pixels():
+    """밝기 위 25%로 고른 픽셀이 20개보다 적으면 못 잰 것이다.
 
-    assert white_of_map(face_map, holes) is None
+    60개면 15개, 100개면 25개가 남는다.
+    """
+
+    def ramp(count: int) -> np.ndarray:
+        return np.repeat(np.arange(100, 100 + count)[:, None], 3, axis=1)
+
+    assert white_of_pixels(ramp(60)) is None
+    assert white_of_pixels(ramp(100)) == pytest.approx([187, 187, 187])
+    assert white_of_pixels(np.zeros((0, 3))) is None
 
 
-def test_eye_holes_lie_inside_the_face_and_are_read_only():
-    holes = eye_holes()
+def test_eye_points_cover_both_eyes_with_ratios_inside_their_triangle():
+    """눈마다 지도 점이 있고, 점마다 비율은 품은 삼각형 안이라
 
-    assert holes.any() and not holes.flags.writeable
+    0 이상이고 합이 1이다(float32 반올림 안).
+    """
+    corners, ratios, eyes = eye_points()
+
+    assert len(corners) == len(ratios) == len(eyes)
+    assert set(eyes.tolist()) == {0, 1}
+    assert (ratios >= -1e-6).all()
+    assert np.allclose(ratios.sum(axis=1), 1, atol=1e-6)
+    assert not corners.flags.writeable
+
+
+def test_read_spots_mixes_four_pixels_and_rounds_half_up():
+    """FE처럼 위 두 픽셀 · 아래 두 픽셀을 섞고 0.5는 올린다."""
+    photo = np.zeros((2, 2, 3), dtype=np.uint8)
+    photo[0, 0], photo[0, 1] = (10, 20, 30), (11, 21, 31)
+    photo[1, 0], photo[1, 1] = (30, 40, 50), (30, 40, 50)
+
+    out = read_spots(photo, np.array([[0.5, 0.0], [0.0, 0.5], [1.0, 1.0]]))
+
+    assert out.tolist() == [[11, 21, 31], [20, 30, 40], [30, 40, 50]]
 
 
 def test_gauge_carries_video_white_only_when_it_has_values():

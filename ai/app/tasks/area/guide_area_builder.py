@@ -77,6 +77,7 @@ from app.tasks.area.parts.eye_white import reference_white
 from app.tasks.area.parts.eyeliner_area import (
     EyelinerArea,
     find_eyeliner_area,
+    joined_upper,
     paired_eyeliner,
     used_eyeliner,
 )
@@ -89,7 +90,7 @@ from app.tasks.area.parts.eyeshadow_area import (
     paired_darkened,
     paired_eyeshadow,
 )
-from app.tasks.area.parts.lip_area import LipArea, PhotoLoader, find_lip_area
+from app.tasks.area.parts.lip_area import LipArea, PhotoLoader, filled_lips, find_lip_area
 from app.tasks.area.parts.makeup_effect import (
     effect_record,
     light_base,
@@ -141,6 +142,8 @@ LINE_UPPER_WORDS = ("윗", "위쪽", "눈꺼풀", "쌍꺼풀")
 LINE_BOTH_WORDS = ("위아래", "아래위", "위아랫")
 LINE_TAIL_WORDS = ("꼬리", "뒤쪽", "윙", "앞쪽", "중간")
 LINE_WATERLINE_WORDS = ("점막", "워터라인")
+LINE_FILL_WORDS = (*LINE_WATERLINE_WORDS, "촘촘")
+LIP_WHOLE_WORDS = ("전체",)
 LINE_WORDS = (
     LINE_BOTH_WORDS + LINE_UNDER_WORDS + LINE_UPPER_WORDS + LINE_TAIL_WORDS + LINE_WATERLINE_WORDS
 )
@@ -546,6 +549,8 @@ def _sub_step(
     if step.makeup == "blush" and nose_blush(step):
         return template_sub_step(sub_step_id, "blushNose", [NOT_ANALYZED])
     finder = AREA_FINDERS[step.makeup]
+    if step.makeup == "lip" and lip_covers_whole(step):
+        finder = _whole_lip_sub_step
     try:
         sub_step = finder(
             result,
@@ -648,6 +653,20 @@ def contour_elsewhere(step: Step | GuideInputStep) -> bool:
     )
 
 
+def contour_eye_template(step: Step | GuideInputStep) -> TemplateId | None:
+    """눈 둘레 쉐딩 단계에 쓸 아이섀도 기본 가이드. 눈 둘레 단계가 아니면 None이다.
+
+    애교살 경계처럼 쉐딩 색으로 눈 둘레를 바르는 단계는 쉐딩 기본 가이드(턱 · 코)가 아니라
+    그 자리를 그려야 한다. 바른 자리는 아이섀도처럼 eyeshadow_zones로 고르고,
+    한 자리면 그 자리 키(ZONE_TEMPLATES), 위아래 둘 다면 eyeshadow다.
+    글에 광대 · 턱 · 이마 같은 코 밖 얼굴 자리(contour_elsewhere)도 있으면 쉐딩 기본 가이드로 둔다.
+    """
+    zones = eyeshadow_zones(step)
+    if not zones or contour_elsewhere(step):
+        return None
+    return ZONE_TEMPLATES[zones[0]] if len(zones) == 1 else "eyeshadow"
+
+
 def _step_texts(step: Step | GuideInputStep) -> list[str]:
     if not isinstance(step, GuideInputStep):
         return []
@@ -663,11 +682,14 @@ def _contour_step(
     """쉐딩 단계의 하위 단계들.
 
     단계 글에 코가 있으면(contour_nose) 콧대 양옆을 찾아 contour_sub_steps로 적는다.
-    아니면 찾지 않고 notAnalyzed 이유로 쉐딩 기본 가이드(contour)다.
+    아니면 찾지 않고 notAnalyzed 이유로 기본 가이드다. 글에 코 밖 얼굴 자리 없이 눈 자리만 있으면
+    (애교살 경계 쉐딩 등) 그 자리의 아이섀도 기본 가이드(contour_eye_template)이고,
+    나머지는 쉐딩 기본 가이드(contour)다.
     분석 중 오류가 나면 이 단계만 failed 하나로 적고 로그를 남긴다.
     """
     if not contour_nose(step):
-        return [template_sub_step(f"{step.step_id}-1", "contour", [NOT_ANALYZED])]
+        template = contour_eye_template(step) or "contour"
+        return [template_sub_step(f"{step.step_id}-1", template, [NOT_ANALYZED])]
     try:
         areas = find_contour_area(
             result,
@@ -751,6 +773,16 @@ def eyeliner_zones(step: Step | GuideInputStep) -> tuple[LineZone, ...] | None:
     return zones or None
 
 
+def eyeliner_fills_lash_line(step: Step | GuideInputStep) -> bool:
+    """아이라인 단계 글(partLabel · facts.area)이 점막을 따라 속눈썹 뿌리를 채운다고 하는지.
+
+    점막 · 촘촘(LINE_FILL_WORDS)이 있으면 채우는 단계다. 눈 밖에서는 선이 조각으로만 보여
+    윗라인 조각 사이를 잇는다. 「아이라인 앞쪽 · 뒤쪽 · 중간」이나 「윗눈꺼풀 라인과 눈꼬리」처럼
+    나눠 그린 단계는 잇지 않는다. 글이 없는 매니페스트 단계는 아니다.
+    """
+    return any(word in text for text in _step_texts(step) for word in LINE_FILL_WORDS)
+
+
 def _eyeliner_step(
     step: Step | GuideInputStep,
     result: LandmarksResult,
@@ -763,6 +795,7 @@ def _eyeliner_step(
 
     zones는 단계의 그린 자리(eyeliner_zones)이고 None이면 모른다.
     윗점막만 그린 단계는 사진으로 찾지 않는다(눈 구멍 안이라 찾을 수 없다).
+    점막을 따라 채우는 단계(eyeliner_fills_lash_line)는 윗라인 조각 사이를 잇는다(joined_upper).
     drawn은 앞 아이라인 단계들에서 안내한 칸이고 paired_eyeliner에 넘겨 빼고 보게 한다.
     찾은 자리가 있으면 그 마스크를 더해 돌려주고, 없으면 drawn을 그대로 돌려준다.
     분석 중 오류가 나면 이 단계만 failed 하나로 적고 로그를 남긴다.
@@ -781,6 +814,8 @@ def _eyeliner_step(
             )
             for eye in EYES
         }
+        if eyeliner_fills_lash_line(step):
+            areas = {eye: joined_upper(area, eye) for eye, area in areas.items()}
         return eyeliner_sub_steps(step.step_id, areas, zones, drawn)
     except Exception:
         logger.exception("%s 단계 영역 분석에서 오류", step.step_id)
@@ -981,6 +1016,31 @@ def _lip_sub_step(
     """립 단계 직전·직후 사진으로 바른 곳을 찾아 lip_sub_step으로 적는다."""
     found = find_lip_area(result, step_start_ms, step_end_ms, load_photo, occlusion=occlusion)
     return lip_sub_step(sub_step_id, found)
+
+
+def _whole_lip_sub_step(
+    result: LandmarksResult,
+    step_start_ms: int,
+    step_end_ms: int,
+    load_photo: PhotoLoader,
+    sub_step_id: str,
+    occlusion: OcclusionFinder | None,
+) -> AreaSubStep:
+    """입술 전체에 바르는 립 단계(lip_covers_whole). 찾은 곳의 두 입술을 채운다(filled_lips)."""
+    found = find_lip_area(result, step_start_ms, step_end_ms, load_photo, occlusion=occlusion)
+    if found.mask is not None:
+        found = LipArea(mask=filled_lips(found.mask))
+    return lip_sub_step(sub_step_id, found)
+
+
+def lip_covers_whole(step: Step | GuideInputStep) -> bool:
+    """립 단계 글(partLabel · facts.area)이 입술 전체에 바른다고 하는지(LIP_WHOLE_WORDS).
+
+    입 모양이 전후로 달라 한쪽 입술이 조각만 잡혀도 두 입술을 채워 보낸다.
+    「입술 안쪽에 틴트」 · 「입술 가운데 글로스」처럼 일부만 바르는 단계는 채우지 않는다.
+    글이 없는 매니페스트 단계는 아니다.
+    """
+    return any(word in text for text in _step_texts(step) for word in LIP_WHOLE_WORDS)
 
 
 def lip_sub_step(sub_step_id: str, found: LipArea) -> AreaSubStep:

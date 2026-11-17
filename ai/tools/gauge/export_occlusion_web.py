@@ -6,7 +6,9 @@
 아래 2번 고치기가 바꿀 자리가 없고, 브라우저 정확도 · 시간도 줄이기 전 모델로 쟀다.
 
 실행 (ai/ 폴더에서):
-  uv run --group train python tools/gauge/export_occlusion_web.py <저장할 onnx>
+  uv run --group train python tools/gauge/export_occlusion_web.py <저장할 onnx> [--fp16]
+--fp16이면 모델 안 숫자를 16비트 실수로 줄인다(입력 · 출력은 32비트 그대로).
+FE가 쓰는 shared/occlusion의 파일은 --fp16으로 만든 것이다(shared/occlusion/README.md).
 
 원래 모델은 입력 512 × 512에 맞춰 숫자가 박힌 곳이 두 종류 있다.
 학습한 값은 그대로 두고 그 둘만 바꾼다.
@@ -18,6 +20,7 @@
 docs/experiments/GAUGE_UNMEASURABLE_SMOOTHING.md에 있다.
 """
 
+import argparse
 import hashlib
 import sys
 from pathlib import Path
@@ -126,6 +129,17 @@ def _sort(graph: onnx.GraphProto) -> None:
     graph.node.extend(ordered)
 
 
+def half(model: onnx.ModelProto) -> onnx.ModelProto:
+    """model 안 실수 숫자를 16비트로 줄인 모델. 입력 · 출력은 32비트 실수 그대로 둔다.
+
+    브라우저가 처음 받는 파일이 절반이 되고 WebGPU에서 빨라진다. 판정 차이는
+    docs/experiments/DEMO_AI_CHECK.md에 있다.
+    """
+    from onnxruntime.transformers.float16 import convert_float_to_float16
+
+    return convert_float_to_float16(model, keep_io_types=True)
+
+
 def source_problem() -> str | None:
     """줄이기 전 모델 파일을 쓸 수 없으면 그 까닭을, 쓸 수 있으면 None을 돌려준다.
 
@@ -140,15 +154,19 @@ def source_problem() -> str | None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("python tools/gauge/export_occlusion_web.py <저장할 onnx>")
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("target", type=Path, help="저장할 onnx")
+    parser.add_argument("--fp16", action="store_true", help="모델 안 숫자를 16비트 실수로 줄인다")
+    args = parser.parse_args()
     problem = source_problem()
     if problem:
         raise SystemExit(f"줄이기 전 가림 찾기 모델을 쓸 수 없다: {problem}")
-    target = Path(sys.argv[1])
-    target.parent.mkdir(parents=True, exist_ok=True)
-    onnx.save(flexible(onnx.load(str(SOURCE_PATH))), str(target))
-    print(target)
+    model = flexible(onnx.load(str(SOURCE_PATH)))
+    if args.fp16:
+        model = half(model)
+    args.target.parent.mkdir(parents=True, exist_ok=True)
+    onnx.save(model, str(args.target))
+    print(args.target)
 
 
 if __name__ == "__main__":

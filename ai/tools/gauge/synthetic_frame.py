@@ -1,8 +1,9 @@
 """얼굴 지도를 카메라 사진으로 되돌려 그리는 합성 사진 도구.
 
-얼굴 메시 uv(468점)를 사진 좌표로 옮긴 가짜 얼굴 점을 만들고(frame_points), 얼굴 지도를 그 자리에
-그린다(render). FE가 카메라 사진에서 게이지 값을 내는 전체 순서(펴기 → 칸 색 → …)를 실제 얼굴 없이
-시험하려는 것이다. 사람 얼굴 사진은 저장소에 넣지 않으므로 시험 데이터 얼굴은 cartoon_face로 그린다.
+얼굴 메시 uv(468점)와 눈동자 점 10개를 사진 좌표로 옮긴 가짜 얼굴 점을 만들고(frame_points),
+얼굴 지도를 그 자리에 그린다(render). FE가 카메라 사진에서 게이지 값을 내는
+전체 순서(펴기 → 칸 색 → …)를 실제 얼굴 없이 시험하려는 것이다.
+사람 얼굴 사진은 저장소에 넣지 않으므로 시험 데이터 얼굴은 cartoon_face로 그린다.
 flatten_at은 face_map.flatten과 같은 펴기를 지도 크기 · 샘플링 · 칸 기준 위치 · 정밀도를 바꿔 한다.
 """
 
@@ -23,15 +24,17 @@ LIP = (185, 105, 105)
 MOUTH = (80, 35, 35)
 SCLERA = (225, 218, 212)
 IRIS = (70, 50, 40)
+IRIS_SHARE = 0.35
+IRIS_EYES = ("rightEye", "leftEye")
 
 
 def frame_points(pose: str) -> np.ndarray:
-    """얼굴 메시 uv(468점)를 사진 좌표(px)로 옮긴 가짜 얼굴 점.
+    """얼굴 메시 uv(468점)와 눈동자 점(iris_uv, 10점)을 사진 좌표(px)로 옮긴 가짜 얼굴 점 478개.
 
     front는 정면, turn은 한쪽을 눌러 고개 돌림처럼, roll은 0.12 rad 기울임,
     far는 작게 찍힌 얼굴이다.
     """
-    p = fm.mesh_uv()[: fm.VERTEX_COUNT] / fm.MAP_SIZE - 0.5
+    p = np.concatenate([fm.mesh_uv()[: fm.VERTEX_COUNT] / fm.MAP_SIZE, iris_uv()]) - 0.5
     scale = (0.42 if pose == "far" else 0.6) * FRAME_W
     if pose == "turn":
         p = np.stack([p[:, 0] * (1 - 0.5 * p[:, 0]), p[:, 1]], axis=1)
@@ -137,6 +140,29 @@ def region_mask(region: str, size: int = fm.MAP_SIZE) -> np.ndarray:
     return polygon_mask(points, size, size)
 
 
+def _iris(region: str, size: int) -> tuple[float, float, float]:
+    """cartoon_face가 그리는 눈동자 원의 (가운데 행, 가운데 열, 반지름). 지도 칸 단위다.
+
+    눈 구멍 칸들의 가운데가 중심이고, 반지름은 눈 구멍 세로 칸 수 × IRIS_SHARE다.
+    """
+    ys, xs = np.nonzero(region_mask(region, size))
+    return ys.mean(), xs.mean(), IRIS_SHARE * (ys.max() - ys.min() + 1)
+
+
+def iris_uv() -> np.ndarray:
+    """MediaPipe 눈동자 점 468~477의 uv(0~1) 자리.
+
+    오른눈 가운데 · 둘레 넷, 왼눈 가운데 · 둘레 넷 순서다.
+    cartoon_face의 눈동자 원 가운데와 원 위 오른쪽 · 위 · 왼쪽 · 아래 점이다.
+    """
+    out = []
+    for region in IRIS_EYES:
+        cy, cx, radius = _iris(region, fm.MAP_SIZE)
+        for dx, dy in ((0, 0), (radius, 0), (0, -radius), (-radius, 0), (0, radius)):
+            out.append(((cx + dx + 0.5) / fm.MAP_SIZE, (cy + dy + 0.5) / fm.MAP_SIZE))
+    return np.array(out)
+
+
 @lru_cache
 def cartoon_face(size: int = fm.MAP_SIZE) -> np.ndarray:
     """사람 얼굴 대신 쓰는 합성 맨얼굴 지도. 피부 · 눈썹 · 입술 · 입 안 · 흰자 · 눈동자만 칠한다.
@@ -163,9 +189,7 @@ def cartoon_face(size: int = fm.MAP_SIZE) -> np.ndarray:
     for region in ("leftEye", "rightEye"):
         eye = region_mask(region, size)
         out[eye] = SCLERA
-        ys, xs = np.nonzero(eye)
-        cy, cx = ys.mean(), xs.mean()
-        radius = 0.35 * (ys.max() - ys.min() + 1)
+        cy, cx, radius = _iris(region, size)
         yy, xx = np.ogrid[:size, :size]
         out[eye & ((yy - cy) ** 2 + (xx - cx) ** 2 <= radius**2)] = IRIS
     out.flags.writeable = False

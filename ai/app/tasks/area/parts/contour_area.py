@@ -9,8 +9,10 @@
 평균이 아니라 가운데 값인 것은, 범위 한쪽 끝에 걸린 손·그림자 몇 칸에 끌리지 않게 하려는 것이다.
 바른 곳의 경계는 늘어난 양을 EDGE_BLUR_SIGMA로 흐린 뒤
 그 범위에서 가장 큰 값의 EDGE_RATIO배로 정한다.
-좌우는 따로 찾고, 두 쪽 모두 찾았을 때만 쪽마다 찾은 모양을 쓴다(paired_contour).
+좌우는 따로 찾고, 두 쪽 모두 찾았을 때만 쓴다(paired_contour).
 코 쉐딩은 양옆에 같이 바르고, 한쪽만 달라지는 것은 손·고개 돌림인 일이 많아서다.
+모양은 한쪽을 좌우로 뒤집어 다른 쪽과 합친 같은 모양을 두 쪽에 쓴다. 한쪽이 짧게만 잡히면
+두 쪽 모양이 달라졌고, 합치면 단계 경계를 흔들어도 모양이 덜 바뀌었다.
 광대·턱선·이마 쉐딩은 찾지 않는다. 바르지 않은 단계의 변화와 가르지 못했다.
 """
 
@@ -214,11 +216,16 @@ def check_contour_area(
 def paired_contour(areas: dict[RegionName, ContourArea]) -> dict[RegionName, np.ndarray] | None:
     """쪽마다 찾은 결과(SIDES)에서 양쪽에 쓸 마스크를 고른다.
 
-    두 쪽 모두 찾았으면 쪽마다 찾은 마스크를 그대로 쓰고, 한쪽이라도 못 찾았으면 None이다.
+    두 쪽 모두 찾았으면 한쪽을 좌우로 뒤집어 다른 쪽과 합친 모양을 두 쪽에 쓰고(그쪽 범위
+    side_range 안으로 자름), 한쪽이라도 못 찾았으면 None이다. 얼굴 지도는 좌우 대칭이라
+    뒤집으면 반대쪽 콧대 옆에 놓인다. 시험 영상 코 쉐딩에서 단계 경계를 0 · ±0.5 · ±1초 흔든
+    다섯 번의 모양 IoU가 쪽마다 따로 0.824, 뒤집어 합침 0.852, 뒤집어 겹친 곳만 0.850이었다.
     """
     if any(areas[side].mask is None for side in SIDES):
         return None
-    return {side: areas[side].mask for side in SIDES}
+    left, right = SIDES
+    merged = areas[left].mask | areas[right].mask[:, ::-1]
+    return {left: merged & side_range(left), right: merged[:, ::-1] & side_range(right)}
 
 
 def _both(reason: ContourAreaReason) -> dict[RegionName, ContourArea]:

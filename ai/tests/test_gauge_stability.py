@@ -42,7 +42,7 @@ def flips(shown):
         (st.FrameState(faces=1), "eyeshadow", None),
         (st.FrameState(faces=0), "lip", "lost"),
         (st.FrameState(faces=2), "lip", "lost"),
-        (st.FrameState(faces=1, yaw=FRONT_MAX + 0.01), "lip", "turned"),
+        (st.FrameState(faces=1, yaw=st.YAW_MAX + 0.01), "lip", "turned"),
         (st.FrameState(faces=1, roll=-(ROLL_MAX + 0.01)), "lip", "turned"),
         (st.FrameState(faces=1, pitch=-(st.PITCH_MAX + 0.01)), "lip", "turned"),
         (st.FrameState(faces=1, face_width=st.FACE_WIDTH_MIN - 0.01), "lip", "far"),
@@ -63,6 +63,14 @@ def test_tablet_pitch_is_measured_but_steeper_is_turned():
     assert st.frame_reason(st.FrameState(faces=1, pitch=-0.3), "eyeshadow") is None
     assert st.frame_reason(st.FrameState(faces=1, pitch=-0.4), "eyeshadow") == "turned"
     assert st.PITCH_MAX > FRONT_MAX
+
+
+def test_one_eye_side_turn_is_measured_but_wider_is_turned():
+    """한 눈씩 바르면 좌우가 등록 정면 기준(0.2)을 자주 넘는다. 0.25까지는 시연자 맨얼굴에서 잰 값이
+    정면과 같아 게이지에 쓰고, 그보다 돌리면 turned다. 기준 사진 조건(FRONT_MAX)은 그대로 좁다."""
+    assert st.frame_reason(st.FrameState(faces=1, yaw=0.24), "eyeshadow") is None
+    assert st.frame_reason(st.FrameState(faces=1, yaw=-0.26), "eyeshadow") == "turned"
+    assert FRONT_MAX < st.YAW_MAX < st.PITCH_MAX
 
 
 def test_closed_eyes_only_stop_eyelid_makeup():

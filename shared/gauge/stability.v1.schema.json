@@ -18,7 +18,7 @@
         "faceWidthMin": { "type": "number", "minimum": 0, "maximum": 1, "description": "얼굴 윤곽 폭 ÷ 영상 폭이 이보다 작으면 far" },
         "brightness": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2, "description": "얼굴 가운데 평균 밝기(0~255)가 [아래, 위] 밖이면 dark · bright" },
         "driftMax": { "type": "number", "exclusiveMinimum": 0, "description": "맨피부가 단계 시작 기준에서 바뀐 크기(baseline.v1.json drift의 size, ΔE2000)가 이보다 크면 lightChanged" },
-        "eyesOpenMin": { "type": "number", "minimum": 0, "description": "eyeMakeups 단계에서 눈 뜬 정도가 이보다 작으면 eyesClosed" },
+        "eyesOpenMin": { "type": "number", "minimum": 0, "description": "eyeMakeups 단계에서 눈 뜬 정도(두 눈 중 작은 쪽의 1 − eyeBlink ÷ 0.5, 0~1)가 이보다 작으면 eyesClosed" },
         "eyeMakeups": { "type": "array", "items": { "type": "string" } },
         "areaCoverMax": { "type": "number", "minimum": 0, "maximum": 1, "description": "지금 하위 단계 영역 칸의 가린 몫이 이보다 크면 covered. 이하면 가린 칸만 그 장에서 뺀다" },
         "order": { "type": "array", "items": { "$ref": "#/$defs/frameReason" }, "description": "이유를 보는 순서. 먼저 걸린 이유 하나만 낸다" }

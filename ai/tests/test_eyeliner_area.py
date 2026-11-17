@@ -24,6 +24,8 @@ from app.tasks.area.parts.eyeliner_area import (
     eyeliner_range,
     eyeliner_shape,
     find_eyeliner_area,
+    joined_upper,
+    joined_upper_line,
     paired_eyeliner,
 )
 from tests.test_area_preparation import DARK_SKIN, make_row
@@ -626,3 +628,54 @@ def test_black_line_painted_on_sample_video_is_found():
         found = check_eyeliner_area(eyeliner_color_change(before, painted), eye)
         assert found.zone("upper").mask is not None
         assert iou(found.zone("upper").mask, line) >= MIN_BLACK_IOU_ON_SAMPLE
+
+
+def upper_band(eye, start: float, end: float) -> np.ndarray:
+    """윗라인 울타리 중 눈 테두리 3칸 안에서 앞머리 → 눈꼬리 위치 start ~ end(눈 가로 1)인 칸."""
+    outer, inner = eye_corners(eye)
+    axis = outer - inner
+    rows, cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE]
+    along = ((cols - inner[0]) * axis[0] + (rows - inner[1]) * axis[1]) / float(axis @ axis)
+    hole = polygon_mask(map_points(REGION_POINTS[eye]), MAP_SIZE, MAP_SIZE)
+    gap = cv2.distanceTransform((~hole).astype(np.uint8), cv2.DIST_L2, 5)
+    return eyeliner_range(eye, "upper") & (gap <= 3) & (along >= start) & (along <= end)
+
+
+def test_upper_line_pieces_with_a_short_gap_are_joined():
+    """윗라인이 가운데가 빈 두 조각으로 잡히면 빈 곳을 속눈썹 띠로 이어 한 줄로 만든다.
+
+    시연 영상 운영 실행(MR !253)의 윗라인이 가운데가 빈 채로 나간 사례다.
+    """
+    for eye in EYES:
+        pieces = upper_band(eye, 0.2, 0.35) | upper_band(eye, 0.6, 0.85)
+        joined = joined_upper_line(pieces, eye, eyeliner_range(eye, "upper"))
+        assert cv2.connectedComponents(joined.astype(np.uint8), connectivity=8)[0] - 1 == 1
+        assert (joined & upper_band(eye, 0.4, 0.55)).any()
+        assert not (joined & ~eyeliner_range(eye, "upper")).any()
+
+
+def test_upper_line_pieces_far_apart_stay_apart():
+    """빈 곳이 UPPER_JOIN_MAX보다 길면 따로 그린 선으로 둔다."""
+    for eye in EYES:
+        pieces = upper_band(eye, 0.05, 0.15) | upper_band(eye, 0.8, 0.95)
+        assert np.array_equal(joined_upper_line(pieces, eye, eyeliner_range(eye, "upper")), pieces)
+
+
+def test_joined_upper_joins_only_the_upper_line_of_a_found_eye():
+    """찾기 결과에서 윗라인만 잇고 아랫라인은 그대로다. 윗라인이 없으면 결과를 그대로 돌려준다."""
+    for eye in EYES:
+        pieces = upper_band(eye, 0.2, 0.35) | upper_band(eye, 0.6, 0.85)
+        lower = lash_line(eye, upper=False)
+        area = EyelinerArea(
+            mask=pieces | lower,
+            zones={"upper": ZoneLine(mask=pieces), "under": ZoneLine(mask=lower)},
+        )
+        joined = joined_upper(area, eye)
+        assert (
+            cv2.connectedComponents(joined.zone("upper").mask.astype(np.uint8), connectivity=8)[0]
+            == 2
+        )
+        assert joined.zone("under").mask is lower
+        assert np.array_equal(joined.mask, joined.zone("upper").mask | lower)
+        missing = EyelinerArea(mask=lower, zones={"under": ZoneLine(mask=lower)})
+        assert joined_upper(missing, eye) is missing

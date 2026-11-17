@@ -186,6 +186,27 @@ def check_lip_area(area: np.ndarray, unknown: np.ndarray | None = None) -> LipAr
     return LipArea(mask=area)
 
 
+def filled_lips(area: np.ndarray) -> np.ndarray:
+    """윗입술 · 아랫입술 둘 다에서 찾았으면, 찾은 칸의 가로 범위만큼 두 입술을 채운다.
+
+    입술 전체에 바르는 단계에서, 입을 다물고 벌린 모양이 전후로 달라 한쪽 입술이 조각만 잡힐 때
+    그 입술을 메운다. 가이드 영역 빌더가 그런 단계(단계 글에 「전체」)에만 쓴다.
+    안쪽 · 가운데에만 바르는 단계(틴트 · 글로스)에 쓰면 바르지 않은 칸까지 넓어졌다.
+    한쪽 입술에서만 찾았으면 그대로 둔다. 위아래는 입 안 가운데 높이로 가른다.
+    """
+    lips = _lips()
+    found = area & lips
+    rows, _ = np.nonzero(_inner())
+    middle = float(rows.mean()) if len(rows) else MAP_SIZE / 2
+    grid_rows, grid_cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE]
+    upper = grid_rows < middle
+    if not (found & upper).any() or not (found & ~upper).any():
+        return area
+    found_cols = np.nonzero(found.any(axis=0))[0]
+    across = (grid_cols >= found_cols.min()) & (grid_cols <= found_cols.max())
+    return area | (lips & across)
+
+
 def found_ratio(area: np.ndarray, unknown: np.ndarray | None = None) -> float:
     """입술(바깥 테두리 안, 입 안 빼고) 칸 중 바른 칸의 비율. unknown(모름 칸)은 빼고 센다."""
     lips = known_cells(_lips(), unknown)

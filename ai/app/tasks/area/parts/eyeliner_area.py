@@ -11,6 +11,9 @@
 가이드 영역 빌더가 점막 단계는 찾지 않고 기본 가이드로 보낸다.
 전후 사이 조명이 바뀐 만큼은 remove_lighting으로 빼고 본다.
 찾은 칸은 좁은 틈을 메우고 작은 조각을 버린다(eyeliner_shape).
+점막을 따라 속눈썹 뿌리를 채우는 단계는 눈 밖에서 조각으로만 보여, 가이드 영역 빌더가 그 단계의
+윗라인 조각 사이 빈 곳(눈 가로의 UPPER_JOIN_MAX보다 짧은 곳)을 속눈썹 띠로 잇는다(joined_upper).
+일부러 나눠 그린 윗라인은 잇지 않는다(docs/experiments/DEMO_AI_CHECK.md).
 paired_eyeliner가 자리마다 두 눈의 결과를 합쳐 양쪽 눈에 쓸 모양을 만들고,
 앞 아이라인 단계에서 이미 안내한 곳은 뺀다.
 """
@@ -61,6 +64,8 @@ DARKENING_MIN = 8
 REDNESS_DROP_MIN = 3
 CLOSE_CELLS = 3
 MIN_PIECE_CELLS = 20
+UPPER_JOIN_MAX = 0.5
+JOIN_BINS = 40
 FOUND_MIN_CELLS: dict[Zone, int] = {"upper": 150, "under": 220}
 DRAWN_GROW_CELLS = 3
 OUTLINE_GROW_CELLS = 1
@@ -342,6 +347,48 @@ def eyeliner_shape(mask: np.ndarray, cells: np.ndarray) -> np.ndarray:
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (CLOSE_CELLS, CLOSE_CELLS))
     closed = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel) > 0
     return _drop_small(closed & cells)
+
+
+def joined_upper(area: EyelinerArea, eye: RegionName) -> EyelinerArea:
+    """눈 하나의 찾기 결과에서 윗라인 조각 사이를 이은 결과(joined_upper_line).
+
+    윗라인을 못 찾았으면 그대로 돌려준다. 잇는 칸은 윗라인 울타리(eyeliner_range) 안이다.
+    """
+    upper = area.zones.get("upper")
+    if upper is None or upper.mask is None:
+        return area
+    line = ZoneLine(mask=joined_upper_line(upper.mask, eye, eyeliner_range(eye, "upper")))
+    zones = {**area.zones, "upper": line}
+    found = [z.mask for z in zones.values() if z.mask is not None]
+    return EyelinerArea(mask=np.any(found, axis=0), reason=area.reason, zones=zones)
+
+
+def joined_upper_line(mask: np.ndarray, eye: RegionName, cells: np.ndarray) -> np.ndarray:
+    """윗라인에서 끊겨 찾은 조각들 사이를 속눈썹 선 띠로 잇는다. cells(울타리) 안에 머문다.
+
+    앞머리 → 눈꼬리 방향 위치(눈 가로 길이를 1로 본 값)를 JOIN_BINS칸으로 나눠, 찾은 칸이 있는
+    칸 사이 빈 구간이 모두 UPPER_JOIN_MAX보다 짧으면 처음 칸 ~ 마지막 칸을 잇는다.
+    잇는 칸은 눈 테두리에서 찾은 칸 두께(눈 테두리까지 거리의 75번째 백분위)만큼의 띠다.
+    눈꼬리 바깥(꼬리 · 트임)은 따로 그린 선이라 잇지 않는다.
+    """
+    outer, inner = eye_corners(eye)
+    axis = outer - inner
+    length = float(np.hypot(*axis))
+    rows, cols = np.mgrid[0:MAP_SIZE, 0:MAP_SIZE]
+    along = ((cols - inner[0]) * axis[0] + (rows - inner[1]) * axis[1]) / length**2
+    inside = mask & (along >= 0) & (along <= 1)
+    if not inside.any():
+        return mask
+    bins = np.unique(np.clip((along[inside] * JOIN_BINS).astype(int), 0, JOIN_BINS - 1))
+    if len(bins) < 2 or np.max(np.diff(bins)) <= 1:
+        return mask
+    if (np.max(np.diff(bins)) - 1) / JOIN_BINS > UPPER_JOIN_MAX:
+        return mask
+    gap = cv2.distanceTransform((~_hole(eye)).astype(np.uint8), cv2.DIST_L2, 5)
+    thickness = float(np.percentile(gap[inside], 75))
+    start, end = bins[0] / JOIN_BINS, (bins[-1] + 1) / JOIN_BINS
+    bridge = cells & (gap <= thickness) & (along >= start) & (along <= end)
+    return mask | bridge
 
 
 def paired_eyeliner(

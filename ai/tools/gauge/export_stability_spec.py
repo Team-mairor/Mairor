@@ -19,7 +19,7 @@ sys.path.insert(0, str(AI_ROOT))
 from app.tasks.area.parts.area_preparation import OCCLUDED_MAX
 from tools.gauge import measure as ms
 from tools.gauge import stability as st
-from tools.gauge.baseline import FRONT_MAX, ROLL_MAX
+from tools.gauge.baseline import ROLL_MAX
 
 SPEC_PATH = AI_ROOT.parent / "shared" / "gauge" / "stability.v1.json"
 STEP = ms.MEASURE_INTERVAL_MS
@@ -28,8 +28,8 @@ FRAME_CASES = [
     ("frontOk", "eyeshadow", {"faces": 1}),
     ("noFace", "lip", {"faces": 0}),
     ("twoFaces", "lip", {"faces": 2}),
-    ("yawEdgeOk", "lip", {"faces": 1, "yaw": FRONT_MAX}),
-    ("yawOver", "lip", {"faces": 1, "yaw": -(FRONT_MAX + 0.01)}),
+    ("yawEdgeOk", "lip", {"faces": 1, "yaw": st.YAW_MAX}),
+    ("yawOver", "lip", {"faces": 1, "yaw": -(st.YAW_MAX + 0.01)}),
     ("rollOver", "lip", {"faces": 1, "roll": ROLL_MAX + 0.01}),
     ("tabletPitchOk", "lip", {"faces": 1, "pitch": -0.3}),
     ("pitchOver", "lip", {"faces": 1, "pitch": -(st.PITCH_MAX + 0.01)}),
@@ -162,7 +162,7 @@ def spec() -> dict:
     return {
         "version": "v1",
         "frame": {
-            "yawMax": FRONT_MAX,
+            "yawMax": st.YAW_MAX,
             "rollMax": ROLL_MAX,
             "pitchMax": st.PITCH_MAX,
             "faceWidthMin": st.FACE_WIDTH_MIN,

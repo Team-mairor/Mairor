@@ -12,12 +12,16 @@
   "white": {
     "frames": 15,
     "share": 0.25,
-    "clip": 250
+    "clip": 250,
+    "inset": 0.05,
+    "irisScale": 1.2,
+    "minPixels": 20
   },
   "methods": {
     "color": {
       "name": "mix",
       "anchor": "white",
+      "degree": "chroma",
       "weight": 1.0
     },
     "dark": {
@@ -188,21 +192,21 @@
         }
       ],
       "expected": {
-        "ratio": 0.9921,
-        "bar": 49.6065,
-        "hue": -0.0143,
-        "chroma": -0.0339,
+        "ratio": 1.0041,
+        "bar": 50.2042,
+        "hue": -0.0167,
+        "chroma": 0.0151,
         "hueSame": true,
         "chromaSame": true,
-        "target": 9.1458,
+        "target": 9.0856,
         "reason": null,
         "sides": [
           {
             "region": "lipsOuter",
-            "ratio": 0.9921,
-            "hue": -0.0143,
-            "chroma": -0.0339,
-            "target": 9.1458,
+            "ratio": 1.0041,
+            "hue": -0.0167,
+            "chroma": 0.0151,
+            "target": 9.0856,
             "reason": null
           }
         ]

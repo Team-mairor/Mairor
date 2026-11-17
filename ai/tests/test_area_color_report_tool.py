@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 from PIL import Image
 
@@ -113,6 +114,54 @@ def test_palettes_reads_palette_color_text(tmp_path) -> None:
 
     assert area_color_report.palettes(tmp_path) == {"s2": "3번 색"}
     assert area_color_report.palettes(tmp_path / "none") == {}
+
+
+def test_step_ends_follow_the_steps_the_area_was_built_from(tmp_path) -> None:
+    """가이드 입력이 있으면 그 단계 끝을, 없으면 매니페스트 단계 끝을 쓴다.
+
+    영역은 가이드 입력 단계 ID로 만들어지고, 처리기 매니페스트 단계는 ID가 달라 그 ID로 찾으면 없다.
+    """
+    step = {
+        "makeup": "lip",
+        "partLabel": "입술",
+        "summary": "입술에 바릅니다.",
+        "facts": {"area": {"value": "입술", "source": "voice", "at": 0}},
+        "product": None,
+    }
+    steps = [
+        step | {"order": 1, "stepId": "g1", "startSeconds": 1, "endSeconds": 2.5},
+        step | {"order": 2, "stepId": "g2", "startSeconds": 3, "endSeconds": 4.25},
+    ]
+    (tmp_path / "guide_input.json").write_text(
+        json.dumps({"videoId": "test_01", "durationSeconds": 10, "steps": steps}),
+        encoding="utf-8",
+    )
+    reference = SimpleNamespace(
+        manifest=SimpleNamespace(steps=[SimpleNamespace(step_id="step_01", end_seconds=9.0)])
+    )
+
+    assert area_color_report.step_ends(tmp_path, reference) == {"g1": 2500, "g2": 4250}
+    assert area_color_report.step_ends(tmp_path / "none", reference) == {"step_01": 9000}
+
+
+def test_photo_crops_skip_steps_without_an_end_time() -> None:
+    """끝 시각을 모르는 단계는 사진 조각 없이 넘어간다(KeyError로 멈추지 않는다)."""
+    sub_step = AreaSubStep(
+        subStepId="g1-1",
+        order=1,
+        status="template",
+        reasons=["lipColorNotFound"],
+        templateId="lip",
+        guideSets=[],
+    )
+    area = GuideArea(
+        videoId="test_01",
+        meshVersion="v1",
+        steps=[AreaStep(stepId="g1", order=1, makeup="lip", subSteps=[sub_step])],
+    )
+    reference = SimpleNamespace(manifest=SimpleNamespace(frames=[]))
+
+    assert area_color_report.photo_crops(area, None, reference, {}) == {}
 
 
 def test_colors_are_saved_per_step_in_order(tmp_path) -> None:

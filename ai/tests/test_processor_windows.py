@@ -7,7 +7,6 @@ from app.tasks.area.reference_area import PART_WINDOWS
 PROCESSOR_WINDOWS = (
     Path(__file__).resolve().parents[2] / "video-processor/processor/tasks/frames/windows.py"
 )
-REQUESTED_MAKEUPS = {"contour"}
 
 
 def load_processor_windows():
@@ -21,13 +20,13 @@ def load_processor_windows():
 def test_processor_window_table_matches_part_windows():
     """처리기가 뽑는 사진 구간이 AI 부위 창과 같아야 AI가 쓰는 사진이 빠지지 않는다.
 
-    처리기에 아직 없어도 되는 부위는 REQUESTED_MAKEUPS뿐이다. 그 부위는 사진이 오지 않아
-    기본 가이드로 나간다. 처리기가 그 부위를 더하면 창 길이가 AI와 같아야 한다.
+    AI가 창을 정한 부위는 모두 처리기 창 표에도 있어야 한다. 처리기에 없는 부위는 사진이 오지 않아
+    늘 기본 가이드로 나간다.
     """
     processor = load_processor_windows().AI_WINDOWS_MS
 
     assert processor == {makeup: PART_WINDOWS[makeup] for makeup in processor}
-    assert set(PART_WINDOWS) - set(processor) <= REQUESTED_MAKEUPS
+    assert set(PART_WINDOWS) == set(processor)
 
 
 def test_processor_ratio_window_matches_frame_checker():

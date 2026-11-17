@@ -50,7 +50,6 @@ from app.tasks.area.parts import (
     blush_area,
     brow_area,
     contour_area,
-    eye_white,
     eyeliner_area,
     eyeshadow_area,
     lip_area,
@@ -72,7 +71,6 @@ PART_MODULES = (
     blush_area,
     lip_area,
     contour_area,
-    eye_white,
 )
 NO_OCCLUSION = "none"
 OPTION = "--no-store"

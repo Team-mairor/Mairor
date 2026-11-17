@@ -246,11 +246,15 @@ def spec() -> dict:
             "frames": eye_white.WHITE_FRAMES,
             "share": eye_white.WHITE_SHARE,
             "clip": eye_white.WHITE_CLIP,
+            "inset": eye_white.WHITE_INSET,
+            "irisScale": eye_white.IRIS_SCALE,
+            "minPixels": eye_white.MIN_WHITE_PIXELS,
         },
         "methods": {
             "color": {
                 "name": cm.COLOR_METHOD.name,
                 "anchor": cm.COLOR_METHOD.anchor,
+                "degree": cm.COLOR_METHOD.degree,
                 "weight": cm.COLOR_METHOD.weight,
             },
             "dark": {

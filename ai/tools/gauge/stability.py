@@ -5,15 +5,19 @@ measure.py가 최근 사진 묶음으로 진하기 비율을 한 번 내면, 이
 
 1. 사진마다 게이지에 쓸 수 있는지 본다(frame_reason). 이미 정해 쓰는 판정과 숫자를 그대로 쓴다.
    - 얼굴이 하나가 아니면 lost.
-   - 고개: 좌우 baseline.FRONT_MAX · 기울기 baseline.ROLL_MAX(FE 얼굴 등록 정면 기준)를 넘거나,
-     위아래가 PITCH_MAX를 넘으면 turned. 위아래만 등록 기준보다 넓다. 태블릿이 눈보다 낮으면
-     평소 자세가 −0.2 안팎이고, 0.35까지는 막대가 더 틀리지 않았다.
+   - 고개: 좌우가 YAW_MAX, 기울기가 baseline.ROLL_MAX(FE 얼굴 등록 정면 기준)를 넘거나,
+     위아래가 PITCH_MAX를 넘으면 turned. 좌우 · 위아래는 등록 기준(baseline.FRONT_MAX)보다 넓다.
+     태블릿이 눈보다 낮으면 평소 자세가 −0.2 안팎이고, 0.35까지는 막대가 더 틀리지 않았다.
+     한 눈씩 바르면 좌우가 0.2를 자주 넘는데, 0.25까지는 시연자 맨얼굴에서 잰 값이 정면과 같고
+     바르지 않은 부위가 잘못 읽히는 몫이 줄었다(docs/experiments/DEMO_AI_CHECK.md).
    - 얼굴 폭이 영상 폭의 FACE_WIDTH_MIN보다 작으면 far(FE far와 같은 값).
    - 얼굴 밝기가 BRIGHTNESS_RANGE 밖이면 dark · bright(FE 얼굴 등록과 같은 값).
    - 맨피부가 단계 시작 기준에서 바뀐 크기(baseline.drift의 size)가 DRIFT_MAX보다 크면
      lightChanged. 조명이 그대로여도 카메라가 움직여 95%가 4 안팎이다.
    - 눈꺼풀 위 화장(EYE_MAKEUPS)은 눈 뜬 정도가 EYES_OPEN_MIN보다 작으면 eyesClosed.
-     감은 눈꺼풀은 뜬 눈과 색이 다르다.
+     감은 눈꺼풀은 뜬 눈과 색이 다르다. 눈 뜬 정도는 FE처럼 깜빡임 값(eyeBlink)으로 낸
+     0~1 값이다(FrameState). 시연자 녹화에서 0.2~0.3은 잘못 읽는 몫을 늘리지 않고 게이지가 보이는
+     시간을 점 6개 비율 0.25보다 크게 늘렸다.
    - 지금 하위 단계 영역 칸 중 가린 몫(287 가림 찾기 모델)이 area_preparation.OCCLUDED_MAX보다
      크면 covered. 그보다 적으면 사진은 쓰고 가린 칸만 뺀다(measure.frames_median이 빈 칸을 뺀다).
 2. measure.MEASURE_INTERVAL_MS마다 최근 measure.MEDIAN_WINDOW_MS 동안 쓸 수 있는 사진으로 잰다
@@ -41,7 +45,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.tasks.area.parts.area_preparation import OCCLUDED_MAX
-from tools.gauge.baseline import FRONT_MAX, ROLL_MAX
+from tools.gauge.baseline import ROLL_MAX
 from tools.gauge.measure import MEASURE_INTERVAL_MS, Measure, MeasureReason, gauge_bar
 
 FrameReason = Literal[
@@ -50,6 +54,7 @@ FrameReason = Literal[
 GaugeReason = FrameReason | MeasureReason | Literal["weakReference"]
 GaugeLabel = Literal["lighter", "similar", "darker"]
 
+YAW_MAX = 0.25
 PITCH_MAX = 0.35
 FACE_WIDTH_MIN = 0.4
 BRIGHTNESS_RANGE = (100.0, 215.0)
@@ -73,7 +78,8 @@ class FrameState:
     """사진 한 장의 상태.
 
     faces는 찾은 얼굴 수, yaw · pitch · roll은 고개 각도(라디안, 부호는 FE와 같음),
-    eyes는 눈 뜬 정도(area_preparation.eye_openness와 같은 식), face_width는 얼굴 윤곽 폭 ÷ 영상 폭,
+    eyes는 눈 뜬 정도(두 눈 중 작은 쪽의 1 − eyeBlink ÷ 0.5를 0~1로 자른 값, FE와 같음),
+    face_width는 얼굴 윤곽 폭 ÷ 영상 폭,
     brightness는 얼굴 가운데 평균 밝기(0~255, FE faceBrightness),
     drift는 맨피부가 단계 시작 기준에서 바뀐 크기(baseline.drift의 size, ΔE2000),
     area_cover는 지금 하위 단계 영역 칸 중 가린 몫(0~1)이다.
@@ -112,7 +118,7 @@ def frame_reason(state: FrameState, makeup: str) -> FrameReason | None:
     """사진 한 장을 게이지에 쓸 수 없는 이유. 쓸 수 있으면 None이다(모듈 설명 1번 순서)."""
     if state.faces != 1:
         return "lost"
-    if abs(state.yaw) > FRONT_MAX or abs(state.roll) > ROLL_MAX or abs(state.pitch) > PITCH_MAX:
+    if abs(state.yaw) > YAW_MAX or abs(state.roll) > ROLL_MAX or abs(state.pitch) > PITCH_MAX:
         return "turned"
     if state.face_width < FACE_WIDTH_MIN:
         return "far"

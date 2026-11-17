@@ -2,8 +2,8 @@
 
 measure.v1.json의 cases는 영역 가운데 색부터 시작해, 사진을 얼굴 지도로 펴고 칸 색을 내고
 기준 · 조명 빼기 · 영역 칸을 고르는 앞 단계는 시험하지 않는다. 이 파일은 합성 얼굴(cartoon_face)을
-그린 480 × 640 사진(PNG)과 얼굴 점 468개, 가이드 영역(guideSets), 레퍼런스 gauge를 입력으로
-measure · baseline 순서대로 잰 중간값과 게이지 값을 기대값으로 둔다.
+그린 480 × 640 사진(PNG)과 얼굴 점 478개(눈동자 10개 포함), 가이드 영역(guideSets),
+레퍼런스 gauge를 입력으로 measure · baseline 순서대로 잰 중간값과 게이지 값을 기대값으로 둔다.
 허용 오차는 docs/experiments/GAUGE_BROWSER_SPEC.md의 구현 차이 비교로 정했다.
 
 실행 (ai/ 폴더에서):
@@ -18,6 +18,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 
 AI_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(AI_ROOT))
@@ -34,6 +35,7 @@ from app.schemas.guide_area import (
 )
 from app.tasks.area.common import face_map as fm
 from app.tasks.area.common.region_points import REGION_POINTS
+from app.tasks.area.parts import eye_white
 from tools.gauge import baseline as bl
 from tools.gauge import color_match as cm
 from tools.gauge import measure as ms
@@ -193,7 +195,7 @@ def pipeline(
     now_grids = [bl.grid_lab(m) for m in now_maps]
     start = bl.build_baseline(start_grids)
     current = ms.frames_median(now_grids)
-    white = cm.white_color(fm.median_map(start_maps), syn.eye_holes(fm.MAP_SIZE))
+    white = user_white(starts, face)
     cells = [ms.area_cells(s) for s in sets]
     made = ms.made_cells(cells)
     sides, side_values = [], []
@@ -220,6 +222,7 @@ def pipeline(
             for region, cell in probe_cells()
         ],
         "white": None if white is None else _round(white, 6),
+        "whitePoints": int(eye_white.sclera_points(face, width, height).sum()),
         "baselineCells": int(start.cells.sum()),
         "madeCells": int(made.sum()),
         "sides": side_values,
@@ -234,6 +237,19 @@ def pipeline(
             "reason": result.reason,
         },
     }
+
+
+def user_white(frames: Sequence[np.ndarray], face) -> np.ndarray | None:
+    """기준 사진들의 흰자(선형). 사진마다 eye_white.photo_white로 내고 채널마다 가운데 값이다.
+
+    흰자를 낸 사진이 없으면 None이다.
+    """
+    height, width = frames[0].shape[:2]
+    row = SimpleNamespace(face=face, image_size=SimpleNamespace(width=width, height=height))
+    whites = [w for f in frames if (w := eye_white.photo_white(row, f)) is not None]
+    if not whites:
+        return None
+    return cm.linear_of_srgb(np.median(whites, axis=0))
 
 
 def probe_cells() -> list[tuple[str, tuple[int, int]]]:

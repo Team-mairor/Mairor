@@ -17,6 +17,8 @@
   레퍼런스 효과에서 가장 적게 바른 양(least_paint)과 그때 안료 색을 거꾸로 구하고,
   안료 색을 사용자 화면으로 (사용자 기준 색 ÷ 레퍼런스 기준 색)^weight 배수만큼 옮긴 뒤
   레퍼런스와 같은 양을 사용자 바르기 전 색에 칠한 목표 색을 바탕 위 레퍼런스 화장으로 둔다.
+  degree가 chroma이면 두 기준 색을 각자 밝기(Y)로 나눈 뒤 견줘 색만 옮기고, half이면 밝기 배수의
+  제곱근만 옮긴다(anchor_gain).
   사용자가 바른 양을 그 안료 쪽으로 간 거리로 잰 양의 비율은 amount에 따로 담는다.
 
 맞추기 기준 색(anchor)은 맨피부(skin)나 흰자(white)다. 맨피부 차이에는 조명과 피부톤이 섞여 있어
@@ -26,6 +28,8 @@
 바탕(target)은 레퍼런스 쪽, 사용자 쪽, 둘의 가운데(average) 중 하나다.
 
 같은 화장은 같은 제품을 같은 양 바른 것이다. 피부톤이 달라도 같은 양이면 같다고 읽혀야 한다.
+흰자는 색은 고르게 잡히지만 밝기는 시선 · 눈꺼풀 그늘에 따라 같은 사람 같은 조명에서도
+20~33% 흔들려서, 흰자로는 색만 맞춘다(docs/experiments/DEMO_AI_CHECK.md).
 그래서 색 있는 화장(립·블러셔·섀도 등)은 흰자 기준 mix(COLOR_METHOD)로, 검정·갈색 화장
 (DARK_MAKEUPS: 눈썹·아이라인)은 사용자 바탕 local(DARK_METHOD)로 견준다(method_for).
 값은 여러 영역을 한꺼번에 견줄 수 있게 모두 (… × 3) 표로 받는다.
@@ -87,8 +91,9 @@ class AreaSide:
 
 @dataclass(frozen=True)
 class MatchMethod:
-    """맞추는 방법 하나. space·degree는 skin·skinEffect·local에만, target은 none·mix 말고 모두에,
-    weight는 local(선형 RGB)·mix에만, anchor는 skin·skinEffect·mix에만 쓴다."""
+    """맞추는 방법 하나. space는 skin·skinEffect·local에만, degree는 skin·skinEffect·mix에만,
+    target은 none·mix 말고 모두에, weight는 local(선형 RGB)·mix에만,
+    anchor는 skin·skinEffect·mix에만 쓴다."""
 
     name: MatchName
     space: Space = "rgb"
@@ -106,7 +111,8 @@ class MatchMethod:
             return f"effect/{self.target}"
         white = "/white" if self.anchor == "white" else ""
         if self.name == "mix":
-            return f"mix/w{self.weight:g}{white}"
+            degree = "" if self.degree == "full" else f"/{self.degree}"
+            return f"mix/w{self.weight:g}{white}{degree}"
         if self.name == "local":
             tail = "" if self.weight == 1.0 else f"/w{self.weight:g}"
             return f"local/{self.space}/{self.target}{tail}"
@@ -133,7 +139,7 @@ class Comparison:
     amount: np.ndarray
 
 
-COLOR_METHOD = MatchMethod("mix", weight=1.0, anchor="white")
+COLOR_METHOD = MatchMethod("mix", degree="chroma", weight=1.0, anchor="white")
 DARK_METHOD = MatchMethod("local", target="user")
 DARK_MAKEUPS = frozenset({"brow", "eyeliner"})
 
@@ -149,6 +155,8 @@ def all_methods() -> Iterator[MatchMethod]:
     for anchor in ANCHORS:
         for weight in WEIGHTS:
             yield MatchMethod("mix", weight=weight, anchor=anchor)
+            if weight:
+                yield MatchMethod("mix", degree="chroma", weight=weight, anchor=anchor)
     for target in TARGETS:
         yield MatchMethod("effect", target=target)
         for weight in WEIGHTS[1:]:
@@ -299,8 +307,7 @@ def _mix(reference: AreaSide, user: AreaSide, method: MatchMethod) -> Comparison
     ref_change = np.asarray(reference.after, dtype=np.float64) - ref_before
     ref_amount = least_paint(ref_before, ref_change)
     pigment = ref_before + ref_change / ref_amount[..., None]
-    ratio = np.maximum(_anchor(user, method), TINY) / np.maximum(_anchor(reference, method), TINY)
-    gain = ratio**method.weight
+    gain = anchor_gain(_anchor(reference, method), _anchor(user, method), method)
     user_before = np.asarray(user.before, dtype=np.float64)
     toward = gain * pigment - user_before
     length = np.maximum(np.sum(toward**2, axis=-1), TINY)
@@ -320,6 +327,22 @@ def _mix(reference: AreaSide, user: AreaSide, method: MatchMethod) -> Comparison
     )
 
 
+def anchor_gain(reference: np.ndarray, user: np.ndarray, method: MatchMethod) -> np.ndarray:
+    """mix에서 안료 색에 곱할 채널별 배수((사용자 기준 색 ÷ 레퍼런스 기준 색)^weight).
+
+    degree가 chroma이면 두 기준 색을 각자 밝기 Y(선형 RGB의 0.2126 R + 0.7152 G + 0.0722 B)로
+    나눈 뒤 견줘 밝기 배수를 1로 두고, half이면 밝기 배수의 제곱근만 남긴다.
+    """
+    reference = np.maximum(np.asarray(reference, dtype=np.float64), TINY)
+    user = np.maximum(np.asarray(user, dtype=np.float64), TINY)
+    ratio = user / reference
+    if method.degree != "full":
+        light = (user @ SRGB_TO_XYZ[1]) / (reference @ SRGB_TO_XYZ[1])
+        keep = 0.0 if method.degree == "chroma" else 0.5
+        ratio = ratio / light[..., None] ** (1 - keep)
+    return ratio**method.weight
+
+
 def _moved_effect(side: AreaSide, base: np.ndarray, weight: float) -> np.ndarray:
     before = np.asarray(side.before, dtype=np.float64)
     gain = (np.maximum(base, TINY) / np.maximum(before, TINY)) ** weight
@@ -330,7 +353,9 @@ def white_color(face_map: np.ndarray, holes: np.ndarray) -> np.ndarray | None:
     """맨얼굴 지도(sRGB uint8)에서 흰자 색(선형 RGB). 흰자 칸이 없으면 None이다.
 
     화장한 뒤에는 아이라인·속눈썹이 흰자 둘레를 덮어 어둡게 읽히므로 맨얼굴(기준) 사진에서 잰다.
-    흰자 칸을 고르는 규칙(white_cells)은 레퍼런스 쪽을 재는 서비스 코드(eye_white)와 같다.
+    밝기로 칸을 고르는 규칙(white_cells)은 서비스 코드(eye_white)와 같다.
+    서비스는 사진마다 눈 테두리 안쪽 · 눈동자 원 밖 자리만 보지만(photo_white),
+    합성 지도에는 사진 자리가 없어 보지 않는다.
     """
     cells = white_cells(face_map, holes)
     if not cells.any():

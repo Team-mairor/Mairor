@@ -30,5 +30,6 @@
 | [튜토리얼 게이지: 측정 불가 판정 · 값 안정화 · 진하기 비율 식 변경과 가림 모델](2026-11-15-hyeonsoo-seoyun-gauge-unmeasurable.md)                  | 2026-11-15 | 김현수 → 한서윤                | 요청                                  |
 | [튜토리얼 단계 끝 AI 평가: 입력은 「다음」마다 남긴 칸 색 · 결과 형식 확정 · 계산 규격](2026-11-15-hyeonsoo-seoyun-step-evaluation.md)             | 2026-11-15 | 김현수 → 한서윤                | 요청                                  |
 | [튜토리얼 단계 끝 안내 문장: 문장 규칙 · 결과 형식에 sides 더하기 · 묶음 끝 3줄 · 기능명세 반영](2026-11-16-hyeonsoo-seoyun-step-feedback-text.md) | 2026-11-16 | 김현수 → 한서윤                | 요청                                  |
-| [게이지 눈 뜸 문턱과 사용자 흰자 고르기 다시 보기](2026-11-16-seoyun-hyeonsoo-gauge-eye-open-white.md)                                             | 2026-11-16 | 한서윤 → 김현수                | 요청                                  |
+| [튜토리얼 게이지: 고개 돌림 기준 0.25 · 흰자는 색만 맞추기 · 가림 모델 입력은 320 이상](2026-11-16-hyeonsoo-seoyun-gauge-demo-check.md)            | 2026-11-16 | 김현수 → 한서윤                | 요청                                  |
+| [가이드 조회: AI 영역이 모두 notApplicable인 단계는 previewable false](2026-11-16-hyeonsoo-jeongyun-previewable-not-applicable.md)                 | 2026-11-16 | 김현수 → 김정윤                | 요청                                  |
 | [튜토리얼 게이지: AI 흰자 추출 규칙과 브라우저용 가림 모델 전달 요청](2026-11-17-seoyun-hyeonsoo-gauge-white-occlusion.md)                         | 2026-11-17 | 한서윤 → 김현수                | 요청                                  |

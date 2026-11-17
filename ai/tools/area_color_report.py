@@ -70,7 +70,7 @@ def main() -> None:
         (folder / CHECKED_FILE).read_text(encoding="utf-8")
     )
     reference = load_reference_input(folder)
-    crops = photo_crops(area, result, reference)
+    crops = photo_crops(area, result, reference, step_ends(folder, reference))
     sheet_path = folder / SHEET_FILE
     sheet(rows, crops).save(sheet_path)
     print(f"저장: {sheet_path}")
@@ -148,18 +148,35 @@ def table(rows: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def step_ends(folder: Path, reference: ReferenceInput) -> dict[str, int]:
+    """단계 ID마다 단계 끝 시각(ms).
+
+    build_guide_area가 가이드 입력(guide_input.json)이 있으면 그 단계로 영역을 만들므로
+    같은 단계를 쓰고, 없으면 매니페스트 단계다.
+    처리기 단계표와 가이드 입력 단계는 ID가 다를 수 있다.
+    """
+    path = folder / GUIDE_INPUT_FILE
+    if path.is_file():
+        steps = GuideInput.model_validate_json(path.read_text(encoding="utf-8")).steps
+    else:
+        steps = reference.manifest.steps
+    return {step.step_id: round(step.end_seconds * 1000) for step in steps}
+
+
 def photo_crops(
-    area: GuideArea, result: LandmarksResult, reference: ReferenceInput
+    area: GuideArea, result: LandmarksResult, reference: ReferenceInput, ends: dict[str, int]
 ) -> dict[tuple[str, str], Image.Image]:
     """(하위 단계 ID, 부위)마다 단계 끝 직후 사진에서 그 영역 둘레를 자른 조각.
 
+    ends는 단계 ID마다 단계 끝 시각(ms, step_ends)이다. 끝 시각을 모르는 단계는 뺀다.
     영역 묶음의 부위가 화면 안인 첫 사진(draw_guide_area)을 쓰고, 그런 사진이 없으면 뺀다.
     """
     frames = {frame.frame_index: frame for frame in reference.manifest.frames}
-    ends = {step.step_id: round(step.end_seconds * 1000) for step in reference.manifest.steps}
     triangles = draw_guide_area._triangles()
     crops = {}
     for step in area.steps:
+        if step.step_id not in ends:
+            continue
         for sub_step_id, region, outlines in _outlines(step):
             rows = draw_guide_area._first_row(result, ends[step.step_id], [region])
             if not rows:

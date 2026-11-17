@@ -86,6 +86,33 @@ def build(monkeypatch, find_lip_area, steps=STEPS):
     return build_guide_area("test_01", steps, RESULT, never)
 
 
+@pytest.mark.parametrize(
+    ("part_label", "area", "filled"),
+    [
+        ("입술 전체에 립스틱 바르기", "입술", True),
+        ("립글로스 덧바르기", "입술 전체", True),
+        ("입술 안쪽에 립 틴트 바르기", "입술", False),
+        ("글로스", "입술 가운데", False),
+    ],
+)
+def test_only_whole_lip_steps_fill_both_lips(monkeypatch, part_label, area, filled):
+    """입술 전체에 바르는 단계만 찾은 곳의 두 입술을 채운다.
+
+    시연 영상 운영 실행(MR !253)의 립이 아랫입술 일부만 나간 사례다.
+    시험 영상의 「입술 안쪽」 틴트 · 「입술 가운데」 글로스는 채우면 진하게 바뀐 칸 몫이
+    0.85 → 0.54까지 떨어져 채우지 않는다.
+    """
+    calls = []
+
+    def fill(mask):
+        calls.append(mask)
+        return mask
+
+    monkeypatch.setattr(guide_area_builder, "filled_lips", fill)
+    build(monkeypatch, lips_found, steps=[input_step("lip", part_label, area)])
+    assert len(calls) == (1 if filled else 0)
+
+
 def test_steps_are_copied_from_input_in_order(monkeypatch):
     area = build(monkeypatch, lips_found, steps=[STEPS[2], STEPS[0], STEPS[1]])
     assert [(s.step_id, s.order, s.makeup) for s in area.steps] == [
@@ -848,6 +875,35 @@ def liner_sub_steps(monkeypatch, finder, step):
     return build_eyeliner(monkeypatch, finder, [step]).steps[0].sub_steps
 
 
+@pytest.mark.parametrize(
+    ("part_label", "area", "joined"),
+    [
+        ("아이라인 그리기", "윗점막, 아랫점막, 눈꼬리, 윗라인", True),
+        ("아이라인", "윗라인을 촘촘하게 채우기", True),
+        ("아이라인", "윗눈꺼풀 라인과 눈꼬리", False),
+        ("아이라인 중간", "아이라인 중간", False),
+    ],
+)
+def test_only_lash_line_filling_steps_join_upper_line_pieces(monkeypatch, part_label, area, joined):
+    """점막을 따라 채우는 단계만 윗라인 조각 사이를 잇는다.
+
+    시연 영상 운영 실행(MR !253)의 「윗점막, 아랫점막, 눈꼬리, 윗라인」 단계가 윗라인 가운데가 빈
+    채로 나간 사례다. 나눠 그린 단계는 그대로 둔다(시험 영상 s12는 이으면 진하게 바뀐 칸 몫이
+    0.84 → 0.64로 떨어졌다).
+    """
+    calls = []
+
+    def join(found_area, eye):
+        calls.append(eye)
+        return found_area
+
+    monkeypatch.setattr(guide_area_builder, "joined_upper", join)
+    liner_sub_steps(
+        monkeypatch, liner_found(upper=upper_line), input_step("eyeliner", part_label, area)
+    )
+    assert calls == (list(EYES) if joined else [])
+
+
 def test_waterline_step_uses_waterline_default_guide_without_reading_photos(monkeypatch):
     def never_find(*args, **kwargs):
         raise AssertionError("윗점막 단계는 사진으로 찾지 않아야 합니다")
@@ -1077,7 +1133,7 @@ def test_nose_contour_with_other_places_adds_the_face_contour_template(
     ("part_label", "area"),
     [
         ("블러셔와 쉐딩 이어주기", "옆광대~턱선"),
-        ("쉐딩 컬러로 애교살 경계선 잡기", "애교살, 눈 밑"),
+        ("애교살 아래 쉐딩", "애교살, 옆광대"),
         ("코랄 쉐딩", "볼"),
         ("코렉터 섞은 쉐딩", "턱"),
     ],
@@ -1085,7 +1141,10 @@ def test_nose_contour_with_other_places_adds_the_face_contour_template(
 def test_contour_away_from_the_nose_sides_uses_the_contour_template_without_finding(
     monkeypatch, part_label, area
 ):
-    """글에 코가 없는 쉐딩은 찾지 않는다. 광대·턱선·이마는 바르지 않은 단계와 가르지 못했다."""
+    """글에 코가 없는 쉐딩은 찾지 않는다. 광대·턱선·이마는 바르지 않은 단계와 가르지 못했다.
+
+    눈 자리와 광대 · 턱 같은 얼굴 자리를 같이 바르면 눈 자리만 그리지 않고 쉐딩 기본 가이드다.
+    """
 
     def never_find(*_, **__):
         raise AssertionError("콧대 옆이 아닌 쉐딩은 색으로 찾지 않아야 합니다")
@@ -1093,6 +1152,33 @@ def test_contour_away_from_the_nose_sides_uses_the_contour_template_without_find
     sub_steps = contour_sub_steps_of(monkeypatch, never_find, part_label, area)
     assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
         ("template", "contour", [NOT_ANALYZED])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("part_label", "area", "template"),
+    [
+        ("쉐딩 컬러로 애교살 경계선 잡기", "애교살, 눈 밑", "eyeshadowUnder"),
+        ("애교살 쉐딩", "애교살 경계", "eyeshadowUnder"),
+        ("눈두덩 쉐딩", "눈두덩 바깥쪽", "eyeshadowUpper"),
+        ("눈매 쉐딩", "눈두덩과 애교살", "eyeshadow"),
+    ],
+)
+def test_contour_around_the_eyes_uses_that_eye_place_template_without_finding(
+    monkeypatch, part_label, area, template
+):
+    """쉐딩 색으로 눈 둘레를 바르는 단계는 턱 · 코가 아니라 그 눈 자리 기본 가이드를 그린다.
+
+    시연 영상 운영 실행(MR !244 · !253)의 「쉐딩 컬러로 애교살 경계선을 확실히 잡아요」가
+    쉐딩 기본 가이드(턱)로 나갔던 사례다. 자리는 아이섀도와 같은 낱말로 고른다.
+    """
+
+    def never_find(*_, **__):
+        raise AssertionError("눈 둘레 쉐딩은 콧대 옆을 찾지 않아야 합니다")
+
+    sub_steps = contour_sub_steps_of(monkeypatch, never_find, part_label, area)
+    assert [(s.status, s.template_id, s.reasons) for s in sub_steps] == [
+        ("template", template, [NOT_ANALYZED])
     ]
 
 

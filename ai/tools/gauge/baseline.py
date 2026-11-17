@@ -56,7 +56,10 @@ _POW_25_7 = 25.0**7
 
 @dataclass(frozen=True)
 class FrameQuality:
-    """사진 한 장의 상태. 고개 각도(라디안, 부호는 FE와 같음)와 눈 뜬 정도."""
+    """사진 한 장의 상태. 고개 각도(라디안, 부호는 FE와 같음)와 눈 뜬 정도.
+
+    눈 뜬 정도는 stability.FrameState.eyes와 같은 깜빡임 값(0~1)이다.
+    """
 
     yaw: float
     pitch: float

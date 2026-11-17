@@ -242,14 +242,44 @@ def test_white_anchor_reads_same_amount_on_darker_skin_as_same():
     assert abs(np.log2(float(white.ratio))) < abs(np.log2(float(by_skin.ratio)))
 
 
-def test_white_anchor_still_removes_channel_light():
+def test_white_anchor_still_removes_colored_light():
     """흰자도 같은 조명을 받는다.
 
-    조명이 채널마다 곱해지면 흰자 비율로 정확히 지워진다.
+    밝기는 그대로이고 색만 다른 조명이 채널마다 곱해지면 흰자 색으로 지워진다.
+    흰자가 완전한 회색이 아니라 흰자 밝기가 조금 달라지는 만큼만 남는다(ΔE 0.05 아래).
+    """
+    cast = np.array([0.9, 1.0, 1.12])
+    cast = cast / float(cast @ cm.SRGB_TO_XYZ[1])
+    reference = side(SKIN, LIP, 0.4)
+    user = side(SKIN, LIP, 0.4, gain=tuple(cast))
+    assert float(cm.compare(reference, user, cm.COLOR_METHOD).same) < 0.05
+
+
+def test_white_anchor_ignores_white_brightness():
+    """흰자 밝기는 시선 · 눈꺼풀 그늘로 흔들려 색만 맞춘다.
+
+    사용자 흰자만 어둡게 잡혀도(같은 장면) 결과가 그대로이고, 밝기까지 맞추면 달라진다.
     """
     reference = side(SKIN, LIP, 0.4)
-    user = side(SKIN, LIP, 0.4, gain=(0.63, 0.7, 0.77))
-    assert float(cm.compare(reference, user, cm.COLOR_METHOD).same) == pytest.approx(0, abs=1e-6)
+    user = side(SKIN, LIP, 0.4)
+    shaded = cm.AreaSide(user.before, user.after, user.skin, user.white * 0.7, user.ratio)
+    full = cm.MatchMethod("mix", weight=1.0, anchor="white")
+    assert float(cm.compare(reference, shaded, cm.COLOR_METHOD).same) == pytest.approx(0, abs=1e-6)
+    assert float(cm.compare(reference, shaded, full).same) > 1.0
+
+
+def test_anchor_gain_keeps_brightness_by_degree():
+    """밝기 배수를 full은 그대로, half는 제곱근만, chroma는 1로 둔다."""
+    reference = np.array([0.8, 0.8, 0.8])
+    user = reference * 0.5
+    methods = {
+        degree: cm.MatchMethod("mix", degree=degree, anchor="white")
+        for degree in ("full", "half", "chroma")
+    }
+    gains = {degree: cm.anchor_gain(reference, user, method) for degree, method in methods.items()}
+    assert gains["full"] == pytest.approx([0.5] * 3)
+    assert gains["half"] == pytest.approx([0.5**0.5] * 3)
+    assert gains["chroma"] == pytest.approx([1.0] * 3)
 
 
 def test_white_anchor_needs_white_color():

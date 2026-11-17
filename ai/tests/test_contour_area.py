@@ -171,11 +171,18 @@ def test_side_more_than_half_hidden_gives_no_usable_frame():
     assert found["rightEye"].reason is None
 
 
-def test_paired_contour_keeps_each_side_own_shape():
-    left, right = side_range("leftEye").copy(), side_range("rightEye").copy()
-    masks = paired_contour({"leftEye": ContourArea(mask=left), "rightEye": ContourArea(mask=right)})
-    assert masks["leftEye"] is left
-    assert masks["rightEye"] is right
+def test_paired_contour_gives_both_sides_the_merged_mirror_shape():
+    """한쪽이 짧게만 잡혀도 두 쪽이 뒤집어 합친 같은 모양이다(운영 시연 영상 코 쉐딩 사례)."""
+    full = side_range("leftEye").copy()
+    rows = np.nonzero(full.any(axis=1))[0]
+    short = side_range("rightEye").copy()
+    short[: rows[len(rows) // 2]] = False
+    masks = paired_contour({"leftEye": ContourArea(mask=full), "rightEye": ContourArea(mask=short)})
+    merged = full | short[:, ::-1]
+    assert np.array_equal(masks["leftEye"], merged & side_range("leftEye"))
+    assert np.array_equal(masks["rightEye"], merged[:, ::-1] & side_range("rightEye"))
+    assert masks["rightEye"].sum() > short.sum()
+    assert not (masks["leftEye"] & ~side_range("leftEye")).any()
 
 
 def test_paired_contour_is_none_when_only_one_side_is_found():

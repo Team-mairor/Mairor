@@ -18,7 +18,7 @@
         "pitchCenterFrames": { "type": "integer", "minimum": 1, "description": "튜토리얼 시작 때 그 사람 정면 pitch(가운데 값)를 정하는 사진 수. 좌우 고개 · 기울기 · 눈 뜸 조건을 지킨 앞 사진들이다" },
         "frontMax": { "type": "number", "exclusiveMinimum": 0, "description": "좋은 사진의 |yaw| 최댓값, 그리고 |pitch − 그 사람 정면 pitch| 최댓값(라디안)" },
         "rollMax": { "type": "number", "exclusiveMinimum": 0, "description": "좋은 사진의 |roll| 최댓값(라디안)" },
-        "eyesOpenMin": { "type": "number", "minimum": 0, "description": "좋은 사진의 눈 뜬 정도 최솟값" }
+        "eyesOpenMin": { "type": "number", "minimum": 0, "description": "좋은 사진의 눈 뜬 정도(두 눈 중 작은 쪽의 1 − eyeBlink ÷ 0.5, 0~1) 최솟값" }
       }
     },
     "light": {
