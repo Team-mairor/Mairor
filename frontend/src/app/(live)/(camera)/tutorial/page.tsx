@@ -291,8 +291,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
 
   const [defaults, setDefaults] = useState<GuideSet | null>(null);
   const [step, setStep] = useState(0);
-  // 지금 하는 동작. '했어요'로 하나씩 넘긴다
-  const [act, setAct] = useState(0);
   // false면 단계 준비 카드(제품·할 일·끝내는 기준)를 띄운다. 앞으로 갈 때만 띄우고, 이전 단계로 돌아갈 때는 띄우지 않는다
   const [ready, setReady] = useState(false);
   const [exitAsk, setExitAsk] = useState(false);
@@ -342,7 +340,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   // 실제 가이드의 선택은 표시만 하고 촬영·게이지 판단에는 쓰지 않는다
   const pick = info.ref ? null : pickOf(info.stepId, run.choice, state.pouch);
   const hasProduct = !!pr && pr.kind !== "none";
-  // 동작을 하나씩 넘기는지. 샘플에서 제품이 없는 단계만 동작을 한꺼번에 보여 주고 바로 건너뛸 수 있다
+  // 바르는 단계인지. 샘플에서 제품이 없는 단계만 바로 건너뛸 수 있다
   const paced = hasProduct || !pr;
   const last = step >= steps.length - 1 || finishing;
   // 설명·제품과 얼굴 위 영역(GuideArea)은 단계 ID로 묶는다. 그릴 것이 없으면 설명만 보여 준다
@@ -621,7 +619,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     : gaugeLabel
       ? LABEL_TEXT[gaugeLabel]
       : null;
-  const lastAct = !paced || act >= info.acts.length - 1;
   // 사진은 묶음 마지막 단계(또는 완성하는 단계)에서만 찍으므로, 촬영 부위를 다시 불러오는 것도 그때만 한다
   const reloadRegions = (groupLast || finishing) && defaultsFailed && photoRegions.length === 0;
   // 묶음 안 위치. 한 단계뿐인 묶음이면 띄우지 않는다
@@ -634,8 +631,8 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
       ? `${group.label} · ${groupSize}단계로 나눠 발라요`
       : groupDetail;
   const flash = entered?.step === step ? entered : null;
-  // 화면에 띄우고 읽어 줄 동작. 단계 설명에 동작이 비어 있으면 아무것도 띄우지 않는다
-  const shownActs = paced ? (info.acts[act] ? [act] : []) : info.acts.map((_, i) => i);
+  // 한 단계의 가이드 영역은 하나라 동작을 하나씩 넘기지 않고 한 번에 띄우고 읽어 준다
+  const shownActs = info.acts.map((_, i) => i);
 
   // 가이드를 다시 확인하는 동안 촬영 대기를 접는다
   useEffect(() => {
@@ -650,7 +647,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setReview(null);
     setReviewError(null);
     setStep(i);
-    setAct(0);
     setReady(!prep);
     setEntered(null);
     setFinishing(false);
@@ -675,7 +671,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     setListOpen(false);
     setFinishing(true);
     setReady(true);
-    setAct(Math.max(0, info.acts.length - 1));
   };
   /** 단계에서 쓸 내 제품 이름. 제품 없이 하면 null */
   const productNameOf = (s: TutorialStep) => {
@@ -700,10 +695,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
   const next = () => {
     if (countdownActive.current) return cancelCountdown();
     if (shot.shooting || shot.saving || paused) return;
-    if (!lastAct) {
-      setAct((a) => a + 1);
-      return;
-    }
     if (!groupLast && !finishing) return enterNextInGroup();
     if (reloadRegions) {
       setDefaultsFailed(false);
@@ -738,17 +729,15 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           ? "잠시 멈춰 주세요…"
           : selfie && shot.state === "idle"
             ? "촬영하기"
-            : lastAct && reloadRegions
+            : reloadRegions
               ? "다시 불러오기"
               : shot.state === "failed"
                 ? "다시 찍기"
-                : !lastAct
-                  ? "했어요 · 다음 할 일"
-                  : last
-                    ? "완성하기"
-                    : paced
-                      ? "다음 스텝"
-                      : "건너뛰기";
+                : last
+                  ? "완성하기"
+                  : paced
+                    ? "다음 스텝"
+                    : "건너뛰기";
 
   return (
     <main className="relative flex flex-1 flex-col">
@@ -837,11 +826,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
               {groupDetail && (
                 <span className="shrink-0 text-[15px] text-line-2 tabular">{groupDetail}</span>
               )}
-              {paced && info.acts.length > 1 && (
-                <span className="shrink-0 text-[15px] text-line-2 tabular">
-                  할 일 {act + 1}/{info.acts.length}
-                </span>
-              )}
               {visibleGauge && meterText && (
                 <span
                   className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
@@ -851,7 +835,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                 </span>
               )}
             </div>
-            {/* 지금 할 동작을 카드 한 장으로 크게, 다음 동작은 흐리게 미리 보여 준다. */}
+            {/* 단계의 동작을 모두 카드로 띄운다 */}
             <div className="flex flex-col gap-2">
               {shownActs.map((i) => (
                 <ActCard
@@ -861,11 +845,6 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                   doneWhen={i === info.acts.length - 1 ? info.doneWhen : null}
                 />
               ))}
-              {paced && act < info.acts.length - 1 && (
-                <span className="truncate px-2 text-[16px] text-ash">
-                  다음 {act + 2}. {info.acts[act + 1].text}
-                </span>
-              )}
             </div>
 
             {visibleGauge && (
@@ -944,23 +923,10 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
               // 촬영을 기다리는 중이면(부위가 계속 화면 밖 등) 대기만 접고 지금 단계에 머문다
               if (shot.shooting) return cancelShot();
               if (posing) return setPosing(false);
-              if (act > 0) {
-                // 마지막 할 일에서 촬영에 실패한 채 돌아가면 실패 안내·다시 찍기 라벨을 지운다
-                cancelShot();
-                return setAct((a) => a - 1);
-              }
               if (step > 0) goStep(step - 1, false);
             }}
-            label={
-              shot.saving
-                ? "저장 중…"
-                : shot.shooting
-                  ? "촬영 취소"
-                  : act > 0
-                    ? "이전 할 일"
-                    : "이전 단계"
-            }
-            disabled={shot.saving || (!shot.shooting && step === 0 && act === 0)}
+            label={shot.saving ? "저장 중…" : shot.shooting ? "촬영 취소" : "이전 단계"}
+            disabled={shot.saving || (!shot.shooting && step === 0)}
           />
           <PillButton
             size="cta"
