@@ -16,6 +16,8 @@ import type {
   LoginResponse,
   Page,
   PasswordResetVerified,
+  PouchItemResponse,
+  PouchList,
   PopularVideoResponse,
   User,
   VideoSearchItem,
@@ -72,6 +74,77 @@ const MOCK_VIDEO: VideoSearchItem = {
 const NO_GUIDE = { guideId: null, guideAvailable: false } as const;
 const MOCK_FACE_ID = "f0000000-0000-4000-8000-000000000001";
 const MOCK_EXECUTION_ID = "e0000000-0000-4000-8000-000000000001";
+const MOCK_NOW = "2026-11-11T00:00:00Z";
+
+const mockPouchItem = (
+  pouchItemId: string,
+  category: string,
+  type: string,
+  brand: string,
+  name: string,
+  color: string,
+  shadeName: string | null = null,
+): PouchItemResponse => ({
+  pouchItemId,
+  registrationMode: "MANUAL",
+  productId: null,
+  shadeId: null,
+  brand,
+  name,
+  category,
+  type,
+  shadeName,
+  color: { colorSpace: "sRGB", hex: color, source: "USER_INPUT", estimated: false },
+  colorSource: "USER_INPUT",
+  createdAt: MOCK_NOW,
+  updatedAt: MOCK_NOW,
+});
+
+/** 제품 확인의 같은 제품·대체 제품·게이지 흐름을 모두 볼 수 있는 모의 파우치 */
+const MOCK_POUCH: PouchItemResponse[] = [
+  mockPouchItem(
+    "p1",
+    "BASE",
+    "FOUNDATION",
+    "바닐라코",
+    "커버리셔스 파워 핏 파운데이션",
+    "#E9D2C2",
+    "19 라이트",
+  ),
+  mockPouchItem("p2", "CHEEK", "BLUSHER", "하밍", "젤리 에어 치크", "#EF8E8A", "02 베리피치"),
+  mockPouchItem("p3", "LIP", "LIP_TINT", "잉가", "벨벳 쥬 틴트", "#B5706B", "애프리콧 슈"),
+  mockPouchItem("p4", "EYE", "EYESHADOW_PALETTE", "에뛰드", "Play Color Eyes", "#C9A98B"),
+  mockPouchItem("p5", "EYE", "EYELINER", "페리페라", "Ink V Shadow 딥브라운", "#6B4E3D"),
+  mockPouchItem("p6", "LIP", "LIP_TINT", "롬앤", "Juicy Lasting Tint", "#B5706B"),
+];
+
+const mockMatch = (
+  stepId: string,
+  result: "SAME" | "SUBSTITUTE" | "NONE",
+  pouchItemId: string | null = null,
+) => ({
+  stepId,
+  result,
+  samePouchItemId: result === "SAME" ? pouchItemId : null,
+  noneReason: result === "NONE" ? "NO_SUITABLE_ITEM" : null,
+  candidates: result === "SUBSTITUTE" && pouchItemId ? [{ pouchItemId, rank: 1 }] : [],
+});
+
+const MOCK_MATCH_STEPS = [
+  mockMatch("s5", "SAME", "p1"),
+  mockMatch("s7", "SAME", "p2"),
+  mockMatch("s9", "NONE"),
+  mockMatch("s10", "SUBSTITUTE", "p4"),
+  mockMatch("s11", "NONE"),
+  mockMatch("s12", "SUBSTITUTE", "p5"),
+  mockMatch("s13", "NONE"),
+  mockMatch("s14", "NONE"),
+  mockMatch("s15", "NONE"),
+  mockMatch("s16", "NONE"),
+  mockMatch("s17", "SUBSTITUTE", "p6"),
+  mockMatch("s18", "SAME", "p3"),
+  mockMatch("s19", "NONE"),
+];
 
 // 리포트 모의 기록. 2단계 중 하나는 대체 제품, 하나는 생략
 const MOCK_REPORT_SUMMARY: ReportSummaryDto = {
@@ -182,20 +255,33 @@ const ROUTES: MockRoute[] = [
       }),
   },
   {
-    // 빈 파우치. 제품 체크를 지나 튜토리얼까지 갈 수 있게 한다
+    // 같은 제품·대체 제품·없는 제품을 제품 체크에서 함께 확인한다
     method: "GET",
     path: /^\/v1\/users\/me\/pouch-items$/,
     success: () => ({
       status: 200,
-      body: { items: [], page: 0, size: 100, hasNext: false, pouchVersion: 1 },
+      body: {
+        items: MOCK_POUCH,
+        page: 0,
+        size: 100,
+        hasNext: false,
+        pouchVersion: 1,
+      } satisfies PouchList,
     }),
     error: () => NOT_FOUND(),
   },
   {
-    // 요청 본문(guideId)을 보지 않으므로 단계 결과 없이 답한다. 화면은 모든 단계를 비교 기준 없음으로 본다
+    // 모의 가이드의 같은 제품·대체 제품·없는 제품 결과
     method: "POST",
     path: /^\/v1\/users\/me\/guide-matches$/,
-    success: () => ({ status: 201, body: { matchId: "mock-match", guideId: "", steps: [] } }),
+    success: () => ({
+      status: 201,
+      body: {
+        matchId: "mock-match",
+        guideId: MOCK_VIDEO.guideId ?? "",
+        steps: MOCK_MATCH_STEPS,
+      },
+    }),
     error: () => NOT_FOUND(),
   },
   {
