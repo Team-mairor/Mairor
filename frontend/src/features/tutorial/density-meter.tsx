@@ -1,3 +1,5 @@
+import { GAUGE_DARKER_FROM, GAUGE_SIMILAR_FROM } from "./use-smoothed-gauge";
+
 /** 레퍼런스만큼 바른 자리(0~100). 막대는 내 화장 효과 ÷ 레퍼런스 효과 × 50이다 */
 export const GAUGE_REFERENCE = 50;
 /** 0도 트랙 안에서 시작점과 최소 채움이 보이게 하는 화면 위치 */
@@ -12,7 +14,7 @@ export function gaugeVisualValue(value: number): number {
   return Math.round(eased * 100) / 100;
 }
 
-/** 연하게~진하게 게이지와 레퍼런스 위치선 */
+/** 연해요~진해요 게이지와 목표 구간 띠 */
 export function DensityMeter({
   value,
   color,
@@ -27,6 +29,9 @@ export function DensityMeter({
   const current = value === null ? null : Math.min(Math.max(value, 0), 100);
   const visualCurrent = current === null ? null : gaugeVisualValue(current);
   const visual = Math.max(visualCurrent ?? 0, GAUGE_START);
+  // 「비슷해요」로 보는 목표 구간. 막대와 같은 표시 곡선으로 그려 위치가 맞는다
+  const bandFrom = gaugeVisualValue(GAUGE_SIMILAR_FROM);
+  const bandTo = gaugeVisualValue(GAUGE_DARKER_FROM);
   return (
     <div
       role="meter"
@@ -38,16 +43,10 @@ export function DensityMeter({
       aria-valuetext={
         visualCurrent === null ? "측정 중" : `현재 ${Math.round(visualCurrent)}, 목표 50`
       }
-      className="flex flex-col gap-1.5 text-[13px] font-bold text-white"
+      className="flex flex-col gap-1.5 pt-3.5 text-[13px] font-bold text-white"
     >
-      <div className="grid grid-cols-3 items-center text-[12px] font-bold text-white/85">
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full border-2 border-white bg-ice" aria-hidden />내 위치
-        </span>
-        <span className="flex items-center justify-center gap-1.5">목표</span>
-      </div>
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
-        <span>연하게</span>
+        <span>연해요</span>
         <div className="relative h-6 min-w-0">
           <div
             data-track
@@ -59,10 +58,20 @@ export function DensityMeter({
             style={{ width: `${visual}%`, background: color }}
           />
           <span
-            data-dark
-            className="absolute top-0.5 h-5 w-[3px] -translate-x-1/2 rounded-sm bg-white"
-            style={{ left: `${GAUGE_REFERENCE}%` }}
+            data-target-band
+            aria-hidden
+            className="absolute top-1.5 h-3 rounded-sm bg-white/25"
+            style={{ left: `${bandFrom}%`, width: `${bandTo - bandFrom}%` }}
           />
+          <span
+            data-target-label
+            data-dark
+            aria-hidden
+            className="absolute -top-3.5 -translate-x-1/2 text-[12px] font-bold text-white/85"
+            style={{ left: `${(bandFrom + bandTo) / 2}%` }}
+          >
+            목표
+          </span>
           <span
             data-current
             data-measuring={current === null || undefined}
@@ -72,7 +81,7 @@ export function DensityMeter({
             <span className="sr-only">{current === null ? "측정 시작점" : "현재 위치"}</span>
           </span>
         </div>
-        <span>진하게</span>
+        <span>진해요</span>
       </div>
     </div>
   );

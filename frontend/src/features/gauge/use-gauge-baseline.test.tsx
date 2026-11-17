@@ -94,6 +94,7 @@ type Result = {
   stepBaseline: (i: number) => unknown;
   takeNext: (next: number, makeup: string) => boolean;
   record: (at: number, state: FrameState, grid: CellLab | null) => void;
+  restart: () => void;
 };
 const probe: { current: Result | null } = { current: null };
 type ProbeProps = {
@@ -176,6 +177,39 @@ describe("게이지 기준 모으기", () => {
       lock: { exposure: "얼굴 등록에서 고정됨" },
     });
     expect(mocks.match).not.toHaveBeenCalled();
+  });
+
+  it("정면이 정해진 뒤 자세가 바뀌어 기준 사진이 안 모여도 다시 모으기로 풀린다", async () => {
+    saveRegisteredGaugeBaseline({
+      runId: "run",
+      track: mocks.track as MediaStreamTrack,
+      baseline: {
+        lab: new Float32Array(GRID * GRID * 3).fill(50),
+        cells: new Uint8Array(GRID * GRID).fill(1),
+        frames: 15,
+      },
+      white: [230, 220, 215],
+      center: -0.19,
+      lock: { exposure: "얼굴 등록에서 고정됨" },
+    });
+    // 카메라 정면 안이지만 등록 때 정면에서 0.2보다 벗어난 자세
+    const lean = () =>
+      act(async () => {
+        for (let i = 0; i < 60; i++) {
+          now += FRAME_GAP_MS;
+          mocks.listener?.(frame({ yaw: 0, pitch: 0.15, roll: 0 }));
+        }
+      });
+
+    await render("run", 1, true);
+    await lean();
+    expect(latest().status.frames).toBe(0);
+    expect(latest().stepBaseline(1)).toBeNull();
+
+    await act(async () => latest().restart());
+    expect(latest().status.center).toBeNull();
+    await lean();
+    expect(latest().stepBaseline(1)).not.toBeNull();
   });
 
   it("지금 단계 부위가 화면에 온전히 보여야 기준 사진을 모은다", async () => {

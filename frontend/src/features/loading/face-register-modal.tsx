@@ -455,10 +455,6 @@ export function FaceRegisterModal({
             <span className="font-label text-[13px] font-bold tracking-[.16em] text-navy">
               FACE ID
             </span>
-            <span className="flex h-8 items-center gap-2 rounded-full bg-cream px-3 text-[14px] font-semibold text-ink tabular">
-              <span className="size-1.5 rounded-full bg-cyan" />
-              분석 {pct}%
-            </span>
           </div>
 
           <FaceRing

@@ -92,7 +92,7 @@ export function PrepCard({
   /** 실제 가이드의 선택. 있으면 match 대신 쓴다 */
   pick?: StepPick | null;
   /** 게이지 단계가 시작 전에 모으는 기준 사진 */
-  baseline?: { frames: number; total: number; ready: boolean; canSkip?: boolean };
+  baseline?: { frames: number; total: number; ready: boolean };
   onStart: () => void;
 }) {
   const mine = pick ? (pick.kind === "picked" ? pick.item : null) : (match?.p ?? null);
@@ -196,16 +196,10 @@ export function PrepCard({
         trailing
         progress={baseline ? (baseline.frames / baseline.total) * 100 : undefined}
         onClick={onStart}
-        disabled={baseline && !baseline.ready && !baseline.canSkip}
-        aria-label={
-          baseline?.canSkip && !baseline.ready
-            ? `게이지 없이 시작, 준비 ${baseline.frames}/${baseline.total}`
-            : baseline
-              ? `시작하기, 준비 ${baseline.frames}/${baseline.total}`
-              : "시작하기"
-        }
+        disabled={baseline && !baseline.ready}
+        aria-label={baseline ? `시작하기, 준비 ${baseline.frames}/${baseline.total}` : "시작하기"}
       >
-        {baseline?.canSkip && !baseline.ready ? "게이지 없이 시작" : "시작하기"}
+        시작하기
         {baseline && ` (${baseline.frames}/${baseline.total})`}
       </PillButton>
     </Modal>

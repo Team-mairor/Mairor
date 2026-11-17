@@ -44,7 +44,7 @@ export function BottomTabs({
   return (
     <nav
       aria-label="주요 메뉴"
-      className="grid h-32 shrink-0 grid-cols-5 gap-1 border-t border-line-2 bg-white px-4 pt-3 pb-5 shadow-[0_-8px_24px_color-mix(in_srgb,var(--color-night)_6%,transparent)]"
+      className="sticky inset-x-0 bottom-0 z-20 grid h-32 shrink-0 grid-cols-5 gap-1 border-t border-line-2 bg-white px-4 pt-3 pb-5 shadow-[0_-8px_24px_color-mix(in_srgb,var(--color-night)_6%,transparent)]"
     >
       {TABS.map(({ href, label, Icon, match }) => {
         const on = match(pathname);

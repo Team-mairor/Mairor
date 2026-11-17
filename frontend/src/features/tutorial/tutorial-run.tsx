@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { pickOf } from "@/domain/check";
+import { needsMore } from "@/domain/gauge";
 import { groupIndexOf, groupSteps, productStepKey } from "@/domain/guide";
 import {
   abandonExecution,
@@ -38,6 +39,7 @@ import {
 } from "@/vision/guide";
 
 import { ExitModal } from "./exit-modal";
+import { LackMoreModal, TooDarkModal } from "./gauge-notice-modals";
 import { ProductChip } from "./product-chip";
 import { SelfiePreview } from "./selfie-preview";
 import { StepActions } from "./step-actions";
@@ -61,9 +63,11 @@ import {
 import { useFinalCountdown } from "./use-final-countdown";
 import { useFinalReview } from "./use-final-review";
 import { useGaugeDebug } from "./use-gauge-debug";
+import { useSmoothedGauge } from "./use-smoothed-gauge";
 import { useStepBaseline } from "./use-step-baseline";
 import { LABEL_COLOR, LABEL_TEXT, useStepGaugeRule } from "./use-step-gauge-rule";
 import { useStepShot } from "./use-step-shot";
+import { useTooDarkNotice } from "./use-too-dark-notice";
 
 /**
  * 상단 바는 연속한 같은 제품 단계를 한 칸으로 묶고, 묶음의 마지막 단계를 넘길 때 확인 창 없이 사진을 한 장 남긴다.
@@ -252,24 +256,36 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
     onShot: baseline.record,
   });
   const { display } = gaugeMeasure;
+  // 화면에 보이는 막대 · 문구 · 연함 / 진함 창은 모두 이 다듬은 값에서 정한다. 원래 값은 디버그에만 보인다
+  const smoothed = useSmoothedGauge(display?.bar ?? null);
+  const shown = useMemo(
+    () => (display ? { ...display, bar: smoothed.bar, label: smoothed.label } : null),
+    [display, smoothed],
+  );
   const gaugeUnavailable =
     display?.reason === "thinArea" ||
     display?.reason === "weakReference" ||
     display?.reason === "noReference" ||
     display?.reason === "noWhite";
-  const visibleGauge = showGauge && !gate.skipped && !gaugeUnavailable;
+  const visibleGauge = showGauge && !gaugeUnavailable;
   // 이전 화면에서 기준 없이 시작한 실행도 준비 카드를 다시 열어 같은 단계 기준을 모은다
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 기준이 없는 기존 실행을 준비 카드로 복구한다
-    if (ready && showGauge && !gate.skipped && display?.reason === "noBaseline") setReady(false);
-  }, [ready, showGauge, gate.skipped, display?.reason]);
-  const gaugeLabel = display?.label ?? null;
-  const meterBlocked = paused || reason === "far" || display?.bar == null;
+    if (ready && showGauge && display?.reason === "noBaseline") setReady(false);
+  }, [ready, showGauge, display?.reason]);
+  // 너무 진하면 멈추고 확인시키고, 단계를 넘길 때 연하면 더 바를지 묻는다. 둘 다 단계마다 새로 시작한다
+  const stepKey = `${run.id}:${step}`;
+  const gaugeReading = gaugeActive && visibleGauge && reason !== "far";
+  const tooDark = useTooDarkNotice({ display: shown, enabled: gaugeReading, stepKey });
+  const [lackKey, setLackKey] = useState<string | null>(null);
+  const lackAsked = useRef(new Set<string>());
+  const gaugeLabel = shown?.label ?? null;
+  const meterBlocked = paused || reason === "far" || shown?.bar == null;
   const meterColor = !gaugeLabel ? "#20DFFF" : LABEL_COLOR[gaugeLabel];
   const meterText = meterBlocked
     ? reason === "far"
       ? "조금 가까이 와 주세요"
-      : display?.bar == null
+      : shown?.bar == null
         ? "화장을 바르면 내 위치가 움직여요"
         : "측정을 잠시 멈췄어요"
     : gaugeLabel
@@ -351,6 +367,12 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
   const next = () => {
     if (finalCountdown.cancel()) return;
     if (shot.shooting || shot.saving || paused) return;
+    // 레퍼런스보다 연하면 넘기기 전에 한 번 묻는다. 사용자가 목록에서 여기서 끝내겠다고 한 때는 묻지 않는다
+    if (!finishing && gaugeReading && needsMore(shown) && !lackAsked.current.has(stepKey)) {
+      lackAsked.current.add(stepKey);
+      setLackKey(stepKey);
+      return;
+    }
     if (!groupLast && !finishing) return enterNextInGroup();
     if (reloadRegions) {
       setDefaultsFailed(false);
@@ -461,7 +483,7 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
             meter={{
               show: visibleGauge,
               text: meterText,
-              value: display?.bar ?? null,
+              value: shown?.bar ?? null,
               color: meterColor,
               blocked: meterBlocked,
             }}
@@ -516,26 +538,23 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
                   frames: baseline.status.frames,
                   total: 15,
                   ready: stepBaseline !== null,
-                  canSkip: gate.canSkip,
                 }
               : undefined
           }
           onStart={() => {
-            if (!gate.needed || stepBaseline || gate.canSkip) {
-              if (gate.needed && !stepBaseline) gate.skip();
-              setReady(true);
-            }
+            if (!gate.needed || stepBaseline) setReady(true);
           }}
         />
       )}
 
-      {gate.cameraTuning && !gate.canSkip && <CameraTuningOverlay />}
+      {gate.cameraTuning && <CameraTuningOverlay />}
       {!ready &&
         !gate.cameraTuning &&
-        !gate.canSkip &&
         gate.needed &&
         !stepBaseline &&
-        (baseline.status.front === false || gate.stalled) && <LookAtCameraOverlay />}
+        (baseline.status.front === false || gate.stalled) && (
+          <LookAtCameraOverlay onRetry={gate.stalled ? gate.retry : undefined} />
+        )}
 
       {review.photo && (
         <PhotoReview
@@ -564,6 +583,15 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
         onClose={() => setListOpen(false)}
       />
       <ExitModal open={exitAsk} onQuit={quit} onClose={() => setExitAsk(false)} />
+      <LackMoreModal
+        open={lackKey === stepKey}
+        onMore={() => setLackKey(null)}
+        onSkip={() => {
+          setLackKey(null);
+          next();
+        }}
+      />
+      <TooDarkModal open={tooDark.open} onConfirm={tooDark.confirm} />
     </main>
   );
 }

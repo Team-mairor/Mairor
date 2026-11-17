@@ -98,7 +98,7 @@ describe("영상 제품 정보가 없는 실제 가이드 단계", () => {
     expect(button?.disabled).toBe(true);
   });
 
-  it("기준 사진을 오래 모으지 못하면 게이지 없이 시작할 수 있다", async () => {
+  it("기준 사진을 모으기 전에는 게이지 없이 시작할 수 없다", async () => {
     const onStart = vi.fn();
     await render(
       <PrepCard
@@ -107,15 +107,16 @@ describe("영상 제품 정보가 없는 실제 가이드 단계", () => {
         info={info}
         refProduct={null}
         match={null}
-        baseline={{ frames: 7, total: 15, ready: false, canSkip: true }}
+        baseline={{ frames: 7, total: 15, ready: false }}
         onStart={onStart}
       />,
     );
     const button = element.querySelector("button")!;
-    expect(button.textContent).toContain("게이지 없이 시작 (7/15)");
-    expect(button.getAttribute("aria-label")).toBe("게이지 없이 시작, 준비 7/15");
-    expect(button.disabled).toBe(false);
+    expect(button.textContent).toContain("시작하기 (7/15)");
+    expect(button.textContent).not.toContain("게이지 없이");
+    expect(button.getAttribute("aria-label")).toBe("시작하기, 준비 7/15");
+    expect(button.disabled).toBe(true);
     await act(async () => button.click());
-    expect(onStart).toHaveBeenCalledOnce();
+    expect(onStart).not.toHaveBeenCalled();
   });
 });

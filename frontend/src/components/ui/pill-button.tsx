@@ -11,7 +11,7 @@ import { Spinner } from "./spinner";
 // cta(72px)·hero(80px)는 화면 아래 큰 버튼 크기다. 주요 버튼은 primary, 옆의 보조 버튼은 line으로 쓴다.
 // trailing을 주면 오른쪽에 화살표 원이 붙고 글씨는 왼쪽으로 붙는다.
 const pillVariants = cva(
-  "group inline-flex shrink-0 items-center justify-center gap-2.5 rounded-full font-semibold whitespace-nowrap transition-[background,transform] select-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40 active:not-disabled:scale-[.99] disabled:cursor-default tabular",
+  "group isolate inline-flex shrink-0 items-center justify-center gap-2.5 rounded-full font-semibold whitespace-nowrap transition-[background,transform] select-none outline-none focus-visible:ring-3 focus-visible:ring-ring/40 active:not-disabled:scale-[.99] disabled:cursor-default tabular",
   {
     variants: {
       variant: {
@@ -112,7 +112,10 @@ export function PillButton({
           </span>
         </>
       ) : (
-        <span className="relative z-10">{children}</span>
+        // 버튼의 gap이 아이콘·글자 사이에 적용되도록 자식을 같은 줄에 둔다
+        <span className="relative z-10 inline-flex items-center justify-center gap-[inherit]">
+          {children}
+        </span>
       )}
     </button>
   );

@@ -2,7 +2,7 @@
 
 import { ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
@@ -11,6 +11,7 @@ import { usePouchSync } from "@/domain/session";
 import { useAuth, useMyPouch, useSessionActions } from "@/domain/session";
 import { MyHeader } from "@/features/my";
 import { PouchBoard, PouchOpenFx, ProductSheet } from "@/features/pouch";
+import { shouldPlayPouchOpenFx } from "@/features/pouch/pouch-open-policy";
 import { ApiError, errorMessage, isAbortError } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
@@ -26,9 +27,16 @@ export default function MyPouchPage() {
   const [cat, setCat] = useState<string>("전체");
   const [form, setForm] = useState<ProductDraft | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  // 진입 연출 2.2초
+  // 진입 연출 2.2초. 같은 탭에서 최근에 봤다면 목록을 바로 보여 준다.
   const [fx, setFx] = useState(true);
-  useEffect(() => {
+  // 효과가 두 번 실행돼도(StrictMode) 재생 여부는 처음 한 번만 정한다
+  const playFx = useRef<boolean | null>(null);
+  useLayoutEffect(() => {
+    playFx.current ??= shouldPlayPouchOpenFx(sessionStorage);
+    if (!playFx.current) {
+      setFx(false);
+      return;
+    }
     const t = setTimeout(() => setFx(false), 2200);
     return () => clearTimeout(t);
   }, []);

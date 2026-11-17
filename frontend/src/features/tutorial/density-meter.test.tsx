@@ -4,13 +4,25 @@ import { describe, expect, it } from "vitest";
 import { DensityMeter, gaugeVisualValue } from "./density-meter";
 
 describe("DensityMeter", () => {
-  it("목표선과 현재 위치를 따로 표시한다", () => {
+  it("목표 구간 띠와 현재 위치를 따로 표시한다", () => {
     const html = renderToStaticMarkup(<DensityMeter value={32} color="#9be8f6" blocked={false} />);
 
     expect(html).toContain("목표");
-    expect(html).toContain("내 위치");
+    expect(html).not.toContain("내 위치");
     expect(html).toContain("left:34.99%");
     expect(html).toContain("현재 35, 목표 50");
+  });
+
+  it("목표 구간(35~55)을 막대와 같은 표시 곡선으로 띠로 보여 준다", () => {
+    const html = renderToStaticMarkup(<DensityMeter value={20} color="#9be8f6" blocked={false} />);
+    const from = gaugeVisualValue(35);
+
+    expect(html).toContain("data-target-band");
+    expect(html).toContain(`left:${from}%`);
+    expect(html).toContain(`width:${gaugeVisualValue(55) - from}%`);
+    // 「목표」 글자는 띠 위쪽 가운데에 둔다
+    expect(html).toContain("data-target-label");
+    expect(html).toContain(`left:${(from + gaugeVisualValue(55)) / 2}%`);
   });
 
   it("측정이 막혀도 게이지 틀을 유지한다", () => {

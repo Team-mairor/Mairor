@@ -27,11 +27,12 @@ const AUTO_SHOT_SECONDS = 7;
  * width는 칸 너비(구멍 822px) 대비 %, 모두 칸 아래쪽에 붙는다.
  */
 const CAPTURE_GUESTS = [
-  { side: "left", width: (454 / 822) * 100 },
-  { side: "left", width: (489 / 822) * 100 },
-  { side: "right", width: (478 / 822) * 100 },
-  { side: "right", width: (639 / 822) * 100 },
+  { side: "left", px: [454, 1097] },
+  { side: "left", px: [489, 1012] },
+  { side: "right", px: [478, 970] },
+  { side: "right", px: [639, 988] },
 ] as const;
+const GUEST_BASE_WIDTH = 822;
 
 function cameraErrorText(error: CameraError) {
   switch (error.kind) {
@@ -323,10 +324,13 @@ export default function PhotoCapturePage() {
             ))}
             {/* eslint-disable-next-line @next/next/no-img-element -- 정적 오버레이 이미지 */}
             <img
+              key={targetIndex}
               src={`/images/photo/guest-${targetIndex + 1}.png`}
               alt={`${targetIndex + 1}번 컷 함께 찍는 사람`}
+              width={guest.px[0]}
+              height={guest.px[1]}
               className="absolute bottom-0 block h-auto"
-              style={{ [guest.side]: 0, width: `${guest.width}%` }}
+              style={{ [guest.side]: 0, width: `${(guest.px[0] / GUEST_BASE_WIDTH) * 100}%` }}
             />
             <span className="absolute top-7 left-7 rounded-full bg-night/55 px-5 py-2.5 font-label text-[18px] font-semibold tracking-[.16em] text-white backdrop-blur-sm mirror:text-[24px]">
               CUT 0{targetIndex + 1}

@@ -96,6 +96,7 @@ export function ProductSheet({
   const lookupCtl = useRef<AbortController | null>(null);
   // 제품명 입력칸에 커서가 있는 동안만 후보 목록을 보여 준다
   const [sugOpen, setSugOpen] = useState(false);
+  const [composingName, setComposingName] = useState(false);
   useEffect(() => () => lookupCtl.current?.abort(), []);
 
   const isEdit = !!f.id;
@@ -124,7 +125,7 @@ export function ProductSheet({
   const canSave = ready && !!type && !dup && !busy && !guest;
   const noColor = custom && !f.color;
   // 후보는 로그인 뒤에만 받는다. 이미 카탈로그 제품에 연결됐거나 입력이 짧으면 묻지 않는다
-  const suggestions = useProductSuggestions(guest ? null : suggestQuery(f, type));
+  const suggestions = useProductSuggestions(guest || composingName ? null : suggestQuery(f, type));
 
   const patch = (o: Partial<ProductDraft>) => {
     setFail(null);
@@ -382,6 +383,12 @@ export function ProductSheet({
                 value={f.name}
                 onChange={(e) => {
                   patch({ name: e.target.value });
+                  if (!composingName) setSugOpen(true);
+                }}
+                onCompositionStart={() => setComposingName(true)}
+                onCompositionEnd={(e) => {
+                  patch({ name: e.currentTarget.value });
+                  setComposingName(false);
                   setSugOpen(true);
                 }}
                 onFocus={() => setSugOpen(true)}

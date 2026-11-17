@@ -6,7 +6,7 @@ import { useReports } from "@/domain/report";
 import { displayName, useAuth, useMyPouch, useSessionActions } from "@/domain/session";
 import { cn } from "@/lib/utils";
 
-/** 마이페이지 상단: 프로필 + 내 파우치 · 리포트 탭. 로그아웃·미러필름 토글은 홈 프로필 버튼에 있다 */
+/** 마이페이지 상단: 프로필 + 내 파우치 · 리포트 탭. 로그아웃·미러필름 전환은 홈 상단에 있다 */
 export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
   const { loggedIn, email, nickname } = useAuth();
   const { pouch } = useMyPouch();

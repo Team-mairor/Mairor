@@ -84,7 +84,7 @@ export function StartModal({
           disabled={busy}
           className="ml-auto min-w-[300px]"
         >
-          {busy ? "시작하는 중" : n ? "건너뛰고 시작" : "시작하기"}
+          {busy ? "시작하는 중" : n ? "생략하고 진행" : "시작하기"}
         </PillButton>
       </div>
     </Modal>

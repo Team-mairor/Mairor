@@ -418,5 +418,17 @@ export function useGaugeBaseline({
     s.steps.set(next, base);
     return true;
   }, []);
-  return { status, stepBaseline, takeNext, record, sampler };
+  /**
+   * 기준 사진이 모이지 않을 때 쓴다. 그 사람 정면과 모으던 사진을 버리고 지금 자세에서 다시 모은다.
+   * 정면 pitch가 한 번 정해지면 그 값에서 벗어난 자세는 계속 걸러지기 때문이다
+   */
+  const restart = useCallback(() => {
+    const s = store.current;
+    if (!s.collector) return;
+    s.center = new FrontCenter();
+    s.collector = new BaselineCollector();
+    s.eyes = [];
+    setStatus((prev) => ({ ...prev, center: null, front: null, frames: 0 }));
+  }, []);
+  return { status, stepBaseline, takeNext, record, sampler, restart };
 }

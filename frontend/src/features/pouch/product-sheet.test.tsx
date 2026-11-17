@@ -66,6 +66,22 @@ async function clickButton(label: string, scope: ParentNode = element) {
   await act(async () => button.click());
 }
 
+function inputFor(label: string) {
+  const input = [...element.querySelectorAll("label")]
+    .find((candidate) => candidate.textContent?.includes(label))
+    ?.querySelector("input");
+  if (!input) throw new Error(`${label} 입력칸이 없습니다`);
+  return input;
+}
+
+async function type(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   vi.clearAllMocks();
@@ -123,5 +139,33 @@ describe("파우치 제품 삭제 확인", () => {
     );
     expect(element.querySelector('[role="dialog"]')?.textContent).toContain("제품 수정");
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("파우치 제품 입력", () => {
+  it("상품명을 직접 입력하면 입력값을 유지한다", async () => {
+    await mount();
+    const input = inputFor("제품명");
+
+    await type(input, "킬커버 파운웨어 쿠션");
+
+    expect(input.value).toBe("킬커버 파운웨어 쿠션");
+  });
+
+  it("한글 조합 중에는 자동완성을 멈추고 조합이 끝난 값을 유지한다", async () => {
+    await mount();
+    const input = inputFor("제품명");
+
+    await act(async () =>
+      input.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true })),
+    );
+    await type(input, "쿠션");
+    expect(pouchApi.useProductSuggestions).toHaveBeenLastCalledWith(null);
+
+    await act(async () =>
+      input.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true })),
+    );
+
+    expect(input.value).toBe("쿠션");
   });
 });

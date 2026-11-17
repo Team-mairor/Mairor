@@ -262,7 +262,7 @@ describe("실제 가이드 제품 체크", () => {
   it("시작하면 화면에 보이는 결과를 선택으로 저장하고 없음은 생략한다", async () => {
     await click(button("이 조합으로 시작"));
     expect(text()).toContain("없는 제품 2개는");
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(session.state.run.choice).toEqual({
       s2: { kind: "pouch", id: "same", auto: true },
       s5: { kind: "pouch", id: "tint", auto: true },
@@ -294,7 +294,7 @@ describe("실제 가이드 제품 체크", () => {
       return MATCH;
     });
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(api.get).toHaveBeenCalledWith("/v1/users/me/face-registrations/f1");
     expect(text()).toContain("가이드나 제품 매칭을 찾지 못해 다시 맞췄어요");
     expect(session.state.run.faceRegistrationId).toBe("f1");
@@ -311,7 +311,7 @@ describe("실제 가이드 제품 체크", () => {
       return { user: { email: "t@example.com" }, csrfToken: "c" };
     });
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(session.state.run.faceRegistrationId).toBeNull();
     expect(router.push).not.toHaveBeenCalled();
   });
@@ -335,7 +335,7 @@ describe("실제 가이드 제품 체크", () => {
       return { user: { email: "t@example.com" }, csrfToken: "c" };
     });
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(session.state.run).toMatchObject({ faceRegistrationId: "f2", executionId: "e2" });
     expect(router.push).toHaveBeenCalledWith(`/tutorial/guide?guideId=${GUIDE_ID}`);
   });
@@ -366,7 +366,7 @@ describe("실제 가이드 제품 체크", () => {
       return { user: { email: "t@example.com" }, csrfToken: "c" };
     });
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(api.get).toHaveBeenCalledWith("/v1/users/me/face-registrations/f2");
     expect(session.state.run.faceRegistrationId).toBe("f2");
     expect(text()).toContain("가이드나 제품 매칭을 찾지 못해 다시 맞췄어요");
@@ -380,7 +380,7 @@ describe("실제 가이드 제품 체크", () => {
         : Promise.resolve(MATCH),
     );
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     await act(async () => {
       session.endRun(session.state.run.id);
     });
@@ -396,7 +396,7 @@ describe("실제 가이드 제품 체크", () => {
       return MATCH;
     });
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(text()).toContain("제품 정보가 바뀌어 다시 맞췄어요");
     expect(router.push).not.toHaveBeenCalled();
     expect(session.state.run.executionId).toBeNull();
@@ -406,7 +406,7 @@ describe("실제 가이드 제품 체크", () => {
     await click(button("선택", element.querySelector('[data-step="s8"]')!));
     await click(button("글로우"));
     await click(button("이 조합으로 시작"));
-    await click(button("건너뛰고 시작"));
+    await click(button("생략하고 진행"));
     expect(session.state.run.choice.s8).toEqual({ kind: "pouch", id: "high" });
     expect(session.state.run.choice.s9).toEqual({ kind: "none", auto: true });
     // 돌아와 제품을 등록하면 s9에도 대체 후보가 생긴다

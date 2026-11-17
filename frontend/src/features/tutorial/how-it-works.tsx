@@ -2,16 +2,17 @@
  * 기능 소개 3장. 온보딩(02-1)과 튜토리얼 안내(09)가 같은 내용을 쓴다.
  * 1 영역 표시 · 2 진하기 게이지 · 3 스텝 캡처
  */
-const FACE = "/images/sample-face.png";
+const FACE = "/images/how-it-works-face.png";
 
+/** 캡처 썸네일 7장: 얼굴 전체에서 눈 · 볼 · 입으로 좁혀 가는 확대 위치(왼쪽 · 위 여백 %, 사진 너비 %) */
 const THUMBS: [ml: number, mt: number, w: number][] = [
-  [-19, -158, 260],
-  [-147, -300, 500],
-  [-147, -280, 500],
-  [-165, -290, 500],
-  [-179, -350, 500],
-  [-83, -360, 500],
-  [-83, -440, 500],
+  [-50, -30, 175],
+  [-73, -36, 220],
+  [-231, -99, 420],
+  [-139, -102, 420],
+  [-234, -143, 400],
+  [-184, -218, 420],
+  [-96, -97, 260],
 ];
 
 const COPY = [
@@ -38,20 +39,15 @@ export function HowItWorksSlide({ index }: { index: number }) {
   return (
     <div className="flex flex-col">
       <div className="relative h-[540px] overflow-hidden rounded-[26px] bg-line">
-        <img
-          src={FACE}
-          alt=""
-          className="absolute top-0 left-0 h-auto w-[187.9%] max-w-none"
-          style={{ marginTop: "-111.5%" }}
-        />
+        <img src={FACE} alt="" className="absolute inset-0 size-full object-cover" />
         {index === 0 && (
           <div
             className="absolute rounded-full shadow-[0_0_0_1600px_color-mix(in_srgb,var(--color-night)_36%,transparent)]"
             style={{
-              left: "61.8%",
-              top: 62,
-              width: "24.5%",
-              height: 76,
+              left: "54.3%",
+              top: 210,
+              width: "26%",
+              height: 80,
               animation: "mr-spot 6.4s cubic-bezier(.65,0,.35,1) infinite",
             }}
           >
@@ -71,8 +67,8 @@ export function HowItWorksSlide({ index }: { index: number }) {
             <div
               className="absolute rounded-full"
               style={{
-                left: "73%",
-                top: 178,
+                left: "58%",
+                top: 245,
                 width: "26%",
                 height: 150,
                 background: "radial-gradient(closest-side,rgba(226,84,112,.62),rgba(226,84,112,0))",
@@ -81,7 +77,7 @@ export function HowItWorksSlide({ index }: { index: number }) {
             />
             <div
               className="absolute rounded-full shadow-[0_0_0_1600px_color-mix(in_srgb,var(--color-night)_30%,transparent)]"
-              style={{ left: "75.6%", top: 194, width: "20.9%", height: 118 }}
+              style={{ left: "60.6%", top: 261, width: "20.9%", height: 118 }}
             >
               <div className="absolute inset-0 rounded-full border-2 border-white" />
             </div>

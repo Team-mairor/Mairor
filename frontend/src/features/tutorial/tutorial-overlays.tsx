@@ -154,8 +154,11 @@ export function CameraTuningOverlay() {
   );
 }
 
-/** 기준 사진 수집이 멈췄을 때 카메라 렌즈를 보게 하는 안내 */
-export function LookAtCameraOverlay() {
+/**
+ * 기준 사진 수집이 멈췄을 때 카메라 렌즈를 보게 하는 안내.
+ * onRetry가 있으면 오래 멈춘 것이라 지금 자세에서 처음부터 다시 모으는 버튼을 함께 보인다
+ */
+export function LookAtCameraOverlay({ onRetry }: { onRetry?: () => void }) {
   return (
     <div
       className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-3 bg-night/85 px-8 text-center text-white backdrop-blur-sm"
@@ -166,6 +169,16 @@ export function LookAtCameraOverlay() {
       <span className="text-[19px] font-semibold text-white/80">
         화면이 아니라 카메라를 바라보면 사진 수집을 계속해요
       </span>
+      {onRetry && (
+        <>
+          <span className="text-[16px] text-white/70">
+            계속 진행되지 않으면 편한 자세로 앉은 뒤 다시 모아 주세요
+          </span>
+          <PillButton size="cta" onClick={onRetry} className="pointer-events-auto mt-3">
+            다시 모으기
+          </PillButton>
+        </>
+      )}
     </div>
   );
 }

@@ -1,4 +1,12 @@
 export {
+  isTooDark,
+  isTooDarkReleased,
+  needsMore,
+  TOO_DARK_BAR,
+  TOO_DARK_HOLD_MS,
+  TOO_DARK_RELEASE_BAR,
+} from "./alerts";
+export {
   buildBaseline,
   BaselineCollector,
   FrontCenter,
