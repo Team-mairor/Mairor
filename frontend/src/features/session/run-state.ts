@@ -126,7 +126,7 @@ export function runHref(path: string, guideId: string | null, extra?: Record<str
 }
 
 export const isRunPath = (path: string) =>
-  ["/loading", "/preview", "/check", "/tutorial/guide", "/tutorial", "/done"].includes(path);
+  ["/loading", "/check", "/tutorial/guide", "/tutorial", "/done"].includes(path);
 
 export type RunRouteAction =
   | { kind: "allow" }

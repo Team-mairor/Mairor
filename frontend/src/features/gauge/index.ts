@@ -27,4 +27,12 @@ export {
   videoReader,
   type GaugeBaselineOptions,
   type GaugeBaselineStatus,
+  type Samplers,
 } from "./use-gauge-baseline";
+export {
+  clearRegisteredGaugeBaseline,
+  RegisteredBaselineCollector,
+  registeredGaugeBaseline,
+  saveRegisteredGaugeBaseline,
+  type RegisteredGaugeBaseline,
+} from "./registered-baseline";

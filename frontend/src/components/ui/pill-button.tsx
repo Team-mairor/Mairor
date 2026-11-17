@@ -47,11 +47,14 @@ export function PillButton({
   busy = false,
   asChild = false,
   trailing = false,
+  progress,
   children,
   disabled,
   ...props
 }: React.ComponentProps<"button"> &
-  VariantProps<typeof pillVariants> &
+  VariantProps<typeof pillVariants> & {
+    /** 0~100. 비활성 버튼 안에서 준비 진행률을 채운다 */ progress?: number;
+  } &
   // asChild(Slot)는 자식이 하나여야 해서, 자식을 더하는 busy(스피너)·trailing(화살표 원)과 같이 쓸 수 없다
   (
     | {
@@ -75,6 +78,7 @@ export function PillButton({
       type="button"
       className={cn(
         pillVariants({ variant, size }),
+        progress !== undefined && "relative isolate overflow-hidden",
         trailing && "justify-between gap-4 pr-2.5",
         className,
       )}
@@ -82,14 +86,21 @@ export function PillButton({
       aria-busy={busy || undefined}
       {...props}
     >
+      {progress !== undefined && (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 left-0 z-0 bg-ice transition-[width] duration-300 ease-out"
+          style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }}
+        />
+      )}
       {busy && <Spinner className="size-[18px]" />}
       {trailing ? (
         <>
-          <span className="min-w-0 truncate text-left">{children}</span>
+          <span className="relative z-10 min-w-0 truncate text-left">{children}</span>
           <span
             className={cn(
               // 비활성이면 원도 흐리게 해 눌릴 것처럼 보이지 않게 한다
-              "flex shrink-0 items-center justify-center rounded-full bg-ink text-ice group-disabled:bg-white group-disabled:text-line-3",
+              "relative z-10 flex shrink-0 items-center justify-center rounded-full bg-ink text-ice group-disabled:bg-white group-disabled:text-line-3",
               size === "hero" ? "size-[60px]" : "size-[54px]",
             )}
           >
@@ -101,7 +112,7 @@ export function PillButton({
           </span>
         </>
       ) : (
-        children
+        <span className="relative z-10">{children}</span>
       )}
     </button>
   );

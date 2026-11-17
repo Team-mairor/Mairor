@@ -12,15 +12,25 @@ const MIN_WHITE_PIXELS = 20;
 export interface EyeSampler {
   corners: Int32Array;
   weights: Float32Array;
+  eyes: Uint8Array;
   size: number;
 }
 
+const EYES = [
+  { name: "leftEye", center: 473, ring: [474, 475, 476, 477] },
+  { name: "rightEye", center: 468, ring: [469, 470, 471, 472] },
+] as const;
+
+const INSET_SHARE = 0.05;
+const IRIS_SCALE = 1.2;
+
 /** 두 눈 구멍(눈 테두리 안) 지도 점을 한 번만 고른다. 점마다 그 점을 덮는 삼각형을 찾는다 */
 export function eyeSampler(mesh: FaceMesh): EyeSampler {
-  const holes = (["leftEye", "rightEye"] as const).map((name) =>
+  const holes = EYES.map(({ name }) =>
     REGIONS[name].indices.map((i) => mesh.uv[i] as [number, number]),
   );
-  const points = polygonPoints(holes);
+  const eyePoints = holes.map((hole) => polygonPoints([hole]));
+  const points = eyePoints.flat();
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
   const [minX, maxX, minY, maxY] = [
@@ -42,31 +52,73 @@ export function eyeSampler(mesh: FaceMesh): EyeSampler {
   });
   const corners: number[] = [];
   const weights: number[] = [];
-  for (const [px, py] of points) {
-    for (const tri of near) {
-      const [[ax, ay], [bx, by], [cx, cy]] = tri.map((i) => mesh.uv[i]);
-      const area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
-      if (Math.abs(area) < 1e-12) continue;
-      const wb = ((px - ax) * (cy - ay) - (cx - ax) * (py - ay)) / area;
-      const wc = ((bx - ax) * (py - ay) - (px - ax) * (by - ay)) / area;
-      const wa = 1 - wb - wc;
-      if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) continue;
-      corners.push(...tri);
-      weights.push(wa, wb, wc);
-      break;
+  const eyes: number[] = [];
+  for (const [eye, samples] of eyePoints.entries()) {
+    for (const [px, py] of samples) {
+      for (const tri of near) {
+        const [[ax, ay], [bx, by], [cx, cy]] = tri.map((i) => mesh.uv[i]);
+        const area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
+        if (Math.abs(area) < 1e-12) continue;
+        const wb = ((px - ax) * (cy - ay) - (cx - ax) * (py - ay)) / area;
+        const wc = ((bx - ax) * (py - ay) - (px - ax) * (by - ay)) / area;
+        const wa = 1 - wb - wc;
+        if (wa < -1e-9 || wb < -1e-9 || wc < -1e-9) continue;
+        corners.push(...tri);
+        weights.push(wa, wb, wc);
+        eyes.push(eye);
+        break;
+      }
     }
   }
   return {
     corners: Int32Array.from(corners),
     weights: Float32Array.from(weights),
+    eyes: Uint8Array.from(eyes),
     size: weights.length / 3,
   };
+}
+
+type PixelPoint = readonly [number, number];
+
+const distance = ([ax, ay]: PixelPoint, [bx, by]: PixelPoint) => Math.hypot(ax - bx, ay - by);
+
+function segmentDistance(p: PixelPoint, a: PixelPoint, b: PixelPoint) {
+  const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+  const length2 = dx * dx + dy * dy;
+  if (!length2) return distance(p, a);
+  const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length2));
+  return distance(p, [a[0] + dx * t, a[1] + dy * t]);
+}
+
+function irisRadius(points: PixelPoint[]) {
+  let diameter = 0;
+  for (let a = 0; a < points.length; a++)
+    for (let b = a + 1; b < points.length; b++)
+      diameter = Math.max(diameter, distance(points[a], points[b]));
+  return (diameter / 2) * IRIS_SCALE;
 }
 
 /** 프레임에서 눈 구멍 점마다 sRGB(0~255)를 둘레 네 픽셀로 섞어 읽는다. 사진 밖 점은 NaN이다 */
 export function readEyePixels(pixels: Pixels, landmarks: Point[], s: EyeSampler): Float32Array {
   const { width, height, data } = pixels;
   const out = new Float32Array(s.size * 3).fill(NaN);
+  const at = (i: number): PixelPoint | null => {
+    const p = landmarks[i];
+    return p ? [p.x * width, p.y * height] : null;
+  };
+  const eyes = EYES.map(({ name, center, ring }) => {
+    const outline = REGIONS[name].indices.map(at).filter((p): p is PixelPoint => p !== null);
+    const axis = REGIONS[name].axis.map(at);
+    const irisCenter = at(center);
+    const irisRing = ring.map(at).filter((p): p is PixelPoint => p !== null);
+    return {
+      outline,
+      inset:
+        axis[0] && axis[1] ? distance(axis[0], axis[1]) * INSET_SHARE : Number.POSITIVE_INFINITY,
+      irisCenter,
+      irisRadius: irisRing.length === ring.length ? irisRadius(irisRing) : 0,
+    };
+  });
   for (let k = 0; k < s.size; k++) {
     const [a, b, c] = [0, 1, 2].map((n) => landmarks[s.corners[k * 3 + n]]);
     if (!a || !b || !c) continue;
@@ -74,6 +126,17 @@ export function readEyePixels(pixels: Pixels, landmarks: Point[], s: EyeSampler)
     const x = (a.x * wa + b.x * wb + c.x * wc) * width;
     const y = (a.y * wa + b.y * wb + c.y * wc) * height;
     if (x < 0 || y < 0 || x > width - 1 || y > height - 1) continue;
+    const eye = eyes[s.eyes[k]];
+    const point: PixelPoint = [x, y];
+    if (
+      eye.outline.length < 3 ||
+      eye.outline.some(
+        (edge, i) =>
+          segmentDistance(point, edge, eye.outline[(i + 1) % eye.outline.length]) < eye.inset,
+      ) ||
+      (eye.irisCenter && eye.irisRadius > 0 && distance(point, eye.irisCenter) <= eye.irisRadius)
+    )
+      continue;
     const x0 = Math.floor(x);
     const y0 = Math.floor(y);
     const x1 = Math.min(x0 + 1, width - 1);
@@ -112,19 +175,23 @@ function percentile(values: number[], q: number) {
  */
 export function whiteOfFrames(frames: Float32Array[]): [number, number, number] | null {
   if (!frames.length) return null;
-  const size = frames[0].length / 3;
-  const pixels: [number, number, number][] = [];
-  for (let k = 0; k < size; k++) {
-    const rgb = [0, 1, 2].map((ch) => {
-      const values = frames.map((f) => f[k * 3 + ch]).filter((v) => !Number.isNaN(v));
-      return values.length ? median(values) : NaN;
-    });
-    if (rgb.every((v) => !Number.isNaN(v))) pixels.push(rgb as [number, number, number]);
-  }
-  if (!pixels.length) return null;
-  const light = pixels.map(([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b);
-  const floor = percentile(light, 1 - measure.white.share);
-  const kept = pixels.filter((p, i) => light[i] >= floor && Math.max(...p) < measure.white.clip);
-  if (kept.length < MIN_WHITE_PIXELS) return null;
-  return [0, 1, 2].map((ch) => median(kept.map((p) => p[ch]))) as [number, number, number];
+  const whites = frames.flatMap((frame) => {
+    const pixels: [number, number, number][] = [];
+    for (let k = 0; k < frame.length / 3; k++) {
+      const rgb = [frame[k * 3], frame[k * 3 + 1], frame[k * 3 + 2]] as [number, number, number];
+      if (rgb.every((v) => !Number.isNaN(v))) pixels.push(rgb);
+    }
+    if (!pixels.length) return [];
+    const light = pixels.map(([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b);
+    const floor = percentile(light, 1 - measure.white.share);
+    const kept = pixels.filter((p, i) => light[i] >= floor && Math.max(...p) < measure.white.clip);
+    if (kept.length < MIN_WHITE_PIXELS) return [];
+    return [[0, 1, 2].map((ch) => median(kept.map((p) => p[ch]))) as [number, number, number]];
+  });
+  if (!whites.length) return null;
+  return [0, 1, 2].map((ch) => median(whites.map((white) => white[ch]))) as [
+    number,
+    number,
+    number,
+  ];
 }

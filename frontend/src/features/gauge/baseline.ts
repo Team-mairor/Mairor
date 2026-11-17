@@ -18,14 +18,17 @@ export const qualityOf = (frame: FaceFrame): FrameQuality => ({
 });
 
 /** 좌우 고개·기울기·눈 뜸 조건. 얼굴 등록과 같은 각도다 */
-export const facing = (q: FrameQuality) =>
+/** 고개가 정면인지. center가 있으면 그 사람의 위아래 정면도 함께 본다 */
+export const frontPose = (q: FrameQuality, center: number | null = null) =>
   Math.abs(q.yaw) <= FRAMES.frontMax &&
   Math.abs(q.roll) <= FRAMES.rollMax &&
-  q.eyes >= FRAMES.eyesOpenMin;
+  (center === null || Math.abs(q.pitch - center) <= FRAMES.frontMax);
+
+export const facing = (q: FrameQuality) => frontPose(q) && q.eyes >= FRAMES.eyesOpenMin;
 
 /** 기준에 쓸 사진인지. 위아래 고개는 카메라 정면이 아니라 그 사람 정면(center)에서 본다 */
 export const goodFrame = (q: FrameQuality, center: number) =>
-  facing(q) && Math.abs(q.pitch - center) <= FRAMES.frontMax;
+  frontPose(q, center) && q.eyes >= FRAMES.eyesOpenMin;
 
 const median = (values: number[]) => {
   const sorted = [...values].sort((a, b) => a - b);
@@ -35,7 +38,11 @@ const median = (values: number[]) => {
 
 /** 그 사람 정면 pitch. facing 조건을 지킨 앞 사진 pitchCenterFrames장의 가운데 값이다 */
 export class FrontCenter {
-  private pitches: number[] = [];
+  private pitches: number[];
+
+  constructor(center?: number) {
+    this.pitches = center === undefined ? [] : Array(FRAMES.pitchCenterFrames).fill(center);
+  }
 
   push(q: FrameQuality) {
     if (this.pitches.length < FRAMES.pitchCenterFrames && facing(q)) this.pitches.push(q.pitch);

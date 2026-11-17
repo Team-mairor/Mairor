@@ -13,11 +13,20 @@ import {
   eyesClosed,
   hasMirrorFit,
   loadMirrorFit,
+  lockControls,
+  matchExposure,
   saveFacePhoto,
   useCamera,
   useFaceCheck,
   type CheckName,
 } from "@/features/face";
+import {
+  loadCellSampler,
+  RegisteredBaselineCollector,
+  saveRegisteredGaugeBaseline,
+  videoReader,
+  type Samplers,
+} from "@/features/gauge";
 import { readPixels, saveBrowsFrom } from "@/features/guide";
 import { FaceStateProvider, useCameraErrorNote } from "@/features/live";
 import { MirrorFitView } from "@/features/mirror-fit";
@@ -39,6 +48,7 @@ const CONDITIONS: Record<CheckName, [label: string, hint: string]> = {
 const TIPS = ["밝고 고른 조명", "정면 · 이마 드러내기", "맨얼굴이면 더 정확해요"];
 /** 조건을 이 시간(ms) 동안 유지하면 촬영한다. 한 프레임만 맞았을 때 찍히지 않게 한다 */
 const HOLD_MS = 1500;
+const GAUGE_HINT_MS = 600;
 
 type Stage = "ready" | "scan" | "done";
 
@@ -104,7 +114,7 @@ function FitAsk({
 
 /**
  * 얼굴 등록 모달. 안내 → 카메라 → 실시간 조건 체크 → 조건을 유지하면 자동 촬영.
- * 카메라는 (live) 레이아웃의 것을 켜서 쓰고, 등록을 마치면 미리보기에서 그대로 이어 쓴다.
+ * 카메라는 (live) 레이아웃의 것을 켜서 쓰고, 등록을 마치면 제품 확인에서 그대로 이어 쓴다.
  */
 export function FaceRegisterModal({
   runId,
@@ -138,6 +148,14 @@ export function FaceRegisterModal({
   /** 등록 완료(onDone)를 기다리는 중 · 실패한 오류 */
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
+  const [samplers, setSamplers] = useState<Samplers | null>(null);
+  const [gaugeWaiting, setGaugeWaiting] = useState(false);
+  const [setupError, setSetupError] = useState(false);
+  const [prepareAttempt, setPrepareAttempt] = useState(0);
+  const [tuned, setTuned] = useState<{
+    track: MediaStreamTrack;
+    lock: Record<string, string>;
+  } | null>(null);
   const cameraReady = camera.status === "ready";
   // 미러필름 위에서는 비친 얼굴이 이 원 안에 있는지로 위치를 본다
   const circleRef = useRef<HTMLDivElement>(null);
@@ -148,7 +166,7 @@ export function FaceRegisterModal({
   const passed = allPassed(check);
   const ok = CHECKS.filter((name) => check[name]).length;
   // 조건을 모두 만족하는 동안만 촬영을 진행하고, 잠깐 흔들리는 정도를 넘어 깨지면 처음부터 다시 잰다
-  const scanning = passed && !done;
+  const scanning = passed && samplers !== null && tuned !== null && !done;
   const stage: Stage = done ? "done" : scanning ? "scan" : "ready";
   // 이미 찍었으면 카메라 오류가 나도 완료로 넘어갈 수 있게 오류 안내를 띄우지 않는다
   const errorNote = done ? null : cameraError;
@@ -158,8 +176,16 @@ export function FaceRegisterModal({
     setDone(false);
     setScan(0);
     setRetake(null);
+    setGaugeWaiting(false);
+    setSetupError(false);
     setSaveError(null);
+    setTuned(null);
     void camera.start();
+  };
+  const retrySetup = () => {
+    setSetupError(false);
+    setTuned(null);
+    setPrepareAttempt((attempt) => attempt + 1);
   };
   const finish = async () => {
     setSaving(true);
@@ -173,37 +199,89 @@ export function FaceRegisterModal({
     }
   };
 
+  useEffect(() => {
+    if (step !== "cam" || !cameraReady || tuned) return;
+    const video = camera.videoRef.current;
+    const track = (video?.srcObject as MediaStream | null)?.getVideoTracks()[0] ?? null;
+    if (!video || !track) return;
+    const controller = new AbortController();
+    void Promise.all([
+      loadCellSampler(),
+      matchExposure(track, video, controller.signal).then(async (exposure) => ({
+        ...exposure,
+        ...(await lockControls(track, ["whiteBalance"])),
+      })),
+    ])
+      .then(([loaded, lock]) => {
+        if (controller.signal.aborted) return;
+        setSetupError(false);
+        setSamplers(loaded);
+        setTuned({ track, lock });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setSetupError(true);
+          console.warn("얼굴 등록에서 카메라 기준을 준비하지 못했습니다", error);
+        }
+      });
+    return () => controller.abort();
+  }, [camera.status, camera.videoRef, cameraReady, prepareAttempt, step, tuned]);
+
   const capturing = useRef(false);
   useEffect(() => {
-    if (!scanning) return;
+    if (!scanning || !samplers || !tuned) return;
     // 화면의 판정은 잠깐 흔들려도 통과로 두므로, 유지 시간은 실제로 통과한 프레임 동안만 센다
     let held = 0;
     let last = performance.now();
+    let lastGaugeAt = last;
+    const gauge = new RegisteredBaselineCollector();
+    const read = videoReader();
     // 찍는 사이 모달이 닫히거나 조건이 깨지면 결과를 버린다
     let cancelled = false;
     const timer = setInterval(() => {
       const now = performance.now();
       const passing = passedNow();
-      if (passing) held += now - last;
-      last = now;
-      const p = Math.min(100, (held / HOLD_MS) * 100);
-      setScan(p);
       const video = camera.videoRef.current;
+      const shot = frame.current;
+      const pixels = passing && video && shot ? read(video) : null;
+      if (passing) {
+        held += now - last;
+        const added = !!(shot && pixels && gauge.push(shot, pixels, samplers));
+        if (added) {
+          lastGaugeAt = now;
+          setGaugeWaiting(false);
+        } else if (now - lastGaugeAt >= GAUGE_HINT_MS) setGaugeWaiting(true);
+      } else {
+        held = 0;
+        gauge.reset();
+        lastGaugeAt = now;
+        setGaugeWaiting(false);
+      }
+      last = now;
+      const p = Math.min(100, (held / HOLD_MS) * 100, (gauge.count / 15) * 100);
+      setScan(p);
       if (p < 100 || !passing || capturing.current || !video) return;
-      if (eyesClosed(frame.current)) {
+      if (eyesClosed(shot)) {
         // 눈 감은 사진은 기준으로 쓰지 않고, 조건을 그대로 유지하면 처음부터 다시 재서 찍는다
         setRetake("eyes");
         held = 0;
         return;
       }
+      const gaugeBaseline = gauge.build();
+      if (!gaugeBaseline) return;
       capturing.current = true;
-      const shot = frame.current;
-      const pixels = shot ? readPixels(video) : null;
+      const browPixels = shot ? readPixels(video) : null;
       captureFace(video)
         .then((photo) => {
           if (cancelled) return;
+          saveRegisteredGaugeBaseline({
+            runId,
+            track: tuned.track,
+            lock: tuned.lock,
+            ...gaugeBaseline,
+          });
           saveFacePhoto(runId, photo);
-          if (shot && pixels) void saveBrowsFrom(runId, photo, pixels, shot);
+          if (shot && browPixels) void saveBrowsFrom(runId, photo, browPixels, shot);
           setRetake(null);
           setDone(true);
         })
@@ -224,7 +302,7 @@ export function FaceRegisterModal({
       clearInterval(timer);
       setRetake(null);
     };
-  }, [scanning, camera.videoRef, frame, passedNow, runId]);
+  }, [scanning, camera.videoRef, frame, passedNow, runId, samplers, tuned]);
 
   // 얼굴을 못 찾았으면 다른 조건은 볼 수 없으니 원에 맞추라는 안내부터 한다
   const firstFailed = ok === 0 ? "distance" : CHECKS.find((name) => !check[name]);
@@ -235,28 +313,36 @@ export function FaceRegisterModal({
         : "환경 기준을 저장했어요"
       : errorNote
         ? errorNote.title
-        : !cameraReady
-          ? "카메라를 켜는 중이에요"
-          : stage === "scan"
-            ? "눈을 뜨고 정면을 또렷하게 봐 주세요"
-            : "얼굴을 원 안에 맞춰 주세요";
+        : setupError
+          ? "카메라 기준을 준비하지 못했어요"
+          : !cameraReady
+            ? "카메라를 켜는 중이에요"
+            : stage === "scan"
+              ? gaugeWaiting
+                ? "카메라를 정면으로 봐 주세요"
+                : "눈을 뜨고 정면을 또렷하게 봐 주세요"
+              : "얼굴을 원 안에 맞춰 주세요";
   const sub = errorNote
     ? errorNote.desc
-    : saveError
-      ? `등록을 저장하지 못했어요. ${errorMessage(saveError)}`
-      : retake === "eyes"
-        ? "눈을 감은 것 같아요. 눈을 뜨고 그대로 있으면 다시 찍어요"
-        : retake === "failed"
-          ? "사진을 찍지 못했어요. 그대로 있으면 다시 찍어요"
-          : stage === "done"
-            ? "정면 1장을 이번 메이크업의 조명·색온도 기준으로 저장했어요"
-            : stage === "scan"
-              ? "정면 얼굴을 찍고 조명·색온도를 확인하고 있어요"
-              : passed
-                ? "필수 조건 4가지를 통과했어요"
-                : found && !check.distance
-                  ? "실선 얼굴이 원 가운데에 오면 돼요"
-                  : "";
+    : setupError
+      ? "카메라를 그대로 둔 채 다시 준비해 주세요"
+      : saveError
+        ? `등록을 저장하지 못했어요. ${errorMessage(saveError)}`
+        : retake === "eyes"
+          ? "눈을 감은 것 같아요. 눈을 뜨고 그대로 있으면 다시 찍어요"
+          : retake === "failed"
+            ? "사진을 찍지 못했어요. 그대로 있으면 다시 찍어요"
+            : stage === "done"
+              ? "정면 1장을 이번 메이크업의 조명·색온도 기준으로 저장했어요"
+              : stage === "scan"
+                ? gaugeWaiting
+                  ? "고개를 바로 하고 카메라 렌즈를 봐 주세요"
+                  : "정면 얼굴을 찍고 조명·색온도를 확인하고 있어요"
+                : passed
+                  ? "필수 조건 4가지를 통과했어요"
+                  : found && !check.distance
+                    ? "실선 얼굴이 원 가운데에 오면 돼요"
+                    : "";
   const cta =
     stage === "ready"
       ? `조건 맞추는 중 · ${ok} / ${CHECKS.length}`
@@ -270,7 +356,7 @@ export function FaceRegisterModal({
               ? "등록 완료"
               : "등록 완료 · 파우치 확인";
   const alert =
-    errorNote || !cameraReady || stage !== "ready"
+    errorNote || setupError || !cameraReady || stage !== "ready"
       ? null
       : passed
         ? { ok: true, text: "조건 통과 · 그대로 봐 주세요" }
@@ -443,6 +529,10 @@ export function FaceRegisterModal({
                 className="min-w-0 flex-1"
               >
                 {errorNote.retry ?? "다시 시도할 수 없어요"}
+              </PillButton>
+            ) : setupError ? (
+              <PillButton size="hero" onClick={retrySetup} className="min-w-0 flex-1">
+                카메라 기준 다시 준비
               </PillButton>
             ) : (
               <PillButton

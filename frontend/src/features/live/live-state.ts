@@ -51,7 +51,7 @@ export interface LiveState {
 
 /**
  * 현재 보여 줄 안내와 그릴 수 있는지 여부. 카메라 오류 > 준비 중 > 확인용 알림 > 추적 문제.
- * 세 카메라 화면(미리보기·제품 체크·튜토리얼)은 이 값으로 숨김·측정 불가를 판단한다
+ * 카메라 화면(제품 체크·튜토리얼)은 이 값으로 숨김·측정 불가를 판단한다
  */
 export function useLiveState(
   alert?: LiveAlert | null,

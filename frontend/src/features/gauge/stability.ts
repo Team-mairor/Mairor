@@ -139,6 +139,8 @@ export class GaugeStabilizer {
   private weak: boolean | null = null;
   private color: [boolean | null, boolean | null] = [null, null];
 
+  constructor(private readonly persistLast = false) {}
+
   /** nowMs에 잰 값을 받는다. 못 쟀으면 measure가 null이거나 ratio가 null이고 reason에 이유를 준다 */
   update(
     nowMs: number,
@@ -158,7 +160,8 @@ export class GaugeStabilizer {
       return this.show(false, null);
     }
     const missing = reason || measure?.reason || "lost";
-    if (this.seenMs !== null && nowMs - this.seenMs <= HOLD_MS) return this.show(true, missing);
+    if (this.seenMs !== null && (this.persistLast || nowMs - this.seenMs <= HOLD_MS))
+      return this.show(true, missing);
     this.label = this.pending = this.pendingMs = null;
     return hidden(missing);
   }

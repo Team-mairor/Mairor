@@ -100,7 +100,7 @@ const unit = (v: Uv): Uv => {
   return { x: v.x / len, y: v.y / len };
 };
 
-/** 아이라인 경로. 미리보기 레이어도 같은 경로를 쓴다 */
+/** 아이라인 경로. 화장 레이어도 같은 경로를 쓴다 */
 export function eyelinerPaths(mesh: FaceMesh): { right: MeshAnchor[]; left: MeshAnchor[] } {
   const { uvPt, anchorAt, at } = anchorTools(mesh);
   const path = ({ upper, lowerNearOuter, inner, outer }: typeof EYELINER.right) => {

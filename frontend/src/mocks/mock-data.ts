@@ -86,7 +86,7 @@ export const REF_PRODUCTS: RefProduct[] = PLAY_STEPS.map((s) => ({
   refState: REF_STATE[s.stepId],
 }));
 
-/** 미리보기·입혀보기 대상 단계(색 있는 단계)의 GUIDE_STEPS 순번. 베이스는 제외 */
+/** 입혀보기 대상 단계(색 있는 단계)의 GUIDE_STEPS 순번. 베이스는 제외 */
 const TRY_MAKEUPS: Makeup[] = ["eyeshadow", "eyeliner", "blush", "highlight", "lip"];
 export const TRY_STEPS: number[] = GUIDE_STEPS.flatMap((s, i) =>
   TRY_MAKEUPS.includes(s.makeup) ? [i] : [],

@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { GaugeReference } from "@/features/guide";
 
-import { linearOfSrgb, measure, type SideMeasure, userSideOfLab, type Vec3 } from "./measure";
+import {
+  anchorGain,
+  COLOR_METHOD,
+  linearOfSrgb,
+  measure,
+  type SideMeasure,
+  userSideOfLab,
+  type Vec3,
+} from "./measure";
 import spec from "../../../../shared/gauge/measure.v1.json" with { type: "json" };
 
 type Case = (typeof spec.cases)[number];
@@ -29,6 +37,35 @@ const closeOrNull = (actual: number | null, expected: number | null) => {
 };
 
 describe("게이지 값 계산은 AI 기대값과 같다", () => {
+  it("공유 규격의 흰자 보정 범위를 따른다", () => {
+    const reference: Vec3 = [0.8, 0.8, 0.8];
+    const user: Vec3 = [0.4, 0.4, 0.4];
+    const degree = "degree" in spec.methods.color ? spec.methods.color.degree : "full";
+    expect(COLOR_METHOD).toMatchObject({ degree });
+    expect(
+      anchorGain(reference, user, COLOR_METHOD as Extract<typeof COLOR_METHOD, { name: "mix" }>),
+    ).toEqual(degree === "chroma" ? [1, 1, 1] : [0.5, 0.5, 0.5]);
+  });
+
+  it("색조 제품은 목표축 반대 방향의 실제 색 변화도 바른 양으로 잰다", () => {
+    const reference = spec.cases[0].reference;
+    if (!reference) throw new Error("립 기준이 필요하다");
+    const before = reference.lab.map((value, index) => value - reference.delta[index]) as Vec3;
+    const opposite = before.map((value, index) => value - reference.delta[index] * 0.5) as Vec3;
+    const side = userSideOfLab(
+      before,
+      opposite,
+      120,
+      reference.white ? linearOfSrgb(hexRgb(reference.white)) : null,
+    );
+
+    const out = measure(gaugeOf(reference), "lip", [{ region: "lipsOuter", side, cells: 120 }]);
+
+    expect(out.ratio).not.toBeNull();
+    expect(out.ratio!).toBeGreaterThan(0);
+    expect(out.bar!).toBeGreaterThan(0);
+  });
+
   it.each(spec.cases.map((c) => [c.name, c] as const))("%s", (_, c) => {
     const sides = c.sides.map((s) => ({
       region: s.region,

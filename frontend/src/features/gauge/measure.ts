@@ -15,7 +15,12 @@ export type MeasureReason = "noReference" | "noWhite" | "tooFewCells" | "thinAre
 export type Combine = "weaker" | "stronger" | "mean";
 
 export type MatchMethod =
-  | { name: "mix"; anchor: "skin" | "white"; weight: number }
+  | {
+      name: "mix";
+      anchor: "skin" | "white";
+      degree: "full" | "chroma";
+      weight: number;
+    }
   | { name: "local"; target: "reference" | "user" | "average"; space: "rgb" };
 
 /** 잴 칸이 이보다 적으면 tooFewCells */
@@ -26,6 +31,7 @@ export const THIN_MAKEUPS: readonly string[] = raw.area.thinMakeups;
 export const COLOR_METHOD: MatchMethod = {
   name: "mix",
   anchor: raw.methods.color.anchor as "white",
+  degree: ("degree" in raw.methods.color ? raw.methods.color.degree : "full") as "full" | "chroma",
   weight: raw.methods.color.weight,
 };
 export const DARK_METHOD: MatchMethod = {
@@ -43,11 +49,8 @@ const COLOR = raw.color;
 export const MEASURE_FRAMES: { intervalMs: number; medianWindowMs: number } = raw.frames;
 const TINY = 1e-6;
 
-const SRGB_TO_XYZ = [
-  [0.412453, 0.35758, 0.180423],
-  [0.212671, 0.71516, 0.072169],
-  [0.019334, 0.119193, 0.950227],
-];
+const LUMA: Vec3 = [0.212671, 0.71516, 0.072169];
+const SRGB_TO_XYZ = [[0.412453, 0.35758, 0.180423], LUMA, [0.019334, 0.119193, 0.950227]];
 const D65 = [0.950456, 1, 1.088754];
 const EPS = 6 / 29;
 
@@ -157,16 +160,25 @@ function anchorOf(side: AreaSide, anchor: "skin" | "white"): Vec3 {
   return side.white;
 }
 
+/** mix 안료를 사용자 화면으로 옮길 채널별 배수. chroma는 흰자의 밝기 차이를 제외하고 색만 맞춘다 */
+export function anchorGain(
+  reference: Vec3,
+  user: Vec3,
+  method: Extract<MatchMethod, { name: "mix" }>,
+): Vec3 {
+  const ref = map3(reference, (v) => Math.max(v, TINY));
+  const current = map3(user, (v) => Math.max(v, TINY));
+  const light = method.degree === "chroma" ? dot(current, LUMA) / dot(ref, LUMA) : 1;
+  return map3(current, (v, i) => (v / ref[i] / light) ** method.weight);
+}
+
 function mix(reference: AreaSide, user: AreaSide, method: Extract<MatchMethod, { name: "mix" }>) {
   const refChange = sub(reference.after, reference.before);
   const refAmount = leastPaint(reference.before, refChange);
   const pigment = map3(reference.before, (b, i) => b + refChange[i] / refAmount);
   const userAnchor = anchorOf(user, method.anchor);
   const refAnchor = anchorOf(reference, method.anchor);
-  const gain = map3(
-    userAnchor,
-    (u, i) => (Math.max(u, TINY) / Math.max(refAnchor[i], TINY)) ** method.weight,
-  );
+  const gain = anchorGain(refAnchor, userAnchor, method);
   const toward = map3(pigment, (p, i) => gain[i] * p - user.before[i]);
   const length = Math.max(dot(toward, toward), TINY);
   const userAmount = Math.max(dot(sub(user.after, user.before), toward) / length, 0);
@@ -277,7 +289,7 @@ export function userSide(
 /** 영역 하나(좌우 짝이면 한쪽)를 잰 값. 못 쟀으면 값은 null이고 reason에 이유가 든다 */
 export interface SideMeasure {
   region: string | null;
-  /** 진하기 비율. 1이면 레퍼런스만큼, 0 아래는 0 */
+  /** 진하기 비율. 1이면 레퍼런스만큼. 색조 제품은 목표축을 따라 변한 양의 절댓값 */
   ratio: number | null;
   /** 색상 각도 차이(도). 노란 쪽이 + */
   hue: number | null;
@@ -358,7 +370,7 @@ export function measureSide(
     return failed(region, cells, "noWhite");
   const result = compare(reference, user, method);
   if (Number.isNaN(result.along)) return failed(region, cells, "noReference");
-  const ratio = Math.max(result.along, 0);
+  const ratio = DARK_MAKEUPS.includes(makeup) ? Math.max(result.along, 0) : Math.abs(result.along);
   const target = de(result.reference, result.base);
   if (DARK_MAKEUPS.includes(makeup))
     return { region, ratio, hue: null, chroma: null, cells, reason: null, target };

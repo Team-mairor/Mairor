@@ -39,7 +39,7 @@ describe("실행 진입과 초기화", () => {
       choice: {},
     });
   });
-  it.each(["/loading", "/preview", "/check", "/tutorial/guide", "/tutorial", "/done"])(
+  it.each(["/loading", "/check", "/tutorial/guide", "/tutorial", "/done"])(
     "%s 새로고침은 ID로 새 실행을 만든다",
     (path) => {
       expect(runRouteAction(path, `guideId=${A}`, EMPTY_RUN)).toEqual({

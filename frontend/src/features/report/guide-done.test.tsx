@@ -29,7 +29,6 @@ const step = (stepId: string, order: number): GuideStepModel => ({
   doneWhen: null,
   product: { name: "영상 제품", shade: null },
   matchCategory: "CHEEK",
-  previewable: false,
   subSteps: [],
 });
 const guide: GuideModel = {

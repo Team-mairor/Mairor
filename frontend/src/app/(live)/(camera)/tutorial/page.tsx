@@ -13,7 +13,6 @@ import {
   useGaugeBaseline,
   useGaugeMeasure,
   type GaugeLabel,
-  type GaugeReason,
   type SelectedProduct,
 } from "@/features/gauge";
 import {
@@ -204,24 +203,19 @@ function GuideTutorial() {
   }
 }
 
-/** 이 하위 단계 동안 잴 수 없는 이유. 게이지를 아예 숨긴다 */
-const HIDE_GAUGE = new Set<GaugeReason>([
-  "noReference",
-  "weakReference",
-  "thinArea",
-  "noWhite",
-  "noBaseline",
-]);
 const LABEL_TEXT: Record<GaugeLabel, string> = {
   lighter: "레퍼런스보다 연해요",
   similar: "레퍼런스와 비슷해요",
   darker: "레퍼런스보다 진해요",
 };
 const LABEL_COLOR: Record<GaugeLabel, string> = {
-  lighter: "var(--color-sky)",
-  similar: "var(--color-mint)",
-  darker: "var(--color-blush)",
+  lighter: "#20DFFF",
+  similar: "#2EF58C",
+  darker: "#FF3E9D",
 };
+const GAUGE_DEBUG_KEY = "mairor:gauge-debug";
+const subscribeGaugeDebug = () => () => {};
+const readGaugeDebug = () => sessionStorage.getItem(GAUGE_DEBUG_KEY) === "1";
 
 /** 묶음 안 다음 단계로 넘어갈 때 단계 제목 · 할 일(제품이 바뀌면 제품도)을 강조하는 시간(ms) */
 const ENTER_FLASH_MS = 1800;
@@ -395,17 +389,53 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     const chosen = selectedProduct(products, nextInfo.stepId, nextSkipped);
     return !!ref && productRule(ref.gauge, nextInfo.makeup, chosen).show;
   }, [nextInfo, area, products, nextSkipped]);
-  const gaugeActive = ready && showGauge && !exitAsk && !paused;
+  const baselineKey = `${run.id}:${step}`;
+  const [skippedBaselineKey, setSkippedBaselineKey] = useState<string | null>(null);
+  const baselineSkipped = skippedBaselineKey === baselineKey;
+  const gaugeActive = ready && showGauge && !baselineSkipped && !exitAsk && !paused;
+  // 첫 단계에서 눈 화장 전 맨얼굴·흰자를 확보하고, 게이지 단계에서는 바르기 전 해당 부위를 다시 모은다.
+  const baselineNeeded = step === 0 || showGauge;
   // 게이지가 이번 단계 화장만 재도록 단계 준비 카드가 떠 있는 동안 바르기 전 얼굴을 모은다.
   // 묶음 안 다음 단계는 카드 없이 시작하므로 이번 단계 동안 사진을 남겨 두었다가 그 단계 기준으로 쓴다
   const baseline = useGaugeBaseline({
     runId: run.id,
     step,
-    collecting: !ready,
+    collecting: !ready && baselineNeeded,
     makeup: info.makeup,
+    regions: guideStep?.regions,
     recording: ready && nextNeedsBaseline && !paused,
     measuring: gaugeActive,
   });
+  const stepBaseline = baseline.stepBaseline(step);
+  const cameraTuning = !ready && baselineNeeded && !stepBaseline && baseline.status.lock === null;
+  const [stalledAt, setStalledAt] = useState<{ key: string; frames: number } | null>(null);
+  const [baselineEscapeKey, setBaselineEscapeKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (ready || !baselineNeeded || stepBaseline || baseline.status.lock === null) return;
+    const frames = baseline.status.frames;
+    const timer = setTimeout(() => setStalledAt({ key: baselineKey, frames }), 1000);
+    return () => clearTimeout(timer);
+  }, [
+    ready,
+    baselineNeeded,
+    stepBaseline,
+    baseline.status.frames,
+    baseline.status.lock,
+    baselineKey,
+  ]);
+  useEffect(() => {
+    if (ready || !baselineNeeded || stepBaseline) return;
+    const timer = setTimeout(() => setBaselineEscapeKey(baselineKey), 8000);
+    return () => clearTimeout(timer);
+  }, [ready, baselineNeeded, stepBaseline, baselineKey]);
+  const baselineStalled =
+    !cameraTuning &&
+    !ready &&
+    baselineNeeded &&
+    !stepBaseline &&
+    stalledAt?.key === baselineKey &&
+    stalledAt.frames === baseline.status.frames;
+  const canSkipBaseline = baselineEscapeKey === baselineKey;
   // 묶음 사진을 기다리고 확대할 부위. 묶음 안 모든 단계의 부위를 합친다.
   // 실시간 안내·측정 판정은 그리는 가이드(guideStep) 기준이다
   const photoRegions = useMemo(
@@ -545,29 +575,52 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
     [],
   );
 
-  // 개발 도구에서 ?gauge를 붙이면 잰 값과 못 잰 이유를 띄운다
-  const gaugeDebug = process.env.DEV_TOOLS === "1" && !!query?.has("gauge");
+  // 개발 도구에서 ?gauge를 한 번 붙이면 같은 탭의 화면 이동 뒤에도 디버그 값을 계속 띄운다
+  const gaugeDebugRequested = process.env.DEV_TOOLS === "1" && !!query?.has("gauge");
+  const gaugeDebugStored = useSyncExternalStore(subscribeGaugeDebug, readGaugeDebug, () => false);
+  useEffect(() => {
+    if (process.env.DEV_TOOLS !== "1") return;
+    if (gaugeDebugRequested) sessionStorage.setItem(GAUGE_DEBUG_KEY, "1");
+  }, [gaugeDebugRequested]);
+  const gaugeDebug = gaugeDebugRequested || gaugeDebugStored;
   const gaugeMeasure = useGaugeMeasure({
-    active: gaugeActive,
+    // 먼 얼굴은 색이 부정확하므로 마지막 값을 유지하고, 가까워도 해당 부위가 보이면 계속 잰다
+    active: gaugeActive && reason !== "far",
     // 기준이 대체 제품 쪽으로 바뀌면 다듬던 값을 이어 쓰지 않는다
     key: reference ? `${run.id}:${reference.subStepId}:${rule?.basis}` : null,
     makeup: info.makeup,
     gauge: measureGauge,
     guideSets: measured,
     madeSets,
-    start: baseline.stepBaseline(step),
+    start: stepBaseline,
     white: baseline.status.white,
     debug: gaugeDebug,
     onShot: baseline.record,
   });
   const { display } = gaugeMeasure;
-  // 이 하위 단계 동안 잴 수 없는 이유면 게이지를 숨기고, 카메라가 잠깐 못 잴 때는 회색으로 비운다
-  const gaugeHidden = !!display?.reason && HIDE_GAUGE.has(display.reason) && display.bar === null;
-  const showMeter = showGauge && !gaugeHidden;
+  const gaugeUnavailable =
+    display?.reason === "thinArea" ||
+    display?.reason === "weakReference" ||
+    display?.reason === "noReference" ||
+    display?.reason === "noWhite";
+  const visibleGauge = showGauge && !baselineSkipped && !gaugeUnavailable;
+  // 이전 화면에서 기준 없이 시작한 실행도 준비 카드를 다시 열어 같은 단계 기준을 모은다
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 기준이 없는 기존 실행을 준비 카드로 복구한다
+    if (ready && showGauge && !baselineSkipped && display?.reason === "noBaseline") setReady(false);
+  }, [ready, showGauge, baselineSkipped, display?.reason]);
   const gaugeLabel = display?.label ?? null;
-  const meterBlocked = blocked || display?.bar == null;
-  // 변수 이름을 그대로 적어야 Tailwind가 테마 변수를 CSS에 넣는다
-  const meterColor = meterBlocked || !gaugeLabel ? "var(--color-ash)" : LABEL_COLOR[gaugeLabel];
+  const meterBlocked = paused || reason === "far" || display?.bar == null;
+  const meterColor = !gaugeLabel ? "#20DFFF" : LABEL_COLOR[gaugeLabel];
+  const meterText = meterBlocked
+    ? reason === "far"
+      ? "조금 가까이 와 주세요"
+      : display?.bar == null
+        ? "화장을 바르면 내 위치가 움직여요"
+        : "측정을 잠시 멈췄어요"
+    : gaugeLabel
+      ? LABEL_TEXT[gaugeLabel]
+      : null;
   const lastAct = !paced || act >= info.acts.length - 1;
   // 사진은 묶음 마지막 단계(또는 완성하는 단계)에서만 찍으므로, 촬영 부위를 다시 불러오는 것도 그때만 한다
   const reloadRegions = (groupLast || finishing) && defaultsFailed && photoRegions.length === 0;
@@ -789,12 +842,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                   할 일 {act + 1}/{info.acts.length}
                 </span>
               )}
-              {showMeter && !meterBlocked && gaugeLabel && (
+              {visibleGauge && meterText && (
                 <span
                   className="ml-auto shrink-0 text-[20px] leading-tight font-extrabold whitespace-nowrap transition-colors"
                   style={{ color: meterColor }}
                 >
-                  {LABEL_TEXT[gaugeLabel]}
+                  {meterText}
                 </span>
               )}
             </div>
@@ -815,8 +868,12 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
               )}
             </div>
 
-            {showMeter && (
-              <DensityMeter value={display?.bar ?? 0} color={meterColor} blocked={meterBlocked} />
+            {visibleGauge && (
+              <DensityMeter
+                value={display?.bar ?? null}
+                color={meterColor}
+                blocked={meterBlocked}
+              />
             )}
             {gaugeDebug && (
               <GaugeDebug
@@ -926,9 +983,57 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
           refProduct={info.product}
           match={pr}
           pick={pick}
-          onStart={() => setReady(true)}
+          baseline={
+            baselineNeeded
+              ? {
+                  frames: baseline.status.frames,
+                  total: 15,
+                  ready: stepBaseline !== null,
+                  canSkip: canSkipBaseline,
+                }
+              : undefined
+          }
+          onStart={() => {
+            if (!baselineNeeded || stepBaseline || canSkipBaseline) {
+              if (baselineNeeded && !stepBaseline) setSkippedBaselineKey(baselineKey);
+              setReady(true);
+            }
+          }}
         />
       )}
+
+      {cameraTuning && !canSkipBaseline && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-3 bg-night px-8 text-center text-white"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="font-display text-[40px] leading-tight">
+            카메라 밝기를 맞추고 있어요
+          </span>
+          <span className="text-[19px] font-semibold text-white/80">
+            잠시 정면을 보고 가만히 있어 주세요
+          </span>
+        </div>
+      )}
+
+      {!ready &&
+        !cameraTuning &&
+        !canSkipBaseline &&
+        baselineNeeded &&
+        !stepBaseline &&
+        (baseline.status.front === false || baselineStalled) && (
+          <div
+            className="pointer-events-none absolute inset-0 z-[6] flex flex-col items-center justify-center gap-3 bg-night/85 px-8 text-center text-white backdrop-blur-sm"
+            role="alert"
+            aria-live="assertive"
+          >
+            <span className="font-display text-[44px] leading-tight">카메라 렌즈를 봐 주세요</span>
+            <span className="text-[19px] font-semibold text-white/80">
+              화면이 아니라 카메라를 바라보면 사진 수집을 계속해요
+            </span>
+          </div>
+        )}
 
       {/* 준비 카드처럼 상단 바(z-[5]) 아래에 깔아, 저장이 계속 실패해도 나가기를 누를 수 있게 한다 */}
       {review && (

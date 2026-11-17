@@ -38,8 +38,6 @@ export interface GuideStepDto {
   /** 목표 발색. 1차는 항상 null */
   targetColor: unknown;
   videoRange: { startSeconds: number; endSeconds: number };
-  /** 미리보기 대상 화장 종류인지. 색이 준비됐다는 뜻은 아니다 */
-  previewable: boolean;
   matchCategory: string | null;
   /** shared/guide-area의 하위 단계 그대로. 영역이 없으면 빈 목록 */
   subSteps: AreaSubStep[];
@@ -59,7 +57,6 @@ export interface GuideDto {
   referenceImageUrl: string | null;
   /** GUIDE 단계 수 */
   stepCount: number;
-  previewableStepCount: number;
   /** order 순. GUIDE·EXCLUDED가 섞여 있다 */
   steps: GuideStepDto[];
 }

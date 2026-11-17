@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { clearFacePhoto } from "@/features/face";
+import { clearRegisteredGaugeBaseline } from "@/features/gauge";
 import type { PouchItem } from "@/features/pouch";
 import type { VideoItem } from "@/features/video";
 import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/lib/api";
@@ -115,13 +116,19 @@ export function SessionProvider({
   const activeRunId = useRef("");
   const previousRunId = useRef("");
   useLayoutEffect(() => {
-    if (previousRunId.current !== state.run.id) clearFacePhoto(previousRunId.current);
+    if (previousRunId.current !== state.run.id) {
+      clearFacePhoto(previousRunId.current);
+      clearRegisteredGaugeBaseline(previousRunId.current);
+    }
+    if (state.run.phase === "completed" || state.run.phase === "invalidated")
+      clearRegisteredGaugeBaseline(state.run.id);
     // 끝내기·새 실행·로그아웃·무효화는 모두 여기를 지난다. 완료 기록을 남긴 실행의 사진만 남긴다
     if (previousRunId.current !== state.run.id || state.run.phase === "invalidated")
       discardUnsavedStepPhotos();
     previousRunId.current = state.run.id;
     activeRunId.current = state.run.phase === "invalidated" ? "" : state.run.id;
   }, [state.run.id, state.run.phase]);
+  useEffect(() => () => clearRegisteredGaugeBaseline(), []);
   const isCurrentRun = useCallback((id: string) => !!id && activeRunId.current === id, []);
 
   // 같은 계정이 이어질 때만 파우치를 둔다. 아니면 비우고 서버 목록을 기다린다(샘플·다른 계정 목록을 내 제품으로 쓰지 않게)

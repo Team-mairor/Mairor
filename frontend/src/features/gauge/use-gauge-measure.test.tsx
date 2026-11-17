@@ -131,29 +131,40 @@ describe("게이지 재기", () => {
     expect(probe.current).toMatchObject({ bar: 50, label: "similar", reason: null });
   });
 
-  it("단계 시작 기준이 없으면 이 단계 동안 게이지를 숨긴다", async () => {
+  it("단계 시작 기준이 없으면 측정값을 내지 않는다", async () => {
     await render({ ...base, start: null });
     await feed(3);
     expect(probe.current).toMatchObject({ bar: null, reason: "noBaseline" });
   });
 
-  it("사진을 모두 거르면 잠깐은 마지막 값을 보이고, 오래가면 그 이유로 숨긴다", async () => {
+  it("사진을 모두 거르면 마지막 값을 계속 유지한다", async () => {
     await render(base);
     await feed(3);
     mocks.faces = 0;
     // 최근 1초 창에 통과한 사진이 남아 있는 동안은 그대로 잰다
     await feed(4);
     expect(probe.current).toMatchObject({ bar: 50, stale: false });
-    // 창이 비면 holdMs 동안 마지막 값을 보인다
+    // 창이 비어도 마지막 값을 유지한다
     await feed(1);
     expect(probe.current).toMatchObject({ bar: 50, stale: true });
     await feed(10);
-    expect(probe.current).toMatchObject({ bar: null, reason: "lost" });
+    expect(probe.current).toMatchObject({ bar: 50, stale: true, reason: "lost" });
   });
 
   it("재지 않는 동안에는 값을 내지 않는다", async () => {
     await render({ ...base, active: false });
     await feed(3);
     expect(probe.current).toBeNull();
+  });
+
+  it("이미 잰 뒤 멀어서 측정을 멈추면 마지막 위치를 유지한다", async () => {
+    await render(base);
+    await feed(3);
+    expect(probe.current).toMatchObject({ bar: 50 });
+
+    await render({ ...base, active: false });
+    mocks.faces = 0;
+    await feed(10);
+    expect(probe.current).toMatchObject({ bar: 50 });
   });
 });

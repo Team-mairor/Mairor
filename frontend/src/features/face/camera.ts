@@ -146,6 +146,11 @@ export async function lockControls(
       await track.applyConstraints({ advanced: [constraint as MediaTrackConstraintSet] });
       results[name] = `고정됨 (${String(constraint[mode])})`;
     } catch (e) {
+      // 일부 기기는 manual 전환 뒤 값 적용만 실패할 수 있다. 그 상태로 남기지 않고 자동으로 복구한다.
+      if (modes.includes("continuous"))
+        await track
+          .applyConstraints({ advanced: [{ [mode]: "continuous" } as MediaTrackConstraintSet] })
+          .catch(() => {});
       results[name] = `실패: ${e instanceof Error ? e.message : String(e)}`;
     }
   }

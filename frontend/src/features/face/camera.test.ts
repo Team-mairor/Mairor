@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 
-import { exposureRange, matchExposure } from "./camera";
+import { exposureRange, lockControls, matchExposure } from "./camera";
 
 const track = (capabilities: Record<string, unknown>, settings: Record<string, unknown> = {}) =>
   ({
@@ -124,5 +124,27 @@ describe("카메라 노출 맞추기", () => {
       .mock.calls.map(([constraints]) => constraints?.advanced?.[0]);
     expect(applied.at(-1)).toMatchObject({ exposureMode: "continuous" });
     vi.useRealTimers();
+  });
+});
+
+describe("카메라 설정 고정", () => {
+  it("수동 고정에 실패하면 해당 설정을 자동 모드로 되돌린다", async () => {
+    const camera = track(
+      {
+        whiteBalanceMode: ["continuous", "manual"],
+        colorTemperature: { min: 3000, max: 7000 },
+      },
+      { colorTemperature: 5000 },
+    );
+    vi.mocked(camera.applyConstraints)
+      .mockRejectedValueOnce(new Error("고정 실패"))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(lockControls(camera, ["whiteBalance"])).resolves.toEqual({
+      whiteBalance: "실패: 고정 실패",
+    });
+    expect(vi.mocked(camera.applyConstraints).mock.calls.at(-1)?.[0]?.advanced?.[0]).toMatchObject({
+      whiteBalanceMode: "continuous",
+    });
   });
 });

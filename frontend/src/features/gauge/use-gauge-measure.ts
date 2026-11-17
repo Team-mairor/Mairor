@@ -87,7 +87,7 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
   const samplers = useRef<Samplers | null>(null);
   const read = useRef(videoReader());
   const shots = useRef<Shot[]>([]);
-  const stabilizer = useRef(new GaugeStabilizer());
+  const stabilizer = useRef(new GaugeStabilizer(true));
   const last = useRef(-Infinity);
   const lightCache = useRef<{ at: number; light: CellLab } | null>(null);
   const latest = useRef(input);
@@ -112,7 +112,7 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
 
   // 하위 단계가 바뀌면 다듬던 값과 모은 사진을 버린다
   useEffect(() => {
-    stabilizer.current = new GaugeStabilizer();
+    stabilizer.current = new GaugeStabilizer(true);
     shots.current = [];
     lightCache.current = null;
     // eslint-disable-next-line react-hooks/set-state-in-effect

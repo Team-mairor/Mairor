@@ -3,16 +3,18 @@ import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FaceFrame } from "@/features/face";
+import type { FaceFrame, RegionName } from "@/features/face";
 
 import { FRAME_GAP_MS } from "./baseline";
 import type { CellLab } from "./cells";
+import { clearRegisteredGaugeBaseline, saveRegisteredGaugeBaseline } from "./registered-baseline";
 import { GRID } from "./spec";
 import type { FrameState } from "./stability";
 import { useGaugeBaseline, type GaugeBaselineStatus } from "./use-gauge-baseline";
 
 const mocks = vi.hoisted(() => ({
   listener: null as ((frame: FaceFrame | null) => void) | null,
+  regionVisible: true,
   match: vi.fn((...args: [unknown, unknown, AbortSignal?]) => {
     void args;
     return Promise.resolve({ exposure: "고정됨 (노출 500 · ISO 800)" });
@@ -31,6 +33,7 @@ mocks.videoRef.current = video();
 
 vi.mock("@/features/face", () => ({
   FRAME_STALE_MS: 300,
+  isRegionInView: () => mocks.regionVisible,
   lockControls: mocks.lock,
   matchExposure: mocks.match,
   unlockControls: mocks.unlock,
@@ -53,12 +56,21 @@ vi.mock("./cells", () => ({
 }));
 
 let now = 0;
-const frame = (): FaceFrame =>
+const frame = (
+  pose: { yaw: number; pitch: number; roll: number } = {
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+  },
+  trackingState: FaceFrame["trackingState"] = "tracking",
+  usableRegions?: RegionName[],
+): FaceFrame =>
   ({
-    trackingState: "tracking",
+    trackingState,
+    usableRegions,
     timestamp: now,
     detectedAt: now,
-    pose: { yaw: 0, pitch: 0, roll: 0 },
+    pose,
     eyes: { left: { openness: 1, blinking: false }, right: { openness: 1, blinking: false } },
     landmarks: Array.from({ length: 478 }, () => ({ x: 0.5, y: 0.5, z: 0 })),
     imageSize: { width: 640, height: 480 },
@@ -81,9 +93,15 @@ type Result = {
   record: (at: number, state: FrameState, grid: CellLab | null) => void;
 };
 const probe: { current: Result | null } = { current: null };
-type ProbeProps = { run: string; step: number; collecting: boolean; makeup?: string };
-function Probe({ run, step, collecting, makeup }: ProbeProps) {
-  const result = useGaugeBaseline({ runId: run, step, collecting, makeup });
+type ProbeProps = {
+  run: string;
+  step: number;
+  collecting: boolean;
+  makeup?: string;
+  regions?: RegionName[];
+};
+function Probe({ run, step, collecting, makeup, regions }: ProbeProps) {
+  const result = useGaugeBaseline({ runId: run, step, collecting, makeup, regions });
   useEffect(() => {
     probe.current = result;
   });
@@ -101,6 +119,7 @@ beforeEach(() => {
     getImageData: () => ({ width: 4, height: 4, data: new Uint8ClampedArray(64) }),
   } as unknown as CanvasRenderingContext2D);
   mocks.videoRef.current = video();
+  mocks.regionVisible = true;
   element = document.createElement("div");
   document.body.append(element);
   root = createRoot(element);
@@ -112,14 +131,88 @@ afterEach(async () => {
   mocks.lock.mockClear();
   mocks.match.mockClear();
   mocks.unlock.mockClear();
+  clearRegisteredGaugeBaseline();
 });
 
-const render = (run: string, step: number, collecting: boolean, makeup = "foundation") =>
+const render = (
+  run: string,
+  step: number,
+  collecting: boolean,
+  makeup = "foundation",
+  regions?: RegionName[],
+) =>
   act(async () =>
-    root.render(<Probe run={run} step={step} collecting={collecting} makeup={makeup} />),
+    root.render(
+      <Probe run={run} step={step} collecting={collecting} makeup={makeup} regions={regions} />,
+    ),
   );
 
 describe("게이지 기준 모으기", () => {
+  it("같은 카메라 세션의 얼굴 등록 기준을 첫 단계에서 다시 모으지 않고 쓴다", async () => {
+    const baseline = {
+      lab: new Float32Array(GRID * GRID * 3).fill(50),
+      cells: new Uint8Array(GRID * GRID).fill(1),
+      frames: 15,
+    };
+    saveRegisteredGaugeBaseline({
+      runId: "registered",
+      track: mocks.track as MediaStreamTrack,
+      baseline,
+      white: [230, 220, 215],
+      center: 0.02,
+      lock: { exposure: "얼굴 등록에서 고정됨" },
+    });
+
+    await render("registered", 0, true);
+
+    expect(latest().stepBaseline(0)).toBe(baseline);
+    expect(latest().status).toMatchObject({
+      bare: baseline,
+      white: [230, 220, 215],
+      center: 0.02,
+      lock: { exposure: "얼굴 등록에서 고정됨" },
+    });
+    expect(mocks.match).not.toHaveBeenCalled();
+  });
+
+  it("지금 단계 부위가 화면에 온전히 보여야 기준 사진을 모은다", async () => {
+    mocks.regionVisible = false;
+    await render("run", 0, true, "lip", ["lipsOuter"]);
+    await feed(15);
+    expect(latest().status.frames).toBe(0);
+    expect(latest().status.front).toBe(false);
+
+    mocks.regionVisible = true;
+    await feed(15);
+    expect(latest().stepBaseline(0)).not.toBeNull();
+  });
+
+  it("얼굴 전체 추적이 약해도 지금 단계 부위가 안정적으로 보이면 기준 사진을 모은다", async () => {
+    await render("run", 0, true, "lip", ["lipsOuter"]);
+    await act(async () => {
+      for (let i = 0; i < 45; i++) {
+        now += FRAME_GAP_MS;
+        mocks.listener?.(frame(undefined, "degraded", ["lipsOuter"]));
+      }
+    });
+    expect(latest().stepBaseline(0)).not.toBeNull();
+  });
+
+  it("준비 중 고개가 정면인지 화면에 알린다", async () => {
+    await render("run", 0, true);
+    await act(async () => {
+      now += 600;
+      mocks.listener?.(frame({ yaw: 0.4, pitch: 0, roll: 0 }));
+    });
+    expect(latest().status.front).toBe(false);
+
+    await act(async () => {
+      now += 600;
+      mocks.listener?.(frame());
+    });
+    expect(latest().status.front).toBe(true);
+  });
+
   it("첫 단계 준비 카드에서 카메라를 자동 밝기에 맞춰 잠근 뒤 15장을 모아 맨얼굴 기준으로 둔다", async () => {
     await render("run", 0, true);
     expect(mocks.match).toHaveBeenCalledTimes(1);
@@ -144,6 +237,18 @@ describe("게이지 기준 모으기", () => {
     await act(async () => done({ exposure: "고정됨" }));
     await feed(15);
     expect(latest().status.bare?.frames).toBe(15);
+  });
+
+  it("준비 카드를 일찍 닫아 기준을 못 만들었으면 같은 단계에서 다시 모은다", async () => {
+    await render("run", 0, true);
+    await feed(5);
+    await render("run", 0, false);
+    expect(latest().stepBaseline(0)).toBeNull();
+
+    await render("run", 0, true);
+    expect(latest().status.frames).toBe(0);
+    await feed(15);
+    expect(latest().stepBaseline(0)).not.toBeNull();
   });
 
   it("잠그는 동안 측정에서 받은 사진도 다음 단계 시작 기준에 남기지 않는다", async () => {

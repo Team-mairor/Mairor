@@ -41,7 +41,6 @@ const step = (stepId: string, order: number, extra: Partial<GuideStepModel> = {}
   doneWhen: null,
   product: { name: "롬앤 베러 댄 치크", shade: "01 쥬시 코랄" },
   matchCategory: "CHEEK" as const,
-  previewable: false,
   subSteps: [],
   ...extra,
 });

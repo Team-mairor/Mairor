@@ -196,13 +196,13 @@ describe("분석 중 이용 준비", () => {
     expect(element.querySelector('[data-testid="progress"]')?.textContent).toBe("100");
   });
 
-  it.each(["분석 등록", "가이드 등록", "미리보기 저장", "분석 재시도", "분석 상태"])(
+  it.each(["분석 등록", "가이드 등록", "제품 확인 전 저장", "분석 재시도", "분석 상태"])(
     "%s의 401은 세션·사진·토큰을 정리한다",
     async (source) => {
       const unauthorized = new ApiError(401, "UNAUTHORIZED", "로그인 필요");
       await mount(
-        source === "가이드 등록" || source === "미리보기 저장",
-        source === "미리보기 저장",
+        source === "가이드 등록" || source === "제품 확인 전 저장",
+        source === "제품 확인 전 저장",
       );
       const id = session.state.run.id;
       if (source === "분석 재시도") {
@@ -218,7 +218,7 @@ describe("분석 중 이용 준비", () => {
         await render();
       } else {
         mocks.register.mockRejectedValueOnce(unauthorized);
-        await click(source === "미리보기 저장" ? "미리보기 보기" : "촬영 완료");
+        await click(source === "제품 확인 전 저장" ? "제품 확인하기" : "촬영 완료");
       }
       expect(session.state).toMatchObject({
         loggedIn: false,
@@ -320,12 +320,12 @@ describe("분석 중 이용 준비", () => {
     expect(mocks.router.replace).not.toHaveBeenCalled();
   });
 
-  it("서버 등록이 끝난 사진은 미리보기 진입 때 다시 업로드하지 않는다", async () => {
+  it("서버 등록이 끝난 사진은 제품 확인 진입 때 다시 업로드하지 않는다", async () => {
     await mount(true, true);
     await act(async () => session.updateRun({ faceRegistrationId: "already-saved" }));
-    await click("미리보기 보기");
+    await click("제품 확인하기");
     expect(mocks.register).not.toHaveBeenCalled();
-    expect(mocks.router.push).toHaveBeenCalledWith(`/preview?guideId=${GUIDE}`);
+    expect(mocks.router.push).toHaveBeenCalledWith(`/check?guideId=${GUIDE}`);
   });
 
   it("등록을 미뤄도 파우치를 보여주고 자동 등록 안내를 반복하지 않는다", async () => {
@@ -371,7 +371,7 @@ describe("분석 중 이용 준비", () => {
     const photo = facePhoto(session.state.run.id);
     expect(element.querySelector('[data-testid="face"]')).toBeNull();
     mocks.register.mockRejectedValueOnce(new Error("저장 실패"));
-    await click("미리보기 보기");
+    await click("제품 확인하기");
     expect(element.querySelector('[role="alert"]')?.textContent).toContain(
       "얼굴 등록을 저장하지 못했어요",
     );
@@ -397,7 +397,7 @@ describe("분석 중 이용 준비", () => {
       expect.objectContaining({ videoId: "v", guideId: GUIDE }),
     );
     expect(session.state.run.faceRegistrationId).toBe("f1");
-    expect(mocks.router.push).toHaveBeenCalledWith(`/preview?guideId=${GUIDE}`);
+    expect(mocks.router.push).toHaveBeenCalledWith(`/check?guideId=${GUIDE}`);
   });
 
   it("이전 실행의 업로드가 늦게 끝나면 등록을 정리하고 이동하지 않는다", async () => {
@@ -409,7 +409,7 @@ describe("분석 중 이용 준비", () => {
           finish = resolve;
         }),
     );
-    await click("미리보기 보기");
+    await click("제품 확인하기");
     await act(async () => session.startRun({ kind: "sample", jobId: "other" }));
     await act(async () => finish({ faceRegistrationId: "stale" }));
     expect(mocks.remove).toHaveBeenCalledWith("stale");
@@ -446,7 +446,7 @@ describe("분석 중 이용 준비", () => {
     await mount(true);
     await click("나중에");
     await click("파우치 확인 완료");
-    await click("얼굴 등록하고 미리보기");
+    await click("얼굴 등록하고 제품 확인");
     await click("촬영 완료");
     expect(mocks.register).toHaveBeenCalledOnce();
     expect(element.querySelector('[data-testid="face"]')).toBeNull();

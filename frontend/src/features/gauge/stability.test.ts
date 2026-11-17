@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   frameReason,
   GaugeStabilizer,
+  HOLD_MS,
   nextStartPicks,
   windowReason,
   type FrameReason,
@@ -45,6 +46,24 @@ describe("GaugeStabilizer", () => {
       closeOrNull(got.ratio, want.ratio);
       closeOrNull(got.bar, want.bar);
       expect({ ...got, ratio: 0, bar: 0 }).toEqual({ ...want, ratio: 0, bar: 0 });
+    });
+  });
+
+  it("마지막 위치 유지 옵션이면 측정 중단이 길어져도 값을 숨기지 않는다", () => {
+    const stabilizer = new GaugeStabilizer(true);
+    const measured = stabilizer.update(0, {
+      ratio: 1,
+      target: null,
+      hueSame: true,
+      chromaSame: true,
+    });
+    const stopped = stabilizer.update(HOLD_MS + 1, null, "lost");
+
+    expect(stopped).toMatchObject({
+      ratio: measured.ratio,
+      bar: measured.bar,
+      stale: true,
+      reason: "lost",
     });
   });
 });

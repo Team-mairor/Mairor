@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { StepPick } from "@/features/check";
 
@@ -74,5 +74,48 @@ describe("영상 제품 정보가 없는 실제 가이드 단계", () => {
     );
     expect(element.textContent).toContain("영상 속 제품 · 하밍 젤리 에어 치크 02 베리피치");
     expect(element.textContent).not.toContain("이름만 확인");
+  });
+
+  it("게이지 기준 사진을 다 모을 때까지 시작을 막고 진행 수를 보여 준다", async () => {
+    await render(
+      <PrepCard
+        step={0}
+        total={3}
+        info={info}
+        refProduct={null}
+        match={null}
+        baseline={{ frames: 7, total: 15, ready: false }}
+        onStart={() => {}}
+      />,
+    );
+    expect(element.textContent).not.toContain("정면을 봐 주세요");
+    const button = element.querySelector("button");
+    expect(button?.textContent).toContain("시작하기 (7/15)");
+    expect(button?.getAttribute("aria-label")).toBe("시작하기, 준비 7/15");
+    expect(button?.querySelector<HTMLElement>("[aria-hidden]")?.style.width).toBe(
+      "46.666666666666664%",
+    );
+    expect(button?.disabled).toBe(true);
+  });
+
+  it("기준 사진을 오래 모으지 못하면 게이지 없이 시작할 수 있다", async () => {
+    const onStart = vi.fn();
+    await render(
+      <PrepCard
+        step={0}
+        total={3}
+        info={info}
+        refProduct={null}
+        match={null}
+        baseline={{ frames: 7, total: 15, ready: false, canSkip: true }}
+        onStart={onStart}
+      />,
+    );
+    const button = element.querySelector("button")!;
+    expect(button.textContent).toContain("게이지 없이 시작 (7/15)");
+    expect(button.getAttribute("aria-label")).toBe("게이지 없이 시작, 준비 7/15");
+    expect(button.disabled).toBe(false);
+    await act(async () => button.click());
+    expect(onStart).toHaveBeenCalledOnce();
   });
 });

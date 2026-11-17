@@ -123,7 +123,7 @@ function LoadingScreen({ jobId }: { jobId: string | null }) {
   const faceOk = faceReady(run) && facePhoto(run.id) !== null;
   const faceCaptured = run.faceReg && facePhoto(run.id) !== null;
 
-  // 다시 따라 하기는 들어오자마자 등록부터 한다. 미리보기에서 돌아왔을 때처럼 이미 등록했으면 띄우지 않는다
+  // 다시 따라 하기는 들어오자마자 등록부터 한다. 이미 등록했으면 다시 띄우지 않는다
   const [faceModal, setFaceModal] = useState(replay && !faceCaptured && !run.facePrompted);
   const [faceShown, setFaceShown] = useState(replay || run.facePrompted);
   const [pouchModal, setPouchModal] = useState(false);
@@ -290,9 +290,9 @@ function LoadingScreen({ jobId }: { jobId: string | null }) {
   } else if (review === "rejected") {
     ctaLabel = "다른 영상 고르기";
     ctaGo = () => router.push("/select");
-  } else if (!guideOk) ctaLabel = "분석이 끝나면 미리보기를 열 수 있어요";
+  } else if (!guideOk) ctaLabel = "분석이 끝나면 제품을 확인할 수 있어요";
   else if (!faceCaptured) {
-    ctaLabel = "얼굴 등록하고 미리보기";
+    ctaLabel = "얼굴 등록하고 제품 확인";
     ctaGo = () => {
       setFaceShown(true);
       updateRun({ facePrompted: true }, run.id);
@@ -303,15 +303,15 @@ function LoadingScreen({ jobId }: { jobId: string | null }) {
       ? "얼굴 등록을 저장하는 중"
       : faceSaveError
         ? "얼굴 등록 저장 다시 시도"
-        : "미리보기 보기";
+        : "제품 확인하기";
     ctaGo = savingFace
       ? null
       : () => {
           void savePreparedFace();
         };
   } else {
-    ctaLabel = "미리보기 보기";
-    ctaGo = () => router.push(href("/preview"));
+    ctaLabel = "제품 확인하기";
+    ctaGo = () => router.push(href("/check"));
   }
 
   const barText = replay
@@ -351,7 +351,7 @@ function LoadingScreen({ jobId }: { jobId: string | null }) {
         return;
       }
       updateRun({ faceRegistrationId }, run.id);
-      router.push(href("/preview"));
+      router.push(href("/check"));
     } catch (e) {
       if (!isCurrentRun(run.id)) return;
       setFaceSaveError(`얼굴 등록을 저장하지 못했어요. ${errorMessage(e)}`);
@@ -395,7 +395,7 @@ function LoadingScreen({ jobId }: { jobId: string | null }) {
   const closePouch = () => {
     setPouchModal(false);
     updateRun({ pouchReviewed: true }, run.id);
-    if (replay && faceOk) router.push(href("/preview"));
+    if (replay && faceOk) router.push(href("/check"));
   };
 
   if (invalidEntry)

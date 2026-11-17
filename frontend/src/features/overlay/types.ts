@@ -6,7 +6,7 @@ export type LayerShape = "polygon" | "uvMask" | "polyline";
 
 export type BlendMode = "normal" | "multiply";
 
-/** 미리보기 레이어 하나. 크기 단위(feather·width)는 IOD = 1 기준 */
+/** 화장 레이어 하나. 크기 단위(feather·width)는 IOD = 1 기준 */
 export interface MakeupLayer {
   stepId: string;
   makeup: MakeupKind;

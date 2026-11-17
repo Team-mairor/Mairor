@@ -430,7 +430,7 @@ export function GuideCheck() {
           <LiveNote note={note} className="relative inset-x-auto top-auto mx-8 shrink-0" />
         )}
         <div className="flex shrink-0 items-center gap-2.5 px-8">
-          <RoundBack onClick={() => router.push(href("/preview"))} label="미리보기로" />
+          <RoundBack onClick={() => router.push(href("/loading"))} label="준비 화면으로" />
           <PillButton
             size="cta"
             trailing

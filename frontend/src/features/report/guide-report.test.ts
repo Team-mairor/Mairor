@@ -15,7 +15,6 @@ const step = (stepId: string, extra: Partial<GuideStepModel> = {}): GuideStepMod
   doneWhen: null,
   product: { name: "롬앤 베러 댄 치크", shade: "01 쥬시 코랄" },
   matchCategory: "CHEEK",
-  previewable: false,
   subSteps: [],
   ...extra,
 });

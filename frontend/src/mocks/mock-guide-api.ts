@@ -19,7 +19,6 @@ export const MOCK_ALL_PARTS_GUIDE_ID = "a0000000-0000-4000-8000-000000000002";
 /** 세션이 없을 때처럼 401(로그인 필요)로 답하는 가이드 */
 export const MOCK_LOGIN_REQUIRED_GUIDE_ID = "a0000000-0000-4000-8000-000000000003";
 
-const PREVIEWABLE = new Set<Makeup>(["eyeshadow", "eyeliner", "blush", "highlight", "lip"]);
 const MATCH_CATEGORY: Partial<Record<Makeup, string>> = {
   foundation: "BASE",
   eyeshadow: "EYE",
@@ -61,7 +60,6 @@ function toStep(s: MockGuideStep, subSteps: GuideStepDto["subSteps"]): GuideStep
         : null,
     targetColor: null,
     videoRange: s.videoRange,
-    previewable: guide && PREVIEWABLE.has(s.makeup),
     matchCategory: guide ? (MATCH_CATEGORY[s.makeup] ?? null) : null,
     subSteps,
   };
@@ -79,7 +77,6 @@ function toGuide(guideId: string, steps: GuideStepDto[], meshVersion: string | n
     meshVersion,
     referenceImageUrl: null,
     stepCount: steps.filter((s) => s.type === "GUIDE").length,
-    previewableStepCount: steps.filter((s) => s.previewable).length,
     steps,
   };
 }

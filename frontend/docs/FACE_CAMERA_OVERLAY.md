@@ -21,7 +21,7 @@
 
 ## 카메라·얼굴 추적
 
-`(live)` 레이아웃의 `CameraProvider`가 카메라와 추적을 한 번만 켠다. 로딩(얼굴 등록) → 미리보기 → 제품 체크 → 튜토리얼은 다시 켜지 않고 이어 쓰고, 이 묶음을 떠나면 끈다.
+`(live)` 레이아웃의 `CameraProvider`가 카메라와 추적을 한 번만 켠다. 로딩(얼굴 등록) → 제품 체크 → 튜토리얼은 다시 켜지 않고 이어 쓰고, 이 묶음을 떠나면 끈다.
 
 ```tsx
 // (live)/layout.tsx
@@ -82,7 +82,7 @@
 <MakeupOverlay layersUrl={url} hidden={hide} />
 ```
 
-- `layersUrl`: AI 미리보기 출력(`layers.json`). 못 불러오면 5초마다 다시 시도한다
+- `layersUrl`: AI 화장 레이어 출력(`layers.json`). 못 불러오면 5초마다 다시 시도한다
 - `hidden`: 그리기만 멈추고 레이어는 둔다. `enabled={false}`는 성능 비교용으로 그리기를 끈다
 - 캔버스는 CSS 픽셀의 절반 해상도로 그린다. 그리는 픽셀이 곧 검출 지연이다
 
@@ -112,7 +112,7 @@ const issue = useGuideTrackingIssue(step, crop); // 단계 부위가 잘리거�
 
 ## 하프미러 좌표 보정
 
-미러필름 모드(`<html class="mirror">`)에서는 얼굴 등록 원·튜토리얼 가이드·미리보기 화장을 카메라 영상 위치가 아니라 거울에 비친 얼굴 위치에 그린다. 세 곳 모두 같은 `halfMirror` 변환을 쓴다.
+미러필름 모드(`<html class="mirror">`)에서는 얼굴 등록 원·튜토리얼 가이드·개발 검증용 화장 레이어를 카메라 영상 위치가 아니라 거울에 비친 얼굴 위치에 그린다. 모두 같은 `halfMirror` 변환을 쓴다.
 
 ```ts
 const { frame: reflected, view } = halfMirror(frame, mirrorScreen(canvas), loadMirrorFit());
@@ -181,7 +181,7 @@ toScreen(reflected.landmarks[i], frame.imageSize, view);
 
 ## 아직 확인하지 못한 것
 
-- 갤럭시탭에서 화면 꺼짐·앱 전환 뒤 가이드 복귀, 얼굴 등록 뒤 미리보기에서 카메라를 다시 켜지 않는지
+- 갤럭시탭에서 화면 꺼짐·앱 전환 뒤 가이드 복귀, 얼굴 등록 뒤 제품 확인에서 카메라를 다시 켜지 않는지
 - 움직임 지연(가이드와 얼굴의 어긋남) 수치. 지금은 예측 전후를 눈으로 비교한 결과만 있다
 - 얼굴 등록의 손 가림·표정 판정
 - 갤럭시탭 S6에서 피부 분할이 켜진 채로 도는지, 켜지면 미러필름에서 가림 마스크가 볼·턱에서 어긋나는지

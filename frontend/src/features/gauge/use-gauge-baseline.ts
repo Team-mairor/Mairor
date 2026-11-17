@@ -4,19 +4,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   FRAME_STALE_MS,
+  isRegionInView,
   lockControls,
   matchExposure,
   unlockControls,
   useCamera,
   useFaceFrame,
   type FaceFrame,
+  type RegionName,
 } from "@/features/face";
 import { loadFaceMesh } from "@/features/overlay";
 
 import {
   BaselineCollector,
+  facing,
   FRAME_GAP_MS,
   FrontCenter,
+  goodFrame,
   qualityOf,
   type Baseline,
   type FrameQuality,
@@ -24,6 +28,7 @@ import {
 import { cellSampler, readCells, type CellLab, type CellSampler, type Pixels } from "./cells";
 import { eyeAspect, frameState } from "./frame";
 import { nextStartBaseline, trimTail, type TailShot } from "./next-start";
+import { registeredGaugeBaseline, type RegisteredGaugeBaseline } from "./registered-baseline";
 import { FRAME, type FrameState } from "./stability";
 import { eyeSampler, readEyePixels, whiteOfFrames, type EyeSampler } from "./white";
 
@@ -66,6 +71,8 @@ const videoTrack = (video: HTMLVideoElement | null) =>
   (video?.srcObject as MediaStream | null)?.getVideoTracks()[0] ?? null;
 
 export interface GaugeBaselineStatus {
+  /** 최근 얼굴이 정면이고 지금 단계 부위가 온전히 보여 기준 사진에 쓸 수 있는지 */
+  front: boolean | null;
   /** 그 사람 정면 pitch. 아직 못 정했으면 null */
   center: number | null;
   /** 맨얼굴 기준. 첫 단계 준비 카드에서 다 모으지 못했으면 null */
@@ -90,6 +97,8 @@ export interface GaugeBaselineOptions {
   collecting: boolean;
   /** 지금 단계 화장 종류. 눈 화장 단계에 들어서면 그 뒤로는 흰자를 재지 않는다 */
   makeup?: string;
+  /** 기준 사진에 온전히 보여야 하는 지금 단계 부위 */
+  regions?: readonly RegionName[];
   /** 묶음 안 다음 단계 시작 기준에 쓸 사진을 남기는 중인지 */
   recording?: boolean;
   /** 게이지가 재는 중이면 그 사진을 record로 받아 따로 읽지 않는다 */
@@ -97,22 +106,22 @@ export interface GaugeBaselineOptions {
 }
 
 /** 한 실행 동안 모은 기준 */
-const freshStore = (runId: string) => ({
+const freshStore = (runId: string, registered: RegisteredGaugeBaseline | null = null) => ({
   runId,
-  center: new FrontCenter(),
-  bare: null as Baseline | null,
-  white: null as [number, number, number] | null,
+  center: new FrontCenter(registered?.center),
+  bare: registered?.baseline ?? (null as Baseline | null),
+  white: registered?.white ?? (null as [number, number, number] | null),
   /** 지금 모으는 기준 사진의 눈 구멍 점 색. 흰자 색을 잴 때 쓴다 */
   eyes: [] as Float32Array[],
   /** 눈 화장 단계에 들어선 적이 있는지. 아이라인 · 속눈썹이 흰자 둘레를 덮으므로 그 뒤로는 흰자를 재지 않는다 */
   eyeMakeupSeen: false,
   /** 첫 모으기가 끝나기 전. 이때 만든 기준만 맨얼굴 기준이다 */
-  first: true,
+  first: registered === null,
   /** 카메라를 잠그는 중. 잠그는 동안은 화면 밝기가 바뀌어 기준 사진을 모으지 않는다 */
   locking: false,
   /** 카메라 잠금을 시도해 끝냈는지. 트랙이 준비되기 전에는 false라 기준을 모으지 않는다 */
-  lockReady: false,
-  steps: new Map<number, Baseline | null>(),
+  lockReady: registered !== null,
+  steps: new Map<number, Baseline | null>(registered ? [[0, registered.baseline]] : []),
   collector: null as BaselineCollector | null,
   step: 0,
   /** 지금 단계 동안 남긴 최근 사진. 묶음 안 다음 단계 시작 기준을 여기서 고른다 */
@@ -168,11 +177,13 @@ export function useGaugeBaseline({
   step,
   collecting,
   makeup,
+  regions = [],
   recording = false,
   measuring = false,
 }: GaugeBaselineOptions) {
   const { videoRef } = useCamera();
   const [status, setStatus] = useState<GaugeBaselineStatus>({
+    front: null,
     center: null,
     bare: null,
     frames: 0,
@@ -237,6 +248,7 @@ export function useGaugeBaseline({
     releaseCamera();
     setStatus((prev) => ({
       ...prev,
+      front: null,
       center: null,
       bare: null,
       frames: 0,
@@ -246,7 +258,25 @@ export function useGaugeBaseline({
       white: null,
       quality: null,
     }));
-  }, [releaseCamera, runId]);
+  }, [releaseCamera, runId, videoRef]);
+
+  useEffect(() => {
+    const s = store.current;
+    if (s.runId !== runId || s.lockReady) return;
+    const track = videoTrack(videoRef.current);
+    const registered = registeredGaugeBaseline(runId, track);
+    if (!registered || !track) return;
+    store.current = freshStore(runId, registered);
+    locked.current = track;
+    setStatus((prev) => ({
+      ...prev,
+      center: registered.center,
+      bare: registered.baseline,
+      frames: registered.baseline.frames,
+      lock: registered.lock,
+      white: registered.white,
+    }));
+  }, [runId, videoRef]);
 
   useEffect(() => () => releaseCamera(), [releaseCamera]);
 
@@ -258,10 +288,11 @@ export function useGaugeBaseline({
   // 준비 카드가 닫히거나 단계가 바뀌면 모으던 기준을 그 단계 것으로 정한다
   useEffect(() => {
     const s = store.current;
-    if (collecting && !s.steps.has(step)) {
+    if (collecting && s.steps.get(step) == null) {
       s.collector = new BaselineCollector();
       s.step = step;
       s.eyes = [];
+      setStatus((prev) => ({ ...prev, front: null, frames: 0 }));
       const video = videoRef.current;
       const track = videoTrack(video);
       if (!s.lockReady && video && track) startLock(s, video, track);
@@ -282,6 +313,10 @@ export function useGaugeBaseline({
   useEffect(() => {
     recordingRef.current = { recording, measuring };
   }, [recording, measuring]);
+  const regionsRef = useRef(regions);
+  useEffect(() => {
+    regionsRef.current = regions;
+  }, [regions]);
   // 단계가 바뀌면 앞 단계 사진을 버린다
   useEffect(() => {
     store.current.tail = [];
@@ -289,7 +324,18 @@ export function useGaugeBaseline({
 
   useFaceFrame((frame: FaceFrame | null) => {
     const s = store.current;
-    if (!frame || frame.trackingState !== "tracking") return;
+    const requiredRegions = regionsRef.current;
+    const regionsTracked =
+      !!frame &&
+      (frame.trackingState === "tracking" ||
+        (frame.trackingState === "degraded" &&
+          requiredRegions.length > 0 &&
+          requiredRegions.every((region) => frame.usableRegions?.includes(region))));
+    if (!frame || !regionsTracked) {
+      if (s.collector)
+        setStatus((prev) => (prev.front === false ? prev : { ...prev, front: false }));
+      return;
+    }
     const rec = recordingRef.current;
     const video = videoRef.current;
     const at = performance.now();
@@ -315,13 +361,19 @@ export function useGaugeBaseline({
       );
     }
     const q = qualityOf(frame);
+    const regionsVisible = requiredRegions.every((region) => isRegionInView(frame, region));
+    const before = s.center.value;
+    if (regionsVisible) s.center.push(q);
+    const center = s.center.value;
+    const collectable = regionsVisible && (center === null ? facing(q) : goodFrame(q, center));
     if (s.collector && performance.now() - shown.current > 500) {
       shown.current = performance.now();
-      setStatus((prev) => ({ ...prev, quality: { ...q, aspect: eyeAspect(frame) } }));
+      setStatus((prev) => ({
+        ...prev,
+        front: collectable,
+        quality: { ...q, aspect: eyeAspect(frame) },
+      }));
     }
-    const before = s.center.value;
-    s.center.push(q);
-    const center = s.center.value;
     if (before === null && center !== null) setStatus((prev) => ({ ...prev, center }));
     const collector = s.collector;
     const now = performance.now();
@@ -331,7 +383,7 @@ export function useGaugeBaseline({
       if (track) startLock(s, video, track);
       return;
     }
-    if (center === null || !sampler.current || s.locking) return;
+    if (!regionsVisible || center === null || !sampler.current || s.locking) return;
     if (now - (frame.detectedAt ?? frame.timestamp) > FRAME_STALE_MS) return;
     if (!collector.wants(q, center, now)) return;
     const pixels = read.current(video);

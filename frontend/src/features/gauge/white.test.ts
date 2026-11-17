@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+import { REGIONS } from "@/features/face";
 import type { FaceMesh } from "@/features/overlay";
 
 import { areaCells, madeCells } from "./area";
@@ -72,7 +73,34 @@ describe("흰자 색", { timeout: 20_000 }, () => {
     expect(sampler.size).toBeGreaterThan(200);
     const data = new Uint8ClampedArray(512 * 512 * 4).fill(200);
     const rgb = readEyePixels({ width: 512, height: 512, data }, landmarks, sampler);
-    expect(rgb.every((v) => v === 200)).toBe(true);
+    const kept = [...rgb].filter((v) => !Number.isNaN(v));
+    expect(kept.length).toBeGreaterThan(60);
+    expect(kept.length).toBeLessThan(rgb.length);
+    expect(kept.every((v) => v === 200)).toBe(true);
+  });
+
+  it("눈동자와 눈 테두리 5% 안쪽은 흰자에서 뺀다", () => {
+    const withIris = [...landmarks];
+    for (const [name, center, ring] of [
+      ["rightEye", 468, [469, 470, 471, 472]],
+      ["leftEye", 473, [474, 475, 476, 477]],
+    ] as const) {
+      const [a, b] = REGIONS[name].axis.map((i) => landmarks[i]);
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      withIris[center] = mid;
+      const radius = Math.hypot(a.x - b.x, a.y - b.y) * 0.12;
+      for (const [i, angle] of ring.map((i, k) => [i, (Math.PI * k) / 2] as const))
+        withIris[i] = {
+          x: mid.x + Math.cos(angle) * radius,
+          y: mid.y + Math.sin(angle) * radius,
+        };
+    }
+    const data = new Uint8ClampedArray(512 * 512 * 4).fill(200);
+    const without = readEyePixels({ width: 512, height: 512, data }, landmarks, sampler);
+    const filtered = readEyePixels({ width: 512, height: 512, data }, withIris, sampler);
+    const count = (values: Float32Array) => [...values].filter((v) => !Number.isNaN(v)).length;
+
+    expect(count(filtered)).toBeLessThan(count(without));
   });
 
   it("밝은 위 25% 중 반사광을 뺀 점의 가운데 값이다", () => {
