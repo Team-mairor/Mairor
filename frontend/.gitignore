@@ -48,3 +48,4 @@ next-env.d.ts
 
 # copied by scripts/sync-brow-assets.mjs
 /public/brow-runtime
+/public/occlusion-runtime

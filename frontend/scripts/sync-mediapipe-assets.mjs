@@ -104,4 +104,44 @@ for (const { url, sha256: expected, to, timeoutMs } of downloads) {
   renameSync(`${to}.tmp`, to);
 }
 
+// 가림 찾기 모델(Git LFS)과 onnxruntime-web 실행 파일. shared/occlusion/README.md의 SHA-256과 같아야 한다.
+// LFS 없이 받으면 130바이트 안팎의 포인터 파일이라, 개발에서는 경고만 하고 빌드에서는 멈춘다.
+const occlusionModel = {
+  from: join(frontendDir, "../shared/occlusion/occlusion_bisenet.v1.web.fp16.onnx"),
+  to: join(frontendDir, "public/models/occlusion_bisenet.v1.web.fp16.onnx"),
+  sha256: "8d9ef97b3d15585ad3803126235bebfd89c34a31518de8947207ca65e494e844",
+};
+// wasm 방식은 첫 두 개, WebGPU 방식은 브라우저가 지원하는 변형(asyncify · jspi · jsep) 가운데 하나를 불러온다
+const ortFiles = [
+  "ort-wasm-simd-threaded.mjs",
+  "ort-wasm-simd-threaded.wasm",
+  ...["asyncify", "jspi", "jsep"].flatMap((kind) => [
+    `ort-wasm-simd-threaded.${kind}.mjs`,
+    `ort-wasm-simd-threaded.${kind}.wasm`,
+  ]),
+];
+const occlusionProblem = (() => {
+  if (!existsSync(occlusionModel.from)) return "모델 파일이 없습니다";
+  const data = readFileSync(occlusionModel.from);
+  if (sha256(data) !== occlusionModel.sha256)
+    return `SHA-256이 다릅니다(${data.length}바이트). Git LFS 포인터일 수 있으니 'git lfs pull'을 실행하세요`;
+  mkdirSync(dirname(occlusionModel.to), { recursive: true });
+  copyFileSync(occlusionModel.from, occlusionModel.to);
+  return null;
+})();
+if (occlusionProblem) {
+  const message = `[sync-mediapipe-assets] 가림 찾기 모델을 준비하지 못했습니다: ${occlusionProblem}`;
+  if (process.env.npm_lifecycle_event === "prebuild") {
+    console.error(message);
+    process.exit(1);
+  }
+  console.warn(`${message}
+  (개발 서버는 그대로 켜지지만 가림 찾기는 동작하지 않습니다)`);
+}
+const ortDist = join(frontendDir, "node_modules/onnxruntime-web/dist");
+mkdirSync(join(frontendDir, "public/occlusion-runtime"), { recursive: true });
+for (const name of ortFiles) {
+  copyFileSync(join(ortDist, name), join(frontendDir, "public/occlusion-runtime", name));
+}
+
 console.log("[sync-mediapipe-assets] MediaPipe wasm·모델·메시 파일을 public/에 준비했습니다.");

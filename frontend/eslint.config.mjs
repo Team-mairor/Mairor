@@ -69,6 +69,8 @@ const eslintConfig = defineConfig([
     "public/mediapipe/**",
     // copied by scripts/sync-brow-assets.mjs
     "public/brow-runtime/**",
+    // copied by scripts/sync-mediapipe-assets.mjs
+    "public/occlusion-runtime/**",
   ]),
 ]);
 

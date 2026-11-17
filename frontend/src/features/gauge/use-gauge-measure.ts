@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { areaCells, madeCells } from "@/domain/gauge/area";
 import type { Baseline } from "@/domain/gauge/baseline";
 import { readCells, type CellLab } from "@/domain/gauge/cells";
+import { areaCover, blankCovered, readCover } from "@/domain/gauge/cover";
 import { frameState } from "@/domain/gauge/frame";
 import { drift, lightChange } from "@/domain/gauge/light";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/domain/gauge/stability";
 import { FRAME_STALE_MS, useCamera, useFaceFrame, type FaceFrame } from "@/vision/face";
 import type { AreaGuideSet, GaugeReference } from "@/vision/guide";
+import { OcclusionRunner, type OcclusionStatus } from "@/vision/occlusion";
 import { loadFaceMesh, type FaceMesh } from "@/vision/overlay";
 
 import { loadCellSampler, videoReader, type Samplers } from "./use-gauge-baseline";
@@ -60,6 +62,10 @@ export interface GaugeReading {
   drift: number | null;
   /** 한 번 재는 데 걸린 시간(ms) */
   ms: number;
+  /** 지금 하위 단계 영역 가린 몫(0~1). 가림 표가 없으면 null */
+  cover: number | null;
+  /** 가림 찾기 모델 상태 */
+  occlusion: OcclusionStatus | null;
 }
 
 const sameDisplay = (a: GaugeDisplay | null, b: GaugeDisplay) =>
@@ -128,10 +134,27 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
     () => (mesh ? madeCells(input.madeSets.map((set) => areaCells(set, mesh))) : null),
     [mesh, input.madeSets],
   );
-  const areasRef = useRef({ areas, made });
+  /** 지금 하위 단계 영역 칸 전체. 영역 가린 몫을 낼 때 쓴다 */
+  const current = useMemo(() => madeCells(areas.map(({ cells }) => cells)), [areas]);
+  const areasRef = useRef({ areas, made, current });
   useEffect(() => {
-    areasRef.current = { areas, made };
-  }, [areas, made]);
+    areasRef.current = { areas, made, current };
+  }, [areas, made, current]);
+
+  // 가림 찾기 모델. 가이드에 재는 영역이 있으면 미리 열어 첫 측정부터 쓸 수 있게 한다
+  const occlusion = useRef<OcclusionRunner | null>(null);
+  const hasAreas = input.guideSets.length > 0;
+  useEffect(() => {
+    const runner = new OcclusionRunner();
+    occlusion.current = runner;
+    return () => {
+      runner.dispose();
+      occlusion.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    if (hasAreas) occlusion.current?.start();
+  }, [hasAreas]);
 
   useFaceFrame((frame: FaceFrame | null) => {
     const now = performance.now();
@@ -149,8 +172,25 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
     const state = frameState(fresh ? frame : null, pixels);
     let grid: CellLab | null = null;
     let skinDrift: number | null = null;
+    let cover: number | null = null;
+    const runner = occlusion.current;
     if (state.faces === 1 && pixels && frame) {
       grid = readCells(pixels, frame.landmarks, samplers.current.cells);
+      // 가림 찾기: 가린 몫이 문턱을 넘으면 그 사진을 거르고(covered), 가린 점이 있는 칸은 그 장에서 비운다
+      runner?.feed(video, frame.landmarks, now);
+      const mask = runner?.latestFor(now) ?? null;
+      if (mask) {
+        // 가림 표의 box는 영상 원본 크기 기준이라 같은 크기로 칸 점을 옮긴다
+        const cellCover = readCover(
+          mask,
+          { width: video.videoWidth, height: video.videoHeight },
+          frame.landmarks,
+          samplers.current.cells,
+        );
+        cover = areaCover(cellCover, areasRef.current.current);
+        state.areaCover = cover;
+        grid = blankCovered(grid, cellCover);
+      }
       if (start) skinDrift = drift(grid, start, areasRef.current.made).size;
       state.drift = Number.isNaN(skinDrift) ? null : skinDrift;
     }
@@ -195,6 +235,8 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
         frame: reason,
         drift: skinDrift,
         ms: performance.now() - started,
+        cover,
+        occlusion: runner?.status ?? null,
       });
   });
 

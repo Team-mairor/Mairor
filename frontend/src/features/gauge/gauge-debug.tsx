@@ -66,6 +66,14 @@ export function GaugeDebug({
       `${reading?.frame ?? "통과"} · 흔들림 ${num(reading?.drift)} · ${num(reading?.ms, 1)}ms`,
     ],
     [
+      "가림",
+      `${reading?.cover === null || reading?.cover === undefined ? "-" : num(reading.cover)} · ${
+        reading?.occlusion
+          ? `${reading.occlusion.state}${reading.occlusion.provider ? ` ${reading.occlusion.provider}` : ""} ${num(reading.occlusion.runMs, 0)}ms/${num(reading.occlusion.intervalMs, 0)}ms${reading.occlusion.reason ? ` ${reading.occlusion.reason}` : ""}`
+          : "-"
+      }`,
+    ],
+    [
       "잰 값",
       `비율 ${num(m?.ratio)} · 막대 ${num(m?.bar, 1)} · 목표 ${num(m?.target)} · ${m?.reason ?? ""}`,
     ],
