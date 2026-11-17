@@ -39,25 +39,23 @@ export interface PhotoFrameTemplate {
 }
 
 /**
- * 촬영·합성 개발용 2×2 프레임. 최종 디자인은 최주연 담당이다.
- * 1200×1800은 개발 기준값이며 사진/프레임 규격을 확정한 뒤 교체할 수 있다.
- * 기본 브랜드 워드마크는 하단 여백에 배치하며 최종 디자인에서 교체할 수 있다.
+ * SSAFY 15기 기념 네컷 프레임. 1800×2646, 사진 칸은 825×1100(정확한 3:4).
+ * overlay는 디자이너의 검은 프레임 사진 칸을 투명하게 뚫고, 칸마다 함께 찍는 사람과 흰 문구를 붙인 이미지다(일반 모드).
+ * 칸 위치는 프레임 구멍(822×1097)을 잰 값이고, 크기는 구멍보다 3px 크게 잡아 프레임이 가장자리를 덮는다.
+ * 칸 비율이 작은 정수비가 아니면 촬영 시 카메라 영상이 크게 잘려 확대되므로(capture-crop) 3:4를 지킨다.
  */
 export const BASIC_PHOTO_FRAME = {
-  id: "basic-grid",
-  version: 1,
-  output: { width: 1200, height: 1800, background: "#ffffff" },
+  id: "ssafy15",
+  version: 3,
+  output: { width: 1800, height: 2646, background: "#ffffff" },
   slots: [
-    { id: "slot-1", x: 60, y: 60, width: 520, height: 760 },
-    { id: "slot-2", x: 620, y: 60, width: 520, height: 760 },
-    { id: "slot-3", x: 60, y: 860, width: 520, height: 760 },
-    { id: "slot-4", x: 620, y: 860, width: 520, height: 760 },
+    { id: "slot-1", x: 48, y: 48, width: 825, height: 1100 },
+    { id: "slot-2", x: 48, y: 1193, width: 825, height: 1100 },
+    { id: "slot-3", x: 930, y: 271, width: 825, height: 1100 },
+    { id: "slot-4", x: 930, y: 1416, width: 825, height: 1100 },
   ],
-  brand: {
-    text: "mairor",
-    y: 1728,
-    fontSize: 52,
-    fontFamily: 'Georgia, "Times New Roman", serif',
-    color: "#1b2d63",
-  },
+  overlaySrc: "/images/photo/frame-overlay.png",
 } as const satisfies PhotoFrameTemplate;
+
+/** 미러필름 모드(<html class="mirror">)에서 쓰는 프레임. 검은 화면 위에서 보이도록 #f4f9ff 바탕·네이비 문구이고, 칸 좌표는 BASIC_PHOTO_FRAME과 같다. */
+export const MIRROR_FRAME_OVERLAY_SRC = "/images/photo/frame-overlay-mirror.png";

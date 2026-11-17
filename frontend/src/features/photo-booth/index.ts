@@ -1,4 +1,4 @@
-export { BASIC_PHOTO_FRAME } from "./frame";
+export { BASIC_PHOTO_FRAME, MIRROR_FRAME_OVERLAY_SRC } from "./frame";
 export type { PhotoFrameTemplate, PhotoSlot, PhotoSlotId } from "./frame";
 export { calculatePhotoCrop, MAX_PHOTO_ZOOM } from "./crop";
 export type { PhotoCrop, PhotoPlacement, PhotoSize } from "./crop";
@@ -14,3 +14,4 @@ export {
   PhotoJpegError,
 } from "./export-jpeg";
 export type { PhotoJpegErrorKind } from "./export-jpeg";
+export { PhotoPreview } from "./photo-preview";

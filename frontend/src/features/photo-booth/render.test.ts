@@ -1,7 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { BASIC_PHOTO_FRAME } from "./frame";
+import type { PhotoFrameTemplate } from "./frame";
 import { renderPhotoFrame, type FramePhotos } from "./render";
+
+/** 합성 순서·좌표 검사용 고정 프레임. 실제 프레임(overlay 필수)과 따로 둔다. */
+const BASIC_PHOTO_FRAME = {
+  id: "test-grid",
+  version: 1,
+  output: { width: 1200, height: 1800, background: "#ffffff" },
+  slots: [
+    { id: "slot-1", x: 60, y: 60, width: 520, height: 760 },
+    { id: "slot-2", x: 620, y: 60, width: 520, height: 760 },
+    { id: "slot-3", x: 60, y: 860, width: 520, height: 760 },
+    { id: "slot-4", x: 620, y: 860, width: 520, height: 760 },
+  ],
+  brand: {
+    text: "mairor",
+    y: 1728,
+    fontSize: 52,
+    fontFamily: "Georgia, serif",
+    color: "#1b2d63",
+  },
+} as const satisfies PhotoFrameTemplate;
 
 function fixture() {
   let fillStyle = "";

@@ -255,6 +255,10 @@
 .mirror video {
   visibility: hidden;
 }
+/* 오늘네컷은 함께 찍는 사람과 구도를 맞춰야 하므로 미러에서도 카메라 영상을 보여 준다 */
+.mirror [data-photo-booth] video {
+  visibility: visible;
+}
 
 /*
  * 흰·잉크는 쓰인 자리에 따라 바꾸는 방향이 다르다. 배경 클래스가 그 안쪽 글씨 색을 정한다.

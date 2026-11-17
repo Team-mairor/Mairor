@@ -81,17 +81,17 @@ describe("네컷 프레임 규격", () => {
   );
 
   it("사진 영역의 겹침은 거부하고 경계가 맞닿는 배치는 허용한다", () => {
-    expect(() => assertPhotoFrame(changedSlot({ width: 561 }))).toThrow(RangeError);
-    expect(() => assertPhotoFrame(changedSlot({ width: 560 }))).not.toThrow();
-    expect(() => assertPhotoFrame(changedSlot({ height: 801 }))).toThrow(RangeError);
-    expect(() => assertPhotoFrame(changedSlot({ height: 800 }))).not.toThrow();
+    expect(() => assertPhotoFrame(changedSlot({ width: 883 }))).toThrow(RangeError);
+    expect(() => assertPhotoFrame(changedSlot({ width: 882 }))).not.toThrow();
+    expect(() => assertPhotoFrame(changedSlot({ height: 1146 }))).toThrow(RangeError);
+    expect(() => assertPhotoFrame(changedSlot({ height: 1145 }))).not.toThrow();
   });
 
   it("영역이 출력 우측·하단 경계에 정확히 닿는 것은 허용한다", () => {
     expect(() =>
       assertPhotoFrame({
         ...BASIC_PHOTO_FRAME,
-        output: { ...BASIC_PHOTO_FRAME.output, width: 1140, height: 1620 },
+        output: { ...BASIC_PHOTO_FRAME.output, width: 1755, height: 2516 },
         brand: undefined,
       }),
     ).not.toThrow();

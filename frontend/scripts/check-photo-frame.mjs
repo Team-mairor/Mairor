@@ -19,7 +19,13 @@ if (!browser) throw new Error("PHOTO_BROWSER_PATH에 Chrome/Edge 실행 파일�
 const directory = mkdtempSync(path.join(tmpdir(), "mairor-photo-frame-"));
 const bundle = await build({
   absWorkingDir: frontend,
-  entryPoints: ["src/features/photo-booth/index.ts"],
+  // index.ts는 화면 컴포넌트(next/link 등)도 내보내므로 합성 함수만 묶는다
+  stdin: {
+    contents:
+      'export { renderPhotoFrame } from "./render"; export { createPhotoJpegBlob, createPhotoJpegFilename } from "./export-jpeg";',
+    resolveDir: "src/features/photo-booth",
+    loader: "ts",
+  },
   bundle: true,
   write: false,
   format: "iife",
@@ -31,7 +37,17 @@ const html = `<!doctype html><meta charset="utf-8"><canvas id="output"></canvas>
 <script>
 void (async () => {
 try {
-  const { BASIC_PHOTO_FRAME: frame, renderPhotoFrame, createPhotoJpegBlob, createPhotoJpegFilename } = PhotoBooth;
+  const frame = {
+    id: 'check-grid', version: 1,
+    output: { width: 1200, height: 1800, background: '#ffffff' },
+    slots: [
+      { id: 'slot-1', x: 60, y: 60, width: 520, height: 760 },
+      { id: 'slot-2', x: 620, y: 60, width: 520, height: 760 },
+      { id: 'slot-3', x: 60, y: 860, width: 520, height: 760 },
+      { id: 'slot-4', x: 620, y: 860, width: 520, height: 760 },
+    ],
+  };
+  const { renderPhotoFrame, createPhotoJpegBlob, createPhotoJpegFilename } = PhotoBooth;
   const makeImage = (left, right = left) => {
     const image = document.createElement('canvas');
     image.width = image.height = 200;

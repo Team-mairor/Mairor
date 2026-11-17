@@ -1,62 +1,68 @@
-import { Camera } from "lucide-react";
 import Link from "next/link";
 
-import { BASIC_PHOTO_FRAME } from "@/features/photo-booth";
+const STEPS = ["네 장 연속 촬영", "컷별 다시 찍기", "바로 완성 · 저장"];
 
-/** 메이크업 실행과 독립된 네컷 사진 진입 화면. */
+/** 메이크업 실행과 독립된 오늘네컷 진입 화면. 색·글꼴은 홈 대시보드 카드와 맞춘다. */
 export default function PhotoBoothPage() {
   return (
-    <main className="flex min-h-0 flex-1 flex-col px-8 pt-8 pb-10">
-      <header className="flex items-center justify-end">
-        <span className="font-label text-[14px] font-semibold tracking-[.16em] text-mute">
-          PHOTO BOOTH
-        </span>
-      </header>
+    <main className="flex min-h-full flex-1 flex-col justify-center gap-16 py-10 text-ink">
+      <section className="grid grid-cols-[minmax(0,1fr)_380px] items-center gap-10 px-10">
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-4">
+            <span className="font-label text-[16px] font-semibold tracking-[.16em] text-navy mirror:text-[22px]">
+              FOUR CUTS
+            </span>
+            <h1 className="font-display text-[52px] leading-[1.25] text-ink">
+              오늘의 순간을
+              <br />네 컷으로
+            </h1>
+          </div>
 
-      <section className="mx-auto flex w-full max-w-[620px] flex-1 flex-col justify-center gap-7 py-8">
-        <div className="flex flex-col gap-3">
-          <p className="font-label text-[15px] font-semibold tracking-[.14em] text-navy">
-            JUST FOR FUN
-          </p>
-          <h1 className="font-display text-[36px] leading-[1.25] text-ink">
-            오늘의 순간을 네 컷으로
-          </h1>
-          <p className="text-[18px] leading-[1.6] text-mute">
-            메이크업 가이드를 시작하지 않아도 사진을 찍고 네 컷으로 꾸밀 수 있어요.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-7 rounded-3xl border border-line bg-white p-6">
-          <div
-            className="grid aspect-[2/3] w-[132px] shrink-0 grid-cols-2 gap-1.5 p-2"
-            style={{ backgroundColor: BASIC_PHOTO_FRAME.output.background }}
-            aria-label="네 장 사진이 들어가는 기본 프레임 미리보기"
-            role="img"
-          >
-            {BASIC_PHOTO_FRAME.slots.map((slot) => (
-              <span key={slot.id} className="rounded-sm bg-ice" />
+          <ol className="flex flex-col">
+            {STEPS.map((step, index) => (
+              <li
+                key={step}
+                className="flex h-21 items-center gap-[22px] border-t-2 border-line-3 text-[28px] font-bold last:border-b-2"
+              >
+                <span className="w-10 font-serif text-[34px] text-cyan italic mirror:font-label mirror:text-[30px] mirror:font-bold mirror:not-italic">
+                  0{index + 1}
+                </span>
+                {step}
+              </li>
             ))}
-          </div>
-          <div className="flex min-w-0 flex-col gap-2">
-            <span className="font-display text-[24px] text-ink">기본 네 컷</span>
-            <span className="text-[16px] leading-[1.5] text-mute">
-              네 장을 차례로 촬영하고, 마음에 들지 않는 컷은 다시 찍거나 사진별 위치와 확대를 조정할
-              수 있어요.
-            </span>
-            <span className="mt-1 text-[14px] text-mute-2">
-              지금은 기능 확인용 기본 프레임을 사용해요.
-            </span>
-          </div>
+          </ol>
         </div>
 
+        {/* 일반 모드는 검은 프레임, 미러필름 모드는 밝은(#f4f9ff) 프레임 예시를 보여 준다 */}
+        <div className="w-[380px] rotate-2 rounded-sm shadow-float">
+          {/* eslint-disable-next-line @next/next/no-img-element -- 정적 예시 이미지, 최적화 불필요 */}
+          <img
+            src="/images/photo/frame-sample.png"
+            alt="SSAFY 15기 기념 네컷 프레임"
+            className="block h-auto w-full mirror:hidden"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element -- 정적 예시 이미지, 최적화 불필요 */}
+          <img
+            src="/images/photo/frame-sample-mirror.png"
+            alt="SSAFY 15기 기념 네컷 프레임"
+            className="hidden h-auto w-full mirror:block"
+          />
+        </div>
+      </section>
+
+      {/* 위쪽 소개는 가운데 자리를 지키고 버튼만 내린다(translate는 배치 계산에 영향 없음) */}
+      <div className="flex shrink-0 translate-y-16 justify-center px-10">
+        {/* 위아래 가는 줄 사이에 세리프 이탤릭 부제와 제목. 바탕은 칠하지 않는다 */}
         <Link
           href="/photo/capture"
-          className="flex h-16 items-center justify-center gap-2 rounded-full bg-navy text-[18px] font-bold text-white"
+          className="flex h-28 w-[440px] flex-col items-center justify-center gap-2 border-y-2 border-navy text-navy transition-colors hover:bg-cream-2 active:scale-[.99]"
         >
-          <Camera className="size-5" aria-hidden />
-          촬영 시작
+          <span className="font-serif text-[24px] leading-none tracking-[.06em] italic mirror:text-[30px]">
+            — Take four cuts —
+          </span>
+          <span className="font-display text-[32px] leading-none">촬영 시작</span>
         </Link>
-      </section>
+      </div>
     </main>
   );
 }

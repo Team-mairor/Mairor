@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { href: "/home", label: "홈", Icon: Home, match: (p: string) => p === "/home" },
-  { href: "/photo", label: "촬영", Icon: Camera, match: (p: string) => p.startsWith("/photo") },
+  { href: "/photo", label: "오늘네컷", Icon: Camera, match: (p: string) => p.startsWith("/photo") },
   {
     href: "/select",
     label: "튜토리얼",
@@ -30,9 +30,17 @@ const TABS = [
 ] as const;
 
 /** 하단 탭 5개. (tabs) 화면에서 보인다 */
-export function BottomTabs({ hidden = false }: { hidden?: boolean }) {
+export function BottomTabs({
+  hidden = false,
+  force = false,
+}: {
+  hidden?: boolean;
+  /** 경로와 상관없이 보인다. 오늘네컷 QR 화면처럼 화면 안에서 직접 넣을 때 쓴다 */
+  force?: boolean;
+}) {
   const pathname = usePathname();
-  if (hidden) return null;
+  // 오늘네컷 촬영·완성 화면은 화면 전체를 쓴다
+  if (hidden || (!force && pathname.startsWith("/photo/"))) return null;
   return (
     <nav
       aria-label="주요 메뉴"
