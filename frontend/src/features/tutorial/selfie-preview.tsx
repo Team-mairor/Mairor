@@ -2,8 +2,8 @@
 
 import { useRef, type ReactNode } from "react";
 
-import { useCamera, useFaceRender } from "@/features/face";
 import { cn } from "@/lib/utils";
+import { useCamera, useFaceRender } from "@/vision/face";
 
 /**
  * 미러필름에서 마지막 사진을 찍는 동안 카메라 영상을 셀카처럼 띄운다. 찍히는 범위 그대로 자르지 않는다.

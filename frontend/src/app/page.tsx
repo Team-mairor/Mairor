@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
 import { Stage } from "@/components/stage";
-import { useSession } from "@/features/session";
+import { useAuth, useSessionActions } from "@/domain/session";
 
 // 로고 점 패턴 (5×7)
 const GLYPHS: Record<string, string[]> = {
@@ -33,7 +33,8 @@ const LABELS: [x: number, y: number, label: string, side: "left" | "right", dela
 /** 00 인트로. 약 6초 뒤 또는 탭하면 로그인 상태에 따라 홈·로그인으로 간다 */
 export default function IntroPage() {
   const router = useRouter();
-  const { state, sessionChecked } = useSession();
+  const { loggedIn, sessionExpired } = useAuth();
+  const { sessionChecked } = useSessionActions();
 
   const dots = useMemo(() => {
     const out: {
@@ -69,8 +70,8 @@ export default function IntroPage() {
   // 저장된 세션을 읽기 전에는 loggedIn이 기본값(false)이라 탭해도 기다린다
   const next = () => {
     if (!sessionChecked) return;
-    if (state.loggedIn) router.replace("/home");
-    else router.replace(state.sessionExpired ? "/login?expired=basic" : "/login");
+    if (loggedIn) router.replace("/home");
+    else router.replace(sessionExpired ? "/login?expired=basic" : "/login");
   };
 
   useEffect(() => {

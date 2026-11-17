@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { completeExecution, useGuide, useRunQuery } from "@/features/guide";
-import { keepStepPhotos, stepPhoto, useSession } from "@/features/session";
+import { completeExecution, useGuide, useRunQuery } from "@/domain/guide-run";
+import { guideReportSummary } from "@/domain/report/guide-report";
+import { keepStepPhotos, stepPhoto, useMyPouch, useRun, useStoredReports } from "@/domain/session";
 
 import { DoneView, type Save } from "./done-view";
-import { guideReportSummary } from "./guide-report";
 import { StepPhotoImg } from "./step-photo-img";
 
 /** 실제 가이드 완료. 서버 실행을 완료하고 받은 recordId로 기기 리포트를 남긴다. 실패하면 같은 실행으로 다시 보낸다 */
@@ -15,15 +15,18 @@ export function GuideDone() {
   const router = useRouter();
   const query = useRunQuery();
   const { load } = useGuide();
-  const { state, update } = useSession();
-  const run = state.run;
+  const { run } = useRun();
+  const { pouch } = useMyPouch();
+  const { setReports } = useStoredReports();
   const guide = load.status === "ready" ? load.guide : null;
   const [save, setSave] = useState<Save>("saving");
   const [recordId, setRecordId] = useState<string | null>(null);
   // 응답이 올 때의 실행 상태로 저장 여부를 정한다
   const latest = useRef(run);
+  const latestPouch = useRef(pouch);
   useEffect(() => {
     latest.current = run;
+    latestPouch.current = pouch;
   });
 
   /** 응답을 받았을 때도 같은 실행 · 같은 가이드 판이면 기기 리포트를 남긴다 */
@@ -31,15 +34,11 @@ export function GuideDone() {
     const r = latest.current;
     if (!guide || r.id !== run.id || r.mode !== "guide" || r.guideVersion !== guide.guideVersion)
       return false;
-    update((prev) => {
-      const r = prev.run;
-      if (r.id !== run.id || r.mode !== "guide" || r.guideVersion !== guide.guideVersion) return {};
-      const report = guideReportSummary(reportId, new Date(), guide, r, prev.pouch);
-      const rest = prev.reports
-        .filter((x) => x.id !== reportId)
-        .map((x) => ({ ...x, isNew: false }));
-      return { reports: [report, ...rest] };
-    });
+    const report = guideReportSummary(reportId, new Date(), guide, r, latestPouch.current);
+    setReports((prev) => [
+      report,
+      ...prev.filter((x) => x.id !== reportId).map((x) => ({ ...x, isNew: false })),
+    ]);
     // 기록을 남긴 실행의 사진은 실행이 끝나도 리포트에서 보여 준다
     keepStepPhotos(run.id);
     return true;
@@ -78,16 +77,21 @@ export function GuideDone() {
   // 이동만 한다. 실행은 실행 화면을 벗어날 때 끝난다
   return (
     <DoneView
-      total={run.captures.length || guide.steps.length}
-      title={guide.title}
-      channel={guide.channelTitle}
-      hasFinal={!!finalShot}
-      hasPhoto={hasPhoto}
-      finalPhoto={finalShot && <StepPhotoImg photo={finalShot} alt="완성 사진" />}
+      summary={{
+        total: run.captures.length || guide.steps.length,
+        title: guide.title,
+        channel: guide.channelTitle,
+      }}
+      photo={{
+        final: finalShot && <StepPhotoImg photo={finalShot} alt="완성 사진" />,
+        any: hasPhoto,
+      }}
       save={save}
-      onRetry={() => void persist(false)}
-      onHome={() => router.push("/home")}
-      onReport={() => recordId && router.replace(`/my/report?id=${encodeURIComponent(recordId)}`)}
+      actions={{
+        onRetry: () => void persist(false),
+        onHome: () => router.push("/home"),
+        onReport: () => recordId && router.replace(`/my/report?id=${encodeURIComponent(recordId)}`),
+      }}
     />
   );
 }

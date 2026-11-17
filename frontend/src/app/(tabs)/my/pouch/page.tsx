@@ -6,26 +6,20 @@ import { useEffect, useState } from "react";
 
 import { Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
+import { emptyDraft, fromApi, getPouchItem, POUCH_CATS, type ProductDraft } from "@/domain/pouch";
+import { usePouchSync } from "@/domain/session";
+import { useAuth, useMyPouch, useSessionActions } from "@/domain/session";
 import { MyHeader } from "@/features/my";
-import {
-  emptyDraft,
-  fromApi,
-  getPouchItem,
-  POUCH_CATS,
-  PouchBoard,
-  PouchOpenFx,
-  ProductSheet,
-  usePouchSync,
-  type ProductDraft,
-} from "@/features/pouch";
-import { useSession } from "@/features/session";
+import { PouchBoard, PouchOpenFx, ProductSheet } from "@/features/pouch";
 import { ApiError, errorMessage, isAbortError } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
 
 /** 마이페이지 · 내 파우치. ?add=1 등록, ?edit=<id> 수정 시트 */
 export default function MyPouchPage() {
-  const { state, sessionChecked, expireSession } = useSession();
+  const { loggedIn } = useAuth();
+  const { pouch } = useMyPouch();
+  const { sessionChecked, expireSession } = useSessionActions();
   const router = useRouter();
   const sync = usePouchSync();
   const query = useQuery();
@@ -43,20 +37,20 @@ export default function MyPouchPage() {
     if (!query || !sessionChecked) return;
     if (query.get("add")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 등록 요청을 한 번 반영한다
-      if (state.loggedIn) setForm(emptyDraft());
+      if (loggedIn) setForm(emptyDraft());
       else router.replace("/login");
     }
-  }, [query, router, sessionChecked, state.loggedIn]);
+  }, [query, router, sessionChecked, loggedIn]);
 
   // ?edit=<id>: 로그인했으면 서버의 최신 항목(API-POUCH-005)으로, 아니면 저장된 파우치에서 연다
   const edit = query?.get("edit") ?? null;
   useEffect(() => {
     if (!edit || !sessionChecked) return;
-    if (!state.loggedIn) {
-      const item = state.loggedIn ? state.pouch.find((p) => p.id === edit) : undefined;
+    if (!loggedIn) {
+      const item = loggedIn ? pouch.find((p) => p.id === edit) : undefined;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소로 받은 요청을 한 번 반영한다
       if (item) setForm({ ...item });
-      else if (!state.loggedIn) router.replace("/login");
+      else if (!loggedIn) router.replace("/login");
       return;
     }
     const controller = new AbortController();
@@ -74,12 +68,12 @@ export default function MyPouchPage() {
     );
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 주소·로그인 상태가 정해질 때 한 번만 연다
-  }, [edit, sessionChecked, state.loggedIn]);
+  }, [edit, sessionChecked, loggedIn]);
 
-  const pouchItems = state.loggedIn ? state.pouch : [];
+  const pouchItems = loggedIn ? pouch : [];
   const list = cat === "전체" ? pouchItems : pouchItems.filter((p) => p.cat === cat);
   // 로그인했으면 서버 목록을 받기 전까지 저장된(지난) 파우치를 보여 주지 않는다
-  const waiting = sync.status === "loading" || (state.loggedIn && !sessionChecked);
+  const waiting = sync.status === "loading" || (loggedIn && !sessionChecked);
   const empty = pouchItems.length === 0 || query?.get("empty") === "1";
 
   // 목록에서 다시 고르면 지난 안내를 지운다
@@ -124,7 +118,7 @@ export default function MyPouchPage() {
             </span>
             <PillButton
               size="xl"
-              onClick={() => (state.loggedIn ? open(emptyDraft()) : router.push("/login"))}
+              onClick={() => (loggedIn ? open(emptyDraft()) : router.push("/login"))}
               className="mt-1.5"
             >
               <Plus className="size-[18px]" strokeWidth={2.2} aria-hidden />
@@ -150,7 +144,7 @@ export default function MyPouchPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => (state.loggedIn ? open(emptyDraft()) : router.push("/login"))}
+                  onClick={() => (loggedIn ? open(emptyDraft()) : router.push("/login"))}
                   className="flex h-11 items-center gap-2 rounded-full bg-ink px-[18px] text-[17px] font-semibold text-white"
                 >
                   <Plus className="size-4" strokeWidth={2} aria-hidden />

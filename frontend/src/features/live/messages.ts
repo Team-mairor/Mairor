@@ -1,4 +1,4 @@
-import type { CameraErrorKind } from "@/features/face";
+import type { CameraErrorKind } from "@/vision/face";
 
 /** 카메라 오류 종류별 제목·설명 */
 export const CAMERA_ERROR_TEXT: Partial<Record<CameraErrorKind, [string, string]>> = {

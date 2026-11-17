@@ -142,7 +142,7 @@
 - 지금 처리기는 분석하는 단계의 직전·직후 창만 뽑고, AI도 그 사진만 받는다(`reference_area.photo_ranges`). 단계 동안 쓸 사진이 있는 시각이 3개보다 적으면 사진을 읽기 전에 `noMiddlePhoto`로 끝나, 지금 운영의 결과와 시간은 바뀌지 않는다.
 - 단계 동안의 사진을 받는 스위치는 `reference_area.DIRECTION_PHOTOS`이고 꺼 두었다. 켜면 시험 영상에서 받는 사진이 1,796장에서 3,067장으로 늘고(단계 동안 초당 2장일 때), 방향 찾기 시간이 위 표만큼 더해진다. 처리기가 단계 동안의 사진을 뽑게 된 뒤, 처리 시간을 보고 켠다.
 - 화살표를 넣지 않은 이유는 AI 서버 `area_step` 기록의 `directions`에 영역 묶음마다 남는다(`noMiddlePhoto` · `tooFewBlocks` · `timeSpreadSmall` · `orderLikeChance`).
-- FE는 `arrow` 도형을 이미 그린다(`frontend/src/features/guide/renderer.ts`). 기본 가이드 단계의 화살표는 FE 기본 가이드에 들어 있다.
+- FE는 `arrow` 도형을 이미 그린다(`frontend/src/vision/guide/renderer.ts`). 기본 가이드 단계의 화살표는 FE 기본 가이드에 들어 있다.
 
 ## 한계
 

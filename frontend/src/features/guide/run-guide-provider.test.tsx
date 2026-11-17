@@ -4,12 +4,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TutorialGuidePage from "@/app/(live)/(camera)/tutorial/guide/page";
-import { clearFacePhoto, facePhoto, saveFacePhoto } from "@/features/face/registered-photo";
-import { SessionProvider, useSession } from "@/features/session/session-provider";
+import { useGuide } from "@/domain/guide-run/use-guide";
+import { SessionProvider, useSession } from "@/domain/session/session-provider";
 import { api, ApiError } from "@/lib/api";
+import { clearFacePhoto, facePhoto, saveFacePhoto } from "@/vision/face/registered-photo";
 
 import { RunGuideProvider } from "./run-guide-provider";
-import { useGuide } from "./use-guide";
 
 const nav = vi.hoisted(() => ({
   path: "/loading",
@@ -22,9 +22,9 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(nav.search),
   useRouter: () => nav.router,
 }));
-vi.mock("./guide-api", () => ({ fetchGuide: fetch }));
-vi.mock("@/features/face", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/features/face")>()),
+vi.mock("@/domain/guide/guide-api", () => ({ fetchGuide: fetch }));
+vi.mock("@/vision/face", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/vision/face")>()),
   useHiddenVideo: () => {},
 }));
 vi.mock("@/features/live", () => ({ CameraErrorNote: () => null }));
@@ -114,6 +114,9 @@ beforeEach(() => {
     getItem: (key: string) => saved.get(key) ?? null,
     setItem: (key: string, value: string) => {
       saved.set(key, value);
+    },
+    removeItem: (key: string) => {
+      saved.delete(key);
     },
     clear: () => saved.clear(),
   });
@@ -351,7 +354,7 @@ describe("루트 실행·가이드 연동", () => {
     expect(session.state.run).toMatchObject({ guideId: B, phase: "preparing", photoOk: false });
     expect(nav.router.push).not.toHaveBeenCalledWith(`/tutorial?guideId=${A}`);
   });
-  it("저장된 옛 run을 버리고 리포트·파우치를 유지하며 run은 다시 저장하지 않는다", async () => {
+  it("저장된 옛 run을 버리고 리포트·파우치를 상태별 키로 옮기며 run은 저장하지 않는다", async () => {
     localStorage.setItem(
       "mairor-session-v2",
       JSON.stringify({
@@ -372,7 +375,9 @@ describe("루트 실행·가이드 연동", () => {
     expect(session.state.run.id).not.toBe("old");
     expect(session.state.reports[0].id).toBe("old-report");
     expect(session.state.pouch[0].id).toBe("old-pouch");
-    expect(JSON.parse(localStorage.getItem("mairor-session-v2")!)).not.toHaveProperty("run");
+    expect(localStorage.getItem("mairor-session-v2")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("mairor-pouch-v1")!)[0].id).toBe("old-pouch");
+    expect(JSON.parse(localStorage.getItem("mairor-reports-v1")!)[0].id).toBe("old-report");
   });
   it.each(["/tutorial", "/done"])(
     "%s 직접 진입은 본문 부작용보다 먼저 얼굴 등록으로 보낸다",

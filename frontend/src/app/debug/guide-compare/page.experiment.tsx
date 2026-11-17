@@ -10,9 +10,9 @@ import {
   containTransform,
   toScreen,
   type FaceFrame,
-} from "@/features/face";
-import { GuideRenderer, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/features/guide";
-import { loadFaceMesh, type FaceMesh } from "@/features/overlay";
+} from "@/vision/face";
+import { GuideRenderer, loadDefaultGuideSet, loadGuideSet, type GuideSet } from "@/vision/guide";
+import { loadFaceMesh, type FaceMesh } from "@/vision/overlay";
 
 import { fitDetectedBrows, type BrowDetection, type FaceCrop } from "./brow-geometry";
 import type { BrowRequest, BrowResponse } from "./brow-messages";

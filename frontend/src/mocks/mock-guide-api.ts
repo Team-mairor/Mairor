@@ -1,6 +1,7 @@
 // 가이드 조회(GET /v1/guides/{guideId}) 모의 응답. BE GuideQueryService와 같은 규칙으로 만든다.
 // 목표 색·대표 이미지는 실제 1차 응답처럼 항상 null이다.
-import type { GuideDto, GuideStepDto, Makeup } from "@/features/guide";
+import type { GuideDto, GuideStepDto } from "@/domain/guide";
+import type { Makeup } from "@/vision/guide";
 
 import {
   MOCK_GUIDE_AREA_URL,

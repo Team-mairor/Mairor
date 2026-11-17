@@ -3,8 +3,8 @@
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { useCamera } from "@/features/face";
 import { cn } from "@/lib/utils";
+import { useCamera } from "@/vision/face";
 
 import { useFaceState } from "./face-state";
 import { useCameraErrorNote, type LiveNoteData } from "./live-state";

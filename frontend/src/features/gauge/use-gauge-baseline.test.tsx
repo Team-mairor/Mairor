@@ -3,13 +3,16 @@ import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FaceFrame, RegionName } from "@/features/face";
+import { FRAME_GAP_MS } from "@/domain/gauge/baseline";
+import type { CellLab } from "@/domain/gauge/cells";
+import {
+  clearRegisteredGaugeBaseline,
+  saveRegisteredGaugeBaseline,
+} from "@/domain/gauge/registered-baseline";
+import { GRID } from "@/domain/gauge/spec";
+import type { FrameState } from "@/domain/gauge/stability";
+import type { FaceFrame, RegionName } from "@/vision/face";
 
-import { FRAME_GAP_MS } from "./baseline";
-import type { CellLab } from "./cells";
-import { clearRegisteredGaugeBaseline, saveRegisteredGaugeBaseline } from "./registered-baseline";
-import { GRID } from "./spec";
-import type { FrameState } from "./stability";
 import { useGaugeBaseline, type GaugeBaselineStatus } from "./use-gauge-baseline";
 
 const mocks = vi.hoisted(() => ({
@@ -31,7 +34,7 @@ const video = () => ({
 });
 mocks.videoRef.current = video();
 
-vi.mock("@/features/face", () => ({
+vi.mock("@/vision/face", () => ({
   FRAME_STALE_MS: 300,
   isRegionInView: () => mocks.regionVisible,
   lockControls: mocks.lock,
@@ -42,15 +45,15 @@ vi.mock("@/features/face", () => ({
     mocks.listener = listener;
   },
 }));
-vi.mock("@/features/overlay", () => ({
+vi.mock("@/vision/overlay", () => ({
   loadFaceMesh: () => Promise.resolve({ triangles: [], uv: [] }),
 }));
-vi.mock("./white", () => ({
+vi.mock("@/domain/gauge/white", () => ({
   eyeSampler: () => ({ corners: new Int32Array(), weights: new Float32Array(), size: 0 }),
   readEyePixels: () => new Float32Array(),
   whiteOfFrames: (frames: Float32Array[]) => (frames.length === 15 ? [230, 220, 215] : null),
 }));
-vi.mock("./cells", () => ({
+vi.mock("@/domain/gauge/cells", () => ({
   cellSampler: () => ({ cell: new Int32Array(), samples: new Uint16Array() }),
   readCells: () => new Float32Array(GRID * GRID * 3).fill(50),
 }));

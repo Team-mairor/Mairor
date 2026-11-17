@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { useCamera, useFaceFrame, type FaceBrows, type FaceFrame } from "@/features/face";
 import { GaugeDebug, useGaugeBaseline, useGaugeMeasure } from "@/features/gauge";
+import { TutorialCropEditor } from "@/features/guide";
+import { useCamera, useFaceFrame, type FaceBrows, type FaceFrame } from "@/vision/face";
 import {
   fitBrowStep,
   browSpans,
   findBrows,
-  TutorialCropEditor,
   loadDefaultGuideSet,
   loadGuideArea,
   loadGuideSet,
@@ -20,8 +20,8 @@ import {
   type AreaStatus,
   type AreaSubStep,
   type GuideStep,
-} from "@/features/guide";
-import { loadFaceMesh, type FaceMesh } from "@/features/overlay";
+} from "@/vision/guide";
+import { loadFaceMesh, type FaceMesh } from "@/vision/overlay";
 
 /** 한 화면에 보여 줄 가이드. AI 영역은 하위 단계마다 하나다 */
 interface Item {

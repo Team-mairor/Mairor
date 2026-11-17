@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
 
-import { hasMirrorFit } from "@/features/face";
 import { isMirror, MIRROR_KEY, setMirror, subscribeMirror } from "@/lib/mirror";
 import { cn } from "@/lib/utils";
+import { hasMirrorFit } from "@/vision/face";
 
 /**
  * 일반 / 미러필름 모드 전환. 색 규칙은 globals.css의 .mirror.

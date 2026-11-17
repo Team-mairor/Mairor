@@ -2,8 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 
-import { isRetryable, trackingIssueText, useCamera, type TrackingIssue } from "@/features/face";
 import { isMirror, subscribeMirror } from "@/lib/mirror";
+import { isRetryable, trackingIssueText, useCamera, type TrackingIssue } from "@/vision/face";
 
 import { useFaceState } from "./face-state";
 import { ALERT, CAMERA_ERROR_TEXT, type LiveAlert } from "./messages";

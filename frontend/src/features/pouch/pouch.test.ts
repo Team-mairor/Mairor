@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { fromApi } from "@/domain/pouch/pouch-api";
 import type { PouchItemResponse } from "@/lib/api";
 
 import { illOf } from "./illustration";
-import { fromApi } from "./pouch-api";
 
 const item: PouchItemResponse = {
   pouchItemId: "00000000-0000-4000-8000-000000000301",

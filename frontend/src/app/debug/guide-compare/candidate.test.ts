@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { REGIONS } from "@/features/face";
-import { buildDefaultGuideSet, type GuideSet } from "@/features/guide";
+import { REGIONS } from "@/vision/face";
+import { buildDefaultGuideSet, type GuideSet } from "@/vision/guide";
 
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8"));
 const mesh = {

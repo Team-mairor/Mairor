@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { isMirror, setMirror } from "@/lib/mirror";
 import {
   halfMirror,
   loadMirrorFit,
@@ -15,8 +16,7 @@ import {
   type FaceFrame,
   type MirrorFit,
   type MirrorScreen,
-} from "@/features/face";
-import { isMirror, setMirror } from "@/lib/mirror";
+} from "@/vision/face";
 
 type Px = { x: number; y: number };
 type Kind = "pupil" | "nose" | "lips" | "chin" | "jaw";

@@ -1,6 +1,6 @@
 "use client";
 
-import { videoThumb } from "@/features/video";
+import { videoThumb } from "@/domain/video";
 
 const TAG_POS: [number, number][] = [
   [50, 60],

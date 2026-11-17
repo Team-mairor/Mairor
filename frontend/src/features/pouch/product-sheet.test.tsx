@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({
-  update: vi.fn(),
+  setPouch: vi.fn(),
   expireSession: vi.fn(),
   state: {
     loggedIn: true,
@@ -19,19 +19,23 @@ const pouchApi = vi.hoisted(() => ({
 }));
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 
-vi.mock("@/features/session", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/features/session")>()),
-  useSession: () => session,
+vi.mock("@/domain/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/session")>()),
+  useAuth: () => session.state,
+  useMyPouch: () => ({ pouch: session.state.pouch, setPouch: session.setPouch }),
+  useSessionActions: () => ({ expireSession: session.expireSession }),
 }));
-vi.mock("./pouch-api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./pouch-api")>()),
+vi.mock("@/domain/pouch/pouch-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/domain/pouch/pouch-api")>()),
   deletePouchItem: pouchApi.deletePouchItem,
   useCategories: pouchApi.useCategories,
   useProductSuggestions: pouchApi.useProductSuggestions,
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
-import { ProductSheet, type ProductDraft } from "./product-sheet";
+import type { ProductDraft } from "@/domain/pouch/draft";
+
+import { ProductSheet } from "./product-sheet";
 
 let root: Root;
 let element: HTMLDivElement;

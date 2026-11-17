@@ -3,11 +3,11 @@ import { act, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
-import type { GuideModel, GuideStepModel } from "@/features/guide";
-import { RunGuideContext } from "@/features/guide/use-guide";
-import type { PouchItem } from "@/features/pouch";
-import { SessionProvider, useSession } from "@/features/session/session-provider";
-import { saveStepPhoto, stepPhoto } from "@/features/session/step-photos";
+import type { GuideModel, GuideStepModel } from "@/domain/guide";
+import { RunGuideContext } from "@/domain/guide-run/use-guide";
+import type { PouchItem } from "@/domain/pouch";
+import { SessionProvider, useSession } from "@/domain/session/session-provider";
+import { saveStepPhoto, stepPhoto } from "@/domain/session/step-photos";
 import { api } from "@/lib/api";
 
 import { GuideDone } from "./guide-done";

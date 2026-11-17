@@ -1,6 +1,6 @@
 # 얼굴 데이터 좌표 규칙
 
-얼굴 추적(FE)과 레퍼런스 분석(AI)이 같이 따르는 좌표·좌우·크기 규칙이다. 파일 목록과 메시 규칙은 [README](README.md), 부위 점 번호는 `regions.v1.json`, 타입은 `frontend/src/features/face/types.ts`가 기준이다.
+얼굴 추적(FE)과 레퍼런스 분석(AI)이 같이 따르는 좌표·좌우·크기 규칙이다. 파일 목록과 메시 규칙은 [README](README.md), 부위 점 번호는 `regions.v1.json`, 타입은 `frontend/src/vision/face/types.ts`가 기준이다.
 
 ## 공통 규칙
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { PendingGuide } from "@/features/session";
+import type { PendingGuide } from "@/domain/session";
 import { api, type AnalysisJobSummary, type Page } from "@/lib/api";
 import { useLoad } from "@/lib/hooks/use-load";
 

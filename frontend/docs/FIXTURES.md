@@ -2,9 +2,9 @@
 
 레이어·추적 화면을 카메라·백엔드 없이 확인하기 위한 예시 데이터(`public/fixtures/`)다. `npm run fixtures`로 다시 만든다 (손으로 고치지 않는다). 스크립트는 Node 22.18 이상에서 돌아가고, 낮은 버전이면 바로 알려 준다 (`.nvmrc` 기준 24). 판정 기준값은 추적기 코드(`tracking-rules.ts`, `visibility.ts`)에서 그대로 읽는다.
 
-- 얼굴 데이터: `FaceFrame` (`src/features/face/types.ts`, `meshVersion: "v1"`)
-- 레이어: `LayerSet` (`src/features/overlay/types.ts`)
-- 가이드: `GuideSet` (`src/features/guide/types.ts`)
+- 얼굴 데이터: `FaceFrame` (`src/vision/face/types.ts`, `meshVersion: "v1"`)
+- 레이어: `LayerSet` (`src/vision/overlay/types.ts`)
+- 가이드: `GuideSet` (`src/vision/guide/types.ts`)
 - 출처: `shared/face-mesh/`의 캐노니컬 얼굴 메시 UV를 정면 얼굴 랜드마크로 쓴 합성 데이터. 실제 사람 얼굴이 아니다
 - 확인 화면: `/debug/overlay`에서 얼굴과 레이어를 골라 합성 결과를 본다 (`?face=turned-left&layers=lip-only`처럼 주소로도 고를 수 있다)
 

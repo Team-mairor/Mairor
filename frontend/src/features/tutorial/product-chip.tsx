@@ -1,6 +1,6 @@
 import { ArrowRight } from "lucide-react";
 
-import type { StepPick } from "@/features/check";
+import type { StepPick } from "@/domain/check";
 
 /** 영상 속 제품 → 내 제품 한 줄. 자세한 건 준비 카드에 있다 */
 export function ProductChip({

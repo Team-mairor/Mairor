@@ -2,8 +2,8 @@
 // API 명세 v2 단계 모양으로 옮긴 목업. 화장 종류는 10개 값 기준인 같은 영상의 가이드 영역 샘플을 따른다.
 // 단계 수·종류는 영상마다 다르고, 화면은 이 목록 길이와 순서대로 돈다.
 // ponytail: API 클라이언트가 붙으면 가이드 조회 응답(Guide.steps)으로 바꾼다.
-import type { Makeup } from "@/features/guide";
-import type { GuideAction } from "@/features/session";
+import type { GuideAction } from "@/domain/session";
+import type { Makeup } from "@/vision/guide";
 
 export interface MockGuideStep {
   stepId: string;

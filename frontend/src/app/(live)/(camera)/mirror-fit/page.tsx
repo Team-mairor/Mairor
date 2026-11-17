@@ -3,10 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { useHiddenVideo } from "@/features/face";
 import { MirrorFitView } from "@/features/mirror-fit";
 import { useQuery } from "@/lib/hooks/use-query";
 import { isMirror, setMirror } from "@/lib/mirror";
+import { useHiddenVideo } from "@/vision/face";
 
 /** 거울 맞추기. ?first=1이면 미러필름을 처음 켜서 들어온 것이다. 저장하거나 취소하면 돌아간다 */
 export default function MirrorFitPage() {

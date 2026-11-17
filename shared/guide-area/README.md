@@ -19,7 +19,7 @@ AI가 레퍼런스 영상에서 찾아 넘기는 튜토리얼 가이드 영역(`
 ## 사용 위치
 
 - AI: `ai/tests/test_guide_area_schema.py`가 이 파일이 모델과 같은지, 샘플(`ai/samples/local_01/guide_area.json`)이 통과하는지, 규칙을 어긴 예를 잡는지 본다. 샘플의 상태·이유·삼각형 번호는 형식을 보이기 위한 예시다. 샘플은 `s17`(찾은 영역)·`s18`(기본 가이드)에만 `gauge`를 넣어, 게이지 기준이 있는 결과와 넣기 전에 만든 결과를 한 파일로 보인다. `gauge` 값은 시험 영상 GO지승 립 단계(`s27a`)에서 나온 숫자다.
-- FE: 스키마 파일을 직접 읽지 않고 같은 모양의 타입으로 받는다(`frontend/src/features/guide/types.ts`, 얼굴 주소 · 부위 이름 · 도형은 `frontend/src/features/face/types.ts`). 튜토리얼은 가이드 조회 응답(`GET /v1/guides/{guideId}`)의 `subSteps`를 그리기 전에 `checkGuideArea`(`frontend/src/features/guide/guide-overlay.tsx`)로 메시 판 · 도형 · 얼굴 주소 · 부위 이름을 검사하고, 쓸 수 없는 도형만 뺀다. FE에 없는 기본 가이드 키를 받은 하위 단계는 그리지 않는다.
+- FE: 스키마 파일을 직접 읽지 않고 같은 모양의 타입으로 받는다(`frontend/src/vision/guide/types.ts`, 얼굴 주소 · 부위 이름 · 도형은 `frontend/src/vision/face/types.ts`). 튜토리얼은 가이드 조회 응답(`GET /v1/guides/{guideId}`)의 `subSteps`를 그리기 전에 `checkGuideArea`(`frontend/src/vision/guide/guide-overlay.tsx`)로 메시 판 · 도형 · 얼굴 주소 · 부위 이름을 검사하고, 쓸 수 없는 도형만 뺀다. FE에 없는 기본 가이드 키를 받은 하위 단계는 그리지 않는다.
 - BE: 가이드 작업 콜백에서 필수 칸, 영상 ID, 설명 단계 ID가 가이드 입력과 같은지만 본다(`backend/src/main/java/com/mairor/backend/analysis/service/AiResultCheck.java`). 영역은 이 스키마로 검사하지 않고 받은 그대로 저장해 가이드 조회 응답의 `subSteps`로 넘긴다.
 
 ## 스키마에 없는 검사
@@ -47,7 +47,7 @@ JSON Schema는 칸끼리 비교하지 못한다. 아래는 AI 모델만 검사�
 
 ## 바른 방향 (`arrow`)
 
-`extracted` 영역 묶음의 `guides`에는 도포 영역(`polygon`) 뒤에 바른 방향(`arrow`)이 0개나 1개 온다. `from`은 먼저 바른 곳, `to`는 나중에 바른 곳이고, FE `frontend/src/features/face/types.ts`의 `arrow` 도형과 같아 FE가 `from` → `to`로 그린다.
+`extracted` 영역 묶음의 `guides`에는 도포 영역(`polygon`) 뒤에 바른 방향(`arrow`)이 0개나 1개 온다. `from`은 먼저 바른 곳, `to`는 나중에 바른 곳이고, FE `frontend/src/vision/face/types.ts`의 `arrow` 도형과 같아 FE가 `from` → `to`로 그린다.
 
 AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 전과 견줘, 찾은 영역 안에서 색이 먼저 바뀐 곳과 나중에 바뀐 곳을 찾는다(`ai/app/tasks/area/direction_finder.py`). 고른 방법과 근거는 [docs/experiments/GUIDE_APPLY_DIRECTION.md](../../docs/experiments/GUIDE_APPLY_DIRECTION.md)에 있다. 단계 동안의 사진이 와야 하므로, 처리기가 직전·직후 창만 뽑는 지금은 화살표가 오지 않는다. 아래일 때는 화살표를 넣지 않고 영역만 보내며, 이유는 AI 서버 `area_step` 기록의 `directions`에 남긴다.
 
@@ -103,7 +103,7 @@ AI는 손 움직임을 보지 않는다. 단계 동안의 사진을 바르기 �
 
 ## 기본 가이드 키 (`templateId`)
 
-`status`가 `template`일 때 FE가 그릴 기본 가이드를 고르는 키다. FE `frontend/src/features/guide/types.ts`의 `TemplateId`와 같다.
+`status`가 `template`일 때 FE가 그릴 기본 가이드를 고르는 키다. FE `frontend/src/vision/guide/types.ts`의 `TemplateId`와 같다.
 
 | 키 | 기본 가이드 |
 | --- | --- |

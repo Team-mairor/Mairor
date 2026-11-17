@@ -3,12 +3,11 @@
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { facePhoto } from "@/features/face";
-import { faceReady, isRunPath, useSession, type RunRouteAction } from "@/features/session";
-import { GuideStatus } from "@/features/tutorial";
-
-import { deleteFaceRegistration } from "./execution-api";
-import { useGuide } from "./use-guide";
+import { GuideStatus } from "@/components/guide-status";
+import { deleteFaceRegistration } from "@/domain/guide-run/execution-api";
+import { useGuide } from "@/domain/guide-run/use-guide";
+import { faceReady, isRunPath, type RunRouteAction, useAuth, useRun } from "@/domain/session";
+import { facePhoto } from "@/vision/face";
 
 /** 실행 화면 본문보다 먼저 진입·조회·인증을 검사한다 */
 export function RunGuideBoundary({
@@ -22,10 +21,10 @@ export function RunGuideBoundary({
   action: RunRouteAction | null;
   children: ReactNode;
 }) {
-  const { state, endRun } = useSession();
+  const { loggedIn } = useAuth();
+  const { run, endRun } = useRun();
   const { load, retry } = useGuide();
   const router = useRouter();
-  const run = state.run;
   const home = {
     label: "홈으로",
     onClick: () => {
@@ -39,7 +38,7 @@ export function RunGuideBoundary({
   };
   if (!isRunPath(path)) return children;
   if (!initialized) return <GuideStatus title="준비 상태를 확인하고 있어요" />;
-  if (!state.loggedIn)
+  if (!loggedIn)
     return (
       <GuideStatus
         title="로그인이 필요해요"

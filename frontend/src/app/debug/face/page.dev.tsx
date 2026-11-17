@@ -33,7 +33,7 @@ import {
   type FaceFrame,
   type RegionName,
   type TrackerStats,
-} from "@/features/face";
+} from "@/vision/face";
 
 import { ColorProbe, type ColorStats } from "./color-probe";
 

@@ -2,15 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { FRAME_STALE_MS, useCamera, useFaceFrame, type FaceFrame } from "@/features/face";
-import type { AreaGuideSet, GaugeReference } from "@/features/guide";
-import { loadFaceMesh, type FaceMesh } from "@/features/overlay";
-
-import { areaCells, madeCells } from "./area";
-import type { Baseline } from "./baseline";
-import { readCells, type CellLab } from "./cells";
-import { frameState } from "./frame";
-import { drift, lightChange } from "./light";
+import { areaCells, madeCells } from "@/domain/gauge/area";
+import type { Baseline } from "@/domain/gauge/baseline";
+import { readCells, type CellLab } from "@/domain/gauge/cells";
+import { frameState } from "@/domain/gauge/frame";
+import { drift, lightChange } from "@/domain/gauge/light";
 import {
   framesMedian,
   linearOfSrgb,
@@ -18,7 +14,7 @@ import {
   userSide,
   type Measure,
   type SideInput,
-} from "./measure";
+} from "@/domain/gauge/measure";
 import {
   frameReason,
   GaugeStabilizer,
@@ -27,7 +23,11 @@ import {
   type FrameReason,
   type FrameState,
   type GaugeDisplay,
-} from "./stability";
+} from "@/domain/gauge/stability";
+import { FRAME_STALE_MS, useCamera, useFaceFrame, type FaceFrame } from "@/vision/face";
+import type { AreaGuideSet, GaugeReference } from "@/vision/guide";
+import { loadFaceMesh, type FaceMesh } from "@/vision/overlay";
+
 import { loadCellSampler, videoReader, type Samplers } from "./use-gauge-baseline";
 
 export interface GaugeMeasureInput {

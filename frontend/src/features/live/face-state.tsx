@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-import { useTrackingIssue, type TrackingIssue } from "@/features/face";
+import { useTrackingIssue, type TrackingIssue } from "@/vision/face";
 
 interface FaceState {
   face: boolean;

@@ -55,7 +55,7 @@ beforeEach(async () => {
   vi.resetModules();
   SignupPage = (await import("./page")).default;
   ({ api, ApiError } = await import("@/lib/api"));
-  const { SessionProvider } = await import("@/features/session/session-provider");
+  const { SessionProvider } = await import("@/domain/session/session-provider");
   vi.clearAllMocks();
   vi.spyOn(api, "get").mockRejectedValue(new ApiError(401, "UNAUTHORIZED", "로그인이 필요합니다."));
   element = document.createElement("div");

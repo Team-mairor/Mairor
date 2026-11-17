@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 
-import { useReports } from "@/features/report";
-import { displayName, useSession } from "@/features/session";
+import { useReports } from "@/domain/report";
+import { displayName, useAuth, useMyPouch, useSessionActions } from "@/domain/session";
 import { cn } from "@/lib/utils";
 
 /** 마이페이지 상단: 프로필 + 내 파우치 · 리포트 탭. 로그아웃·미러필름 토글은 홈 프로필 버튼에 있다 */
 export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
-  const { state, sessionChecked } = useSession();
+  const { loggedIn, email, nickname } = useAuth();
+  const { pouch } = useMyPouch();
+  const { sessionChecked } = useSessionActions();
   // 로그인했으면 서버 목록 수(받은 만큼, 더 있으면 +)
-  const reports = useReports(sessionChecked && state.loggedIn ? state.email : null);
-  const reportCount = !state.loggedIn
+  const reports = useReports(sessionChecked && loggedIn ? email : null);
+  const reportCount = !loggedIn
     ? "0"
     : reports.load.status === "ready"
       ? `${reports.load.data.items.length}${reports.load.data.hasNext ? "+" : ""}`
@@ -22,11 +24,11 @@ export function MyHeader({ tab }: { tab: "pouch" | "reports" }) {
       key: "pouch",
       href: "/my/pouch",
       en: "My pouch",
-      ko: `파우치 ${state.loggedIn ? state.pouch.length : 0}`,
+      ko: `파우치 ${loggedIn ? pouch.length : 0}`,
     },
     { key: "reports", href: "/my/reports", en: "Reports", ko: `리포트 ${reportCount}`.trim() },
   ] as const;
-  const name = displayName(state);
+  const name = displayName({ nickname, email });
   const initial = (name.trim()[0] ?? "m").toUpperCase();
   return (
     <>

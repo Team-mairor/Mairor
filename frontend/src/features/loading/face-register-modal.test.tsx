@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   gaugePush: true,
   loadSampler: vi.fn(),
 }));
-vi.mock("@/features/face", () => ({
+vi.mock("@/vision/face", () => ({
   CHECKS: ["light", "distance", "front", "clear"],
   DISTANCE_HINT_TEXT: {},
   allPassed: (check: Record<string, boolean>) => Object.values(check).every(Boolean),
@@ -45,6 +45,8 @@ vi.mock("@/features/face", () => ({
 vi.mock("@/features/gauge", () => ({
   loadCellSampler: mocks.loadSampler,
   videoReader: () => () => ({ width: 1, height: 1, data: new Uint8ClampedArray(4) }),
+}));
+vi.mock("@/domain/gauge", () => ({
   saveRegisteredGaugeBaseline: mocks.saveGauge,
   RegisteredBaselineCollector: class {
     count = 0;
@@ -70,7 +72,7 @@ vi.mock("@/features/gauge", () => ({
     }
   },
 }));
-vi.mock("@/features/guide", () => ({
+vi.mock("@/vision/guide", () => ({
   readPixels: mocks.pixels,
   saveBrowsFrom: mocks.saveBrows,
 }));

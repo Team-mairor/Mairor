@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { applyLandmarkerParams } from "@/features/face";
-import { MakeupOverlay } from "@/features/overlay";
+import { applyLandmarkerParams } from "@/vision/face";
+import { MakeupOverlay } from "@/vision/overlay";
 
 const DEFAULT_LAYERS = "/fixtures/layers/sample.json";
 

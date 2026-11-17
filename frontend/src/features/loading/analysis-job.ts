@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { ANALYSIS_PHASES } from "@/features/video";
+import { ANALYSIS_PHASES } from "@/domain/video";
 import {
   api,
   ApiError,

@@ -3,11 +3,10 @@
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 
-import type { PouchItem } from "@/features/pouch";
-import type { Choice } from "@/features/session";
+import { toneOf } from "@/domain/check";
+import type { PouchItem } from "@/domain/pouch";
+import type { Choice } from "@/domain/session";
 import { cn } from "@/lib/utils";
-
-import { toneOf } from "./color";
 
 /** 바꾸기 패널. ranked면 상위 3개에 추천을 표시한다 */
 export function SwapPanel({

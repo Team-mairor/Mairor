@@ -30,32 +30,70 @@ export function useDoneSave(ready: boolean, failFirst: boolean, commit: () => bo
 }
 
 interface DoneViewProps {
-  total: number;
-  title: string;
-  channel: string;
-  hasFinal: boolean;
-  hasPhoto: boolean;
-  /** 마지막 단계 사진 자리 */
-  finalPhoto: ReactNode;
+  summary: {
+    total: number;
+    title: string;
+    channel: string;
+  };
+  photo: {
+    /** 마지막 단계 사진 자리. 없으면 미촬영 안내를 보여 준다 */
+    final: ReactNode | null;
+    /** 찍은 단계 사진이 하나라도 있다 */
+    any: boolean;
+  };
   save: Save;
-  onRetry: () => void;
-  onHome: () => void;
-  onReport: () => void;
+  actions: {
+    onRetry: () => void;
+    onHome: () => void;
+    onReport: () => void;
+  };
+}
+
+/** 기록 저장 상태 한 줄. 실패하면 다시 시도할 수 있다 */
+function SaveStatus({ save, onRetry }: { save: Save; onRetry: () => void }) {
+  if (save === "saving")
+    return (
+      <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
+        <span
+          className="size-2.5 shrink-0 rounded-full bg-cyan"
+          style={{ animation: "mr-pulse 1.4s ease-out infinite" }}
+        />
+        <span className="text-[19px] font-semibold">기록 저장 중…</span>
+      </div>
+    );
+  if (save === "fail")
+    return (
+      <div
+        className="flex items-center gap-4 rounded-[18px] border-[1.5px] border-cyan bg-ice-pale py-4 pr-4 pl-5"
+        role="alert"
+      >
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[19px] font-bold text-navy">기록을 저장하지 못했어요</span>
+          <span className="text-[16px] text-mute">다시 시도해도 같은 기록으로 저장돼요.</span>
+        </span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex h-14 shrink-0 items-center rounded-full bg-ice px-6 text-[18px] font-bold whitespace-nowrap text-ink"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  return (
+    <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
+      <span className="size-2.5 shrink-0 rounded-full bg-navy" />
+      <span className="min-w-0 flex-1 text-[19px] font-semibold">기록을 저장했어요</span>
+    </div>
+  );
 }
 
 /** 11 완성 화면. 기록 저장 → 리포트 보기 */
-export function DoneView({
-  total,
-  title,
-  channel,
-  hasFinal,
-  hasPhoto,
-  finalPhoto,
-  save,
-  onRetry,
-  onHome,
-  onReport,
-}: DoneViewProps) {
+export function DoneView({ summary, photo, save, actions }: DoneViewProps) {
+  const { total, title, channel } = summary;
+  const hasFinal = photo.final != null;
+  const hasPhoto = photo.any;
+  const { onRetry, onHome, onReport } = actions;
   return (
     <main className="flex min-h-(--screen-h) flex-1 flex-col gap-6 bg-white px-10 pt-9 pb-8 text-ink">
       <div className="flex flex-col gap-3">
@@ -73,7 +111,7 @@ export function DoneView({
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-3xl border border-line">
         {hasFinal ? (
           <>
-            {finalPhoto}
+            {photo.final}
             <span className="absolute top-[18px] left-[18px] rounded-full bg-white px-[18px] py-2.5 font-label text-[15px] font-semibold tracking-[.14em]">
               FINAL · 마지막 단계 사진
             </span>
@@ -93,39 +131,7 @@ export function DoneView({
         )}
       </div>
 
-      {save === "saving" && (
-        <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
-          <span
-            className="size-2.5 shrink-0 rounded-full bg-cyan"
-            style={{ animation: "mr-pulse 1.4s ease-out infinite" }}
-          />
-          <span className="text-[19px] font-semibold">기록 저장 중…</span>
-        </div>
-      )}
-      {save === "fail" && (
-        <div
-          className="flex items-center gap-4 rounded-[18px] border-[1.5px] border-cyan bg-ice-pale py-4 pr-4 pl-5"
-          role="alert"
-        >
-          <span className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[19px] font-bold text-navy">기록을 저장하지 못했어요</span>
-            <span className="text-[16px] text-mute">다시 시도해도 같은 기록으로 저장돼요.</span>
-          </span>
-          <button
-            type="button"
-            onClick={onRetry}
-            className="flex h-14 shrink-0 items-center rounded-full bg-ice px-6 text-[18px] font-bold whitespace-nowrap text-ink"
-          >
-            다시 시도
-          </button>
-        </div>
-      )}
-      {save === "saved" && (
-        <div className="flex items-center gap-3 rounded-[18px] bg-cream px-5 py-4" role="status">
-          <span className="size-2.5 shrink-0 rounded-full bg-navy" />
-          <span className="min-w-0 flex-1 text-[19px] font-semibold">기록을 저장했어요</span>
-        </div>
-      )}
+      <SaveStatus save={save} onRetry={onRetry} />
 
       <div className="flex min-w-0 flex-col gap-1.5 px-1">
         <span className="font-label text-[15px] font-semibold tracking-[.14em] text-navy">

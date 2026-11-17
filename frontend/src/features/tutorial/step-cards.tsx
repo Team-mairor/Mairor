@@ -2,8 +2,8 @@ import { CircleCheck, Lightbulb, TriangleAlert } from "lucide-react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
-import type { StepPick } from "@/features/check";
-import { type GuideStepInfo, type MatchResult, type RefState } from "@/features/session";
+import type { StepPick } from "@/domain/check";
+import { type GuideStepInfo, type MatchResult, type RefState } from "@/domain/session";
 import { cn } from "@/lib/utils";
 
 /** 단계에 보여 줄 영상 속 제품 */

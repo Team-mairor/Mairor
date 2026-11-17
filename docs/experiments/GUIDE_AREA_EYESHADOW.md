@@ -177,7 +177,7 @@ s10a 서비스 창(창을 안 옮긴 것)은 오른눈 값이 2.13이라 2.2에�
 
 ## FE 섞인 단계와 eyeZone
 
-- FE는 한 단계의 하위 단계를 모두 합쳐 order 순서로 그리고, 찾은 영역과 못 찾은 자리의 기본 가이드가 섞여도 둘 다 그린다(`frontend/src/features/guide/area.ts`의 `resolveStep`, master에 있음). 위아래 모두(`eyeshadow`)가 같이 오면 `eyeshadowUpper` · `eyeshadowUnder`는 뺀다. 그래서 AI가 섞인 단계를 바로 보낸다.
+- FE는 한 단계의 하위 단계를 모두 합쳐 order 순서로 그리고, 찾은 영역과 못 찾은 자리의 기본 가이드가 섞여도 둘 다 그린다(`frontend/src/vision/guide/area.ts`의 `resolveStep`, master에 있음). 위아래 모두(`eyeshadow`)가 같이 오면 `eyeshadowUpper` · `eyeshadowUnder`는 뺀다. 그래서 AI가 섞인 단계를 바로 보낸다.
 - BE `eyeZone`은 아직 오지 않는다(요청 「눈 화장 단계에 바른 자리(eyeZone) 보내기」, 박형준, 기한 2026-11-12). AI는 값이 오면 글보다 먼저 쓰고, 없으면 글로 고른다. 형식·스키마는 바꾸지 않았다.
 - 시험 영상 섀도 5단계는 모두 자리가 하나라 섞인 단계가 나오지 않는다. 섞인 단계는 빌더 시험(위 → 아래 순서, 못 찾은 자리만 기본 가이드)으로 확인했다.
 

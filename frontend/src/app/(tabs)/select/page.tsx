@@ -1,14 +1,16 @@
 "use client";
 
-import { Search, Trophy } from "lucide-react";
+import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { FlowSteps } from "@/components/flow-steps";
 import { Notice } from "@/components/ui/notice";
+import { runHref, useRun } from "@/domain/session";
+import { toVideoItem, type VideoItem } from "@/domain/video";
 import {
-  GuideBadge,
   KW_BG,
+  PopularVideoCard,
   requestAnalysis,
   targetOfPopular,
   targetOfReceipt,
@@ -17,8 +19,6 @@ import {
   VideoPicker,
   type StartTarget,
 } from "@/features/select";
-import { runHref, useSession } from "@/features/session";
-import { toVideoItem, videoThumb, type VideoItem } from "@/features/video";
 import { ApiError, errorMessage, type PopularVideoItem, type VideoSelection } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +32,7 @@ const isCode = (e: unknown, code: string) => e instanceof ApiError && e.code ===
  */
 export default function SelectPage() {
   const router = useRouter();
-  const { startRun } = useSession();
+  const { startRun } = useRun();
   /** 검색 화면에 넣을 첫 검색어. null이면 닫힘 */
   const [picker, setPicker] = useState<string | null>(null);
   const popular = usePopularVideos();
@@ -181,43 +181,14 @@ export default function SelectPage() {
             )
           ) : popular.load.status === "ready" ? (
             <div className="grid grid-cols-2 gap-3.5">
-              {popular.load.data.items.map((item) => {
-                const v = toVideoItem(item);
-                return (
-                  <button
-                    key={item.videoId}
-                    type="button"
-                    disabled={popularBusy}
-                    onClick={() => void startPopular(item)}
-                    className="flex flex-col gap-2.5 rounded-[20px] border-2 border-transparent p-2 text-left hover:border-line disabled:opacity-60"
-                  >
-                    <div
-                      className="relative aspect-video overflow-hidden rounded-[14px] border border-line bg-cover bg-center"
-                      style={{ backgroundImage: `url(${videoThumb(v.ytid)})` }}
-                    >
-                      <span className="absolute right-2 bottom-2 rounded-md bg-ink px-2.5 py-1 text-[16px] font-semibold text-white tabular">
-                        {v.dur}
-                      </span>
-                      <span
-                        className={cn(
-                          "absolute top-2 left-2 flex h-9 items-center gap-1.5 rounded-full py-0 pr-3.5 pl-2.5 text-[16px] font-bold tabular",
-                          item.rank === 1 ? "bg-mint text-ink" : "bg-ink text-white",
-                        )}
-                      >
-                        <Trophy className="size-[18px]" aria-hidden />
-                        {item.rank}위
-                      </span>
-                    </div>
-                    <span className="flex flex-col gap-1 px-1 pb-1">
-                      <span className="font-display text-[17px] leading-[1.3] text-ink">
-                        {v.title}
-                      </span>
-                      <span className="text-[16px] text-mute">{v.ch}</span>
-                      {item.guideAvailable && <GuideBadge />}
-                    </span>
-                  </button>
-                );
-              })}
+              {popular.load.data.items.map((item) => (
+                <PopularVideoCard
+                  key={item.videoId}
+                  item={item}
+                  busy={popularBusy}
+                  onPick={() => void startPopular(item)}
+                />
+              ))}
             </div>
           ) : (
             <span className="px-1 py-7 text-[17px] text-mute">인기 영상을 불러오고 있어요</span>

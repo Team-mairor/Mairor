@@ -3,11 +3,11 @@ import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FaceFrame } from "@/features/face";
+import type { Baseline } from "@/domain/gauge/baseline";
+import { GRID } from "@/domain/gauge/spec";
+import { WINDOW, type GaugeDisplay } from "@/domain/gauge/stability";
+import type { FaceFrame } from "@/vision/face";
 
-import type { Baseline } from "./baseline";
-import { GRID } from "./spec";
-import { WINDOW, type GaugeDisplay } from "./stability";
 import { useGaugeMeasure, type GaugeMeasureInput } from "./use-gauge-measure";
 
 const mocks = vi.hoisted(() => ({
@@ -17,33 +17,33 @@ const mocks = vi.hoisted(() => ({
   videoRef: { current: { videoWidth: 4, videoHeight: 4 } as unknown },
 }));
 
-vi.mock("@/features/face", () => ({
+vi.mock("@/vision/face", () => ({
   FRAME_STALE_MS: 300,
   useCamera: () => ({ videoRef: mocks.videoRef }),
   useFaceFrame: (listener: (frame: FaceFrame | null) => void) => {
     mocks.listener = listener;
   },
 }));
-vi.mock("@/features/overlay", () => ({
+vi.mock("@/vision/overlay", () => ({
   loadFaceMesh: () => Promise.resolve({ triangles: [], uv: [] }),
 }));
 vi.mock("./use-gauge-baseline", () => ({
   loadCellSampler: () => Promise.resolve({ cells: {}, eyes: {} }),
   videoReader: () => () => ({ width: 4, height: 4, data: new Uint8ClampedArray(64) }),
 }));
-vi.mock("./area", () => ({
+vi.mock("@/domain/gauge/area", () => ({
   areaCells: () => new Uint8Array(GRID * GRID),
   madeCells: () => new Uint8Array(GRID * GRID),
 }));
-vi.mock("./cells", () => ({ readCells: () => new Float32Array(GRID * GRID * 3) }));
-vi.mock("./light", () => ({
+vi.mock("@/domain/gauge/cells", () => ({ readCells: () => new Float32Array(GRID * GRID * 3) }));
+vi.mock("@/domain/gauge/light", () => ({
   drift: () => ({ size: 0.5 }),
   lightChange: () => new Float32Array(GRID * GRID * 3),
 }));
-vi.mock("./frame", () => ({
+vi.mock("@/domain/gauge/frame", () => ({
   frameState: () => (mocks.faces ? { faces: 1, eyes: 0.35, faceWidth: 0.5 } : { faces: 0 }),
 }));
-vi.mock("./measure", () => ({
+vi.mock("@/domain/gauge/measure", () => ({
   gaugeBar: (ratio: number) => ratio * 50,
   framesMedian: (grids: Float32Array[]) => grids[0],
   linearOfSrgb: (v: number[]) => v,

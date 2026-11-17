@@ -185,7 +185,7 @@ def anchor_points(anchors: Sequence[MeshAnchor]) -> list[tuple[float, float]]:
 def smooth_points(points: Sequence[tuple[float, float]]) -> list[tuple[float, float]]:
     """닫힌 테두리 점들을 FE가 그리는 곡선 위의 촘촘한 점들로 바꾼다.
 
-    FE(frontend/src/features/guide/renderer.ts의 traceSmooth)는 이웃한 두 점을 3차 베지어 곡선으로
+    FE(frontend/src/vision/guide/renderer.ts의 traceSmooth)는 이웃한 두 점을 3차 베지어 곡선으로
     잇고, 두 조절점을 앞뒤 이웃 점 차이의 1/6만큼 민다(모든 점을 지나는 Catmull-Rom 곡선).
     같은 식으로 구간마다 CURVE_STEPS개씩 점을 찍으므로, 이 점들을 곧은 선으로 이어 칠하면
     FE가 그리는 모양과 거의 같다. 들어온 점은 모두 결과에 그대로 들어 있다.

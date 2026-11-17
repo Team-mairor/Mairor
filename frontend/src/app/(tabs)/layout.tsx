@@ -1,5 +1,5 @@
 import { BottomTabs } from "@/components/bottom-tabs";
-import { ExpiredSessionRedirect } from "@/features/session";
+import { ExpiredSessionRedirect } from "@/domain/session";
 
 /**
  * 하단 탭이 있는 화면 묶음: 홈 · 촬영 · 영상 입력 · 마이페이지 · 리포트 상세. 뒤로·홈 버튼 없이 탭으로 옮겨 다닌다

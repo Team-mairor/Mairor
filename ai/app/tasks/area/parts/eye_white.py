@@ -10,7 +10,7 @@
 밝기 위 WHITE_SHARE이면서 반사광(채널 하나라도 WHITE_CLIP 이상)이 아닌 색의 가운데 값이
 그 사진의 흰자이고(white_of_pixels), 사진마다 낸 흰자의 채널별 가운데 값이 영상의 흰자다.
 사용자 쪽은 FE가 맨얼굴 기준을 잡을 때 같은 점 · 같은 규칙으로 잰다
-(frontend/src/features/gauge/white.ts, shared/gauge/README.md).
+(frontend/src/domain/gauge/white.ts, shared/gauge/README.md).
 단계마다 그 직전 사진으로 재지 않는 것은, 같은 영상에서도 눈을 내리깐 사진과 아이라인 · 속눈썹이
 흰자 둘레를 덮은 사진이 섞여 이마 피부색보다 훨씬 크게 흔들렸기 때문이다.
 근거 숫자는 docs/experiments/GAUGE_MEASURE.md와 DEMO_AI_CHECK.md에 있다.

@@ -1,11 +1,10 @@
 export { DensityMeter, GAUGE_REFERENCE } from "./density-meter";
 export { ExitModal } from "./exit-modal";
-export { GuideStatus } from "./guide-status";
 export { HowItWorksSlide } from "./how-it-works";
 export { ProductChip } from "./product-chip";
 export { ActCard, PrepCard, type StepProduct } from "./step-cards";
-export { templateOf } from "./template";
 export { TutorialTopBar } from "./top-bar";
 export { SelfiePreview } from "./selfie-preview";
 export { StepList, type StepListItem } from "./step-list";
 export { useStepShot, type ShotState } from "./use-step-shot";
+export { TutorialEntry } from "./tutorial-entry";

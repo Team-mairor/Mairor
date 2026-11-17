@@ -1,6 +1,6 @@
 # 게이지 조명 보정(light.ts)이 AI baseline.light_change(OpenCV)와 같은 값을 내는지 볼 시험 데이터를 만든다.
 # opencv-python-headless · numpy가 필요하다.
-# python scripts/gauge-light-fixture.py ../shared/gauge/baseline.v1.json > src/features/gauge/light.fixture.json
+# python scripts/gauge-light-fixture.py ../shared/gauge/baseline.v1.json > src/domain/gauge/light.fixture.json
 import json, sys
 import numpy as np, cv2
 spec = json.load(open(sys.argv[1]))

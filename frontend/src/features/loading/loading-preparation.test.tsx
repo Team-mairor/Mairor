@@ -4,9 +4,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import LoadingPage from "@/app/(live)/loading/page";
-import { clearFacePhoto, facePhoto, saveFacePhoto } from "@/features/face/registered-photo";
-import { SessionProvider, useSession } from "@/features/session";
+import { SessionProvider, useSession } from "@/domain/session";
 import { api, ApiError, type AnalysisJobStatus } from "@/lib/api";
+import { clearFacePhoto, facePhoto, saveFacePhoto } from "@/vision/face/registered-photo";
 
 const mocks = vi.hoisted(() => ({
   query: new URLSearchParams("jobId=j1"),
@@ -24,13 +24,13 @@ const mocks = vi.hoisted(() => ({
 }));
 const GUIDE = "a0000000-0000-4000-8000-000000000001";
 vi.mock("next/navigation", () => ({ useRouter: () => mocks.router }));
-vi.mock("@/features/face", async (original) => ({
-  ...(await original<typeof import("@/features/face")>()),
+vi.mock("@/vision/face", async (original) => ({
+  ...(await original<typeof import("@/vision/face")>()),
   useCamera: () => ({ stop: mocks.stop }),
   useHiddenVideo: () => {},
 }));
-vi.mock("@/features/guide", async (original) => ({
-  ...(await original<typeof import("@/features/guide")>()),
+vi.mock("@/domain/guide-run", async (original) => ({
+  ...(await original<typeof import("@/domain/guide-run")>()),
   useRunQuery: () => mocks.query,
   useGuide: () => ({
     load: { status: "ready", guide: { videoId: "v", guideId: GUIDE, steps: [] } },
@@ -38,14 +38,18 @@ vi.mock("@/features/guide", async (original) => ({
   registerFace: mocks.register,
   deleteFaceRegistration: mocks.remove,
 }));
-vi.mock("@/features/loading", async (original) => ({
-  ...(await original<typeof import("@/features/loading")>()),
+vi.mock("./analysis-job", async (original) => ({
+  ...(await original<typeof import("./analysis-job")>()),
   useAnalysisJob: () => mocks.live,
   retryAnalysisJob: mocks.retry,
+}));
+vi.mock("./analysis-progress", () => ({
   AnalysisProgress: ({ pct }: { pct: number }) => <output data-testid="progress">{pct}</output>,
-  FoundProducts: () => null,
-  ScanPreview: () => null,
-  ReadyStatus: () => null,
+}));
+vi.mock("./found-products", () => ({ FoundProducts: () => null }));
+vi.mock("./scan-preview", () => ({ ScanPreview: () => null }));
+vi.mock("./ready-status", () => ({ ReadyStatus: () => null }));
+vi.mock("./face-register-modal", () => ({
   FaceRegisterModal: function MockFaceRegisterModal({
     onDone,
     onLater,
@@ -75,6 +79,8 @@ vi.mock("@/features/loading", async (original) => ({
       </div>
     );
   },
+}));
+vi.mock("./pouch-check-modal", () => ({
   PouchCheckModal: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? (
       <div data-testid="pouch">

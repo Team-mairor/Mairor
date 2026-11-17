@@ -4,7 +4,8 @@ import { ArrowLeft, Plus } from "lucide-react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
-import { PouchReview, type PouchItem } from "@/features/pouch";
+import { type PouchItem } from "@/domain/pouch";
+import { PouchReview } from "@/features/pouch";
 
 /** 제품 체크에서 시작하기 전에 내 파우치를 확인하는 모달 */
 export function PouchModal({

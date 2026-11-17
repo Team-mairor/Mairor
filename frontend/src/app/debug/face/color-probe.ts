@@ -1,5 +1,5 @@
-import type { FaceFrame } from "@/features/face";
 import { rgbToLab, type Lab } from "@/lib/color";
+import type { FaceFrame } from "@/vision/face";
 
 const FOREHEAD = 151;
 const RADIUS_IOD = 0.12;

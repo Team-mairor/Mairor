@@ -1,12 +1,38 @@
 "use client";
 
-import { Check, ChevronDown, Pencil, Search } from "lucide-react";
+import { ChevronDown, Pencil, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
-import { useSession } from "@/features/session";
+import {
+  CAT_CODE,
+  POUCH_CATS,
+  SHADE_COLORS,
+  type PouchCat,
+  type PouchItem,
+} from "@/domain/pouch/catalog";
+import {
+  draftType,
+  patchDraft,
+  pickSuggestion,
+  saveBody,
+  suggestQuery,
+  toUpdate,
+  type ProductDraft,
+} from "@/domain/pouch/draft";
+import {
+  createPouchItem,
+  deletePouchItem,
+  fromApi,
+  getProduct,
+  searchProduct,
+  updatePouchItem,
+  useCategories,
+  useProductSuggestions,
+} from "@/domain/pouch/pouch-api";
+import { useAuth, useMyPouch, useSessionActions } from "@/domain/session";
 import {
   ApiError,
   errorMessage,
@@ -18,28 +44,11 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { CAT_CODE, POUCH_CATS, SHADE_COLORS, type PouchCat, type PouchItem } from "./catalog";
-import { draftType, patchDraft, pickSuggestion, saveBody, suggestQuery, toUpdate } from "./draft";
 import { Illustration } from "./illustration";
-import {
-  createPouchItem,
-  deletePouchItem,
-  fromApi,
-  getProduct,
-  searchProduct,
-  updatePouchItem,
-  useCategories,
-  useProductSuggestions,
-} from "./pouch-api";
-
-export type ProductDraft = Omit<PouchItem, "id"> & { id?: string; custom?: boolean };
+import { ShadeOption } from "./shade-option";
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="text-[15px] font-bold text-mute">{children}</span>;
-}
-
-export function emptyDraft(partial: Partial<ProductDraft> = {}): ProductDraft {
-  return { cat: "베이스", brand: "", name: "", shade: "", color: null, ...partial };
 }
 
 const norm = (t?: string | null) => (t ?? "").toLowerCase().replace(/\s+/g, "");
@@ -71,7 +80,9 @@ export function ProductSheet({
   onSaved?: (item: PouchItem, isNew: boolean) => void;
 }) {
   const router = useRouter();
-  const { state, update, expireSession } = useSession();
+  const { loggedIn, email } = useAuth();
+  const { pouch, setPouch } = useMyPouch();
+  const { expireSession } = useSessionActions();
   const cats = useCategories();
   const [f, setF] = useState<ProductDraft>(draft);
   // 컬러 목록을 연 때의 key. 입력(분류·종류·브랜드·제품명)이 바뀌면 저절로 닫힌다
@@ -101,7 +112,7 @@ export function ProductSheet({
   const shades = product?.shades ?? [];
   const dup =
     ready &&
-    state.pouch.some(
+    pouch.some(
       (p) =>
         p.id !== f.id &&
         norm(p.brand) === norm(f.brand) &&
@@ -109,7 +120,7 @@ export function ProductSheet({
         norm(p.shade) === norm(f.shade),
     );
   // 로그인 전에는 서버에 저장할 수 없어 읽기만 한다
-  const guest = !state.loggedIn;
+  const guest = !loggedIn;
   const canSave = ready && !!type && !dup && !busy && !guest;
   const noColor = custom && !f.color;
   // 후보는 로그인 뒤에만 받는다. 이미 카탈로그 제품에 연결됐거나 입력이 짧으면 묻지 않는다
@@ -122,7 +133,7 @@ export function ProductSheet({
 
   // 401이면 세션이 끝난 것이라 로그인으로 보낸다. 로그인 전(읽기 전용)에는 보내지 않는다
   const goLogin = (e: unknown) => {
-    if (!(state.loggedIn && e instanceof ApiError && e.code === "UNAUTHORIZED")) return false;
+    if (!(loggedIn && e instanceof ApiError && e.code === "UNAUTHORIZED")) return false;
     expireSession();
     router.replace("/login?expired=basic");
     return true;
@@ -175,9 +186,12 @@ export function ProductSheet({
   };
 
   // 응답이 오기 전에 로그아웃·계정 변경이 있었으면 그 응답을 지금 파우치에 넣지 않는다
-  const owner = state.email;
-  const mine = (prev: { loggedIn: boolean; email: string }) =>
-    prev.loggedIn && prev.email === owner;
+  const owner = email;
+  const authNow = useRef({ loggedIn, email });
+  useLayoutEffect(() => {
+    authNow.current = { loggedIn, email };
+  });
+  const mine = () => authNow.current.loggedIn && authNow.current.email === owner;
 
   const save = async () => {
     if (!canSave || !type) return;
@@ -192,15 +206,12 @@ export function ProductSheet({
       const id = f.id;
       const res = id ? await updatePouchItem(id, toUpdate(body)) : await createPouchItem(body);
       const item = fromApi(res.item);
-      update((prev) =>
-        !mine(prev)
-          ? {}
-          : {
-              pouch: isEdit
-                ? prev.pouch.map((p) => (p.id === item.id ? item : p))
-                : [item, ...prev.pouch.filter((p) => p.id !== item.id)],
-            },
-      );
+      if (mine())
+        setPouch((prev) =>
+          isEdit
+            ? prev.map((p) => (p.id === item.id ? item : p))
+            : [item, ...prev.filter((p) => p.id !== item.id)],
+        );
       onSaved?.(item, !isEdit);
       onClose();
     } catch (e) {
@@ -225,7 +236,7 @@ export function ProductSheet({
         return;
       }
     }
-    update((prev) => (mine(prev) ? { pouch: prev.pouch.filter((p) => p.id !== id) } : {}));
+    if (mine()) setPouch((prev) => prev.filter((p) => p.id !== id));
     onClose();
   };
 
@@ -497,55 +508,26 @@ export function ProductSheet({
                         </span>
                       )}
                       {product &&
-                        shades.map((s) => {
-                          const on = f.shadeId === s.shadeId;
-                          const hex = shadeHex(s);
-                          return (
-                            <button
-                              key={s.shadeId}
-                              type="button"
-                              onClick={() => {
-                                setF((p) => ({
-                                  ...p,
-                                  shade: s.name,
-                                  color: hex,
-                                  productId: product.productId,
-                                  shadeId: s.shadeId,
-                                }));
-                                setFail(null);
-                                setShKey(null);
-                                setCustom(false);
-                              }}
-                              className={cn(
-                                "flex min-h-[60px] items-center gap-3.5 pr-[18px] pl-4 text-left hover:bg-ice-pale",
-                                on && "bg-ice-pale",
-                              )}
-                            >
-                              <span
-                                className="size-8 shrink-0 rounded-full"
-                                style={{
-                                  background: hex ?? "var(--color-cream)",
-                                  boxShadow: "inset 0 0 0 1px rgba(0,0,0,.15)",
-                                }}
-                              />
-                              <span
-                                className={cn(
-                                  "min-w-0 flex-1 text-[19px] text-ink",
-                                  on ? "font-bold" : "font-semibold",
-                                )}
-                              >
-                                {s.name}
-                              </span>
-                              {on && (
-                                <Check
-                                  className="size-[22px] text-navy"
-                                  strokeWidth={2.6}
-                                  aria-hidden
-                                />
-                              )}
-                            </button>
-                          );
-                        })}
+                        shades.map((s) => (
+                          <ShadeOption
+                            key={s.shadeId}
+                            name={s.name}
+                            hex={shadeHex(s)}
+                            selected={f.shadeId === s.shadeId}
+                            onPick={() => {
+                              setF((p) => ({
+                                ...p,
+                                shade: s.name,
+                                color: shadeHex(s),
+                                productId: product.productId,
+                                shadeId: s.shadeId,
+                              }));
+                              setFail(null);
+                              setShKey(null);
+                              setCustom(false);
+                            }}
+                          />
+                        ))}
                       <button
                         type="button"
                         onClick={toCustom}

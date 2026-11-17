@@ -3,3 +3,5 @@ export { AgreementFields, EXTRA_FIELDS, ProfileFields, useProfileForm } from "./
 export { PasswordReset, type ResetStep } from "./password-reset";
 export { useLogout } from "./use-logout";
 export { TermsModal, TermsPage, type TermsDoc } from "./terms";
+export { SignupView } from "./signup-view";
+export { LoginView } from "./login-view";

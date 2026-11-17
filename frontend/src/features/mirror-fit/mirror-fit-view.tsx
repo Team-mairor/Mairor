@@ -3,6 +3,7 @@
 import { useRef, useState, type PointerEvent } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
+import { CameraErrorNote } from "@/features/live";
 import {
   eyeDistanceMm,
   fitMirror,
@@ -20,9 +21,8 @@ import {
   type FaceFrame,
   type MirrorFit,
   type MirrorScreen,
-} from "@/features/face";
-import { GuideOverlay } from "@/features/guide";
-import { CameraErrorNote } from "@/features/live";
+} from "@/vision/face";
+import { GuideOverlay } from "@/vision/guide";
 
 type Px = { x: number; y: number };
 type Eyes = [Px, Px];

@@ -5,11 +5,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { MirrorToggle } from "@/components/mirror-toggle";
-import { saveFacePhoto } from "@/features/face";
-import { createRun, useSession, type SessionState } from "@/features/session";
+import { createRun, useSession, type SessionState } from "@/domain/session";
 import { cn } from "@/lib/utils";
 import { GUIDE_STEPS, VIDEOS } from "@/mocks/mock-data";
 import { MOCK_GUIDE_ID } from "@/mocks/mock-guide-api";
+import { saveFacePhoto } from "@/vision/face";
 
 type Item = {
   label: string;

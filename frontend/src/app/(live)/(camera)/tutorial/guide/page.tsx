@@ -5,13 +5,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
-import { useHiddenVideo } from "@/features/face";
-import { setPhotoConsent, useGuide, useRunQuery as useQuery } from "@/features/guide";
+import { setPhotoConsent, useGuide, useRunQuery as useQuery } from "@/domain/guide-run";
+import { runHref, useDevice, useRun } from "@/domain/session";
 import { CameraErrorNote } from "@/features/live";
-import { runHref, useSession } from "@/features/session";
 import { HowItWorksSlide } from "@/features/tutorial";
 import { errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useHiddenVideo } from "@/vision/face";
 
 /**
  * 09 튜토리얼 안내 · 사진 저장 동의. 리포트에 단계 사진이 꼭 남도록 동의해야 시작할 수 있다.
@@ -20,9 +20,9 @@ import { cn } from "@/lib/utils";
 export default function TutorialGuidePage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, update, enterTutorial, isCurrentRun } = useSession();
+  const { tutSeen, markTutSeen } = useDevice();
+  const { run, enterTutorial, isCurrentRun } = useRun();
   const { load, retry } = useGuide();
-  const run = state.run;
   const n = run.mode === "guide" && load.status === "ready" ? load.guide.steps.length : 0;
   const consentRows = [
     ["저장 항목", `스텝별 얼굴 사진 (최대 ${n}장)`],
@@ -32,7 +32,7 @@ export default function TutorialGuidePage() {
   const href = (path: string) => runHref(path, run.guideId);
   const review = query?.get("review") === "1";
   const [slide, setSlide] = useState(0); // 0~2 안내, 3 동의
-  const showSlides = review || query?.get("force") === "1" || !state.tutSeen;
+  const showSlides = review || query?.get("force") === "1" || !tutSeen;
   const phase = showSlides ? slide : 3;
   useHiddenVideo();
 
@@ -42,7 +42,7 @@ export default function TutorialGuidePage() {
 
   const endSlides = () => {
     if (review) return router.push(href("/tutorial"));
-    update({ tutSeen: true });
+    markTutSeen();
     setSlide(3);
   };
   const consenting = useRef(false);

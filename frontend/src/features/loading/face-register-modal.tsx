@@ -6,6 +6,17 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { Modal } from "@/components/ui/modal";
 import { PillButton } from "@/components/ui/pill-button";
 import {
+  RegisteredBaselineCollector,
+  saveRegisteredGaugeBaseline,
+  type Samplers,
+} from "@/domain/gauge";
+import { loadCellSampler, videoReader } from "@/features/gauge";
+import { FaceStateProvider, useCameraErrorNote } from "@/features/live";
+import { MirrorFitView } from "@/features/mirror-fit";
+import { errorMessage } from "@/lib/api";
+import { isMirror } from "@/lib/mirror";
+import { cn } from "@/lib/utils";
+import {
   allPassed,
   captureFace,
   CHECKS,
@@ -19,20 +30,8 @@ import {
   useCamera,
   useFaceCheck,
   type CheckName,
-} from "@/features/face";
-import {
-  loadCellSampler,
-  RegisteredBaselineCollector,
-  saveRegisteredGaugeBaseline,
-  videoReader,
-  type Samplers,
-} from "@/features/gauge";
-import { readPixels, saveBrowsFrom } from "@/features/guide";
-import { FaceStateProvider, useCameraErrorNote } from "@/features/live";
-import { MirrorFitView } from "@/features/mirror-fit";
-import { errorMessage } from "@/lib/api";
-import { isMirror } from "@/lib/mirror";
-import { cn } from "@/lib/utils";
+} from "@/vision/face";
+import { readPixels, saveBrowsFrom } from "@/vision/guide";
 
 import { FaceDemo } from "./face-demo";
 import { FacePosition } from "./face-position";

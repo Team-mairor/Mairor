@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element -- 메모리에 둔 data URL */
-import type { StepPhoto } from "@/features/session";
+import type { StepPhoto } from "@/domain/session";
 
 /** 단계 사진. crop이면 그 단계 부위(box)만 칸에 꽉 차게, 아니면 사진 전체 */
 export function StepPhotoImg({

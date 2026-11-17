@@ -1,9 +1,9 @@
 // 개발·테스트용 샘플 데이터. 제품 사용자의 파우치·리포트 기록을 대신하는 데 쓰지 않는다.
 
-import type { Makeup } from "@/features/guide";
-import type { PouchCat, PouchItem } from "@/features/pouch";
-import type { GuideStepInfo, RefProduct, RefState } from "@/features/session";
-import type { Chapter, VideoItem, VideoState } from "@/features/video";
+import type { PouchCat, PouchItem } from "@/domain/pouch";
+import type { GuideStepInfo, RefProduct, RefState } from "@/domain/session";
+import type { Chapter, VideoItem, VideoState } from "@/domain/video";
+import type { Makeup } from "@/vision/guide";
 
 import { MOCK_GUIDE_STEPS, type MockGuideStep } from "./mock-guide";
 

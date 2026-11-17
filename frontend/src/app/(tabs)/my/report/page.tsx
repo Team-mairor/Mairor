@@ -5,19 +5,18 @@ import { useEffect, useState, type ReactElement } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Modal } from "@/components/ui/modal";
-import { groupSteps } from "@/features/guide";
+import { groupSteps } from "@/domain/guide";
 import {
   captureTiles,
   deleteReport,
   fromRecord,
   guideReportRows,
-  PhotoSlot,
   SHOW_STEP_PHOTOS,
-  StepPhotoImg,
   useReport,
   type ReportRowPhoto,
-} from "@/features/report";
-import { useSession } from "@/features/session";
+} from "@/domain/report";
+import { useAuth, useSessionActions, useStoredReports } from "@/domain/session";
+import { PhotoSlot, StepPhotoImg } from "@/features/report";
 import { ApiError, errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 
@@ -57,29 +56,30 @@ function StepPhoto({ row, url }: { row: ReportRowPhoto; url?: string | null }): 
 export default function ReportPage() {
   const router = useRouter();
   const query = useQuery();
-  const { state, storageLoaded, sessionChecked, update } = useSession();
+  const { loggedIn, email } = useAuth();
+  const { setReports } = useStoredReports();
+  const { storageLoaded, sessionChecked } = useSessionActions();
   const [expanded, setExpanded] = useState(true);
   const [del, setDel] = useState<DelState>(null);
 
   // 정확한 id로만 찾는다. 저장값 · 로그인 확인 전에는 판단을 미룬다
   const id = query?.get("id") ?? null;
-  const account = sessionChecked && state.loggedIn ? state.email : null;
+  const account = sessionChecked && loggedIn ? email : null;
   const remote = useReport(account, id);
   const remoteError = remote.load.status === "error" ? remote.load.error : null;
-  const rep = state.loggedIn
+  const rep = loggedIn
     ? remote.load.status === "ready"
       ? fromRecord(remote.load.data)
       : undefined
     : undefined;
   // 없는 기록(404)은 목록으로 보낸다
-  const missing = state.loggedIn
+  const missing = loggedIn
     ? (!!query && !id) || (remoteError instanceof ApiError && remoteError.status === 404)
     : storageLoaded && !!query && !rep;
   useEffect(() => {
     if (missing) router.replace("/my/reports");
   }, [missing, router]);
-  const waiting =
-    state.loggedIn && !missing && (!sessionChecked || remote.load.status === "loading");
+  const waiting = loggedIn && !missing && (!sessionChecked || remote.load.status === "loading");
 
   const steps = rep?.guide ? guideReportRows(rep.guide, rep.runId) : [];
   const tiles = captureTiles(steps);
@@ -131,7 +131,7 @@ export default function ReportPage() {
         return;
       }
     }
-    update((prev) => ({ reports: prev.reports.filter((r) => r.id !== rep.id) }));
+    setReports((prev) => prev.filter((r) => r.id !== rep.id));
     router.replace("/my/reports");
   };
 

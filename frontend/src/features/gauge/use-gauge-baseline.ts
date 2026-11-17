@@ -3,6 +3,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  BaselineCollector,
+  facing,
+  FRAME_GAP_MS,
+  FrontCenter,
+  goodFrame,
+  qualityOf,
+  type Baseline,
+  type FrameQuality,
+} from "@/domain/gauge/baseline";
+import { cellSampler, readCells, type CellLab, type Pixels } from "@/domain/gauge/cells";
+import { eyeAspect, frameState } from "@/domain/gauge/frame";
+import { nextStartBaseline, trimTail, type TailShot } from "@/domain/gauge/next-start";
+import {
+  registeredGaugeBaseline,
+  type RegisteredGaugeBaseline,
+} from "@/domain/gauge/registered-baseline";
+import type { Samplers } from "@/domain/gauge/samplers";
+import { FRAME, type FrameState } from "@/domain/gauge/stability";
+import { eyeSampler, readEyePixels, whiteOfFrames } from "@/domain/gauge/white";
+import {
   FRAME_STALE_MS,
   isRegionInView,
   lockControls,
@@ -12,30 +32,10 @@ import {
   useFaceFrame,
   type FaceFrame,
   type RegionName,
-} from "@/features/face";
-import { loadFaceMesh } from "@/features/overlay";
+} from "@/vision/face";
+import { loadFaceMesh } from "@/vision/overlay";
 
-import {
-  BaselineCollector,
-  facing,
-  FRAME_GAP_MS,
-  FrontCenter,
-  goodFrame,
-  qualityOf,
-  type Baseline,
-  type FrameQuality,
-} from "./baseline";
-import { cellSampler, readCells, type CellLab, type CellSampler, type Pixels } from "./cells";
-import { eyeAspect, frameState } from "./frame";
-import { nextStartBaseline, trimTail, type TailShot } from "./next-start";
-import { registeredGaugeBaseline, type RegisteredGaugeBaseline } from "./registered-baseline";
-import { FRAME, type FrameState } from "./stability";
-import { eyeSampler, readEyePixels, whiteOfFrames, type EyeSampler } from "./white";
-
-export interface Samplers {
-  cells: CellSampler;
-  eyes: EyeSampler;
-}
+export type { Samplers };
 
 let samplerPromise: Promise<Samplers> | null = null;
 /** 칸 · 눈 구멍 표본 자리는 얼굴 지도로 정해져 한 번만 만든다 */

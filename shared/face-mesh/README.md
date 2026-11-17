@@ -17,7 +17,7 @@ FE(브라우저, `@mediapipe/tasks-vision`)와 AI(Python, `mediapipe`)가 **같�
 ## 사용 위치
 
 - FE: `frontend/scripts/sync-mediapipe-assets.mjs`가 `npm run dev`·`npm run build` 전에 `frontend/public/models/`로 복사한다.
-- FE: `frontend/src/features/face/regions.ts`가 `regions.v1.json`을 직접 import한다 (`next.config.ts`의 `turbopack.root`가 저장소 루트).
+- FE: `frontend/src/vision/face/regions.ts`가 `regions.v1.json`을 직접 import한다 (`next.config.ts`의 `turbopack.root`가 저장소 루트).
 - AI: `ai/app/core/paths.py`의 `FACE_MESH_DIR`로 이 폴더의 파일을 직접 읽는다. 얼굴 점 찾기는 `face_landmarker.task`(`ai/app/tasks/area/landmarks/face_finder.py`), 얼굴 지도 · 얼굴 주소는 `triangles.v1.json` · `uv.v1.json`(`ai/app/tasks/area/common/face_map.py`)을 쓴다. 부위 점 번호는 `regions.v1.json`을 읽고 따로 옮겨 적지 않는다(`ai/app/tasks/area/common/region_points.py`).
 
 ## 메시 규칙 (`meshVersion: "v1"`)
@@ -29,6 +29,6 @@ FE(브라우저, `@mediapipe/tasks-vision`)와 AI(Python, `mediapipe`)가 **같�
 - 입 안쪽과 눈 안쪽도 삼각형으로 덮여 있다. 메시로 칠할 때 입·눈을 비우려면 따로 빼야 한다.
 - 모델 파일을 바꾸면 `extract_mesh.py`를 다시 실행한다. 결과가 달라지면 스크립트가 덮어쓰지 않고 멈추니, `MESH_VERSION`을 올린 뒤 다시 실행한다.
 - 메시 버전을 올리면 FE에서 함께 바꾼다.
-  - `frontend/src/features/overlay/mesh.ts`의 `MESH_VERSION` (불러오는 파일 이름도 이 값으로 정해진다)
+  - `frontend/src/vision/overlay/mesh.ts`의 `MESH_VERSION` (불러오는 파일 이름도 이 값으로 정해진다)
   - `frontend/scripts/sync-mediapipe-assets.mjs`의 복사할 파일 이름
   - `meshVersion: "v1"` 타입: `face/types.ts`, `overlay/types.ts`, `guide/types.ts`

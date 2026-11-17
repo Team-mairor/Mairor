@@ -1,4 +1,5 @@
-import type { PouchItem } from "./catalog";
+import type { PouchItem } from "@/domain/pouch/catalog";
+
 import { PouchBoard } from "./pouch-board";
 
 /**

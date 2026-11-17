@@ -1,4 +1,4 @@
-import { CameraProvider } from "@/features/face";
+import { CameraProvider } from "@/vision/face";
 
 // 얼굴 등록(로딩) → 제품 체크 → 튜토리얼이 카메라·얼굴 추적을 한 번만 켜서 함께 쓴다.
 // 로딩 화면은 얼굴 등록을 시작할 때, 카메라 화면은 들어올 때 켠다(StartCamera). 이 묶음을 떠나면 끈다.

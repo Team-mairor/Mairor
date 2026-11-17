@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { observeCanvasSize } from "@/lib/canvas-size";
 import {
   containTransform,
   REGIONS,
   toScreen,
   type FaceFrame,
   type RegionName,
-} from "@/features/face";
+} from "@/vision/face";
 import {
   fitBrowStep,
   findBrows,
@@ -20,15 +21,14 @@ import {
   type AreaStatus,
   type GuideArea,
   type GuideSet,
-} from "@/features/guide";
+} from "@/vision/guide";
 import {
   loadFaceMesh,
   loadLayerSet,
   OverlayRenderer,
   resolveAnchor,
   type FaceMesh,
-} from "@/features/overlay";
-import { observeCanvasSize } from "@/lib/canvas-size";
+} from "@/vision/overlay";
 
 const FACES = ["front", "turned-left", "close-up", "far", "blink-hold", "lost"];
 const LAYERS = ["sample", "lip-only", "empty", "no-color", "missing-mask"];

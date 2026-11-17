@@ -4,8 +4,8 @@ import { Gowun_Dodum, Instrument_Sans, Instrument_Serif } from "next/font/google
 import localFont from "next/font/local";
 import { Suspense } from "react";
 
+import { SessionProvider } from "@/domain/session";
 import { RunGuideProvider } from "@/features/guide";
-import { SessionProvider } from "@/features/session";
 import { MIRROR_SCRIPT } from "@/lib/mirror";
 
 import "./globals.css";

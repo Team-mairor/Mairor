@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { StepPhoto } from "@/domain/session";
+import { useTimeout } from "@/lib/hooks/use-timeout";
 import {
   FRAME_STALE_MS,
   isRegionInView,
@@ -12,9 +14,7 @@ import {
   useFaceFrame,
   type FaceFrame,
   type RegionName,
-} from "@/features/face";
-import type { StepPhoto } from "@/features/session";
-import { useTimeout } from "@/lib/hooks/use-timeout";
+} from "@/vision/face";
 
 /**
  * 얼굴이 잠깐 멈췄을 때 찍어 흔들림을 줄인다.

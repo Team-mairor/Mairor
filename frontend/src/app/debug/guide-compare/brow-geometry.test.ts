@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import type { FaceFrame } from "@/features/face";
-import type { FaceMesh } from "@/features/overlay";
+import type { FaceFrame } from "@/vision/face";
+import type { FaceMesh } from "@/vision/overlay";
 
 import { fitDetectedBrows, imageAnchor } from "./brow-geometry";
 

@@ -3,19 +3,19 @@ import { act, useLayoutEffect, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { saveFacePhoto } from "@/features/face";
-import type { GuideModel, GuideStepModel } from "@/features/guide";
-import { RunGuideContext } from "@/features/guide/use-guide";
-import type { PouchItem } from "@/features/pouch";
-import { SessionProvider, useSession } from "@/features/session/session-provider";
+import type { GuideModel, GuideStepModel } from "@/domain/guide";
+import { RunGuideContext } from "@/domain/guide-run/use-guide";
+import type { PouchItem } from "@/domain/pouch";
+import { SessionProvider, useSession } from "@/domain/session/session-provider";
 import { api, ApiError } from "@/lib/api";
+import { saveFacePhoto } from "@/vision/face";
 
 import { GuideCheck } from "./guide-check-view";
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("@/features/face", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/features/face")>()),
+vi.mock("@/vision/face", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/vision/face")>()),
   useHiddenVideo: () => {},
 }));
 vi.mock("@/features/live", () => ({

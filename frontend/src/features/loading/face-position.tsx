@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 
-import { distanceHint, faceBoxIn, useFaceFrame } from "@/features/face";
+import { distanceHint, faceBoxIn, useFaceFrame } from "@/vision/face";
 
 /**
  * 얼굴 원 안에 지금 얼굴 위치(실선 타원)를 그린다. 자리는 판정(distanceHint)과 같은 faceBoxIn이다.

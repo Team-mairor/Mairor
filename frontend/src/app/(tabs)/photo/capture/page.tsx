@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { CameraError, openCamera } from "@/features/face";
 import {
   BASIC_PHOTO_FRAME,
   calculatePhotoCaptureCrop,
@@ -14,6 +13,7 @@ import {
   type PhotoSlotId,
 } from "@/features/photo-booth";
 import { cn } from "@/lib/utils";
+import { CameraError, openCamera } from "@/vision/face";
 
 type CameraStatus = "starting" | "ready" | "error";
 type CapturedPhotos = Partial<Record<PhotoSlotId, Blob>>;

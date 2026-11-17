@@ -12,16 +12,16 @@ if (major < 22 || (major === 22 && minor < 18)) {
   process.exit(1);
 }
 const { crc32, deflateSync } = await import("node:zlib");
-const { REGIONS } = await import("../src/features/face/regions.ts");
+const { REGIONS } = await import("../src/vision/face/regions.ts");
 const { anchorTools, buildDefaultGuideSet, eyelinerPaths } =
-  await import("../src/features/guide/default-guides.ts");
+  await import("../src/vision/guide/default-guides.ts");
 // 추적기와 같은 판정 기준을 그대로 쓴다. 값을 바꾸면 픽스처를 다시 생성한다.
-const { MIN_IN_FRAME_RATIO } = await import("../src/features/face/visibility.ts");
+const { MIN_IN_FRAME_RATIO } = await import("../src/vision/face/visibility.ts");
 const {
   DEFAULT_MAX_YAW: MAX_YAW,
   KEY_REGIONS,
   MIN_KEY_REGIONS_IN_VIEW,
-} = await import("../src/features/face/tracking-rules.ts");
+} = await import("../src/vision/face/tracking-rules.ts");
 
 const frontendDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const meshDir = join(frontendDir, "../shared/face-mesh");
@@ -78,7 +78,7 @@ function faceLandmarks({ scale = 1, offsetX = 0, offsetY = 0 } = {}) {
 
 const px = (p) => ({ x: p.x * IMAGE.width, y: p.y * IMAGE.height });
 
-// features/face/geometry.ts의 computeRegion과 같은 계산
+// vision/face/geometry.ts의 computeRegion과 같은 계산
 function region(name, landmarks, iod) {
   const { indices, axis } = REGIONS[name];
   const points = indices.map((i) => landmarks[i]);

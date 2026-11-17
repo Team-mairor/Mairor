@@ -3,7 +3,7 @@ import { act, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SessionProvider, useSession } from "@/features/session/session-provider";
+import { SessionProvider, useSession } from "@/domain/session/session-provider";
 import { api, ApiError } from "@/lib/api";
 
 import GoogleSignupPage from "./page";

@@ -13,15 +13,23 @@ import {
   type ReactNode,
 } from "react";
 
-import { facePhoto } from "@/features/face";
-import { faceReady, isRunPath, runHref, runRouteAction, useSession } from "@/features/session";
-import { GuideStatus } from "@/features/tutorial";
+import { GuideStatus } from "@/components/guide-status";
+import { fetchGuide } from "@/domain/guide/guide-api";
+import { deleteFaceRegistration } from "@/domain/guide-run/execution-api";
+import { GuideStore, LOADING } from "@/domain/guide-run/guide-store";
+import { RunGuideContext } from "@/domain/guide-run/use-guide";
+import {
+  faceReady,
+  isRunPath,
+  runHref,
+  runRouteAction,
+  useAuth,
+  useRun,
+  useSessionActions,
+} from "@/domain/session";
+import { facePhoto } from "@/vision/face";
 
-import { deleteFaceRegistration } from "./execution-api";
-import { fetchGuide } from "./guide-api";
-import { GuideStore, LOADING } from "./guide-store";
 import { RunGuideBoundary } from "./run-guide-boundary";
-import { RunGuideContext } from "./use-guide";
 
 interface Route {
   path: string;
@@ -43,24 +51,15 @@ function CurrentSearch({ children }: { children: (search: string) => ReactNode }
 }
 
 export function RunGuideProvider({ children }: { children: ReactNode }) {
-  const {
-    state,
-    storageLoaded,
-    sessionChecked,
-    startRun,
-    continueAnalysis,
-    endRun,
-    bindGuide,
-    invalidateRun,
-    expireSession,
-  } = useSession();
-  const run = state.run;
+  const { loggedIn, email } = useAuth();
+  const { run, startRun, continueAnalysis, endRun, bindGuide, invalidateRun } = useRun();
+  const { storageLoaded, sessionChecked, expireSession } = useSessionActions();
   const router = useRouter();
   const pathname = usePathname();
   const [route, setRoute] = useState<Route | null>(null);
   const [store] = useState(() => new GuideStore(fetchGuide));
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const key = run.mode === "guide" && state.loggedIn ? `${run.id}:${state.email}` : "";
+  const key = run.mode === "guide" && loggedIn ? `${run.id}:${email}` : "";
   const load = snapshot.key === key && key ? snapshot.load : LOADING;
   const initialized = storageLoaded && sessionChecked && route?.path === pathname;
   const action = route ? runRouteAction(route.path, route.search, run) : null;
@@ -114,7 +113,7 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
-    if (!state.loggedIn) return;
+    if (!loggedIn) return;
     const decision = runRouteAction(route.path, route.search, run);
     if (decision.kind === "start") {
       const entry = `${route.path}?${route.search}`;
@@ -153,7 +152,7 @@ export function RunGuideProvider({ children }: { children: ReactNode }) {
         router.replace(runHref("/loading", run.guideId));
       }
     }
-  }, [initialized, route, run, state.loggedIn, startRun, continueAnalysis, endRun, router]);
+  }, [initialized, route, run, loggedIn, startRun, continueAnalysis, endRun, router]);
 
   const search = route?.path === pathname ? route.search : null;
   const value = useMemo(() => ({ load, retry: store.retry, search }), [load, store, search]);

@@ -8,8 +8,8 @@ import { Notice } from "@/components/ui/notice";
 import { PillButton } from "@/components/ui/pill-button";
 import { Spinner } from "@/components/ui/spinner";
 import { TextField } from "@/components/ui/text-field";
+import { useDevice, useSessionActions } from "@/domain/session";
 import { AgreementFields, ProfileFields, useProfileForm } from "@/features/auth";
-import { useSession } from "@/features/session";
 import {
   api,
   ApiError,
@@ -66,7 +66,8 @@ export default function GoogleSignupPage() {
 
 function GoogleSignupForm({ pendingSignup }: { pendingSignup: GoogleSignupPending }) {
   const router = useRouter();
-  const { state, signIn } = useSession();
+  const { onboarded } = useDevice();
+  const { signIn } = useSessionActions();
   const { pending, run } = useRequest<"submit">();
   const [formErr, setFormErr] = useState<string | null>(null);
   // Google 표시 이름이 이름 규칙에 맞을 때만 채운다
@@ -89,7 +90,7 @@ function GoogleSignupForm({ pendingSignup }: { pendingSignup: GoogleSignupPendin
           signal,
         });
         signIn(user, csrfToken);
-        router.replace(state.onboarded ? "/home" : "/onboarding");
+        router.replace(onboarded ? "/home" : "/onboarding");
       },
       (e) => {
         if (e instanceof ApiError && BACK_TO_LOGIN.has(e.code)) {

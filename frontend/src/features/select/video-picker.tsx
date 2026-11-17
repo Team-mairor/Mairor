@@ -1,20 +1,17 @@
 "use client";
 
-import { Check, ChevronLeft, Lock, Play, Search, X } from "lucide-react";
+import { ChevronLeft, Lock, Play, Search, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { PillButton } from "@/components/ui/pill-button";
-import { toChapter, toVideoItem, videoThumb, type VideoItem } from "@/features/video";
+import { toChapter, videoThumb, type VideoItem } from "@/domain/video";
 import { ApiError, errorMessage, type VideoSelection } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 import { targetOfSelection } from "./start-target";
 import { useVideoSearch, useVideoSelection } from "./video-api";
-
-/** 키워드 칩·채널 동그라미 배경 (돌아가며 쓴다) */
-export const KW_BG = ["bg-blush", "bg-mint", "bg-sky"];
+import { VideoResultCard } from "./video-result-card";
 
 /** 검색어 없이 열면 이 말로 찾는다 */
 const DEFAULT_QUERY = "메이크업";
@@ -235,51 +232,17 @@ export function VideoPicker({
           <span className="px-8 py-7 text-[18px] text-mute">검색하고 있어요</span>
         ) : (
           <div className="flex flex-col gap-[22px] pt-2 pb-6">
-            {list.map((item, i) => {
-              const v = toVideoItem(item);
-              return (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => {
-                    setSel(v);
-                    setPlaying(false);
-                  }}
-                  className="flex flex-col gap-3 text-left"
-                >
-                  <div
-                    className="relative aspect-video bg-cream bg-cover bg-center"
-                    style={{ backgroundImage: `url(${videoThumb(v.ytid)})` }}
-                  >
-                    <span
-                      data-dark
-                      className="absolute right-2.5 bottom-2.5 rounded bg-black/80 px-[5px] py-0.5 text-[16px] font-semibold text-white tabular"
-                    >
-                      {v.dur}
-                    </span>
-                  </div>
-                  <div className="flex items-start gap-3 px-5">
-                    <span
-                      className={cn(
-                        "flex size-10 shrink-0 items-center justify-center rounded-full text-[18px] font-bold text-ink",
-                        KW_BG[i % 3],
-                      )}
-                    >
-                      {v.ch.slice(-1)}
-                    </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="text-[19px] leading-[1.35] font-semibold text-ink">
-                        {v.title}
-                      </span>
-                      <span className="text-[16px] text-mute">
-                        {v.ch} · {v.meta}
-                      </span>
-                      {item.guideAvailable && <GuideBadge />}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+            {list.map((item, i) => (
+              <VideoResultCard
+                key={item.youtubeVideoId}
+                item={item}
+                index={i}
+                onPick={(v) => {
+                  setSel(v);
+                  setPlaying(false);
+                }}
+              />
+            ))}
             {list.length === 0 && (
               <span className="px-6 py-7 text-[18px] text-mute">
                 분석할 수 있는(CC BY) 영상을 찾지 못했어요. 다른 단어로 찾아보세요.
@@ -342,14 +305,5 @@ export function VideoPicker({
         <X aria-hidden /> 닫기
       </button>
     </div>
-  );
-}
-
-export function GuideBadge() {
-  return (
-    <span className="mt-1 flex h-7 items-center gap-1.5 self-start rounded-full bg-mint px-2.5 text-[14px] font-bold text-ink">
-      <Check className="size-3" strokeWidth={3} aria-hidden />
-      가이드 있음 · 바로 따라 하기
-    </span>
   );
 }

@@ -1,4 +1,4 @@
-import { ANALYSIS_PHASES } from "@/features/video";
+import { ANALYSIS_PHASES } from "@/domain/video";
 import { cn } from "@/lib/utils";
 
 /** 큰 퍼센트와 단계 이름, 진행 선, 단계 6칸 */

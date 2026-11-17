@@ -16,6 +16,7 @@
     "build": "next build",
     "preview": "serve out",
     "lint": "eslint",
+    "lint:cycles": "eslint -c eslint.cycles.mjs src",
     "typecheck": "next typegen && tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

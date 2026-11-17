@@ -4,15 +4,10 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 import { PillButton } from "@/components/ui/pill-button";
+import { fromSummary, pickedCount, REPORT_PAGE_SIZE, useReports } from "@/domain/report";
+import { useAuth, useSessionActions } from "@/domain/session";
 import { MyHeader } from "@/features/my";
-import {
-  fromSummary,
-  PhotoSlot,
-  pickedCount,
-  REPORT_PAGE_SIZE,
-  useReports,
-} from "@/features/report";
-import { useSession } from "@/features/session";
+import { PhotoSlot, ReportCard } from "@/features/report";
 import { errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 
@@ -22,11 +17,12 @@ const ROT = [-1.6, 1.4, 1.2, -1.2];
 
 /** 마이페이지 · 로그인 계정의 서버 리포트 목록 */
 export default function MyReportsPage() {
-  const { state, sessionChecked } = useSession();
+  const { loggedIn, email } = useAuth();
+  const { sessionChecked } = useSessionActions();
   const query = useQuery();
-  const account = sessionChecked && state.loggedIn ? state.email : null;
+  const account = sessionChecked && loggedIn ? email : null;
   const server = useReports(account);
-  const waiting = state.loggedIn && (!sessionChecked || server.load.status === "loading");
+  const waiting = loggedIn && (!sessionChecked || server.load.status === "loading");
   const loadError = server.load.status === "error" ? server.load.error : null;
   const more = server.load.status === "ready" && server.load.data.hasNext;
   const reports =
@@ -138,40 +134,7 @@ export default function MyReportsPage() {
               </div>
               <div className="grid grid-cols-2 gap-x-5 gap-y-7 px-1.5 pt-1">
                 {rest.map((r, i) => (
-                  <Link
-                    key={r.id}
-                    href={`/my/report?id=${r.id}`}
-                    className="flex min-w-0 flex-col gap-3.5 rounded-[10px] bg-white px-3 pt-3 pb-[18px] shadow-float ring-1 ring-line transition-transform hover:translate-y-[-4px] hover:rotate-0"
-                    style={{ transform: `rotate(${ROT[i % 4]}deg)` }}
-                  >
-                    <div className="relative aspect-[4/5] overflow-hidden rounded bg-cream">
-                      {r.photoUrl ? (
-                        <img
-                          src={r.photoUrl}
-                          alt=""
-                          className="absolute inset-0 h-full w-full object-cover"
-                        />
-                      ) : r.noPhoto || r.finalPhoto === false ? (
-                        <div className="absolute inset-0 flex items-center justify-center text-[16px] font-bold text-mute">
-                          미촬영
-                        </div>
-                      ) : r.guide ? (
-                        <PhotoSlot label="마지막 단계 사진" />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-[16px] font-bold text-mute">
-                          사진 없음
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex min-w-0 flex-col gap-1 px-1.5">
-                      <span className="truncate font-display text-[22px] leading-[1.25] text-ink">
-                        {r.title}
-                      </span>
-                      <span className="text-[15px] text-mute">
-                        {r.date} · {r.steps} STEP
-                      </span>
-                    </div>
-                  </Link>
+                  <ReportCard key={r.id} report={r} variant="polaroid" rotate={ROT[i % 4]} />
                 ))}
               </div>
             </div>

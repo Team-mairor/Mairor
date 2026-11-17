@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { GRID, MEASURED, SKIN } from "./spec";
-import type { GaugeDisplay } from "./stability";
+import { GRID, MEASURED, SKIN } from "@/domain/gauge/spec";
+import type { GaugeDisplay } from "@/domain/gauge/stability";
+
 import type { GaugeBaselineStatus } from "./use-gauge-baseline";
 import type { GaugeReading } from "./use-gauge-measure";
 

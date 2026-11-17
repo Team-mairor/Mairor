@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
-import { emptyDraft, PouchBoard, ProductSheet, type ProductDraft } from "@/features/pouch";
-import { useSession } from "@/features/session";
+import { emptyDraft, type ProductDraft } from "@/domain/pouch";
+import { useDevice, useMyPouch } from "@/domain/session";
+import { PouchBoard, ProductSheet } from "@/features/pouch";
 import { HowItWorksSlide } from "@/features/tutorial";
 import { cn } from "@/lib/utils";
 import { DEFAULT_POUCH } from "@/mocks/mock-data";
@@ -14,18 +15,19 @@ import { DEFAULT_POUCH } from "@/mocks/mock-data";
 /** 온보딩 4장: 기능 소개 3장 + 파우치 담기. 이 기기에서 최초 1회 */
 export default function OnboardingPage() {
   const router = useRouter();
-  const { state, update } = useSession();
+  const { markOnboarded } = useDevice();
+  const { pouch } = useMyPouch();
   const [slide, setSlide] = useState(0); // 0~2 소개, 3 파우치
   const [newIds, setNewIds] = useState<string[]>([]);
   const [form, setForm] = useState<ProductDraft | null>(null);
 
-  const mine = state.pouch.filter((p) => newIds.includes(p.id));
+  const mine = pouch.filter((p) => newIds.includes(p.id));
   const demo = mine.length === 0;
   // 아직 담은 제품이 없으면 샘플 제품을 흐리게 보여 준다 (예시일 뿐 파우치에 넣지 않는다)
   const items = demo ? DEFAULT_POUCH : mine;
 
   const finish = () => {
-    update({ onboarded: true });
+    markOnboarded();
     router.replace("/home");
   };
 

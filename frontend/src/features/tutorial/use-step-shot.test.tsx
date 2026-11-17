@@ -3,7 +3,7 @@ import { act, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FaceFrame, RegionName } from "@/features/face";
+import type { FaceFrame, RegionName } from "@/vision/face";
 
 import { SHOT_FALLBACK_MS, STILL_MAX_WAIT_MS, STILL_MS, useStepShot } from "./use-step-shot";
 import frontJson from "../../../public/fixtures/faces/front.json";
@@ -12,8 +12,8 @@ const face = vi.hoisted(() => ({
   listener: null as ((frame: FaceFrame | null) => void) | null,
   snap: vi.fn<() => string | null>(),
 }));
-vi.mock("@/features/face", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/features/face")>()),
+vi.mock("@/vision/face", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/vision/face")>()),
   useCamera: () => ({ videoRef: { current: null } }),
   useFaceFrame: (listener: (frame: FaceFrame | null) => void) => {
     face.listener = listener;

@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 
-import { useCamera, type NormalizedRect } from "@/features/face";
-
+import { useCamera, type NormalizedRect } from "@/vision/face";
 import {
   TABLET_WIDTH,
   layoutHeight,
@@ -15,9 +14,10 @@ import {
   tutorialVideoRatio,
   centeredTutorialCrop,
   resizeTutorialCrop,
-} from "./tutorial-crop";
+} from "@/vision/guide/tutorial-crop";
+import type { GuideStep } from "@/vision/guide/types";
+
 import { CropView, useTutorialCrop } from "./tutorial-viewport";
-import type { GuideStep } from "./types";
 
 const FULL = { x0: 0, y0: 0, x1: 1, y1: 1 };
 const clamp = (n: number, max: number) => Math.max(0, Math.min(max, n));

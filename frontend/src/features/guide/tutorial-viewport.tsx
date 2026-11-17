@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
-import { useCamera, useFaceRender, type NormalizedRect } from "@/features/face";
 import { isMirror, subscribeMirror } from "@/lib/mirror";
-
-import { GuideOverlay } from "./guide-overlay";
+import { useCamera, useFaceRender, type NormalizedRect } from "@/vision/face";
+import { GuideOverlay } from "@/vision/guide/guide-overlay";
 import {
   CROP_KEY,
   cropTransform,
@@ -13,8 +12,8 @@ import {
   TUTORIAL_TOP,
   validCrop,
   writeTutorialCrop,
-} from "./tutorial-crop";
-import type { GuideStep } from "./types";
+} from "@/vision/guide/tutorial-crop";
+import type { GuideStep } from "@/vision/guide/types";
 
 const EVENT = "tutorial-crop-change";
 const subscribe = (change: () => void) => {

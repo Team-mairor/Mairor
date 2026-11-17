@@ -22,7 +22,7 @@
 
 ## 테두리를 FE 곡선 위에서 재기
 
-FE는 테두리 점을 Catmull-Rom 곡선으로 이어 그린다(`frontend/src/features/guide/renderer.ts`의 `traceSmooth`). 지표 도구는 점을 곧은 선으로 이어 칠했기 때문에, 점이 듬성한 얇은 띠에서 화면과 다른 넓이를 쟀다. 아이라인은 곧은 선으로 칠한 넓이가 화면보다 13~28% 작았다. 도구가 FE와 같은 식으로 곡선을 그어 칠하게 바꿨다(`ai/tools/output_area.py`의 `smooth_points`, 점 사이 8조각).
+FE는 테두리 점을 Catmull-Rom 곡선으로 이어 그린다(`frontend/src/vision/guide/renderer.ts`의 `traceSmooth`). 지표 도구는 점을 곧은 선으로 이어 칠했기 때문에, 점이 듬성한 얇은 띠에서 화면과 다른 넓이를 쟀다. 아이라인은 곧은 선으로 칠한 넓이가 화면보다 13~28% 작았다. 도구가 FE와 같은 식으로 곡선을 그어 칠하게 바꿨다(`ai/tools/output_area.py`의 `smooth_points`, 점 사이 8조각).
 
 테두리 모양은 새 도구 `ai/tools/outline_metric.py`로 잰다.
 

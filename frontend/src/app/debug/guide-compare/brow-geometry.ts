@@ -1,6 +1,6 @@
-import type { FaceFrame, MeshAnchor, Point } from "@/features/face";
-import type { GuideStep } from "@/features/guide";
-import type { FaceMesh } from "@/features/overlay";
+import type { FaceFrame, MeshAnchor, Point } from "@/vision/face";
+import type { GuideStep } from "@/vision/guide";
+import type { FaceMesh } from "@/vision/overlay";
 
 export type FaceCrop = { x: number; y: number; size: number };
 export type BrowDetection = { step: GuideStep; outline: MeshAnchor[][] };

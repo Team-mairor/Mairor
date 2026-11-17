@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { StepPick } from "@/features/check";
+import type { StepPick } from "@/domain/check";
 
 import { ProductChip } from "./product-chip";
 import { PrepCard } from "./step-cards";
