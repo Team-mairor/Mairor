@@ -55,12 +55,15 @@ export function Sticker({
       <button
         type="button"
         onClick={onClick}
-        className="relative flex flex-col items-center transition-[translate] hover:-translate-y-1.5"
+        // 흐린 예시는 미러필름 위에서 사라지지 않게 덜 흐리게 한다
+        className={cn(
+          "relative flex flex-col items-center transition-[translate] hover:-translate-y-1.5",
+          dim && "opacity-[.42] grayscale-60 mirror:opacity-70",
+        )}
         style={{
           transform: `translate(-50%,-50%) rotate(${r}deg) scale(${s})`,
-          opacity: dim ? 0.42 : 1,
           filter: dim
-            ? "grayscale(.6)"
+            ? undefined
             : "drop-shadow(0 12px 16px color-mix(in srgb, var(--color-night) 20%, transparent))",
         }}
         aria-label={`${item.brand} ${item.name} 수정`}

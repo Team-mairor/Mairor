@@ -1,6 +1,6 @@
 // 개발·테스트용 샘플 데이터. 제품 사용자의 파우치·리포트 기록을 대신하는 데 쓰지 않는다.
 
-import type { PouchCat, PouchItem } from "@/domain/pouch";
+import type { PouchCat } from "@/domain/pouch";
 import type { GuideStepInfo, RefProduct, RefState } from "@/domain/session";
 import type { Chapter, VideoItem, VideoState } from "@/domain/video";
 import type { Makeup } from "@/vision/guide";
@@ -148,38 +148,6 @@ export const CHAPTERS: Chapter[] = PLAY_STEPS.map((s) => ({
   time: mmss(s.videoRange.startSeconds),
   label: s.part,
 }));
-
-/** 화장 종류 → 샘플 파우치 종류 */
-const POUCH_TYPE: Partial<Record<Makeup, string>> = {
-  foundation: "파운데이션",
-  eyeshadow: "섀도우 팔레트",
-  eyeliner: "아이라이너",
-  mascara: "마스카라",
-  brow: "브로우 펜슬",
-  blush: "블러셔",
-  highlight: "하이라이터",
-  lip: "립틴트",
-};
-
-/** 샘플 파우치. 보유로 보여 줄 단계(HAVE)의 영상 제품과 대체 추천 제품(SUBS)을 넣는다 */
-export const DEFAULT_POUCH: PouchItem[] = [
-  ...REF_PRODUCTS.flatMap((r, i) =>
-    r.have
-      ? [
-          {
-            cat: r.matchCat,
-            type: POUCH_TYPE[PLAY_STEPS[i].makeup],
-            brand: r.brand,
-            name: r.name,
-            color: r.color,
-          },
-        ]
-      : [],
-  ),
-  ...REF_PRODUCTS.flatMap((r, i) =>
-    r.sub ? [{ cat: r.matchCat, type: POUCH_TYPE[PLAY_STEPS[i].makeup], ...r.sub }] : [],
-  ),
-].map((p, i) => ({ id: `p${i + 1}`, ...p }));
 
 /** 영상 상태 샘플. y2 가이드 있음 · y3 분석 중 · y5 재생 불가 · y6 일일 한도 */
 export function videoState(v: VideoItem | null): VideoState {

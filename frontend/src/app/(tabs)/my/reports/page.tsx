@@ -3,15 +3,34 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
+import { CoachTour, type TourStep } from "@/components/coach-tour";
 import { PillButton } from "@/components/ui/pill-button";
 import { fromSummary, pickedCount, REPORT_PAGE_SIZE, useReports } from "@/domain/report";
-import { useAuth, useSessionActions } from "@/domain/session";
+import { useAuth, useSessionActions, useTour } from "@/domain/session";
 import { MyHeader } from "@/features/my";
-import { PhotoSlot, ReportCard } from "@/features/report";
+import { EXAMPLE_LOOKS, PhotoSlot, ReportCard } from "@/features/report";
 import { errorMessage } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 
 const ROT = [-1.6, 1.4, 1.2, -1.2];
+
+const TOUR: TourStep[] = [
+  {
+    target: "reports-start",
+    title: "첫 룩 만들기",
+    body: "영상을 골라 끝까지 따라 하면 이곳에 첫 리포트가 생겨요.",
+  },
+  {
+    target: "reports-latest",
+    title: "최근 룩",
+    body: "가장 최근에 완성한 룩이에요.\n누르면 단계별 내 얼굴 사진과 사용한 제품을 볼 수 있어요.",
+  },
+  {
+    target: "reports-past",
+    title: "지난 룩",
+    body: "지난 메이크업 기록이 쌓여요.\n리포트를 지우면 단계 사진도 함께 지워져요.",
+  },
+];
 
 /* eslint-disable @next/next/no-img-element -- 정적 내보내기 */
 
@@ -34,6 +53,7 @@ export default function MyReportsPage() {
           : []
         : [];
   const [top, ...rest] = reports;
+  const tour = useTour("reports", !waiting && !loadError);
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
@@ -57,22 +77,56 @@ export default function MyReportsPage() {
             </button>
           </div>
         ) : !top ? (
-          <div className="flex flex-col items-center gap-3.5 rounded-3xl border-[1.5px] border-dashed border-line-2 px-8 py-14 text-center">
-            <span className="font-serif text-[34px] leading-none text-navy italic">
-              No looks yet
-            </span>
-            <span className="font-display text-[26px] text-ink">아직 완료한 메이크업이 없어요</span>
-            <span className="text-[18px] leading-[1.55] text-pretty text-mute">
-              영상을 골라 끝까지 따라 하면 이곳에 리포트가 쌓여요.
-            </span>
-            <PillButton asChild size="xl" className="mt-1.5">
-              <Link href="/select">영상 고르러 가기</Link>
-            </PillButton>
+          // 리포트가 없으면 Past looks 자리에 예시 카드를 흐리게 보여 준다 (누를 수 없다)
+          <div className="flex flex-col gap-[18px]">
+            <div data-tour="reports-start" className="flex items-center justify-between gap-4">
+              <span className="flex min-w-0 flex-col gap-1.5">
+                <span className="font-serif text-[26px] leading-none text-ink italic">
+                  No looks yet
+                </span>
+                <span className="text-[16px] text-mute">
+                  예시 · 영상을 끝까지 따라 하면 이렇게 쌓여요
+                </span>
+              </span>
+              <PillButton asChild size="md">
+                <Link href="/select">영상 고르러 가기</Link>
+              </PillButton>
+            </div>
+            <div
+              data-tour="reports-past"
+              className="grid grid-cols-2 gap-x-5 gap-y-7 px-1.5 pt-1 opacity-40 grayscale mirror:opacity-70"
+              inert
+            >
+              {EXAMPLE_LOOKS.slice(0, 2).map((r, i) => (
+                <div
+                  key={r.id}
+                  className="flex min-w-0 flex-col gap-3.5 rounded-[10px] bg-white px-3 pt-3 pb-[18px] shadow-float ring-1 ring-line"
+                  style={{ transform: `rotate(${ROT[i % 4]}deg)` }}
+                >
+                  <div className="relative aspect-[4/5] overflow-hidden rounded bg-cream">
+                    <img
+                      src={r.photoUrl}
+                      alt=""
+                      className={`absolute inset-0 h-full w-full object-cover ${r.photoClass}`}
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-1 px-1.5">
+                    <span className="truncate font-display text-[22px] leading-[1.25] text-ink">
+                      {r.title}
+                    </span>
+                    <span className="text-[15px] text-mute">
+                      {r.date} · {r.steps} STEP
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <>
             <Link
               href={`/my/report?id=${top.id}`}
+              data-tour="reports-latest"
               className="relative shrink-0 overflow-hidden rounded-[28px] bg-night transition-transform active:scale-[.99]"
             >
               <div className="relative h-[420px] overflow-hidden">
@@ -123,7 +177,7 @@ export default function MyReportsPage() {
               </div>
             </Link>
 
-            <div className="flex flex-col gap-[18px]">
+            <div data-tour="reports-past" className="flex flex-col gap-[18px]">
               <div className="flex items-baseline gap-2.5">
                 <span className="font-serif text-[26px] leading-none text-ink italic">
                   Past looks
@@ -141,6 +195,7 @@ export default function MyReportsPage() {
           </>
         )}
       </div>
+      {tour.show && <CoachTour steps={TOUR} onDone={tour.done} />}
     </main>
   );
 }

@@ -21,7 +21,9 @@ export function HomeHeader() {
           mairor
         </span>
         <div className="ml-auto flex items-center gap-3">
-          <MirrorToggle fitFirst />
+          <div data-tour="home-mirror" className="flex">
+            <MirrorToggle fitFirst />
+          </div>
           <div className="relative">
             <button
               type="button"

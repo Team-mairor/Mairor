@@ -4,17 +4,35 @@ import { ChevronRight, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { CoachTour, type TourStep } from "@/components/coach-tour";
 import { Notice } from "@/components/ui/notice";
-import { PillButton } from "@/components/ui/pill-button";
 import { emptyDraft, fromApi, getPouchItem, POUCH_CATS, type ProductDraft } from "@/domain/pouch";
 import { usePouchSync } from "@/domain/session";
-import { useAuth, useMyPouch, useSessionActions } from "@/domain/session";
+import { useAuth, useMyPouch, useSessionActions, useTour } from "@/domain/session";
 import { MyHeader } from "@/features/my";
-import { PouchBoard, PouchOpenFx, ProductSheet } from "@/features/pouch";
+import { EXAMPLE_POUCH, PouchBoard, PouchOpenFx, ProductSheet } from "@/features/pouch";
 import { shouldPlayPouchOpenFx } from "@/features/pouch/pouch-open-policy";
 import { ApiError, errorMessage, isAbortError } from "@/lib/api";
 import { useQuery } from "@/lib/hooks/use-query";
 import { cn } from "@/lib/utils";
+
+const TOUR: TourStep[] = [
+  {
+    target: "pouch-board",
+    title: "파우치 보드",
+    body: "최근 담은 제품이 스티커로 붙어요.\n스티커를 누르면 제품 정보를 고칠 수 있어요.",
+  },
+  {
+    target: "pouch-add",
+    title: "제품 등록",
+    body: "카테고리와 종류를 고르고 브랜드·제품명·호수를 넣어요.\n색상 정보가 있어야 대체 후보로 추천돼요.",
+  },
+  {
+    target: "pouch-cats",
+    title: "카테고리별 목록",
+    body: "카테고리별로 모아 보고, 목록에서 제품을 눌러 고치거나 파우치에서 뺄 수 있어요.",
+  },
+];
 
 /** 마이페이지 · 내 파우치. ?add=1 등록, ?edit=<id> 수정 시트 */
 export default function MyPouchPage() {
@@ -83,12 +101,15 @@ export default function MyPouchPage() {
   // 로그인했으면 서버 목록을 받기 전까지 저장된(지난) 파우치를 보여 주지 않는다
   const waiting = sync.status === "loading" || (loggedIn && !sessionChecked);
   const empty = pouchItems.length === 0 || query?.get("empty") === "1";
+  // 진입 연출이 끝나고 목록을 받은 뒤에 안내한다
+  const tour = useTour("pouch", !fx && !waiting && sync.status !== "error");
 
   // 목록에서 다시 고르면 지난 안내를 지운다
   const open = (d: ProductDraft) => {
     setNotice(null);
     setForm(d);
   };
+  const add = () => (loggedIn ? open(emptyDraft()) : router.push("/login"));
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col">
@@ -115,130 +136,129 @@ export default function MyPouchPage() {
           </div>
         ) : waiting ? (
           <span className="py-10 text-center text-[18px] text-mute">파우치를 불러오고 있어요</span>
-        ) : empty ? (
-          <div className="flex flex-col items-center gap-3.5 rounded-3xl border-[1.5px] border-dashed border-line-2 px-8 py-14 text-center">
-            <span className="font-serif text-[34px] leading-none text-navy italic">
-              Empty pouch
-            </span>
-            <span className="font-display text-[26px] text-ink">아직 등록한 제품이 없어요</span>
-            <span className="text-[18px] leading-[1.55] text-pretty text-mute">
-              가진 제품을 등록하면 영상 속 제품과 맞춰 보유·대체를 찾아 드려요.
-            </span>
-            <PillButton
-              size="xl"
-              onClick={() => (loggedIn ? open(emptyDraft()) : router.push("/login"))}
-              className="mt-1.5"
-            >
-              <Plus className="size-[18px]" strokeWidth={2.2} aria-hidden />
-              제품 등록
-            </PillButton>
-          </div>
         ) : (
           <>
-            <PouchBoard
-              items={pouchItems}
-              scale={0.66}
-              className="h-[340px] shrink-0"
-              onEdit={(p) => open({ ...p })}
-            >
-              <div className="absolute top-5 right-[22px] left-[22px] z-[2] flex items-start justify-between">
-                <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
-                  <span className="font-serif text-[32px] leading-none text-ink italic">
-                    My pouch
+            {/* 비어 있으면 같은 보드에 예시 스티커를 흐리게 보여 준다. 누르면 새 제품 등록 (파우치에 넣지 않는다) */}
+            <div data-tour="pouch-board" className="shrink-0">
+              <PouchBoard
+                items={empty ? EXAMPLE_POUCH : pouchItems}
+                dim={empty}
+                scale={0.66}
+                className="h-[340px]"
+                onEdit={(p) => (empty ? add() : open({ ...p }))}
+              >
+                <div className="absolute top-5 right-[22px] left-[22px] z-[2] flex items-start justify-between">
+                  <span className="flex flex-col gap-1 rounded-[14px] bg-white px-[18px] py-3">
+                    <span className="font-serif text-[32px] leading-none text-ink italic">
+                      My pouch
+                    </span>
+                    <span className="text-[16px] text-mute">
+                      {empty
+                        ? "예시 · 제품을 등록하면 내 파우치로 바뀌어요"
+                        : `내 파우치 · ${pouchItems.length}개 · 탭해서 수정`}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    data-tour="pouch-add"
+                    onClick={add}
+                    className="flex h-11 items-center gap-2 rounded-full bg-ink px-[18px] text-[17px] font-semibold text-white"
+                  >
+                    <Plus className="size-4" strokeWidth={2} aria-hidden />
+                    {empty ? "제품 등록" : "제품 추가"}
+                  </button>
+                </div>
+              </PouchBoard>
+            </div>
+
+            {!empty && (
+              <div className="flex flex-col gap-3.5">
+                <div className="flex items-baseline gap-2.5">
+                  <span className="font-serif text-[26px] leading-none text-ink italic">
+                    All items
                   </span>
                   <span className="text-[16px] text-mute">
-                    내 파우치 · {pouchItems.length}개 · 탭해서 수정
+                    {cat === "전체" ? "전체 제품" : cat} · {list.length}개
                   </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => (loggedIn ? open(emptyDraft()) : router.push("/login"))}
-                  className="flex h-11 items-center gap-2 rounded-full bg-ink px-[18px] text-[17px] font-semibold text-white"
+                </div>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="tablist"
+                  aria-label="카테고리"
+                  data-tour="pouch-cats"
                 >
-                  <Plus className="size-4" strokeWidth={2} aria-hidden />
-                  제품 추가
-                </button>
-              </div>
-            </PouchBoard>
-
-            <div className="flex flex-col gap-3.5">
-              <div className="flex items-baseline gap-2.5">
-                <span className="font-serif text-[26px] leading-none text-ink italic">
-                  All items
-                </span>
-                <span className="text-[16px] text-mute">
-                  {cat === "전체" ? "전체 제품" : cat} · {list.length}개
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="카테고리">
-                {["전체", ...POUCH_CATS].map((k) => {
-                  const on = cat === k;
-                  const n =
-                    k === "전체" ? pouchItems.length : pouchItems.filter((p) => p.cat === k).length;
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      role="tab"
-                      aria-selected={on}
-                      onClick={() => setCat(k)}
-                      className={cn(
-                        "flex h-11 items-center gap-1.5 rounded-full border-[1.5px] px-[18px] text-[16px] font-bold transition-colors",
-                        on
-                          ? "border-navy bg-navy text-white"
-                          : n
-                            ? "border-line bg-white text-ink"
-                            : "border-line bg-white text-ash",
-                      )}
-                    >
-                      {k}
-                      {/* 투명도로 흐리게 하면 미러필름 모드에서 안 보여서, 고른 칩만 투명도를 쓰고 나머지는 색으로 낮춘다 */}
-                      <span
+                  {["전체", ...POUCH_CATS].map((k) => {
+                    const on = cat === k;
+                    const n =
+                      k === "전체"
+                        ? pouchItems.length
+                        : pouchItems.filter((p) => p.cat === k).length;
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        role="tab"
+                        aria-selected={on}
+                        onClick={() => setCat(k)}
                         className={cn(
-                          "text-[14px] font-semibold tabular",
-                          on ? "opacity-70" : n ? "text-mute" : "",
+                          "flex h-11 items-center gap-1.5 rounded-full border-[1.5px] px-[18px] text-[16px] font-bold transition-colors",
+                          on
+                            ? "border-navy bg-navy text-white"
+                            : n
+                              ? "border-line bg-white text-ink"
+                              : "border-line bg-white text-ash",
                         )}
                       >
-                        {n}
+                        {k}
+                        {/* 투명도로 흐리게 하면 미러필름 모드에서 안 보여서, 고른 칩만 투명도를 쓰고 나머지는 색으로 낮춘다 */}
+                        <span
+                          className={cn(
+                            "text-[14px] font-semibold tabular",
+                            on ? "opacity-70" : n ? "text-mute" : "",
+                          )}
+                        >
+                          {n}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {list.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => open({ ...p })}
+                      className="flex min-w-0 items-center gap-3.5 rounded-[20px] border border-line bg-white py-3.5 pr-[18px] pl-3.5 text-left transition-colors hover:border-navy"
+                    >
+                      <span
+                        className="size-14 shrink-0 rounded-full border-4 border-white shadow-float ring-1 ring-line"
+                        style={{ background: p.color ?? "var(--color-cream)" }}
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-[14px] font-bold text-navy">
+                          {p.cat} · <span className="font-medium text-mute">{p.brand}</span>
+                        </span>
+                        <span className="truncate font-serif text-[21px] leading-[1.15] text-ink">
+                          {p.name}
+                        </span>
                       </span>
+                      <ChevronRight
+                        className="size-[18px] shrink-0 text-ash"
+                        strokeWidth={2}
+                        aria-hidden
+                      />
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {list.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => open({ ...p })}
-                    className="flex min-w-0 items-center gap-3.5 rounded-[20px] border border-line bg-white py-3.5 pr-[18px] pl-3.5 text-left transition-colors hover:border-navy"
-                  >
-                    <span
-                      className="size-14 shrink-0 rounded-full border-4 border-white shadow-float ring-1 ring-line"
-                      style={{ background: p.color ?? "var(--color-cream)" }}
-                    />
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="text-[14px] font-bold text-navy">
-                        {p.cat} · <span className="font-medium text-mute">{p.brand}</span>
-                      </span>
-                      <span className="truncate font-serif text-[21px] leading-[1.15] text-ink">
-                        {p.name}
-                      </span>
-                    </span>
-                    <ChevronRight
-                      className="size-[18px] shrink-0 text-ash"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                  </button>
-                ))}
-              </div>
-            </div>
+            )}
           </>
         )}
       </div>
 
       {form && <ProductSheet draft={form} onClose={() => setForm(null)} />}
+      {tour.show && !form && <CoachTour steps={TOUR} onDone={tour.done} />}
     </main>
   );
 }

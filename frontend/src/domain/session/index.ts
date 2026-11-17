@@ -11,6 +11,7 @@ export {
 export { ExpiredSessionRedirect } from "./expired-session-redirect";
 export { displayName, useAuth, type AuthState } from "./auth";
 export { useDevice, type DeviceState } from "./device";
+export { useTour } from "./tour";
 export { useMyPouch } from "./pouch-store";
 export { useStoredReports } from "./report-store";
 export { usePendingGuide } from "./pending-guide";

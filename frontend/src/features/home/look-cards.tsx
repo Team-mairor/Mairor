@@ -11,6 +11,7 @@ export function NewLookCard() {
   return (
     <Link
       href="/select"
+      data-tour="home-new"
       className="flex min-w-0 flex-col justify-between rounded-3xl bg-navy p-6 hover:brightness-90"
     >
       <div className="flex items-start justify-between gap-3">
@@ -38,7 +39,10 @@ export function NewLookCard() {
 /** 가장 최근 리포트의 가이드를 다시 따라 하는 카드 */
 export function AgainCard({ last, onReplay }: { last: ReportSummary; onReplay: () => void }) {
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,.9fr)_minmax(0,1fr)] gap-[18px] rounded-3xl border border-line bg-white p-3.5">
+    <div
+      data-tour="home-again"
+      className="grid min-w-0 grid-cols-[minmax(0,.9fr)_minmax(0,1fr)] gap-[18px] rounded-3xl border border-line bg-white p-3.5"
+    >
       <div className="relative min-h-0 overflow-hidden rounded-2xl">
         <img
           src="/images/login-editorial.png"
@@ -52,7 +56,7 @@ export function AgainCard({ last, onReplay }: { last: ReportSummary; onReplay: (
             <span className="font-serif text-[26px] leading-none text-ink italic">Again</span>
             <span className="text-[16px] text-mute">지난 가이드 다시 따라 하기</span>
           </span>
-          <span className="font-display text-[21px] leading-[1.3] text-pretty text-ink">
+          <span className="line-clamp-3 font-display text-[21px] leading-[1.3] text-pretty text-ink">
             {last.title}
           </span>
         </div>
@@ -72,7 +76,10 @@ export function AgainCard({ last, onReplay }: { last: ReportSummary; onReplay: (
 /** 리포트를 받는 중이거나 받지 못했을 때 Again 자리에 띄우는 안내 */
 export function NoteCard({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col justify-center rounded-3xl border border-line bg-white p-6">
+    <div
+      data-tour="home-again"
+      className="flex min-w-0 flex-col justify-center rounded-3xl border border-line bg-white p-6"
+    >
       {children}
     </div>
   );
@@ -83,6 +90,7 @@ export function FirstLookCard() {
   return (
     <Link
       href="/select"
+      data-tour="home-again"
       className="flex min-w-0 flex-col justify-center gap-2.5 rounded-3xl border-[1.5px] border-dashed border-line-2 bg-white p-6 hover:border-navy"
     >
       <span className="font-serif text-[26px] leading-none text-navy italic">First look</span>

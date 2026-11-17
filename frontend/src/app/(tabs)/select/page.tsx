@@ -4,11 +4,13 @@ import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { CoachTour, type TourStep } from "@/components/coach-tour";
 import { FlowSteps } from "@/components/flow-steps";
 import { Notice } from "@/components/ui/notice";
-import { runHref, useRun } from "@/domain/session";
-import { toVideoItem, type VideoItem } from "@/domain/video";
+import { runHref, useRun, useTour } from "@/domain/session";
+import { toVideoItem, videoThumb, type VideoItem } from "@/domain/video";
 import {
+  EXAMPLE_VIDEOS,
   KW_BG,
   PopularVideoCard,
   requestAnalysis,
@@ -23,6 +25,19 @@ import { ApiError, errorMessage, type PopularVideoItem, type VideoSelection } fr
 import { cn } from "@/lib/utils";
 
 const KEYWORDS = ["데일리", "코랄 블러셔", "봄 웜톤", "10분 메이크업", "무쌍 섀도", "글로시 립"];
+
+const TOUR: TourStep[] = [
+  {
+    target: "select-search",
+    title: "영상 검색",
+    body: "따라 하고 싶은 메이크업 영상을 YouTube에서 찾아요.\n아래 키워드를 눌러 바로 검색할 수도 있어요.",
+  },
+  {
+    target: "select-top",
+    title: "인기 영상",
+    body: "다른 사람들이 많이 고른 영상이에요.\n누르면 바로 시작하고, 가이드가 이미 있는 영상은 분석을 기다리지 않아요.",
+  },
+];
 
 const isCode = (e: unknown, code: string) => e instanceof ApiError && e.code === code;
 
@@ -41,6 +56,9 @@ export default function SelectPage() {
   const [popularBusy, setPopularBusy] = useState(false);
 
   const loadError = popular.load.status === "error" ? popular.load.error : null;
+  // 최근 많이 고른 영상이 아직 없으면 같은 자리에 예시 영상을 흐리게 보여 준다
+  const popularExample = isCode(loadError, "VIDEO_POPULAR_UNAVAILABLE");
+  const tour = useTour("select", popular.load.status !== "loading" && picker === null);
   useEffect(() => {
     const e = loadError ?? popularError;
     if (isCode(e, "UNAUTHORIZED")) router.replace("/login?expired=basic");
@@ -116,7 +134,7 @@ export default function SelectPage() {
           영상을 가져와요
         </h1>
 
-        <div className="flex flex-col gap-3.5">
+        <div data-tour="select-search" className="flex flex-col gap-3.5">
           <button
             type="button"
             onClick={() => openPicker()}
@@ -146,13 +164,18 @@ export default function SelectPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3.5 border-t border-line pt-7">
+        <div
+          data-tour="select-top"
+          className="mt-4 flex flex-col gap-3.5 border-t border-line pt-7"
+        >
           <div className="flex items-baseline gap-2.5">
             <span className="font-serif text-[26px] leading-none text-ink italic">
               Top 4 videos
             </span>
             <span className="text-[16px] text-mute">
-              최근 30일 mairor에서 많이 고른 영상 · 탭하면 바로 시작
+              {popularExample
+                ? "예시 · 많이 고른 영상이 생기면 여기에 보여요"
+                : "최근 30일 mairor에서 많이 고른 영상 · 탭하면 바로 시작"}
             </span>
           </div>
           {popularError ? (
@@ -161,9 +184,29 @@ export default function SelectPage() {
             </Notice>
           ) : null}
           {popular.load.status === "error" ? (
-            isCode(loadError, "VIDEO_POPULAR_UNAVAILABLE") ? (
-              <div className="rounded-[20px] border border-line px-6 py-7 text-[17px] leading-[1.5] text-mute">
-                아직 인기 영상이 없어요. 위에서 검색해 영상을 골라 보세요.
+            popularExample ? (
+              <div
+                className="grid grid-cols-2 gap-3.5 opacity-40 grayscale mirror:opacity-70"
+                inert
+              >
+                {EXAMPLE_VIDEOS.map((v) => (
+                  <div key={v.id} className="flex flex-col gap-2.5 p-2">
+                    <div
+                      className="relative aspect-video overflow-hidden rounded-[14px] border border-line bg-cover bg-center"
+                      style={{ backgroundImage: `url(${videoThumb(v.ytid)})` }}
+                    >
+                      <span className="absolute right-2 bottom-2 rounded-md bg-ink px-2.5 py-1 text-[16px] font-semibold text-white tabular">
+                        {v.dur}
+                      </span>
+                    </div>
+                    <span className="flex flex-col gap-1 px-1 pb-1">
+                      <span className="font-display text-[17px] leading-[1.3] text-ink">
+                        {v.title}
+                      </span>
+                      <span className="text-[16px] text-mute">{v.ch}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className="flex items-center justify-between gap-4 rounded-[20px] border border-line px-6 py-7">
@@ -204,6 +247,7 @@ export default function SelectPage() {
           onPick={startPicked}
         />
       )}
+      {tour.show && <CoachTour steps={TOUR} onDone={tour.done} />}
     </main>
   );
 }

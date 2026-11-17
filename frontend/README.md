@@ -137,7 +137,7 @@ scripts/
 └─ gauge-light-fixture.py     # 게이지 조명 보정 시험 데이터(OpenCV) 생성
 public/
 ├─ ill/                       # 파우치 종류 일러스트
-└─ images/                    # 로그인·온보딩 이미지, 샘플 얼굴
+└─ images/                    # 로그인·온보딩 이미지, 샘플 얼굴, 빈 화면 예시 리포트 사진(report-example-*)
 ```
 
 ### 배치 기준

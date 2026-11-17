@@ -16,7 +16,7 @@ import type { PouchItem } from "@/domain/pouch";
 import { api, ApiError, setCsrfToken, type LoginResponse, type User } from "@/lib/api";
 
 import { authStore, EMPTY_AUTH, useAuth, type AuthState } from "./auth";
-import { deviceStore, useDevice } from "./device";
+import { deviceStore, EMPTY_DEVICE, useDevice } from "./device";
 import { pendingGuideStore, usePendingGuide, type PendingGuide } from "./pending-guide";
 import { pouchStore, useMyPouch } from "./pouch-store";
 import { reportStore, useStoredReports } from "./report-store";
@@ -127,9 +127,11 @@ function ActionsProvider({ children }: { children: ReactNode }) {
       if (!same) {
         setPouch([]);
         setReports([]);
+        // 첫 진입 안내는 로그인할 때마다 다시 보여 준다. 로그인한 채 앱을 다시 열 때(세션 확인)는 유지한다
+        setDevice((d) => ({ ...d, toured: [] }));
       }
     },
-    [clearRun, setAuth, setPouch, setReports],
+    [clearRun, setAuth, setDevice, setPouch, setReports],
   );
 
   // 로그아웃·만료 때는 이전 계정의 데이터를 비운다
@@ -154,7 +156,7 @@ function ActionsProvider({ children }: { children: ReactNode }) {
   const reset = useCallback(() => {
     clearRun();
     setAuth(EMPTY_AUTH);
-    setDevice({ onboarded: false, tutSeen: false });
+    setDevice(EMPTY_DEVICE);
     setPouch([]);
     setReports([]);
     setPending(null);
@@ -252,6 +254,7 @@ export function useSession() {
       if ("pendingGuide" in next) setPendingGuide(next.pendingGuide ?? null);
       if (next.onboarded !== undefined || next.tutSeen !== undefined)
         setDevice((prev) => ({
+          ...prev,
           onboarded: next.onboarded ?? prev.onboarded,
           tutSeen: next.tutSeen ?? prev.tutSeen,
         }));
