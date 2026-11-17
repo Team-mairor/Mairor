@@ -9,6 +9,7 @@ import com.mairor.backend.guides.entity.ReferenceMatchReason;
 import com.mairor.backend.guides.entity.ReviewStatus;
 import com.mairor.backend.guides.repository.GuideRepository;
 import com.mairor.backend.guides.repository.GuideStepProductLinkRepository;
+import com.mairor.backend.guides.service.GuideStepMakeup;
 import com.mairor.backend.matching.dto.CreateGuideMatchRequest;
 import com.mairor.backend.matching.dto.GuideMatchDetailResponse;
 import com.mairor.backend.matching.dto.GuideMatchResponse;
@@ -108,7 +109,7 @@ public class GuideMatchGenerationService {
     ArrayNode steps = JsonNodeFactory.instance.arrayNode();
     ObjectNode referenceColorSnapshots = JsonNodeFactory.instance.objectNode();
     for (JsonNode guideStep : guideInput.path("steps")) {
-      String makeup = guideStep.path("makeup").asString("");
+      String makeup = GuideStepMakeup.of(guideStep);
       if (EXCLUDED_MAKEUP.equals(makeup)) {
         continue;
       }

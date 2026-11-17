@@ -1,5 +1,6 @@
 package com.mairor.backend.pouch;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -186,7 +187,7 @@ class PouchRegistrationApiTest {
   }
 
   @Test
-  void aPaletteWithSeveralSlotsHasNoSingleColor() throws Exception {
+  void aPaletteWithSeveralSlotsStoresNoColorButShowsTheFirstSlotAsPreview() throws Exception {
     UUID[] selection = productWithShade("Brand", "Palette", "01 Palette", null, false);
     insertSlot(selection[1], 1, "#AA0000", "AUTO_APPROVED", true);
     insertSlot(selection[1], 2, "#00AA00", "AUTO_APPROVED", true);
@@ -194,8 +195,15 @@ class PouchRegistrationApiTest {
     mockMvc
         .perform(write(catalogRequest(selection)))
         .andExpect(status().isCreated())
-        .andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()))
-        .andExpect(jsonPath("$.item.colorSource").value("NONE"));
+        .andExpect(jsonPath("$.item.color.hex").value("#AA0000"))
+        .andExpect(jsonPath("$.item.colorSource").value("CATALOG"));
+
+    assertThat(
+            jdbc.queryForObject(
+                "select color_hex from pouch_items where product_id = ?",
+                String.class,
+                selection[0]))
+        .isNull();
   }
 
   @Test

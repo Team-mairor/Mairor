@@ -24,6 +24,30 @@ public record PouchItemResponse(
 
   public record ColorInfo(String colorSpace, String hex, String source, boolean estimated) {}
 
+  /**
+   * 저장한 색이 없는 카탈로그 팔레트 항목에 표시용 색을 얹는다. 저장값은 바꾸지 않고 응답에만 쓴다. 표시용 색이 없으면 {@link #from(PouchItem)}과
+   * 같다.
+   */
+  public static PouchItemResponse from(PouchItem item, ColorInfo previewColor) {
+    if (item.getColor() != null || previewColor == null) {
+      return from(item);
+    }
+    return new PouchItemResponse(
+        item.getId(),
+        item.getRegistrationMode(),
+        item.getProductId(),
+        item.getShadeId(),
+        item.getBrand(),
+        item.getName(),
+        item.getCategory(),
+        item.getType(),
+        item.getShadeName(),
+        previewColor,
+        previewColor.source(),
+        item.getCreatedAt(),
+        item.getUpdatedAt());
+  }
+
   public static PouchItemResponse from(PouchItem item) {
     PouchColor color = item.getColor();
     ColorInfo colorInfo =

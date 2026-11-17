@@ -1,7 +1,6 @@
 package com.mairor.backend.pouch.service;
 
 import com.mairor.backend.common.error.BusinessException;
-import com.mairor.backend.pouch.dto.PouchItemResponse;
 import com.mairor.backend.pouch.dto.PouchRegistrationRequest;
 import com.mairor.backend.pouch.dto.PouchRegistrationResponse;
 import com.mairor.backend.pouch.entity.PouchItem;
@@ -31,12 +30,15 @@ public class PouchRegistrationService {
   private final PouchItemRepository items;
   private final PouchRegistrationValidator validator;
   private final ApplicationEventPublisher events;
+  private final PouchResponseAssembler assembler;
 
   public PouchRegistrationService(
       PouchVersionRepository versions,
       PouchItemRepository items,
       PouchRegistrationValidator validator,
-      ApplicationEventPublisher events) {
+      ApplicationEventPublisher events,
+      PouchResponseAssembler assembler) {
+    this.assembler = assembler;
     this.versions = versions;
     this.items = items;
     this.validator = validator;
@@ -64,7 +66,7 @@ public class PouchRegistrationService {
       if (saved.getRegistrationMode() == RegistrationMode.MANUAL) {
         events.publishEvent(new PouchItemRegisteredManually(userId, saved.getId()));
       }
-      return new PouchRegistrationResponse(PouchItemResponse.from(saved), pouchVersion);
+      return new PouchRegistrationResponse(assembler.assemble(saved), pouchVersion);
     } catch (DataIntegrityViolationException e) {
       if (isDuplicateConstraint(e)) throw duplicate();
       throw e;

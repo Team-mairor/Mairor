@@ -1064,17 +1064,14 @@ class GuideExecutionApiTest {
   }
 
   @Test
-  void manualSelectionOnlyNeedsTheSameCategoryAndAUsableColor() throws Exception {
+  void manualSelectionRejectsSameCategoryButIncompatibleType() throws Exception {
     jdbc.update(
         "insert into product_types values ('LIP_OTHER', 'LIP', '기타 립', 10) on conflict do nothing");
     PouchItem selected = item(user, "LIP", "LIP_OTHER", "#AA4455");
-    JsonNode step =
-        created(body(match(), face(user, login.id(), video), selected.getId()))
-            .path("steps")
-            .get(0);
-    assertThat(step.path("result").asString()).isEqualTo("SUBSTITUTE");
-    assertThat(step.path("selectedColor").path("hex").asString()).isEqualTo("#AA4455");
-    assertThat(step.path("candidates").size()).isZero();
+    send(body(match(), face(user, login.id(), video), selected.getId()))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("GUIDE_SELECTION_INVALID"));
+    assertThat(executionCount()).isZero();
   }
 
   @Test

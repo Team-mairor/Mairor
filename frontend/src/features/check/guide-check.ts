@@ -112,7 +112,7 @@ export function choiceOf(pick: GuidePick): Choice {
 
 /**
  * 교체 목록은 서버가 고른 색 있는 호환 제품(색이 가까운 순)을 먼저 쓰고, 서버 목록에 없는
- * 같은 카테고리의 색 있는 보유 제품을 뒤에 붙인다. 그런 제품이 있으면 목록이 비지 않는다.
+ * 같은 종류의 색 있는 보유 제품을 뒤에 붙인다. 그런 제품이 있으면 목록이 비지 않는다.
  */
 export function swapList(row: CheckRow, pouch: PouchItem[], match?: StepMatch): PouchItem[] {
   const listed: { pouchItemId: string; rank: number; matchedColorHex?: string }[] | undefined =
@@ -128,7 +128,7 @@ export function swapList(row: CheckRow, pouch: PouchItem[], match?: StepMatch): 
 
 /** 기준색이 있으면 색이 가까운 순, 없으면 파우치 순서 */
 export function candidatesFor(
-  step: Pick<GuideStepModel, "makeup" | "matchCategory">,
+  step: Pick<GuideStepModel, "makeup">,
   pouch: PouchItem[],
   refColor: string | null = null,
 ): PouchItem[] {

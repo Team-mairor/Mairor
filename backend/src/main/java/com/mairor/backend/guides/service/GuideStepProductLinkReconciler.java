@@ -111,7 +111,7 @@ public class GuideStepProductLinkReconciler {
   }
 
   private Candidate match(JsonNode step) {
-    String categoryCode = GuideQueryService.MATCH_CATEGORY.get(text(step.path("makeup")));
+    String categoryCode = GuideQueryService.MATCH_CATEGORY.get(GuideStepMakeup.of(step));
     if (categoryCode == null) {
       return Candidate.none(ReferenceMatchReason.CATEGORY_UNSUPPORTED);
     }

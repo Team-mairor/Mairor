@@ -240,13 +240,11 @@ describe("실제 가이드 제품 체크", () => {
     expect(text()).toContain("→ C 틴트");
   });
 
-  it("같은 카테고리의 다른 종류 제품도 직접 선택할 수 있다", async () => {
+  it("같은 카테고리여도 다른 종류 제품은 바꾸기 목록에 나오지 않는다", async () => {
     await click(tab("보유"));
     await click(button("바꾸기", element.querySelector('[data-step="s2"]')!));
-    await click(button("글로우"));
-    expect(session.state.run.choice.s2).toEqual({ kind: "pouch", id: "high" });
-    await click(tab("대체"));
-    expect(element.querySelector('[data-step="s2"]')?.textContent).toContain("B 글로우");
+    expect(() => button("글로우")).toThrow("글로우 버튼이 없습니다");
+    expect(session.state.run.choice.s2).toBeUndefined();
   });
 
   it("없음 단계에서 고르면 대체로 옮기고, 선택 해제하면 서버 결과로 돌아간다", async () => {

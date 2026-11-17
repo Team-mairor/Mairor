@@ -253,8 +253,12 @@ class PouchUpdateApiTest {
                     + palette.shadeId()
                     + "\"}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.item.color").value(org.hamcrest.Matchers.nullValue()))
-        .andExpect(jsonPath("$.item.colorSource").value("NONE"));
+        .andExpect(jsonPath("$.item.color.hex").value("#AA0000"))
+        .andExpect(jsonPath("$.item.colorSource").value("CATALOG"));
+    assertThat(
+            jdbc.queryForObject(
+                "select color_hex from pouch_items where id = ?", String.class, itemId))
+        .isNull();
   }
 
   @Test

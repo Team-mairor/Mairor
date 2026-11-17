@@ -14,6 +14,9 @@ import com.mairor.backend.guides.repository.GuideStepProductLinkRepository;
 import com.mairor.backend.matching.dto.CreateGuideMatchRequest;
 import com.mairor.backend.matching.entity.GuideMatch;
 import com.mairor.backend.matching.repository.GuideMatchRepository;
+import com.mairor.backend.pouch.entity.PouchColor;
+import com.mairor.backend.pouch.entity.PouchItem;
+import com.mairor.backend.pouch.entity.RegistrationMode;
 import com.mairor.backend.pouch.repository.PouchItemRepository;
 import com.mairor.backend.pouch.repository.PouchVersionRepository;
 import com.mairor.backend.products.repository.ProductShadeRepository;
@@ -26,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import tools.jackson.databind.ObjectMapper;
 
 @ExtendWith(MockitoExtension.class)
@@ -94,6 +98,57 @@ class GuideMatchGenerationServiceTest {
     var snapshot = objectMapper.readTree(saved.getValue().getMatchSnapshot());
     assertThat(snapshot.path("steps").size()).isEqualTo(1);
     assertThat(snapshot.path("referenceColors").path("s1").isNull()).isTrue();
+  }
+
+  @Test
+  void lensStepMisclassifiedAsFoundationGetsNoSubstituteWhileRealFoundationStepDoes() {
+    UUID userId = UUID.randomUUID();
+    UUID guideId = UUID.randomUUID();
+    Guide guide =
+        approvedGuide(
+            guideId,
+            2,
+            3,
+            """
+        {"steps":[
+          {"stepId":"lens","makeup":"foundation","partLabel":"렌즈 끼기",
+           "product":{"brand":"Gemhour","name":"에브리데이 에센셜"},
+           "targetColor":{"hex":"#C8A27A"}},
+          {"stepId":"base","makeup":"foundation","partLabel":"쿠션으로 피부 표현",
+           "targetColor":{"hex":"#C8A27A"}}
+        ]}
+        """);
+    PouchItem cushion =
+        new PouchItem(
+            userId,
+            RegistrationMode.MANUAL,
+            null,
+            null,
+            "BASE",
+            "CUSHION",
+            "Brand",
+            "Cushion",
+            "21호",
+            PouchColor.userInput("#D2AE86"));
+    ReflectionTestUtils.setField(cushion, "id", UUID.randomUUID());
+    when(pouchVersions.findByUserId(userId)).thenReturn(OptionalLong.of(4));
+    when(guides.findById(guideId)).thenReturn(Optional.of(guide));
+    when(pouchItems.findByUserIdOrderByCreatedAtDescIdDesc(userId)).thenReturn(List.of(cushion));
+    when(productLinks.findByGuideIdOrderByStepIdAsc(guideId)).thenReturn(List.of());
+    when(matches.saveAndFlush(any(GuideMatch.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    var response = service.create(userId, new CreateGuideMatchRequest(guideId));
+
+    var lens = response.steps().get(0);
+    var base = response.steps().get(1);
+    assertThat(lens.path("stepId").asString()).isEqualTo("lens");
+    assertThat(lens.path("result").asString()).isEqualTo("NONE");
+    assertThat(lens.path("candidates").size()).isZero();
+    assertThat(lens.path("alternatives").size()).isZero();
+    assertThat(lens.path("category").isNull()).isTrue();
+    assertThat(base.path("result").asString()).isEqualTo("SUBSTITUTE");
+    assertThat(base.path("candidates").size()).isEqualTo(1);
   }
 
   @Test

@@ -1,13 +1,5 @@
-import type { GuideStepModel, Makeup, MatchCategory } from "@/features/guide";
-import type { PouchCat, PouchItem } from "@/features/pouch";
-
-export const CATEGORY_CAT: Record<MatchCategory, PouchCat> = {
-  BASE: "베이스",
-  EYE: "아이",
-  BROW: "브로우",
-  CHEEK: "치크",
-  LIP: "립",
-};
+import type { GuideStepModel, Makeup } from "@/features/guide";
+import type { PouchItem } from "@/features/pouch";
 
 /** 화장 종류별 후보 파우치 종류. 확정되지 않은 종류와 쉐딩은 넣지 않는다 */
 export const COMPAT_TYPES: Record<Makeup, readonly string[]> = {
@@ -23,12 +15,8 @@ export const COMPAT_TYPES: Record<Makeup, readonly string[]> = {
   other: [],
 };
 
-/** 수동 선택은 해당 단계 카테고리의 대표 색상이 있는 제품만 허용한다. */
-export function isCompatible(
-  step: Pick<GuideStepModel, "makeup" | "matchCategory">,
-  item: PouchItem,
-) {
+/** 수동 선택도 서버 추천과 같이 단계의 화장 종류에 맞는 종류(블러셔·하이라이터 등)이고 대표 색상이 있는 제품만 허용한다. */
+export function isCompatible(step: Pick<GuideStepModel, "makeup">, item: PouchItem) {
   if (!item.color) return false;
-  if (step.matchCategory) return CATEGORY_CAT[step.matchCategory] === item.cat;
   return !!item.type && COMPAT_TYPES[step.makeup].includes(item.type);
 }

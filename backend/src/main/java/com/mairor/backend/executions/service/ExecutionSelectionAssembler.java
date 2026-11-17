@@ -108,7 +108,7 @@ public class ExecutionSelectionAssembler {
         boolean same = isSame(item, link);
         Candidate candidate = candidates.assemble(item, shades);
         if (!same
-            && (!item.getCategory().equals(PouchCompatibilityPolicy.categoryFor(guideStep.part()))
+            && (!PouchCompatibilityPolicy.supports(guideStep.part(), item.getType())
                 || candidate.colors().isEmpty())) {
           throw invalid();
         }

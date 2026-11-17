@@ -2,7 +2,6 @@ package com.mairor.backend.pouch.service;
 
 import com.mairor.backend.common.error.BusinessException;
 import com.mairor.backend.common.error.ErrorCode;
-import com.mairor.backend.pouch.dto.PouchItemResponse;
 import com.mairor.backend.pouch.dto.PouchUpdateRequest;
 import com.mairor.backend.pouch.dto.PouchUpdateResponse;
 import com.mairor.backend.pouch.entity.PouchItem;
@@ -24,12 +23,15 @@ public class PouchUpdateService {
   private final PouchItemRepository items;
   private final PouchUpdateValidator validator;
   private final PouchUpdateCandidateBuilder candidateBuilder;
+  private final PouchResponseAssembler assembler;
 
   public PouchUpdateService(
       PouchVersionRepository versions,
       PouchItemRepository items,
       PouchUpdateValidator validator,
-      PouchUpdateCandidateBuilder candidateBuilder) {
+      PouchUpdateCandidateBuilder candidateBuilder,
+      PouchResponseAssembler assembler) {
+    this.assembler = assembler;
     this.versions = versions;
     this.items = items;
     this.validator = validator;
@@ -48,7 +50,7 @@ public class PouchUpdateService {
     PouchItem candidate = candidateBuilder.build(userId, current, fields);
 
     if (current.hasSameDetails(candidate)) {
-      return new PouchUpdateResponse(PouchItemResponse.from(current), currentVersion);
+      return new PouchUpdateResponse(assembler.assemble(current), currentVersion);
     }
 
     if (items.existsByUserIdAndBrandNormalizedAndNameNormalizedAndShadeNameNormalizedAndIdNot(
@@ -64,7 +66,7 @@ public class PouchUpdateService {
       current.replaceDetailsFrom(candidate);
       PouchItem saved = items.saveAndFlush(current);
       long nextVersion = versions.increment(userId);
-      return new PouchUpdateResponse(PouchItemResponse.from(saved), nextVersion);
+      return new PouchUpdateResponse(assembler.assemble(saved), nextVersion);
     } catch (DataIntegrityViolationException exception) {
       if (isDuplicateConstraint(exception)) throw duplicate();
       throw exception;

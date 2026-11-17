@@ -10,6 +10,7 @@ import com.mairor.backend.pouch.dto.PouchListResponse;
 import com.mairor.backend.pouch.repository.PouchItemRepository;
 import com.mairor.backend.pouch.repository.PouchVersionRepository;
 import java.util.UUID;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -22,12 +23,17 @@ public class PouchQueryService {
   private final PouchItemRepository items;
   private final PouchVersionRepository versions;
   private final PouchQueryValidator validator;
+  private final PouchResponseAssembler assembler;
 
   public PouchQueryService(
-      PouchItemRepository items, PouchVersionRepository versions, PouchQueryValidator validator) {
+      PouchItemRepository items,
+      PouchVersionRepository versions,
+      PouchQueryValidator validator,
+      PouchResponseAssembler assembler) {
     this.items = items;
     this.versions = versions;
     this.validator = validator;
+    this.assembler = assembler;
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -37,7 +43,8 @@ public class PouchQueryService {
     var rows =
         items.findPageForUser(
             userId, filters.category(), filters.type(), PageRequest.of(page.page(), page.size()));
-    var responsePage = rows.map(PouchItemResponse::from);
+    var responses = assembler.assembleAll(rows.getContent());
+    var responsePage = new PageImpl<>(responses, rows.getPageable(), rows.getTotalElements());
     long pouchVersion =
         versions.findByUserId(userId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
@@ -48,7 +55,7 @@ public class PouchQueryService {
   public PouchItemResponse get(UUID userId, UUID pouchItemId) {
     return items
         .findByIdAndUserId(pouchItemId, userId)
-        .map(PouchItemResponse::from)
+        .map(assembler::assemble)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
   }
 }

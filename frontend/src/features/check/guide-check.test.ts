@@ -198,7 +198,7 @@ describe("swapList", () => {
     expect(list[1].color).toBe("#AA0000");
   });
 
-  it("서버 후보 뒤에 같은 카테고리의 색 있는 제품을 붙이고 중복은 없다", () => {
+  it("서버 후보 뒤에 같은 종류의 색 있는 제품을 붙이고 중복은 없다", () => {
     const m = match("s5", { alternatives: [{ pouchItemId: "p2", rank: 1 }] });
     const ids = swapList(row, pouch, m).map((p) => p.id);
     expect(ids[0]).toBe("p2");
@@ -223,14 +223,27 @@ describe("swapList", () => {
 });
 
 describe("candidatesFor", () => {
-  it("같은 카테고리의 대표 색상이 있는 제품은 종류가 달라도 수동 선택할 수 있다", () => {
+  it("단계의 화장 종류에 맞는 종류만 수동 선택 후보가 된다", () => {
     const pouch = [
       item("blush", { color: "#EF8E8A" }),
       item("high", { type: "하이라이터", color: "#F3E3D3" }),
       item("compact", { type: "컴팩트", color: "#D9B9A0" }),
-      item("lip", { cat: "립", type: "립스틱" }),
+      item("lip", { cat: "립", type: "립스틱", color: "#C06A66" }),
     ];
-    expect(candidatesFor(step("s1"), pouch).map((p) => p.id)).toEqual(["blush", "high", "compact"]);
+    expect(candidatesFor(step("s1"), pouch).map((p) => p.id)).toEqual(["blush"]);
+    expect(candidatesFor(step("s1", { makeup: "highlight" }), pouch).map((p) => p.id)).toEqual([
+      "high",
+    ]);
+  });
+
+  it("같은 카테고리여도 종류가 다르면 뺀다 (하이라이터 단계에 블러셔 제외)", () => {
+    const blush = [item("blush", { color: "#EF8E8A" })];
+    expect(candidatesFor(step("s1", { makeup: "highlight" }), blush)).toEqual([]);
+  });
+
+  it("종류가 없는 제품은 후보에서 뺀다", () => {
+    const manual = [item("manual", { type: undefined, color: "#EF8E8A" })];
+    expect(candidatesFor(step("s1"), manual)).toEqual([]);
   });
 
   it("대표 색상이 없는 제품은 수동 선택 후보에서 제외한다", () => {
@@ -251,14 +264,10 @@ describe("candidatesFor", () => {
     expect(candidatesFor(step("s1"), pouch, "#EF8E8A").map((p) => p.id)).toEqual(["near", "far"]);
   });
 
-  it("화장 종류와 무관하게 같은 카테고리의 제품은 수동 선택할 수 있다", () => {
+  it("쉐이딩은 후보 종류가 없어 수동 선택 후보도 없다", () => {
     expect(
       candidatesFor(step("s1", { makeup: "contour" }), [item("blush", { color: "#EF8E8A" })]),
-    ).toHaveLength(1);
-  });
-
-  it("단계의 대분류와 파우치 카테고리가 다르면 뺀다", () => {
-    expect(candidatesFor(step("s1", { matchCategory: "LIP" }), [item("blush")])).toEqual([]);
+    ).toEqual([]);
   });
 });
 

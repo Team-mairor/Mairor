@@ -122,7 +122,7 @@ public class GuideQueryService {
 
   private GuideStepResponse step(
       JsonNode step, JsonNode explanation, JsonNode area, GuideStepProductLink productLink) {
-    String makeup = step.path("makeup").asString("");
+    String makeup = GuideStepMakeup.of(step);
     StepType type = EXCLUDED_MAKEUP.equals(makeup) ? StepType.EXCLUDED : StepType.GUIDE;
     JsonNode facts = step.path("facts");
     String tool = text(facts.path("tool").path("value"));

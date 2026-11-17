@@ -207,7 +207,7 @@ public class GuideCatalogGapCollector {
   }
 
   private CatalogCollectRequest productMissing(JsonNode step, JsonNode source, String shadeName) {
-    String category = GuideQueryService.MATCH_CATEGORY.get(text(step.path("makeup")));
+    String category = GuideQueryService.MATCH_CATEGORY.get(GuideStepMakeup.of(step));
     String brand = text(source.path("brand"));
     String name = text(source.path("name"));
     if (category == null || brand == null || name == null) {
