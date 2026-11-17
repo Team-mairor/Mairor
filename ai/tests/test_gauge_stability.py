@@ -170,10 +170,10 @@ def test_label_starts_over_after_hiding():
     assert shown[-1].label == "lighter"
 
 
-@pytest.mark.parametrize(("target", "hidden"), [(1.9, True), (2.1, False)])
-def test_reference_effect_under_two_is_hidden(target, hidden):
-    """레퍼런스 효과가 2보다 작으면 정답 곡선에서 문구가 30% 넘게 틀렸다(2는 20% 안)."""
-    shown = run([1.0, 1.0], target=target)
+@pytest.mark.parametrize(("offset", "hidden"), [(-0.1, True), (0.1, False)])
+def test_reference_effect_under_minimum_is_hidden(offset, hidden):
+    """레퍼런스 효과가 WEAK_TARGET_MIN보다 작으면 숨긴다."""
+    shown = run([1.0, 1.0], target=st.WEAK_TARGET_MIN + offset)
     assert (shown[-1].reason == "weakReference") is hidden
 
 

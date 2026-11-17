@@ -253,7 +253,7 @@ function fillPolygon(ixy, width, height, hline) {
 | `stability` `frame.yawMax` · `rollMax` · `pitchMax` | 0.25 · 0.15 · 0.35 | 사진 거르기 고개(rad). 좌우는 등록 정면(0.2)보다 넓다 | GAUGE_UNMEASURABLE_SMOOTHING · DEMO_AI_CHECK |
 | `stability` `frame.faceWidthMin` · `brightness` | 0.4 · 100~215 | 얼굴 폭 비율 · 얼굴 밝기 | GAUGE_UNMEASURABLE_SMOOTHING |
 | `stability` `frame.driftMax` · `eyesOpenMin` · `areaCoverMax` | 6 · 0.25 · 0.2 | 흔들림 ΔE2000 · 눈 뜬 정도 · 영역 가린 몫 | GAUGE_UNMEASURABLE_SMOOTHING |
-| `stability` `weakTargetMin` | 2.0 | 숨길 작은 레퍼런스 효과(ΔE2000) | GAUGE_UNMEASURABLE_SMOOTHING |
+| `stability` `weakTargetMin` | 1.5 | 숨길 작은 레퍼런스 효과(ΔE2000) | GAUGE_UNMEASURABLE_SMOOTHING |
 | `stability` `smoothing.alpha` · `perMs` · `holdMs` | 0.3 · 200 · 1500 | 지수 평균 · 못 잴 때 유지 | GAUGE_UNMEASURABLE_SMOOTHING |
 | `stability` `labels.bounds` · `margin` · `dwellMs` | 0.837 · 1.183 · 0.1 · 200 | 문구 경계 · 여유 · 버티기 | GAUGE_UNMEASURABLE_SMOOTHING (경계는 실기기 시험 뒤 다시 정함) |
 | `stability` `nextStart.windowMs` · `minFrames` · `maxFrames` | 2000 · 3 · 15 | 묶음 둘째 단계 시작 기준 | GAUGE_UNMEASURABLE_SMOOTHING |

@@ -32,7 +32,7 @@
     "intervalMs": 200,
     "medianWindowMs": 1000
   },
-  "weakTargetMin": 2.0,
+  "weakTargetMin": 1.5,
   "smoothing": {
     "alpha": 0.3,
     "perMs": 200
@@ -1448,7 +1448,7 @@
         {
           "t": 0,
           "ratio": 0.5,
-          "target": 1.9,
+          "target": 1.4,
           "reason": null,
           "hueSame": null,
           "chromaSame": null
@@ -1456,7 +1456,7 @@
         {
           "t": 200,
           "ratio": 1.0,
-          "target": 1.9,
+          "target": 1.4,
           "reason": null,
           "hueSame": null,
           "chromaSame": null
@@ -1464,7 +1464,7 @@
         {
           "t": 400,
           "ratio": 1.0,
-          "target": 1.9,
+          "target": 1.4,
           "reason": null,
           "hueSame": null,
           "chromaSame": null
@@ -1506,7 +1506,7 @@
         {
           "t": 0,
           "ratio": 0.5,
-          "target": 2.0,
+          "target": 1.5,
           "reason": null,
           "hueSame": null,
           "chromaSame": null
@@ -1514,7 +1514,7 @@
         {
           "t": 200,
           "ratio": 1.0,
-          "target": 2.0,
+          "target": 1.5,
           "reason": null,
           "hueSame": null,
           "chromaSame": null
@@ -1522,7 +1522,7 @@
         {
           "t": 400,
           "ratio": 1.0,
-          "target": 2.0,
+          "target": 1.5,
           "reason": null,
           "hueSame": null,
           "chromaSame": null
