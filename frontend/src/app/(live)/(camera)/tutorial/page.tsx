@@ -851,7 +851,7 @@ function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: GuideArea |
                   )}
                 >
                   <ChevronDown
-                    className={cn("size-6 transition-transform", actsOpen && "rotate-180")}
+                    className={cn("size-6 transition-transform", !actsOpen && "rotate-180")}
                     strokeWidth={2.4}
                     aria-hidden
                   />
