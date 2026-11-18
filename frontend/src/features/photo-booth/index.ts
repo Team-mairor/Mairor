@@ -14,4 +14,11 @@ export {
   PhotoJpegError,
 } from "./export-jpeg";
 export type { PhotoJpegErrorKind } from "./export-jpeg";
+export { findPhotoFrameOption, PHOTO_FRAME_OPTIONS } from "./frame-options";
+export type { CaptureGuest, PhotoFrameId, PhotoFrameOption } from "./frame-options";
 export { PhotoPreview } from "./photo-preview";
+export {
+  BEAUTY_CAPTURE_FILTER,
+  BEAUTY_PREVIEW_FILTER,
+  PhotoBeautyFilterDefs,
+} from "./beauty-filter";

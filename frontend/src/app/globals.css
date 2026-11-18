@@ -93,6 +93,10 @@
   --shadow-float: 0 8px 24px color-mix(in srgb, var(--color-night) 14%, transparent);
   --shadow-modal: 0 30px 80px color-mix(in srgb, var(--color-night) 35%, transparent);
   --shadow-cta: 0 14px 30px color-mix(in srgb, var(--color-ice) 26%, transparent);
+  /* 흰 프레임도 테두리가 보이도록 두는 아주 연한 그림자 */
+  --shadow-frame:
+    0 2px 8px color-mix(in srgb, var(--color-night) 12%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color-night) 6%, transparent);
 }
 
 :root {

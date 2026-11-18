@@ -54,8 +54,8 @@ export const BASIC_PHOTO_FRAME = {
     { id: "slot-3", x: 930, y: 271, width: 825, height: 1100 },
     { id: "slot-4", x: 930, y: 1416, width: 825, height: 1100 },
   ],
-  overlaySrc: "/images/photo/frame-overlay.png",
+  overlaySrc: "/images/photo/ssafy-final-overlay.png",
 } as const satisfies PhotoFrameTemplate;
 
 /** 미러필름 모드(<html class="mirror">)에서 쓰는 프레임. 검은 화면 위에서 보이도록 #f4f9ff 바탕·네이비 문구이고, 칸 좌표는 BASIC_PHOTO_FRAME과 같다. */
-export const MIRROR_FRAME_OVERLAY_SRC = "/images/photo/frame-overlay-mirror.png";
+export const MIRROR_FRAME_OVERLAY_SRC = "/images/photo/ssafy-final-overlay-mirror.png";

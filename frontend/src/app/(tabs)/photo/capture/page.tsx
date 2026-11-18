@@ -1,15 +1,21 @@
 "use client";
 
-import { ArrowRight, Camera, CameraOff, ChevronLeft, RotateCcw } from "lucide-react";
+import { Camera, CameraOff, ChevronLeft, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { PillButton } from "@/components/ui/pill-button";
 import {
   BASIC_PHOTO_FRAME,
+  BEAUTY_CAPTURE_FILTER,
+  BEAUTY_PREVIEW_FILTER,
   calculatePhotoCaptureCrop,
+  findPhotoFrameOption,
+  PhotoBeautyFilterDefs,
   PhotoPreview,
+  type PhotoFrameOption,
+  type PhotoSlot,
   type PhotoSlotId,
 } from "@/features/photo-booth";
 import { cn } from "@/lib/utils";
@@ -18,21 +24,10 @@ import { CameraError, openCamera } from "@/vision/face";
 type CameraStatus = "starting" | "ready" | "error";
 type CapturedPhotos = Partial<Record<PhotoSlotId, Blob>>;
 
+/** 슬롯 ID는 모든 프레임이 같다 */
 const SLOT_IDS = BASIC_PHOTO_FRAME.slots.map((slot) => slot.id);
-const PHOTO_SLOT = BASIC_PHOTO_FRAME.slots[0];
-/** 아직 안 찍은 컷은 이 시간이 지나면 자동으로 찍는다. 그 전에 셔터를 누르면 바로 찍는다 */
-const AUTO_SHOT_SECONDS = 7;
-/**
- * 촬영 화면에 겹쳐 보이는 함께 찍는 사람. 합성 프레임과 같은 이미지·위치라 찍을 때 본 그대로 결과에 들어간다.
- * width는 칸 너비(구멍 822px) 대비 %, 모두 칸 아래쪽에 붙는다.
- */
-const CAPTURE_GUESTS = [
-  { side: "left", px: [454, 1097] },
-  { side: "left", px: [489, 1012] },
-  { side: "right", px: [478, 970] },
-  { side: "right", px: [639, 988] },
-] as const;
-const GUEST_BASE_WIDTH = 822;
+/** 컷마다 이 시간이 지나면 자동으로 찍는다. 그 전에 셔터를 누르면 바로 찍는다 */
+const AUTO_SHOT_SECONDS = 10;
 
 function cameraErrorText(error: CameraError) {
   switch (error.kind) {
@@ -55,20 +50,22 @@ function cameraErrorText(error: CameraError) {
   }
 }
 
-function captureJpeg(video: HTMLVideoElement): Promise<Blob> {
+function captureJpeg(video: HTMLVideoElement, slot: PhotoSlot): Promise<Blob> {
   if (!video.videoWidth || !video.videoHeight) {
     return Promise.reject(new Error("카메라 영상이 아직 준비되지 않았어요."));
   }
 
   const crop = calculatePhotoCaptureCrop(
     { width: video.videoWidth, height: video.videoHeight },
-    PHOTO_SLOT,
+    slot,
   );
   const canvas = document.createElement("canvas");
   canvas.width = crop.width;
   canvas.height = crop.height;
   const context = canvas.getContext("2d");
   if (!context) return Promise.reject(new Error("사진을 만들지 못했어요."));
+  // 미지원 브라우저는 이 값을 무시해 보정 없이 저장된다
+  context.filter = BEAUTY_CAPTURE_FILTER;
   context.drawImage(
     video,
     crop.x,
@@ -90,8 +87,9 @@ function captureJpeg(video: HTMLVideoElement): Promise<Blob> {
   });
 }
 
-/** 얼굴 인식 없이 네 장을 촬영하고, 선택한 칸의 사진을 다시 촬영한다. */
-export default function PhotoCapturePage() {
+/** 선택한 프레임으로 얼굴 인식 없이 네 장을 차례로 연속 촬영하고, 샘플 화면에서 고른 컷만 다시 촬영한다. */
+function PhotoCapture({ frame }: { frame: PhotoFrameOption }) {
+  const photoSlot = frame.template.slots[0];
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const restoringHistoryRef = useRef(false);
@@ -160,24 +158,33 @@ export default function PhotoCapturePage() {
     setCapturing(true);
     setCaptureError(null);
     try {
-      const photo = await captureJpeg(video);
+      const photo = await captureJpeg(video, photoSlot);
       const next = { ...photos, [targetSlot]: photo };
       setPhotos(next);
       setShared(false);
       const nextEmpty = SLOT_IDS.find((id) => !next[id]);
       if (nextEmpty) setTargetSlot(nextEmpty);
+      else setMode("preview");
     } catch (error) {
       setCaptureError(error instanceof Error ? error.message : "사진을 만들지 못했어요.");
     } finally {
       setCapturing(false);
     }
-  }, [cameraStatus, capturing, photos, targetSlot]);
+  }, [cameraStatus, capturing, photos, photoSlot, targetSlot]);
 
   const capturedCount = SLOT_IDS.filter((id) => photos[id]).length;
+  // 네 장을 다 찍은 뒤 촬영 화면에 있다면 샘플에서 고른 컷을 다시 찍는 중이다
+  const retaking = capturedCount === SLOT_IDS.length;
 
-  // 다시 찍기(이미 찍은 컷)는 셔터로만 찍는다. 자동 촬영은 빈 컷에서만 센다
-  const autoShot =
-    mode === "capture" && cameraStatus === "ready" && !capturing && !photos[targetSlot];
+  const openCapture = (slot: PhotoSlotId) => {
+    setCameraError(null);
+    setCameraStatus("starting");
+    setCaptureError(null);
+    setTargetSlot(slot);
+    setMode("capture");
+  };
+
+  const autoShot = mode === "capture" && cameraStatus === "ready" && !capturing;
   const [countdown, setCountdown] = useState<number | null>(null);
   const captureRef = useRef(capture);
   useEffect(() => {
@@ -263,11 +270,12 @@ export default function PhotoCapturePage() {
   if (mode === "preview" && capturedCount === SLOT_IDS.length) {
     return (
       <PhotoPreview
+        frame={frame}
         photos={photos as Record<PhotoSlotId, Blob>}
-        onBack={() => {
-          setCameraError(null);
-          setCameraStatus("starting");
-          setMode("capture");
+        onRetake={openCapture}
+        onRestart={() => {
+          setPhotos({});
+          openCapture(SLOT_IDS[0]);
         }}
         onShared={() => setShared(true)}
       />
@@ -275,19 +283,30 @@ export default function PhotoCapturePage() {
   }
 
   const targetIndex = SLOT_IDS.indexOf(targetSlot);
-  const guest = CAPTURE_GUESTS[targetIndex];
-  const allCaptured = capturedCount === SLOT_IDS.length;
+  const guest = frame.guests?.[targetIndex];
 
   return (
     <main data-photo-booth className="flex min-h-full flex-1 flex-col text-ink">
+      <PhotoBeautyFilterDefs />
       <header className="flex h-28 shrink-0 items-center px-10">
-        <Link
-          href="/photo"
-          aria-label="뒤로"
-          className="flex size-[60px] items-center justify-center rounded-full border border-ink text-ink hover:bg-cream-2"
-        >
-          <ChevronLeft className="size-[22px]" strokeWidth={1.9} aria-hidden />
-        </Link>
+        {retaking ? (
+          <button
+            type="button"
+            aria-label="샘플로 돌아가기"
+            onClick={() => setMode("preview")}
+            className="flex size-[60px] items-center justify-center rounded-full border border-ink text-ink hover:bg-cream-2"
+          >
+            <ChevronLeft className="size-[22px]" strokeWidth={1.9} aria-hidden />
+          </button>
+        ) : (
+          <Link
+            href="/photo/frame"
+            aria-label="프레임 다시 고르기"
+            className="flex size-[60px] items-center justify-center rounded-full border border-ink text-ink hover:bg-cream-2"
+          >
+            <ChevronLeft className="size-[22px]" strokeWidth={1.9} aria-hidden />
+          </Link>
+        )}
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col gap-8 px-12 pt-4 pb-12">
@@ -295,7 +314,7 @@ export default function PhotoCapturePage() {
           <div
             data-dark
             className="relative max-h-full w-full overflow-hidden rounded-3xl bg-black text-white"
-            style={{ aspectRatio: `${PHOTO_SLOT.width}/${PHOTO_SLOT.height}` }}
+            style={{ aspectRatio: `${photoSlot.width}/${photoSlot.height}` }}
           >
             <video
               ref={videoRef}
@@ -304,6 +323,7 @@ export default function PhotoCapturePage() {
               playsInline
               onLoadedMetadata={() => setCameraStatus("ready")}
               className="absolute inset-0 h-full w-full -scale-x-100 object-cover"
+              style={{ filter: BEAUTY_PREVIEW_FILTER }}
               aria-label="네 컷 사진 카메라 미리보기"
             />
             {[1, 2].map((line) => (
@@ -322,16 +342,22 @@ export default function PhotoCapturePage() {
                 style={{ top: `${(line * 100) / 3}%` }}
               />
             ))}
-            {/* eslint-disable-next-line @next/next/no-img-element -- 정적 오버레이 이미지 */}
-            <img
-              key={targetIndex}
-              src={`/images/photo/guest-${targetIndex + 1}.png`}
-              alt={`${targetIndex + 1}번 컷 함께 찍는 사람`}
-              width={guest.px[0]}
-              height={guest.px[1]}
-              className="absolute bottom-0 block h-auto"
-              style={{ [guest.side]: 0, width: `${(guest.px[0] / GUEST_BASE_WIDTH) * 100}%` }}
-            />
+            {guest && frame.guestHoleWidth && (
+              // 합성 프레임과 같은 이미지·위치라 찍을 때 본 그대로 결과에 들어간다. 너비는 칸 너비 대비 %
+              // eslint-disable-next-line @next/next/no-img-element -- 정적 오버레이 이미지
+              <img
+                key={targetIndex}
+                src={guest.src}
+                alt={`${targetIndex + 1}번 컷 함께 찍는 사람`}
+                width={guest.width}
+                height={guest.height}
+                className="absolute bottom-0 block h-auto"
+                style={{
+                  [guest.side]: 0,
+                  width: `${(guest.width / frame.guestHoleWidth) * 100}%`,
+                }}
+              />
+            )}
             <span className="absolute top-7 left-7 rounded-full bg-night/55 px-5 py-2.5 font-label text-[18px] font-semibold tracking-[.16em] text-white backdrop-blur-sm mirror:text-[24px]">
               CUT 0{targetIndex + 1}
             </span>
@@ -386,79 +412,69 @@ export default function PhotoCapturePage() {
             {captureError}
           </p>
         )}
-        {/* 네 장을 다 찍으면 셔터를 흐리게 두고 완성 버튼으로 눈이 가게 한다. 셔터는 고른 컷 다시 찍기용으로 남긴다 */}
-        {allCaptured && !captureError && (
-          <p role="status" className="text-center text-[24px] font-bold text-navy">
-            네 장을 다 찍었어요! 완성을 눌러 주세요
-          </p>
-        )}
 
         <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-6">
-          <div className="flex gap-2.5" aria-label="촬영할 컷 선택">
-            {SLOT_IDS.map((id, index) => {
-              const isCaptured = Boolean(photos[id]);
-              const isSelected = targetSlot === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={isSelected}
-                  aria-label={`${index + 1}번 컷${isCaptured ? " 다시 찍기" : ""}`}
-                  onClick={() => {
-                    setTargetSlot(id);
-                    setCaptureError(null);
-                  }}
-                  className={cn(
-                    "flex h-23 w-17 items-end rounded-2xl pb-2 pl-2.5 font-serif text-[28px] leading-none italic mirror:font-label mirror:text-[26px] mirror:font-bold mirror:not-italic",
-                    isSelected
-                      ? "bg-navy text-white"
-                      : isCaptured
-                        ? "border-2 border-navy bg-white text-navy"
-                        : "border-2 border-line-3 bg-white text-mute",
-                  )}
-                >
-                  0{index + 1}
-                </button>
-              );
-            })}
+          {/* 진행 표시. 컷은 순서대로만 찍으므로 누를 수 없다 */}
+          <div
+            className="flex gap-2.5"
+            role="status"
+            aria-label={`${targetIndex + 1}번째 컷 촬영 중`}
+          >
+            {SLOT_IDS.map((id, index) => (
+              <span
+                key={id}
+                aria-hidden
+                className={cn(
+                  "flex h-23 w-17 items-end rounded-2xl pb-2 pl-2.5 font-serif text-[28px] leading-none italic mirror:font-label mirror:text-[26px] mirror:font-bold mirror:not-italic",
+                  targetSlot === id
+                    ? "bg-navy text-white"
+                    : photos[id]
+                      ? "border-2 border-navy bg-white text-navy"
+                      : "border-2 border-line-3 bg-white text-mute",
+                )}
+              >
+                0{index + 1}
+              </span>
+            ))}
           </div>
           <button
             type="button"
-            aria-label={
-              photos[targetSlot]
-                ? `${targetIndex + 1}번 컷 다시 촬영`
-                : `${targetIndex + 1}번 컷 촬영`
-            }
+            aria-label={`${targetIndex + 1}번 컷 ${retaking ? "다시 " : ""}촬영`}
             disabled={cameraStatus !== "ready" || capturing}
             onClick={() => void capture()}
-            className={cn(
-              "group flex size-33 rounded-full border-[5px] border-navy p-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-40",
-              allCaptured && "opacity-40 hover:opacity-70",
-            )}
+            className="group flex size-33 rounded-full border-[5px] border-navy p-2 transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
             <span className="flex-1 rounded-full bg-navy transition-transform group-active:scale-95" />
           </button>
           <div className="flex justify-end">
-            <div className="relative">
-              {allCaptured && (
-                <span
-                  aria-hidden
-                  className="absolute -inset-2 animate-pulse rounded-full border-4 border-navy"
-                />
-              )}
-              <PillButton
-                size="cta"
-                disabled={!allCaptured}
-                className="relative"
-                onClick={() => setMode("preview")}
-              >
-                완성
-                <ArrowRight className="size-6" strokeWidth={2.4} aria-hidden />
+            {retaking && (
+              <PillButton variant="line" size="cta" onClick={() => setMode("preview")}>
+                취소
               </PillButton>
-            </div>
+            )}
           </div>
         </div>
       </section>
     </main>
+  );
+}
+
+function PhotoCaptureGate() {
+  const router = useRouter();
+  const frame = findPhotoFrameOption(useSearchParams().get("frame"));
+
+  // 프레임을 고르지 않고 들어오면 선택 화면으로 보낸다
+  useEffect(() => {
+    if (!frame) router.replace("/photo/frame");
+  }, [frame, router]);
+
+  return frame ? <PhotoCapture key={frame.id} frame={frame} /> : null;
+}
+
+export default function PhotoCapturePage() {
+  return (
+    <Suspense>
+      <PhotoCaptureGate />
+    </Suspense>
   );
 }

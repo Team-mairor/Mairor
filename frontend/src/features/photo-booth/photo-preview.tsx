@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronLeft, Clock, QrCode, RotateCw } from "lucide-react";
+import { Camera, ChevronLeft, Clock, QrCode, RotateCw } from "lucide-react";
+import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useRef, useState } from "react";
 
@@ -9,9 +10,11 @@ import { PillButton } from "@/components/ui/pill-button";
 import { errorMessage } from "@/lib/api";
 
 import { createPhotoJpegBlob, PhotoJpegError } from "./export-jpeg";
-import { BASIC_PHOTO_FRAME, MIRROR_FRAME_OVERLAY_SRC, type PhotoSlotId } from "./frame";
+import { BASIC_PHOTO_FRAME, type PhotoSlotId } from "./frame";
+import type { PhotoFrameOption } from "./frame-options";
 import { renderPhotoFrame, type FramePhotos } from "./render";
 import { createPhotoShare } from "./share-api";
+import { drawPhotoStamp, formatStampDate, loadStampFonts } from "./stamp";
 
 type CapturedPhotos = Record<PhotoSlotId, Blob>;
 
@@ -19,14 +22,21 @@ const SLOT_IDS = BASIC_PHOTO_FRAME.slots.map((slot) => slot.id);
 /** 촬영 화면은 거울처럼 좌우 반전해 보여 주므로, 결과도 본 모습 그대로 좌우 반전해 합성한다. */
 const MIRRORED = { mirrored: true } as const;
 
-/** 네 장을 프레임에 합성해 보여 주고 QR 공유로 저장한다. 위치·확대 조정 없이 촬영 그대로 쓴다. */
+/** 네 장을 프레임에 합성해 보여 주고, 마음에 안 드는 컷을 골라 다시 찍거나 QR 공유로 저장한다. 위치·확대 조정 없이 촬영 그대로 쓴다. */
 export function PhotoPreview({
+  frame,
   photos,
-  onBack,
+  onRetake,
+  onRestart,
   onShared,
 }: {
+  /** 선택한 프레임 */
+  frame: PhotoFrameOption;
   photos: CapturedPhotos;
-  onBack: () => void;
+  /** 고른 컷만 다시 찍으러 갈 때 */
+  onRetake: (slot: PhotoSlotId) => void;
+  /** 사진을 읽지 못했을 때 처음부터 다시 찍는다 */
+  onRestart: () => void;
   /** QR 공유가 만들어졌을 때. 사진이 공유됐으므로 촬영 화면의 나가기 경고를 끈다. */
   onShared?: () => void;
 }) {
@@ -39,6 +49,8 @@ export function PhotoPreview({
   const [sharePending, setSharePending] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [share, setShare] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [thumbUrls, setThumbUrls] = useState<Record<PhotoSlotId, string> | null>(null);
+  const [shotDate] = useState(() => formatStampDate(new Date()));
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -51,31 +63,40 @@ export function PhotoPreview({
   useEffect(() => {
     let cancelled = false;
     let bitmaps: ImageBitmap[] = [];
+    let thumbs: string[] = [];
 
     const decodePhotos = async () => {
       try {
+        // 이미지가 있는 프레임은 일반 모드에서 검은 프레임, 미러필름 모드에서 밝은(#f4f9ff) 프레임을 쓴다. 칸 좌표는 같다
+        const overlaySrc = document.documentElement.classList.contains("mirror")
+          ? (frame.mirrorOverlaySrc ?? frame.template.overlaySrc)
+          : frame.template.overlaySrc;
         const [frameImage, decoded] = await Promise.all([
-          // 일반 모드는 검은 프레임, 미러필름 모드는 밝은(#f4f9ff) 프레임을 쓴다. 칸 좌표는 같다
-          fetch(
-            document.documentElement.classList.contains("mirror")
-              ? MIRROR_FRAME_OVERLAY_SRC
-              : BASIC_PHOTO_FRAME.overlaySrc,
-          )
-            .then((response) => {
-              if (!response.ok) throw new Error("프레임 이미지를 불러오지 못했어요.");
-              return response.blob();
-            })
-            .then((blob) => createImageBitmap(blob)),
+          overlaySrc
+            ? fetch(overlaySrc)
+                .then((response) => {
+                  if (!response.ok) throw new Error("프레임 이미지를 불러오지 못했어요.");
+                  return response.blob();
+                })
+                .then((blob) => createImageBitmap(blob))
+            : Promise.resolve(null),
           Promise.all(
             SLOT_IDS.map(async (id) => [id, await createImageBitmap(photos[id])] as const),
           ),
         ]);
-        bitmaps = [frameImage, ...decoded.map(([, bitmap]) => bitmap)];
+        bitmaps = [...(frameImage ? [frameImage] : []), ...decoded.map(([, bitmap]) => bitmap)];
         if (cancelled) {
           bitmaps.forEach((bitmap) => bitmap.close());
           return;
         }
         const bitmapBySlot = new Map(decoded);
+        thumbs = SLOT_IDS.map((id) => URL.createObjectURL(photos[id]));
+        setThumbUrls(
+          Object.fromEntries(SLOT_IDS.map((id, i) => [id, thumbs[i]])) as Record<
+            PhotoSlotId,
+            string
+          >,
+        );
         setOverlay(frameImage);
         setImages({
           "slot-1": { image: bitmapBySlot.get("slot-1")!, placement: MIRRORED },
@@ -92,22 +113,43 @@ export function PhotoPreview({
     return () => {
       cancelled = true;
       bitmaps.forEach((bitmap) => bitmap.close());
+      thumbs.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [photos]);
+  }, [photos, frame]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !images || !overlay) return;
-    const frame = window.requestAnimationFrame(() => {
+    if (!canvas || !images) return;
+    let cancelled = false;
+    const raf = window.requestAnimationFrame(() => {
       try {
-        renderPhotoFrame(canvas, BASIC_PHOTO_FRAME, images, overlay);
-        setRendered(true);
+        renderPhotoFrame(canvas, frame.template, images, overlay ?? undefined);
       } catch {
         setRenderError(true);
+        return;
       }
+      // 서체를 불러온 뒤 우측 하단에 촬영 날짜와 mairor 글씨를 덧그린다
+      void loadStampFonts().then((fonts) => {
+        if (cancelled) return;
+        const mirrored = document.documentElement.classList.contains("mirror");
+        try {
+          drawPhotoStamp(canvas, frame.template, {
+            date: shotDate,
+            color: (mirrored && frame.stamp.mirrorColor) || frame.stamp.color,
+            mairor: frame.stamp.mairor,
+            fonts,
+          });
+          setRendered(true);
+        } catch {
+          setRenderError(true);
+        }
+      });
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [images, overlay]);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf);
+    };
+  }, [images, overlay, frame, shotDate]);
 
   /** 합성한 JPEG를 올려 만료되는 공유 주소를 받고, 휴대폰으로 찍을 QR을 띄운다. */
   const createShare = async () => {
@@ -144,9 +186,9 @@ export function PhotoPreview({
           className="flex flex-1 flex-col items-center justify-center gap-4 text-center"
         >
           <h1 className="font-display text-[34px] text-ink">사진을 불러오지 못했어요</h1>
-          <p className="text-[24px] text-mute">촬영 화면으로 돌아가 다시 시도해 주세요.</p>
-          <PillButton size="cta" className="mt-2" onClick={onBack}>
-            촬영 화면으로 돌아가기
+          <p className="text-[24px] text-mute">처음부터 다시 찍어 주세요.</p>
+          <PillButton size="cta" className="mt-2" onClick={onRestart}>
+            처음부터 다시 찍기
           </PillButton>
         </section>
       ) : (
@@ -178,7 +220,7 @@ export function PhotoPreview({
                 <canvas
                   ref={canvasRef}
                   aria-label="네 장의 사진이 들어간 합성 미리보기"
-                  className="block h-auto w-full"
+                  className="block h-auto w-full shadow-frame"
                   style={{ aspectRatio: `${outW}/${outH}` }}
                 />
                 {!rendered && !renderError && (
@@ -200,12 +242,43 @@ export function PhotoPreview({
               </p>
             )}
 
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-4">
-              <PillButton variant="line" size="cta" onClick={onBack}>
-                다시 찍기
+            <div className="flex flex-col items-center gap-4">
+              <p className="text-[22px] font-semibold text-navy">다시 찍고 싶은 컷을 눌러 주세요</p>
+              <div className="flex gap-4">
+                {SLOT_IDS.map((id, index) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-label={`${index + 1}번 컷 다시 찍기`}
+                    onClick={() => onRetake(id)}
+                    className="relative h-[132px] w-[99px] overflow-hidden rounded-2xl border-2 border-navy bg-white"
+                  >
+                    {thumbUrls && (
+                      // eslint-disable-next-line @next/next/no-img-element -- 촬영한 사진의 임시 주소
+                      <img
+                        src={thumbUrls[id]}
+                        alt=""
+                        className="size-full -scale-x-100 object-cover"
+                      />
+                    )}
+                    <span className="absolute bottom-1.5 left-2 rounded-full bg-night/55 px-2 py-0.5 font-label text-[14px] font-semibold text-white backdrop-blur-sm">
+                      0{index + 1}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-4">
+              {/* 저장하지 않은 사진이 있으면 촬영 화면이 나가기 전에 한 번 물어본다 */}
+              <PillButton asChild variant="line" size="cta" className="px-6">
+                <Link href="/photo/frame">
+                  <Camera className="size-6" strokeWidth={2.2} aria-hidden />
+                  새로 찍기
+                </Link>
               </PillButton>
               <PillButton
                 size="cta"
+                className="flex-1"
                 disabled={!rendered}
                 busy={sharePending}
                 onClick={() => void createShare()}

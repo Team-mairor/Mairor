@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const STEPS = ["네 장 연속 촬영", "컷별 다시 찍기", "바로 완성 · 저장"];
+const STEPS = ["프레임 고르기", "네 장 연속 촬영", "다시 찍고 바로 저장"];
 
 /** 메이크업 실행과 독립된 오늘네컷 진입 화면. 색·글꼴은 홈 대시보드 카드와 맞춘다. */
 export default function PhotoBoothPage() {
@@ -37,13 +37,13 @@ export default function PhotoBoothPage() {
         <div className="w-[380px] rotate-2 rounded-sm shadow-float">
           {/* eslint-disable-next-line @next/next/no-img-element -- 정적 예시 이미지, 최적화 불필요 */}
           <img
-            src="/images/photo/frame-sample.png"
+            src="/images/photo/ssafy-final-frame.png"
             alt="SSAFY 15기 기념 네컷 프레임"
             className="block h-auto w-full mirror:hidden"
           />
           {/* eslint-disable-next-line @next/next/no-img-element -- 정적 예시 이미지, 최적화 불필요 */}
           <img
-            src="/images/photo/frame-sample-mirror.png"
+            src="/images/photo/ssafy-final-frame-mirror.png"
             alt="SSAFY 15기 기념 네컷 프레임"
             className="hidden h-auto w-full mirror:block"
           />
@@ -54,7 +54,7 @@ export default function PhotoBoothPage() {
       <div className="flex shrink-0 translate-y-16 justify-center px-10">
         {/* 위아래 가는 줄 사이에 세리프 이탤릭 부제와 제목. 바탕은 칠하지 않는다 */}
         <Link
-          href="/photo/capture"
+          href="/photo/frame"
           className="flex h-28 w-[440px] flex-col items-center justify-center gap-2 border-y-2 border-navy text-navy transition-colors hover:bg-cream-2 active:scale-[.99]"
         >
           <span className="font-serif text-[24px] leading-none tracking-[.06em] italic mirror:text-[30px]">
