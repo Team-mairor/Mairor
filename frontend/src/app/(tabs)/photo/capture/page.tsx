@@ -14,6 +14,7 @@ import {
   findPhotoFrameOption,
   PhotoBeautyFilterDefs,
   PhotoPreview,
+  useAutoWhiteBalance,
   type PhotoFrameOption,
   type PhotoSlot,
   type PhotoSlotId,
@@ -151,6 +152,8 @@ function PhotoCapture({ frame }: { frame: PhotoFrameOption }) {
       if (video?.srcObject === stream) video.srcObject = null;
     };
   }, [mode, retryKey]);
+
+  useAutoWhiteBalance(videoRef, mode === "capture" && cameraStatus === "ready");
 
   const capture = useCallback(async () => {
     const video = videoRef.current;

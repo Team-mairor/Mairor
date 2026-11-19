@@ -337,16 +337,24 @@ export function PhotoPreview({
                     까지 스캔할 수 있어요
                   </span>
                 </div>
-                <PillButton
-                  variant="line"
-                  size="lg"
-                  className="text-[22px]"
-                  busy={sharePending}
-                  onClick={() => void createShare()}
-                >
-                  {!sharePending && <RotateCw className="size-6" strokeWidth={2.2} aria-hidden />}새
-                  QR 만들기
-                </PillButton>
+                <div className="flex gap-4">
+                  <PillButton asChild variant="line" size="lg" className="text-[22px]">
+                    <Link href="/photo/frame">
+                      <Camera className="size-6" strokeWidth={2.2} aria-hidden />
+                      새로 찍기
+                    </Link>
+                  </PillButton>
+                  <PillButton
+                    variant="line"
+                    size="lg"
+                    className="text-[22px]"
+                    busy={sharePending}
+                    onClick={() => void createShare()}
+                  >
+                    {!sharePending && <RotateCw className="size-6" strokeWidth={2.2} aria-hidden />}
+                    새 QR 만들기
+                  </PillButton>
+                </div>
               </div>
               {/* 저장을 마쳤으니 홈 등으로 갈 수 있게 하단 탭을 보인다 */}
               <BottomTabs force />

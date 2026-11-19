@@ -22,3 +22,4 @@ export {
   BEAUTY_PREVIEW_FILTER,
   PhotoBeautyFilterDefs,
 } from "./beauty-filter";
+export { useAutoWhiteBalance } from "./use-auto-white-balance";
