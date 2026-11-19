@@ -419,6 +419,15 @@ export function useGaugeBaseline({
     return true;
   }, []);
   /**
+   * 지금 하위 단계의 끝 기준을 「다음」을 누르기 직전 사진으로 만든다. 모자라면 null이다.
+   * 모은 사진은 지우지 않아 이어서 takeNext로 다음 단계 시작 기준을 만들 수 있다
+   */
+  const takeEnd = useCallback(
+    (makeup: string) =>
+      nextStartBaseline(store.current.tail, makeup, performance.now(), store.current.center.value),
+    [],
+  );
+  /**
    * 기준 사진이 모이지 않을 때 쓴다. 그 사람 정면과 모으던 사진을 버리고 지금 자세에서 다시 모은다.
    * 정면 pitch가 한 번 정해지면 그 값에서 벗어난 자세는 계속 걸러지기 때문이다
    */
@@ -430,5 +439,5 @@ export function useGaugeBaseline({
     s.eyes = [];
     setStatus((prev) => ({ ...prev, center: null, front: null, frames: 0 }));
   }, []);
-  return { status, stepBaseline, takeNext, record, sampler, restart };
+  return { status, stepBaseline, takeNext, takeEnd, record, sampler, restart };
 }

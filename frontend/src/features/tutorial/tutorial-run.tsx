@@ -44,6 +44,7 @@ import { ProductChip } from "./product-chip";
 import { SelfiePreview } from "./selfie-preview";
 import { StepActions } from "./step-actions";
 import { PrepCard } from "./step-cards";
+import { StepFeedback } from "./step-feedback";
 import { StepList } from "./step-list";
 import { StepPanel } from "./step-panel";
 import { TutorialTopBar } from "./top-bar";
@@ -65,6 +66,7 @@ import { useFinalReview } from "./use-final-review";
 import { useGaugeDebug } from "./use-gauge-debug";
 import { useSmoothedGauge } from "./use-smoothed-gauge";
 import { useStepBaseline } from "./use-step-baseline";
+import { useStepFeedback } from "./use-step-feedback";
 import { LABEL_COLOR, LABEL_TEXT, useStepGaugeRule } from "./use-step-gauge-rule";
 import { useStepShot } from "./use-step-shot";
 import { useTooDarkNotice } from "./use-too-dark-notice";
@@ -145,6 +147,8 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
     groupLast,
   });
   const { subs, reference, rule, showGauge, nextNeedsBaseline } = gaugeRule;
+  // 「다음」마다 단계 끝 평가를 모아 두었다가 묶음 사진 뒤 안내 문장으로 보여 준다
+  const feedback = useStepFeedback(run.id);
   // 한 단계 안에서 영역이 바뀌어도 나눠 넘기지 않고 모든 영역을 한 번에 그린다
   const resolved = useMemo(
     () => resolveStep(info.stepId, subs, defaults, info.makeup),
@@ -211,6 +215,8 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
     }
     if (!isCurrentRun(run.id)) return;
     saveStepPhoto(run.id, info.stepId, photo);
+    // 묶음 사진을 남겼으면 그 묶음의 단계 끝 안내 문장을 다음 묶음으로 넘어가며 보여 준다
+    if (!last) feedback.show(group.start, group.end);
     // 저장한 순서로 둔다. 완료 화면은 마지막으로 찍은 단계 사진을 완성 사진으로 쓴다
     updateRun(
       (r) => ({ captures: [...r.captures.filter((id) => id !== info.stepId), info.stepId] }),
@@ -373,6 +379,17 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
       setLackKey(stepKey);
       return;
     }
+    // 단계 끝 평가는 이 단계를 넘기기 직전 사진으로 끝 기준을 잡아 낸다. 다음 단계 시작 기준을 잡기 전에 한다
+    if (!finishing && !last && showGauge && reference)
+      feedback.record(
+        step,
+        gaugeMeasure.evaluate({
+          subStepId: reference.subStepId,
+          end: baseline.takeEnd(info.makeup),
+          gauge: reference.gauge,
+          product: gaugeRule.product,
+        }),
+      );
     if (!groupLast && !finishing) return enterNextInGroup();
     if (reloadRegions) {
       setDefaultsFailed(false);
@@ -542,7 +559,10 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
               : undefined
           }
           onStart={() => {
-            if (!gate.needed || stepBaseline) setReady(true);
+            if (!gate.needed || stepBaseline) {
+              feedback.dismiss();
+              setReady(true);
+            }
           }}
         />
       )}
@@ -592,6 +612,7 @@ export function TutorialRun({ steps, area }: { steps: TutorialStep[]; area: Guid
         }}
       />
       <TooDarkModal open={tooDark.open} onConfirm={tooDark.confirm} />
+      <StepFeedback lines={feedback.lines} onDismiss={feedback.dismiss} />
     </main>
   );
 }

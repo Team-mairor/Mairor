@@ -5,9 +5,6 @@ import { polygonPoints } from "./area";
 import type { Pixels } from "./cells";
 import measure from "../../../../shared/gauge/measure.v1.json" with { type: "json" };
 
-/** 흰자 칸이 이보다 적으면 못 잰 것으로 본다(AI eye_white와 같음) */
-const MIN_WHITE_PIXELS = 20;
-
 /** 두 눈 구멍 안 지도 점마다 속한 메시 삼각형의 세 꼭짓점과 비율 */
 export interface EyeSampler {
   corners: Int32Array;
@@ -169,9 +166,9 @@ function percentile(values: number[], q: number) {
 }
 
 /**
- * 맨얼굴 사진들의 흰자 색(sRGB 0~255 세 개). 점마다 사진들의 가운데 값을 낸 뒤,
- * 밝기 위 white.share이고 채널 하나라도 white.clip 이상이 아닌 점의 가운데 값이다(AI eye_white와 같은 규칙).
- * 흰자 점이 MIN_WHITE_PIXELS보다 적으면 null이다
+ * 맨얼굴 사진들의 흰자 색(sRGB 0~255 세 개). 사진마다 밝기 위 white.share이고 채널 하나라도
+ * white.clip 이상이 아닌 점의 가운데 값을 흰자로 내고, 그 사진별 흰자의 채널별 가운데 값이다(AI eye_white와 같은 규칙).
+ * 흰자 점이 measure.white.minPixels보다 적으면 null이다
  */
 export function whiteOfFrames(frames: Float32Array[]): [number, number, number] | null {
   if (!frames.length) return null;
@@ -185,7 +182,7 @@ export function whiteOfFrames(frames: Float32Array[]): [number, number, number] 
     const light = pixels.map(([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b);
     const floor = percentile(light, 1 - measure.white.share);
     const kept = pixels.filter((p, i) => light[i] >= floor && Math.max(...p) < measure.white.clip);
-    if (kept.length < MIN_WHITE_PIXELS) return [];
+    if (kept.length < measure.white.minPixels) return [];
     return [[0, 1, 2].map((ch) => median(kept.map((p) => p[ch]))) as [number, number, number]];
   });
   if (!whites.length) return null;

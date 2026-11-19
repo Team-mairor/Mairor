@@ -139,6 +139,7 @@ export function useStepGaugeRule({
   return {
     subs,
     reference,
+    product,
     rule,
     measureGauge,
     measured,

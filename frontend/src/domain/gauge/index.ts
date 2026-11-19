@@ -17,8 +17,10 @@ export {
 } from "./baseline";
 export { cellSampler, readCells, type CellLab, type CellSampler, type Pixels } from "./cells";
 export { deltaE2000, rgbToLab } from "./color";
+export { bundleMessages, renderMessage, stepMessages, type FeedbackMessage } from "./feedback-text";
 export { drift, freeCells, grow, lightChange, makeupEffect, type Drift } from "./light";
 export { GRID } from "./spec";
+export { evaluateStep, type StepEvaluation } from "./step-evaluation";
 export {
   measureForProduct,
   productRule,

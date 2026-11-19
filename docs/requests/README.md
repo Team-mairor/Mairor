@@ -17,19 +17,15 @@
 4. 승인을 받으면 대상자는 관련 요청 문서를 삭제하고 아래 목록에서 해당 항목을 없앤다. 이 변경은 같은 MR에 커밋으로 반영한다.
 5. 대상자가 머지한다.
 
-| 문서                                                                                                                                               | 날짜       | 요청 → 대상                    | 상태                                  |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------ | ------------------------------------- |
-| [BE 로그 JSON 형식과 작업 ID 남기기](2026-10-29-hyeongjun-jungyoon-be-logging.md)                                                                  | 2026-10-29 | 박형준 → 김정윤                | 요청                                  |
-| [가이드 작업 진행 알림·SSE 회신과 진행 알림 보완 제안](2026-11-04-seoyeon-hyeongjun-guide-job-progress-reply.md)                                   | 2026-11-04 | 김서연 → 박형준                | 요청                                  |
-| [화장품 소분류(종류) 추가 논의](2026-11-04-seoyeon-juyeon-missing-product-types.md)                                                                | 2026-11-04 | 김서연 → 최주연·팀             | 논의 대기                             |
-| [AI 서버 가이드 영역 설정(줄 수·일꾼 수) 확인](2026-11-08-hyeonsoo-hyeongjun-area-server-settings.md)                                              | 2026-11-08 | 김현수 → 박형준                | 요청                                  |
-| [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md)                                         | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 회신함(2026-11-15 문서), 승인 뒤 지움 |
-| [노트북 처리기에서 분석 단계 동안의 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-middle-photos.md)                                         | 2026-11-14 | 김현수 → 박형준                | 요청                                  |
-| [가이드 게이지 기준 전달 계약 회신](2026-11-15-hyeonsoo-seoyeon-guide-gauge-reply.md)                                                              | 2026-11-15 | 김현수 → 김서연                | 확인 요청                             |
-| [가이드 게이지 기준(gauge)에 레퍼런스 흰자 색(white) 칸 추가](2026-11-15-hyeonsoo-seoyeon-gauge-white.md)                                          | 2026-11-15 | 김현수 → 김서연                | 확인 요청                             |
-| [튜토리얼 게이지: 측정 불가 판정 · 값 안정화 · 진하기 비율 식 변경과 가림 모델](2026-11-15-hyeonsoo-seoyun-gauge-unmeasurable.md)                  | 2026-11-15 | 김현수 → 한서윤                | 요청                                  |
-| [튜토리얼 단계 끝 AI 평가: 입력은 「다음」마다 남긴 칸 색 · 결과 형식 확정 · 계산 규격](2026-11-15-hyeonsoo-seoyun-step-evaluation.md)             | 2026-11-15 | 김현수 → 한서윤                | 요청                                  |
-| [튜토리얼 단계 끝 안내 문장: 문장 규칙 · 결과 형식에 sides 더하기 · 묶음 끝 3줄 · 기능명세 반영](2026-11-16-hyeonsoo-seoyun-step-feedback-text.md) | 2026-11-16 | 김현수 → 한서윤                | 요청                                  |
-| [튜토리얼 게이지: 고개 돌림 기준 0.25 · 흰자는 색만 맞추기 · 가림 모델 입력은 320 이상](2026-11-16-hyeonsoo-seoyun-gauge-demo-check.md)            | 2026-11-16 | 김현수 → 한서윤                | 요청                                  |
-| [가이드 조회: AI 영역이 모두 notApplicable인 단계는 previewable false](2026-11-16-hyeonsoo-jeongyun-previewable-not-applicable.md)                 | 2026-11-16 | 김현수 → 김정윤                | 요청                                  |
-| [튜토리얼 게이지: AI 흰자 추출 규칙과 브라우저용 가림 모델 전달 요청](2026-11-17-seoyun-hyeonsoo-gauge-white-occlusion.md)                         | 2026-11-17 | 한서윤 → 김현수                | 요청                                  |
+| 문서                                                                                                                               | 날짜       | 요청 → 대상                    | 상태                                  |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------ | ------------------------------------- |
+| [BE 로그 JSON 형식과 작업 ID 남기기](2026-10-29-hyeongjun-jungyoon-be-logging.md)                                                  | 2026-10-29 | 박형준 → 김정윤                | 요청                                  |
+| [가이드 작업 진행 알림·SSE 회신과 진행 알림 보완 제안](2026-11-04-seoyeon-hyeongjun-guide-job-progress-reply.md)                   | 2026-11-04 | 김서연 → 박형준                | 요청                                  |
+| [화장품 소분류(종류) 추가 논의](2026-11-04-seoyeon-juyeon-missing-product-types.md)                                                | 2026-11-04 | 김서연 → 최주연·팀             | 논의 대기                             |
+| [AI 서버 가이드 영역 설정(줄 수·일꾼 수) 확인](2026-11-08-hyeonsoo-hyeongjun-area-server-settings.md)                              | 2026-11-08 | 김현수 → 박형준                | 요청                                  |
+| [가이드 게이지 기준·미리보기 레이어 전달 계약 확정](2026-11-11-seoyeon-ai-guide-gauge-preview-contract.md)                         | 2026-11-11 | 김서연 → AI 437 담당자·FE 협의 | 회신함(2026-11-15 문서), 승인 뒤 지움 |
+| [노트북 처리기에서 분석 단계 동안의 사진도 뽑기](2026-11-14-hyeonsoo-hyeongjun-processor-middle-photos.md)                         | 2026-11-14 | 김현수 → 박형준                | 요청                                  |
+| [가이드 게이지 기준 전달 계약 회신](2026-11-15-hyeonsoo-seoyeon-guide-gauge-reply.md)                                              | 2026-11-15 | 김현수 → 김서연                | 확인 요청                             |
+| [가이드 게이지 기준(gauge)에 레퍼런스 흰자 색(white) 칸 추가](2026-11-15-hyeonsoo-seoyeon-gauge-white.md)                          | 2026-11-15 | 김현수 → 김서연                | 확인 요청                             |
+| [가이드 조회: AI 영역이 모두 notApplicable인 단계는 previewable false](2026-11-16-hyeonsoo-jeongyun-previewable-not-applicable.md) | 2026-11-16 | 김현수 → 김정윤                | 요청                                  |
+| [튜토리얼 게이지: AI 흰자 추출 규칙과 브라우저용 가림 모델 전달 요청](2026-11-17-seoyun-hyeonsoo-gauge-white-occlusion.md)         | 2026-11-17 | 한서윤 → 김현수                | 요청                                  |

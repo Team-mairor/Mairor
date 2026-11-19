@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { areaCells, madeCells } from "@/domain/gauge/area";
 import type { Baseline } from "@/domain/gauge/baseline";
@@ -25,6 +25,8 @@ import {
   type FrameState,
   type GaugeDisplay,
 } from "@/domain/gauge/stability";
+import { evaluateStep, type StepEvaluation } from "@/domain/gauge/step-evaluation";
+import type { SelectedProduct } from "@/domain/gauge/substitute";
 import { FRAME_STALE_MS, useCamera, useFaceFrame, type FaceFrame } from "@/vision/face";
 import type { AreaGuideSet, GaugeReference } from "@/vision/guide";
 import { OcclusionRunner, type OcclusionStatus } from "@/vision/occlusion";
@@ -240,5 +242,34 @@ export function useGaugeMeasure(input: GaugeMeasureInput) {
       });
   });
 
-  return { display, reading, areas, made };
+  /**
+   * 지금 하위 단계의 단계 끝 평가. end는 「다음」을 누르기 직전 사진으로 만든 끝 기준이고,
+   * 시작 기준 · 영역 · 흰자는 지금 재던 값을 쓴다. 결과는 이번 실행 화면에만 쓰고 보내거나 저장하지 않는다
+   */
+  const evaluate = useCallback(
+    (args: {
+      subStepId: string;
+      end: Baseline | null;
+      gauge: GaugeReference | null;
+      product: SelectedProduct | null;
+    }): StepEvaluation => {
+      const { makeup, start, white } = latest.current;
+      const { areas: current, made: all } = areasRef.current;
+      return evaluateStep({
+        subStepId: args.subStepId,
+        makeup,
+        start,
+        end: args.end,
+        areas: current.map(({ set, cells }) => ({ region: set.region, cells })),
+        gauge: args.gauge,
+        white: white ? linearOfSrgb(white) : null,
+        product: args.product,
+        made: all,
+        exclude: all,
+      });
+    },
+    [],
+  );
+
+  return { display, reading, areas, made, evaluate };
 }
