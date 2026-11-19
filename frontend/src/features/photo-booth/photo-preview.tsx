@@ -128,6 +128,11 @@ export function PhotoPreview({
         setRenderError(true);
         return;
       }
+      const stamp = frame.stamp;
+      if (!stamp) {
+        setRendered(true);
+        return;
+      }
       // 서체를 불러온 뒤 우측 하단에 촬영 날짜와 mairor 글씨를 덧그린다
       void loadStampFonts().then((fonts) => {
         if (cancelled) return;
@@ -135,8 +140,9 @@ export function PhotoPreview({
         try {
           drawPhotoStamp(canvas, frame.template, {
             date: shotDate,
-            color: (mirrored && frame.stamp.mirrorColor) || frame.stamp.color,
-            mairor: frame.stamp.mairor,
+            color: (mirrored && stamp.mirrorColor) || stamp.color,
+            mairor: stamp.mairor,
+            scale: stamp.scale,
             fonts,
           });
           setRendered(true);
@@ -176,7 +182,7 @@ export function PhotoPreview({
     }
   };
 
-  const { width: outW, height: outH } = BASIC_PHOTO_FRAME.output;
+  const { width: outW, height: outH } = frame.template.output;
 
   return (
     <main className="flex min-h-full flex-1 flex-col text-ink">

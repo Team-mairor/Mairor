@@ -59,4 +59,20 @@ describe("drawPhotoStamp", () => {
     expect(texts.map((item) => item.text)).toEqual(["2026.11.18"]);
     expect(texts[0].x).toBe(930 + 825 - 160 - 40);
   });
+
+  it("작은 프레임은 글씨와 여백을 지정한 배율로 줄인다", () => {
+    const { canvas, texts } = fakeCanvas();
+    drawPhotoStamp(canvas, BASIC_PHOTO_FRAME, {
+      date: "2026.11.18",
+      color: "#fff",
+      mairor: true,
+      scale: 0.5,
+      fonts,
+    });
+
+    const [mark, date] = texts;
+    expect(mark.y).toBe(BASIC_PHOTO_FRAME.output.height - 24);
+    expect(date.x).toBe(mark.x - 80 - 20);
+    expect(date.font).toBe("600 17px Sans");
+  });
 });

@@ -7,6 +7,8 @@ export interface PhotoStamp {
   readonly color: string;
   /** 프레임 이미지에 mairor 글씨가 없을 때만 직접 그린다 */
   readonly mairor: boolean;
+  /** 기본 출력 크기 대비 글씨·여백 배율 */
+  readonly scale?: number;
   readonly fonts: StampFonts;
 }
 
@@ -52,8 +54,11 @@ export function drawPhotoStamp(
 ): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
+  const scale = stamp.scale ?? 1;
+  const markWidth = MARK_WIDTH * scale;
+  const markGap = MARK_GAP * scale;
   const right = Math.max(...frame.slots.map((slot) => slot.x + slot.width));
-  const baseline = frame.output.height - BASELINE_MARGIN;
+  const baseline = frame.output.height - BASELINE_MARGIN * scale;
 
   ctx.save();
   try {
@@ -64,14 +69,14 @@ export function drawPhotoStamp(
     if (stamp.mairor) {
       ctx.font = `italic 100px ${stamp.fonts.serif}`;
       const measured = ctx.measureText(MARK_TEXT).width;
-      const size = measured > 0 ? (100 * MARK_WIDTH) / measured : 80;
+      const size = measured > 0 ? (100 * markWidth) / measured : 80 * scale;
       ctx.font = `italic ${size}px ${stamp.fonts.serif}`;
       ctx.fillText(MARK_TEXT, right, baseline);
     }
 
-    ctx.font = `600 ${DATE_FONT_SIZE}px ${stamp.fonts.sans}`;
-    ctx.letterSpacing = "2px";
-    ctx.fillText(stamp.date, right - MARK_WIDTH - MARK_GAP, baseline);
+    ctx.font = `600 ${DATE_FONT_SIZE * scale}px ${stamp.fonts.sans}`;
+    ctx.letterSpacing = `${2 * scale}px`;
+    ctx.fillText(stamp.date, right - markWidth - markGap, baseline);
   } finally {
     ctx.restore();
   }

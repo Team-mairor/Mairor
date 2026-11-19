@@ -12,12 +12,16 @@ function FramePreview({ frame }: { frame: PhotoFrameOption }) {
     return (
       <>
         {/* eslint-disable-next-line @next/next/no-img-element -- 정적 예시 이미지, 최적화 불필요 */}
-        <img src={frame.previewSrc} alt={name} className="block h-auto w-full mirror:hidden" />
+        <img
+          src={frame.previewSrc}
+          alt={name}
+          className="block size-full object-contain mirror:hidden"
+        />
         {/* eslint-disable-next-line @next/next/no-img-element -- 정적 예시 이미지, 최적화 불필요 */}
         <img
           src={frame.previewMirrorSrc ?? frame.previewSrc}
           alt={name}
-          className="hidden h-auto w-full mirror:block"
+          className="hidden size-full object-contain mirror:block"
         />
       </>
     );
@@ -71,21 +75,34 @@ export default function PhotoFramePage() {
           <h1 className="font-display text-[44px] leading-[1.25] text-ink">프레임을 골라 주세요</h1>
         </div>
 
-        <ul className="grid grid-cols-3 gap-6">
-          {PHOTO_FRAME_OPTIONS.map((frame) => (
-            <li key={frame.id}>
-              <Link
-                href={`/photo/capture?frame=${frame.id}`}
-                aria-label={`${frame.name} 프레임으로 촬영 시작`}
-                className="group flex flex-col gap-4 text-center"
-              >
-                <span className="block overflow-hidden rounded-sm shadow-frame transition-transform group-active:scale-[.98]">
-                  <FramePreview frame={frame} />
-                </span>
-                <span className="font-display text-[26px] text-ink">{frame.name}</span>
-              </Link>
-            </li>
-          ))}
+        <ul className="grid grid-cols-6 gap-6">
+          {PHOTO_FRAME_OPTIONS.map((frame) => {
+            const half = frame.id === "ssafy-basic-half" || frame.id === "minju-half";
+            const position =
+              frame.id === "ssafy-basic-half"
+                ? "col-start-2"
+                : frame.id === "minju-half"
+                  ? "col-start-4"
+                  : "";
+            return (
+              <li key={frame.id} className={`col-span-2 ${position}`}>
+                <Link
+                  href={`/photo/capture?frame=${frame.id}`}
+                  aria-label={`${frame.name} 프레임으로 촬영 시작`}
+                  className={`group flex flex-col gap-4 text-center ${half ? "mx-auto w-1/2" : ""}`}
+                >
+                  <span
+                    className={`block overflow-hidden rounded-sm shadow-frame transition-transform group-active:scale-[.98] ${half ? "aspect-[900/2646]" : "aspect-[1800/2646]"}`}
+                  >
+                    <FramePreview frame={frame} />
+                  </span>
+                  <span className="font-display text-[26px] whitespace-nowrap text-ink">
+                    {frame.name}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       </section>
     </main>

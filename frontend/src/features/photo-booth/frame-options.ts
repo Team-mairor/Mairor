@@ -1,6 +1,6 @@
 import { BASIC_PHOTO_FRAME, MIRROR_FRAME_OVERLAY_SRC, type PhotoFrameTemplate } from "./frame";
 
-export type PhotoFrameId = "ssafy15" | "white" | "black";
+export type PhotoFrameId = "ssafy15" | "ssafy-basic-half" | "minju-half" | "white" | "black";
 
 /** 촬영 화면에 겹쳐 보이는 함께 찍는 사람. 칸 아래쪽에 붙고, 크기는 원본 픽셀 값이다. */
 export interface CaptureGuest {
@@ -27,12 +27,32 @@ export interface PhotoFrameOption {
   /** guests 너비 계산의 기준이 되는 칸(프레임 구멍) 너비 */
   readonly guestHoleWidth?: number;
   /** 우측 하단 촬영 날짜·mairor 글씨 */
-  readonly stamp: {
+  readonly stamp?: {
     readonly color: string;
     /** 미러필름 모드에서 쓰는 밝은 프레임 이미지 위의 글씨 색 */
     readonly mirrorColor?: string;
     /** false면 프레임 이미지에 mairor 글씨가 이미 있어 날짜만 그린다 */
     readonly mairor: boolean;
+    /** 기본 출력 크기 대비 글씨·여백 배율 */
+    readonly scale?: number;
+  };
+}
+
+const HALF_FRAME_OUTPUT = { width: 900, height: 2646, background: "#ffffff" } as const;
+const HALF_FRAME_SLOTS = [
+  { id: "slot-1", x: 50, y: 59, width: 800, height: 538 },
+  { id: "slot-2", x: 50, y: 627, width: 800, height: 538 },
+  { id: "slot-3", x: 50, y: 1195, width: 800, height: 538 },
+  { id: "slot-4", x: 50, y: 1763, width: 800, height: 538 },
+] as const;
+
+function halfFrame(id: string, overlaySrc: string): PhotoFrameTemplate {
+  return {
+    id,
+    version: 1,
+    output: HALF_FRAME_OUTPUT,
+    slots: HALF_FRAME_SLOTS,
+    overlaySrc,
   };
 }
 
@@ -76,6 +96,27 @@ export const PHOTO_FRAME_OPTIONS: readonly PhotoFrameOption[] = [
     template: plainFrame("plain-black", "#111111"),
     previewSlotColor: "#3b4152",
     stamp: { color: "#ffffff", mairor: true },
+  },
+  {
+    id: "ssafy-basic-half",
+    name: "SSAFY 기본",
+    template: halfFrame("ssafy-basic-half", "/images/photo/ssafy-basic-half-overlay.png"),
+    previewSrc: "/images/photo/ssafy-basic-half-preview.png",
+    stamp: { color: "#0b1430", mairor: true, scale: 0.5 },
+  },
+  {
+    id: "minju-half",
+    name: "민주네컷",
+    template: halfFrame("minju-half", "/images/photo/minju-half-overlay.png"),
+    previewSrc: "/images/photo/minju-half-preview.png",
+    stamp: { color: "#0b1430", mairor: true, scale: 0.5 },
+    guestHoleWidth: 800,
+    guests: [
+      { src: "/images/photo/minju-half-guest-1.png", side: "left", width: 464, height: 476 },
+      { src: "/images/photo/minju-half-guest-2.png", side: "right", width: 502, height: 522 },
+      { src: "/images/photo/minju-half-guest-3.png", side: "left", width: 460, height: 538 },
+      { src: "/images/photo/minju-half-guest-4.png", side: "right", width: 468, height: 474 },
+    ],
   },
 ];
 
